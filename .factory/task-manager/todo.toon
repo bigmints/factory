@@ -4,6 +4,8 @@
 
 summary:
   completed: 5
+    - us_040_043_workflows_hooks:
+        summary: "Created factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat) + post-commit (context update)"
     - us_099_final_integration:
         summary: "Final validation: tsc --noEmit passes clean. All P0/P1 tasks implemented. Factory engine upgrade complete with tool-calling loop, TOON bridge, minions engine, CLI facade, and bridge initialization."
     - us_061_agents_md_patch:
@@ -32,6 +34,8 @@ summary:
   cancelled: 0
 
   completed:
+    - us_040_043_workflows_hooks:
+        summary: "Created factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat) + post-commit (context update)"
     - us_099_final_integration:
         summary: "Final validation: tsc --noEmit passes clean. All P0/P1 tasks implemented. Factory engine upgrade complete with tool-calling loop, TOON bridge, minions engine, CLI facade, and bridge initialization."
     - us_061_agents_md_patch:
@@ -69,7 +73,6 @@ summary:
     - us_022_write_tasks_toon: "In engine/writer.ts writeKnowledgeEntry(): call writeToonTasksSnapshot() after knowledge .md write." [P2 engine/writer.ts engine/toon.ts]
     - us_024_human_toon_input: "manage.sh add auto-slugifies summary into task ID, appends to next: in todo.toon. writeToonTasksSnapshot() in writer.ts preserves human-added tasks (those not matching any spec slug) when Factory overwrites todo.toon." [P2 factory/scripts/task-manager/ engine/writer.ts]
     - us_033_034_engine_field: "Add engine field to AppSpec/FeatureSpec. Validate in spec.ts. Route in cli.ts. Add DB column. factory queue add --engine flag." [P2 engine/types.ts engine/spec.ts engine/cli.ts engine/db.ts]
-    - us_040_043_workflows_hooks: "Verify .factory/workflows/ script paths. Create factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat warn) + post-commit (factory pulse + context update)." [P2 factory/scripts/heartbeat/]
     - us_050_ui_heartbeat: "API /api/heartbeat reads heartbeat.toon per project. HeartbeatMonitor.tsx — shadcn Table, 30s poll, status dots." [P3 ui/src/components/HeartbeatMonitor.tsx]
     - us_051_052_ui_context_skills: "API /api/toon-context and /api/skills. ToonContextViewer.tsx and SkillRegistry.tsx components." [P3 ui/src/]
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
@@ -82,6 +85,9 @@ summary:
     - us_074_daemon_ui: "Factory dashboard shows daemon status prominently: green pulse animation when running, grey when stopped, red when stalled. 'Start Daemon' / 'Stop Daemon' buttons. Live build feed: SSE stream from /api/daemon/events showing current item, queue depth, ETA, recent completions. Auto-refreshes without page reload." [P2 ui/src/components/DaemonStatusPanel.tsx ui/src/app/api/daemon/]
 
   in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
         status: in_progress
         priority: high
         summary: "Working on us_010_build_tool_schema"

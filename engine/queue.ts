@@ -5,6 +5,7 @@
 
 import { getDb } from './db.ts';
 import { writeHeartbeat } from './toon.ts';
+import { log, logError } from './log.ts';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -313,4 +314,119 @@ function writeHeartbeatOnStart(projectPath: string): void {
             writeHeartbeat(projectPath, 'queue: build started');
         }).catch(() => { /* ignore */ });
     } catch { /* ignore */ }
+}
+
+// ─── Daemon Mode ─────────────────────────────────────────
+
+/**
+ * Start the queue daemon — persistent watch loop.
+ * Processes all pending items, then polls SQLite every 30s for new items.
+ * Never exits unless killed (SIGTERM/SIGINT).
+ */
+export async function startQueueDaemon(): Promise<void> {
+    let running = true;
+    const POLL_INTERVAL = 30_000; // 30 seconds
+    const MAX_RETRIES = 3;
+    const BASE_DELAY = 5000; // 5 seconds
+
+    process.on('SIGTERM', () => { running = false; });
+    process.on('SIGINT', () => { running = false; });
+
+    log('●', 'Queue daemon starting...');
+
+    while (running) {
+        try {
+            const stats = getQueueStats();
+            const pending = stats.pending || 0;
+
+            if (pending > 0) {
+                log('●', `Processing ${pending} pending item(s)...`);
+                const item = dequeue();
+                if (item) {
+                    let lastError: string | null = null;
+
+                    // Auto-retry with exponential backoff
+                    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                        try {
+                            markRunning(item.id);
+                            const success = await runBuild(item);
+                            if (success) {
+                                markCompleted(item.id, 'Build succeeded', Date.now());
+                                lastError = null;
+                                break;
+                            }
+                        } catch (error) {
+                            lastError = error instanceof Error ? error.message : String(error);
+                            logError(`Attempt ${attempt}/${MAX_RETRIES} failed: ${lastError}`);
+                        }
+
+                        if (attempt < MAX_RETRIES && lastError) {
+                            const delay = BASE_DELAY * Math.pow(2, attempt - 1);
+                            log('  ', `Retrying in ${delay/1000}s...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                    }
+
+                    if (lastError) {
+                        markFailed(item.id, lastError, '', 0, 'permanent');
+                    }
+                }
+            } else {
+                log('  ', 'No pending items — polling in 30s...');
+            }
+
+            // Wait before next check
+            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+        } catch (error) {
+            logError(`Daemon error: ${error}`);
+            await new Promise(resolve => setTimeout(resolve, 10_000));
+        }
+    }
+
+    log('✓', 'Queue daemon stopped');
+}
+
+// ─── Build Runner ────────────────────────────────────────
+
+/**
+ * Run a build for a queue item.
+ * Returns true if the build succeeded.
+ */
+async function runBuild(item: QueueItem): Promise<boolean> {
+    try {
+        const { runPipeline, runFeaturePipeline } = await import('./generate.ts');
+        const { loadSpec, loadFeatureSpec } = await import('./spec.ts');
+        const { gatherContext } = await import('./context.ts');
+        const { loadBridgeConfig } = await import('./config.ts');
+        const { writeFiles, setupProject, writeKnowledgeEntry, writeAppAgentsMd } = await import('./writer.ts');
+        const { resolve } = await import('node:path');
+
+        const bridge = loadBridgeConfig(process.cwd());
+        const context = gatherContext(process.cwd(), bridge);
+
+        let result;
+        if (item.kind === 'FeatureSpec') {
+            const spec = loadFeatureSpec(item.specFile);
+            result = await runFeaturePipeline(spec, context);
+        } else {
+            const spec = loadSpec(item.specFile);
+            result = await runPipeline(spec, context);
+        }
+
+        // Write files
+        const targetDir = resolve(process.cwd(), item.specFile.replace('.yaml', ''));
+        writeFiles(targetDir, result.files);
+        setupProject(targetDir, bridge.stack?.packageManager);
+
+        // Knowledge feedback
+        const spec = item.kind === 'FeatureSpec' ? loadFeatureSpec(item.specFile) : loadSpec(item.specFile);
+        const appName = 'appName' in spec ? spec.appName : spec.feature.name;
+        writeKnowledgeEntry(process.cwd(), appName, result, (spec as any).stack || {}, item.specFile);
+        writeAppAgentsMd(targetDir, appName, (spec as any).stack || {}, result.files);
+
+        return result.success;
+    } catch (error) {
+        logError(`Build failed: ${error}`);
+        return false;
+    }
 }

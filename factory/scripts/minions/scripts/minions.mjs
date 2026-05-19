@@ -32,7 +32,6 @@ const CONTINUE_ON_ERROR = args.includes('--continue-on-error');
 
 const queueFile = flag('--queue');
 const workdir = flag('--workdir', process.cwd());
-const approvalMode = flag('--approval-mode', 'yolo');
 const model = flag('--model', null);
 const delay = parseInt(flag('--delay', '2'), 10);
 const logDir = flag('--log-dir', './runs');
@@ -47,7 +46,6 @@ Usage:
 Options:
   --queue <file>           Path to YAML queue file (required)
   --workdir <dir>          Working directory for prompts (default: cwd)
-  --approval-mode <mode>   default | auto_edit | yolo (default: yolo)
   --dry-run                Print prompts without running them
   --continue-on-error      Don't abort queue on a failed prompt
   --model <model>          Override Gemini model for all prompts
@@ -102,7 +100,7 @@ async function parseQueue(filePath) {
 // ─── Detect the CLI binary ────────────────────────────────────────────────────
 
 function detectCLI() {
-  for (const bin of ['pi', 'gemini']) {
+  for (const bin of ['gemini', 'pi']) {
     const result = spawnSync('which', [bin], { encoding: 'utf8' });
     if (result.status === 0) return bin;
   }
@@ -118,11 +116,10 @@ Error: No compatible CLI found. Install one of:
 function runPrompt(cli, task, index, total, runLog) {
   const taskWorkdir = task.workdir ? resolve(task.workdir) : resolve(workdir);
   const taskModel = task.model ?? model;
-  const taskMode = task.approval_mode ?? approvalMode;
+  const taskMode = task.approval_mode ?? "yolo";
 
   const cliArgs = ['-p', task.prompt];
   if (taskModel) cliArgs.push('--model', taskModel);
-  if (taskMode !== 'default') cliArgs.push('--approval-mode', taskMode);
 
   console.log(`\n[${index + 1}/${total}] ${task.name}`);
   console.log(`  workdir: ${taskWorkdir}`);

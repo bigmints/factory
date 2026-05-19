@@ -23,6 +23,7 @@ import { loadSpec, loadFeatureSpec, listSpecs, validateSpec, validateFeatureSpec
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherContext } from './context.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
+import { runMinionsBuild, runMinionsFeatureBuild } from './minions-engine.ts';
 import { writeFiles, setupProject, gitCommit, gitPush, writeKnowledgeEntry, writeAppAgentsMd, buildDebrief } from './writer.ts';
 import { autoFixSpec } from './autofix.ts';
 import { log, logHeader, logStep, logError } from './log.ts';
@@ -125,9 +126,10 @@ async function handleBuild(specPath?: string): Promise<void> {
     const bridge = loadBridgeConfig(project.path);
     const context = gatherContext(project.path, bridge);
 
-    // Steps 3-5: Plan → Build → Test → Iterate (or Gemini CLI engine)
+    // Steps 3-5: Plan → Build → Test → Iterate (or minions engine)
     const engineFlag = parseFlags(args.slice(2)).engine as string | undefined;
-    const useMinions = engineFlag === 'minions';
+    const effectiveEngine = engineFlag || spec.engine || 'factory';
+    const useMinions = effectiveEngine === 'minions';
 
     let result;
     if (useMinions) {
@@ -382,7 +384,8 @@ async function handleFeature(subcommand?: string, specPath?: string): Promise<vo
 
             // Check for --engine flag
             const featureFlags = parseFlags(args.slice(3));
-            const useMinionsFeature = featureFlags.engine === 'minions';
+            const effectiveFeatureEngine = featureFlags.engine || spec.engine || 'factory';
+            const useMinionsFeature = effectiveFeatureEngine === 'minions';
 
             const targetDir = bridge.apps_dir
                 ? resolve(project.path, bridge.apps_dir, spec.target.app)
@@ -473,20 +476,27 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
                 process.exit(1);
             }
 
-            // Detect kind and parse phase/dependsOn
+            // Detect kind and parse phase/dependsOn/engine
             let kind: 'AppSpec' | 'FeatureSpec' = 'AppSpec';
             let phase: number | undefined;
             let dependsOn: string[] | undefined;
+            let specEngine: 'factory' | 'minions' | undefined;
             try {
                 const fSpec = loadFeatureSpec(specPath);
                 kind = 'FeatureSpec';
                 phase = fSpec.phase;
                 dependsOn = fSpec.dependsOn;
-            } catch { /* assume AppSpec */ }
+                specEngine = fSpec.engine;
+            } catch {
+                try {
+                    const aSpec = loadSpec(specPath);
+                    specEngine = aSpec.engine;
+                } catch { /* assume AppSpec */ }
+            }
 
             // Detect engine flag from CLI args
             const queueFlags = parseFlags(args.slice(3));
-            const engine = (queueFlags.engine === 'minions') ? 'minions' as const : 'factory' as const;
+            const engine = (queueFlags.engine || specEngine || 'factory') === 'minions' ? 'minions' as const : 'factory' as const;
 
             const item = enqueue(specPath, kind, { phase, dependsOn, engine });
             const phaseInfo = phase ? ` [phase ${phase}]` : '';
@@ -624,8 +634,9 @@ async function handleQueueStart(): Promise<void> {
                                     errorSource: 'engine',
                                     tokensIn: fixResult.tokensIn,
                                     tokensOut: fixResult.tokensOut,
-                                    errorCategory: categorizeError(retryErr),
-                                });
+                                    engine: current.engine,
+                                    errorCategory: categorizeError(retryMsg),
+                                    });
                                 updateSpecStatus(current.specFile, 'review');
                                 failed++;
                                 item = dequeue();
@@ -638,24 +649,30 @@ async function handleQueueStart(): Promise<void> {
                                 errorSource: 'engine',
                                 tokensIn: fixResult.tokensIn,
                                 tokensOut: fixResult.tokensOut,
+                                engine: current.engine,
                                 errorCategory: categorizeError(parseErr),
-                            });
+                                });
                             updateSpecStatus(current.specFile, 'review');
                             failed++;
                             item = dequeue();
                             continue;
                         }
                     }
-                    const result = await withRetry(
-                        () => runFeaturePipeline(spec, context),
-                        { maxAttempts: 3, delayMs: 5000, name: 'Feature Pipeline' }
-                    );
-
                     const targetDir = bridge.apps_dir
                         ? resolve(project.path, bridge.apps_dir, spec.target.app)
                         : resolve(project.path, spec.target.app);
-                    writeFiles(targetDir, result.files);
-                    setupProject(targetDir, bridge.stack?.packageManager);
+
+                    const result = await withRetry(
+                        () => (current.engine === 'minions')
+                            ? runMinionsFeatureBuild(spec, context, targetDir)
+                            : runFeaturePipeline(spec, context),
+                        { maxAttempts: 3, delayMs: 5000, name: 'Feature Pipeline' }
+                    );
+
+                    if (current.engine !== 'minions') {
+                        writeFiles(targetDir, result.files);
+                        setupProject(targetDir, bridge.stack?.packageManager);
+                    }
 
                     // Knowledge feedback + AGENTS.md
                     const featureStack = bridge.stack || { framework: 'unknown', packageManager: 'npm' };
@@ -671,6 +688,7 @@ async function handleQueueStart(): Promise<void> {
                         logBuild(current.specFile, 'FeatureSpec', 'completed', featureSummary, result.files.map(f => f.filename), durationMs, {
                             model: result.model,
                             provider: result.provider,
+                            engine: current.engine,
                             tokensIn: result.tokenUsage?.promptTokens,
                             tokensOut: result.tokenUsage?.completionTokens,
                         });
@@ -688,6 +706,7 @@ async function handleQueueStart(): Promise<void> {
                         logBuild(current.specFile, 'FeatureSpec', 'failed', featureSummary, result.files.map(f => f.filename), durationMs, {
                             model: result.model,
                             provider: result.provider,
+                            engine: current.engine,
                             tokensIn: result.tokenUsage?.promptTokens,
                             tokensOut: result.tokenUsage?.completionTokens,
                             errorSource: 'engine',
@@ -725,8 +744,9 @@ async function handleQueueStart(): Promise<void> {
                                         errorSource: 'engine',
                                         tokensIn: fixResult.tokensIn,
                                         tokensOut: fixResult.tokensOut,
+                                        engine: current.engine,
                                         errorCategory: categorizeError(reValidation.errors),
-                                    });
+                                        });
                                     updateSpecStatus(current.specFile, 'review');
                                     failed++;
                                     item = dequeue();
@@ -750,8 +770,9 @@ async function handleQueueStart(): Promise<void> {
                                 errorSource: 'engine',
                                 tokensIn: fixResult.tokensIn,
                                 tokensOut: fixResult.tokensOut,
+                                engine: current.engine,
                                 errorCategory: categorizeError(validation.errors),
-                            });
+                                });
                             updateSpecStatus(current.specFile, 'review');
                             failed++;
                             item = dequeue();
@@ -761,17 +782,23 @@ async function handleQueueStart(): Promise<void> {
 
                     // Mark as validating
                     updateSpecStatus(current.specFile, 'validation');
-                    const result = await withRetry(
-                        () => runPipeline(spec, context),
-                        { maxAttempts: 3, delayMs: 5000, name: 'App Pipeline' }
-                    );
 
                     const slug = specSlug(spec);
                     const targetDir = bridge.apps_dir
                         ? resolve(project.path, bridge.apps_dir, slug)
                         : resolve(project.path, slug);
-                    writeFiles(targetDir, result.files);
-                    setupProject(targetDir, spec.stack.packageManager);
+
+                    const result = await withRetry(
+                        () => (current.engine === 'minions')
+                            ? runMinionsBuild(spec, context)
+                            : runPipeline(spec, context),
+                        { maxAttempts: 3, delayMs: 5000, name: 'App Pipeline' }
+                    );
+
+                    if (current.engine !== 'minions') {
+                        writeFiles(targetDir, result.files);
+                        setupProject(targetDir, spec.stack.packageManager);
+                    }
 
                     // Knowledge feedback + AGENTS.md
                     writeKnowledgeEntry(project.path, spec.appName, result, spec.stack, current.specFile);
@@ -787,6 +814,7 @@ async function handleQueueStart(): Promise<void> {
                         logBuild(current.specFile, 'AppSpec', 'completed', appSummary, fileNames, durationMs, {
                             model: result.model,
                             provider: result.provider,
+                            engine: current.engine,
                             tokensIn: result.tokenUsage?.promptTokens,
                             tokensOut: result.tokenUsage?.completionTokens,
                         });
@@ -812,6 +840,7 @@ async function handleQueueStart(): Promise<void> {
                         logBuild(current.specFile, 'AppSpec', 'failed', appSummary, fileNames, durationMs, {
                             model: result.model,
                             provider: result.provider,
+                            engine: current.engine,
                             tokensIn: result.tokenUsage?.promptTokens,
                             tokensOut: result.tokenUsage?.completionTokens,
                             errorSource: 'engine',
@@ -827,6 +856,7 @@ async function handleQueueStart(): Promise<void> {
                 markFailed(current.id, msg, '', durationMs, category);
                 logBuild(current.specFile, current.kind, 'failed', `# Build Debrief\n\n> Build failed\n\n## Error\n\n${msg}`, [], durationMs, {
                     errorSource: msg.includes('API error') || msg.includes('returned empty') ? 'llm' : 'engine',
+                    engine: current.engine,
                     errorCategory: category,
                 });
                 updateSpecStatus(current.specFile, 'review');
@@ -897,7 +927,7 @@ function printUsage(): void {
 Usage: factory <command> [options]
 
 Commands:
-  build <spec.yaml> [--engine gemini-cli]   Full pipeline (or Gemini CLI engine)
+  build <spec.yaml> [--engine minions]   Full pipeline (or minions engine)
   validate <spec.yaml>       Validate a spec
   status                     Show spec statuses
   sync <repo-path>           Sync .factory from repo
@@ -912,11 +942,11 @@ Commands:
   project switch <id>        Switch active project
   project remove <id>        Disconnect a repo
 
-  feature build <spec.yaml> [--engine gemini-cli]  Build a feature
+  feature build <spec.yaml> [--engine minions]  Build a feature
   feature validate <spec.yaml>  Validate a feature spec
 
   queue list                    List all queue items
-  queue add <spec.yaml> [--engine gemini-cli]  Add to queue
+  queue add <spec.yaml> [--engine minions]  Add to queue
   queue start                   Process all pending items autonomously
   queue stats                   Show queue statistics
   queue clear                   Clear completed items
@@ -1090,16 +1120,6 @@ function handleHooks(): void {
     spawnScript(script, []);
 }
 
-
-// ─── Minions Engine Stubs (implemented in us_031_032) ───
-
-async function runMinionsBuild(spec: import('./types.ts').AppSpec, context: import('./types.ts').ProjectContext): Promise<import('./types.ts').BuildResult> {
-    throw new Error('Minions engine not yet implemented — run us_031_032 first');
-}
-
-async function runMinionsFeatureBuild(spec: import('./types.ts').FeatureSpec, context: import('./types.ts').ProjectContext, targetDir: string): Promise<import('./types.ts').BuildResult> {
-    throw new Error('Minions engine not yet implemented — run us_031_032 first');
-}
 
 // ─── Run ─────────────────────────────────────────────────
 

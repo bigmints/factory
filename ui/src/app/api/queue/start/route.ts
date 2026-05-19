@@ -403,11 +403,20 @@ function logBuild(
       files_generated TEXT DEFAULT '[]',
       validation_result TEXT,
       output TEXT DEFAULT '',
-      notes TEXT DEFAULT ''
+      notes TEXT DEFAULT '',
+      engine TEXT DEFAULT 'factory'
     );
   `);
 
   const id = `build_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // Add engine column if missing
+  try {
+    const cols = db.prepare(`PRAGMA table_info(builds)`).all() as any[];
+    if (!cols.some(c => c.name === 'engine')) {
+      db.exec(`ALTER TABLE builds ADD COLUMN engine TEXT DEFAULT 'factory'`);
+    }
+  } catch { /* ignore */ }
 
   // Extract generated files from output
   const fileMatches = rawOutput.match(/✓\s+(.+)/g) || [];
@@ -456,8 +465,8 @@ Built in ${(durationMs / 1000).toFixed(1)}s.
     : `Built ${filesGenerated.length} file(s) in ${(durationMs / 1000).toFixed(1)}s`;
 
   db.prepare(`
-    INSERT INTO builds (id, spec_file, kind, timestamp, duration_ms, status, files_generated, output, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO builds (id, spec_file, kind, timestamp, duration_ms, status, files_generated, output, notes, engine)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     item.spec_file,
@@ -468,5 +477,6 @@ Built in ${(durationMs / 1000).toFixed(1)}s.
     JSON.stringify(filesGenerated),
     summary,
     oneLiner,
+    item.engine || 'factory',
   );
 }

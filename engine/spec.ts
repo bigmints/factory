@@ -97,6 +97,11 @@ export function validateSpec(spec: AppSpec): ValidationResult {
         }
     }
 
+    // Engine: if specified, must be 'factory' or 'minions'
+    if (spec.engine && !['factory', 'minions'].includes(spec.engine)) {
+        errors.push(`Unknown engine "${spec.engine}". Known: factory, minions`);
+    }
+
     return { passed: errors.length === 0, errors };
 }
 
@@ -133,6 +138,11 @@ export function validateFeatureSpec(spec: FeatureSpec): ValidationResult {
                 }
             }
         }
+    }
+
+    // Engine: if specified, must be 'factory' or 'minions'
+    if (spec.engine && !['factory', 'minions'].includes(spec.engine)) {
+        errors.push(`Unknown engine "${spec.engine}". Known: factory, minions`);
     }
 
     return { passed: errors.length === 0, errors };

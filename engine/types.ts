@@ -19,6 +19,7 @@ export interface AppSpec {
     deployment?: DeploymentConfig;
     dependencies?: string[];       // npm packages this app requires (e.g. ['express', 'dotenv'])
     status?: SpecStatus;
+    engine?: 'factory' | 'minions';
     build?: BuildMeta;
 }
 
@@ -145,6 +146,7 @@ export interface FeatureSpec {
         type: string;
         title: string;
     }>;
+    engine?: 'factory' | 'minions';
 }
 
 // ─── Bridge Config (.factory/factory.yaml) ───────────────
@@ -252,6 +254,8 @@ export interface BuildResult {
     model?: string;
     /** Provider used (gemini/openai/ollama) */
     provider?: string;
+    /** which engine produced this result */
+    engine?: string;
 }
 
 export type TaskType = 'full-app' | 'frontend' | 'scaffold' | 'static' | 'config';

@@ -27,6 +27,7 @@ Commands:
     --priority <p>          Priority: 1(critical)|2(high)|3(medium)|4(low)|5(lowest)
     --component <c>         Component path
     --depends <id>          Task dependency ID
+    --preserve-human        Skip slugification if summary contains TOON markers (# or ::)
   start <task_id>           Claim a task — move from next/todo to in_progress
   complete --id <id>        Mark task done — move from in_progress to completed
     --summary <text>        Completion summary (optional)
@@ -83,16 +84,55 @@ list_tasks() {
       echo "    Summary: $summary"
       count=$((count + 1))
     done < <(awk -v sec="$section" '
+      BEGIN { in_sec = 0; id = ""; summary = "" }
       /^  [a-z_]+:$/ {
+        if (id != "") {
+          printf "%s|%s\n", id, (summary != "" ? summary : "No summary")
+          id = ""
+          summary = ""
+        }
         split($1, parts, ":")
         if (parts[1] == sec) in_sec = 1
-        else if (in_sec) in_sec = 0
+        else in_sec = 0
+        next
       }
       in_sec && /^    - / {
-        split($0, a, ": ")
-        id = substr(a[1], 7)
-        summary = (a[2] ? a[2] : "No summary")
-        printf "%s|%s\n", id, summary
+        if (id != "") {
+          printf "%s|%s\n", id, (summary != "" ? summary : "No summary")
+        }
+        id = substr($0, 7)
+        # Avoid splitting at ::
+        temp_id = id
+        gsub(/::/, "____", temp_id)
+        if (index(temp_id, ": ")) {
+          p = index(temp_id, ": ")
+          summary = substr(id, p + 2)
+          id = substr(id, 1, p - 1)
+        } else {
+          sub(/:[ ]*$/, "", id)
+          summary = ""
+        }
+        gsub(/^"|"$/, "", summary)
+        next
+      }
+      in_sec && id != "" && /^[ \t]+/ {
+        if ($0 ~ /summary:/) {
+          val = $0
+          sub(/^[ \t]*summary:[ \t]*/, "", val)
+          gsub(/^"|"$/, "", val)
+          if (summary == "") summary = val
+          else if (val != "" && index(summary, val) == 0) summary = summary " " val
+        } else if ($0 ~ /#/ || $0 ~ /::/) {
+          val = $0
+          sub(/^[ \t]+/, "", val)
+          if (summary == "") summary = val
+          else if (val != "" && index(summary, val) == 0) summary = summary " " val
+        }
+      }
+      END {
+        if (id != "") {
+          printf "%s|%s\n", id, (summary != "" ? summary : "No summary")
+        }
       }
     ' "$TASKS_FILE" 2>/dev/null || echo "")
 
@@ -117,20 +157,30 @@ show_status() {
   echo "Section: $section"
 
   awk -v id="$task_id" '
-    /^    - / && index($0, id) > 0 { found = 1; print "  ID: " id; next }
-    found && /^        [a-z_]+:/ {
-      gsub(/^        /, "")
-      gsub(/:$/, "")
-      gsub(/: "/, ": ")
-      gsub(/"$/, "")
-      print "  " $0
+    /^    - / && index($0, id) > 0 { 
+      found = 1; 
+      print "  ID: " id; 
+      line = $0; sub(/^[ ]*- [^:]+:[ ]*/, "", line);
+      if (line != "") {
+        gsub(/^"|"$/, "", line);
+        print "  summary: " line;
+      }
+      next 
     }
     found && /^    - / { exit }
+    found && (/^[ \t]*[a-z_]+:/ || $0 ~ /#/ || $0 ~ /::/) {
+      val = $0
+      sub(/^[ \t]+/, "", val)
+      sub(/:$/, "", val)
+      sub(/: "/, ": ", val)
+      sub(/"$/, "", val)
+      print "  " val
+    }
   ' "$TASKS_FILE"
 }
 
 add_task() {
-  local summary="" priority="" component="" depends=""
+  local summary="" priority="" component="" depends="" preserve_human="false"
 
   [[ $# -gt 0 && "$1" != -* ]] && summary="$1" && shift
 
@@ -139,6 +189,7 @@ add_task() {
       --priority) priority="$2"; shift 2 ;;
       --component) component="$2"; shift 2 ;;
       --depends) depends="$2"; shift 2 ;;
+      --preserve-human) preserve_human="true"; shift ;;
       *) shift ;;
     esac
   done
@@ -146,11 +197,17 @@ add_task() {
   [[ -z "$summary" ]] && { echo "Error: summary required" >&2; exit 1; }
 
   local task_id
-  task_id=$(echo "$summary" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g' | sed 's/__*/_/g' | sed 's/^_//;s/_$//' | cut -c1-50)
+  if [[ "$preserve_human" == "true" ]] && echo "$summary" | grep -qE '^#|::'; then
+    # Preserve as-is, don't slugify
+    task_id="$summary"
+  else
+    task_id=$(echo "$summary" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g' | sed 's/__*/_/g' | sed 's/^_//;s/_$//' | cut -c1-50)
+  fi
 
   local suffix=1
   while task_exists "${task_id}_${suffix}" 2>/dev/null; do suffix=$((suffix+1)); done
   task_exists "$task_id" && task_id="${task_id}_${suffix}"
+
 
   if grep -q "^  next:" "$TASKS_FILE"; then
     sed -i '' "/^  next:/a\\
@@ -172,6 +229,7 @@ add_task() {
   echo "Priority: ${priority:-3}"
   [[ -n "$component" ]] && echo "Component: $component"
   [[ -n "$depends" ]] && echo "Depends on: $depends"
+  return 0
 }
 
 start_task() {

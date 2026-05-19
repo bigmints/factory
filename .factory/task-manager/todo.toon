@@ -4,6 +4,10 @@
 
 summary:
   completed: 5
+    - us_061_agents_md_patch:
+        summary: "Added to initBridge: finds agents.md/AGENTS.md, generates from template if missing, appends Factory Agentic Scaffold section if exists. Never overwrites existing content."
+    - us_060_init_bridge_engine:
+        summary: "Created engine/init.ts with initBridge(repoPath): creates .factory/ scaffold (factory.yaml, skill-index.toon, context.toon, worklog.toon, heartbeat.toon, todo.toon, workflows/). Auto-detects stack from package.json/tsconfig.json. Returns InitResult with list of files created."
     - us_031_032_minions_engine:
         summary: "Created engine/minions-engine.ts with specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) and runMinionsEngine() (spawn, stream, return BuildResult). Added runMinionsBuild and runMinionsFeatureBuild exports for cli.ts integration."
     - us_030_delete_old_engines:
@@ -26,6 +30,10 @@ summary:
   cancelled: 0
 
   completed:
+    - us_061_agents_md_patch:
+        summary: "Added to initBridge: finds agents.md/AGENTS.md, generates from template if missing, appends Factory Agentic Scaffold section if exists. Never overwrites existing content."
+    - us_060_init_bridge_engine:
+        summary: "Created engine/init.ts with initBridge(repoPath): creates .factory/ scaffold (factory.yaml, skill-index.toon, context.toon, worklog.toon, heartbeat.toon, todo.toon, workflows/). Auto-detects stack from package.json/tsconfig.json. Returns InitResult with list of files created."
     - us_031_032_minions_engine:
         summary: "Created engine/minions-engine.ts with specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) and runMinionsEngine() (spawn, stream, return BuildResult). Added runMinionsBuild and runMinionsFeatureBuild exports for cli.ts integration."
     - us_030_delete_old_engines:
@@ -61,8 +69,6 @@ summary:
     - us_050_ui_heartbeat: "API /api/heartbeat reads heartbeat.toon per project. HeartbeatMonitor.tsx — shadcn Table, 30s poll, status dots." [P3 ui/src/components/HeartbeatMonitor.tsx]
     - us_051_052_ui_context_skills: "API /api/toon-context and /api/skills. ToonContextViewer.tsx and SkillRegistry.tsx components." [P3 ui/src/]
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
-    - us_060_init_bridge_engine: "Create engine/init.ts — initBridge(repoPath): creates .factory/ scaffold (factory.yaml, skill-index.toon, context.toon template, worklog.toon, heartbeat.toon, todo.toon, workflows/). Auto-detects stack from package.json/tsconfig.json. Copies bootstrap.md, process.md, commit.md from factory's own .factory/workflows/. Call from both init-bridge and project add handlers in cli.ts. Return InitResult with list of files created." [P1 engine/init.ts engine/cli.ts]
-    - us_061_agents_md_patch: "In engine/init.ts — after scaffold: find agents.md or AGENTS.md (case-insensitive glob) in project root. If missing: generate from template with role, stack, quick-commands table (factory pulse|task|validate|minions), skill-index ref, workflow docs ref. If exists: parse it, check for '## Factory' section — if absent, append Factory Agentic Scaffold section with commands and file-roles table. Never overwrite existing content." [P1 engine/init.ts]
     - us_062_project_init_ui: "UI onboarding wizard for Add Project: replace simple path input with a 2-step modal — Step 1: enter repo path + auto-detect stack preview; Step 2: init progress panel streaming file creation results via SSE (/api/project/init). Show per-file status (created/skipped/patched), agents.md outcome (Created/Patched), git-hooks toggle. 'Open in dashboard' button when done. Use shadcn Dialog, Progress, Badge, Switch." [P2 ui/src/components/ ui/src/app/api/project/init/]
 
     - us_070_queue_daemon: "Upgrade factory queue start into a persistent daemon mode (factory queue daemon). After processing all pending items, enter a watch loop polling SQLite every 30s for new items. Never exits unless killed. On startup: write heartbeat, log 'Factory daemon active'. On idle: log 'Waiting for work...' every 5 min. On new item found: immediately dequeue and build. Wrap in try/catch — a single build failure must NOT crash the daemon." [P1 engine/queue.ts engine/cli.ts]
@@ -73,6 +79,12 @@ summary:
     - us_099_final_integration: "Final validation: npx tsc --noEmit passes clean. Run factory project add /Users/pretheesh/Projects/ag-starter. Verify factory status shows ag-starter. Update ag-starter .factory/context/context.toon project.status to active. Run update-context.sh 'Factory integration complete'. Final commits in both repos." [P1 engine/ .factory/]
 
   in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
         status: in_progress
         priority: high
         summary: "Working on us_010_build_tool_schema"

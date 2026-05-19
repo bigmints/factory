@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-19T21:03:17Z"
+  last_seen: "2026-05-19T23:03:09Z"
   host: "BigMac-2"
-  task: "All P0/P1 tasks complete — Factory engine upgrade done"
+  task: "All tasks complete — Factory engine upgrade done"
   status: alive

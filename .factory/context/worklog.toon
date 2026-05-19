@@ -1,4 +1,4 @@
-entries[8]{date,message}:
+entries[9]{date,message}:
   "2026-05-19 17:38:02","us_001_copy_scripts: scripts copied to factory/scripts/"
   "2026-05-19 17:43:37","us_001_copy_scripts: completed — scripts copied to factory/scripts/, tsc fixed, skill-index updated"
   "2026-05-19 19:56:36","QA: us_001 scripts migrated"
@@ -7,3 +7,4 @@ entries[8]{date,message}:
   "2026-05-19 20:12:31","us_004_cli_facade: testing context"
   "2026-05-19 20:13:16","us_004_cli_facade: added CLI facade subcommands (pulse, task, context, compress, minions, hooks)"
   "2026-05-19 20:58:53","us_010-031: tool-calling loop, TOON bridge, minions engine implemented"
+  "2026-05-19 21:02:11","us_060-061: engine/init.ts with initBridge scaffold, agents.md patching"

@@ -15,8 +15,9 @@
  *   factory feature validate <spec.yaml>     Validate a feature spec
  */
 
-import { resolve, basename } from 'node:path';
+import { resolve, basename, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { loadSpec, loadFeatureSpec, listSpecs, validateSpec, validateFeatureSpec, updateSpecStatus, updateSpecBuildMeta, archiveSpec } from './spec.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherContext } from './context.ts';
@@ -39,6 +40,21 @@ import { performStateAudit, updateHeartbeat, withRetry, categorizeError } from '
 const args = process.argv.slice(2);
 const command = args[0];
 const target = args[1];
+
+/** Resolve a script path relative to factory/scripts/.
+ * Scripts live at factory/factory/scripts/ because there is a factory/ subdir.
+ * @param scriptName - e.g. "heartbeat/pulse.sh" or "minions/scripts/minions"
+ * @returns absolute path to the script
+ */
+export function resolveScript(scriptName: string): string {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    return resolve(__dirname, '..', 'factory', 'scripts', scriptName);
+}
+
+/** Check if a resolved script exists and is executable */
+export function hasScript(scriptName: string): boolean {
+    return existsSync(resolveScript(scriptName));
+}
 
 async function main(): Promise<void> {
     switch (command) {

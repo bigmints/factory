@@ -155,12 +155,22 @@ export interface BridgeConfig {
     description: string;
     namespace?: string;
     projectId?: string;
+    /** Relative path to the Factory project root (for self-referential bridges) */
+    factory_home?: string;
     stack?: ProjectStack;
     registry?: { apps?: string };
     conventions?: { rules?: string; agents?: string };
     skills?: SkillsConfig;
     templates?: { starter?: string };
     apps_dir?: string;
+    /** Agentic configuration — paths to context, tasks, skills, workflows, knowledge */
+    agentic?: {
+        context_dir?: string;
+        task_queue?: string;
+        skill_index?: string;
+        workflows_dir?: string;
+        knowledge_dir?: string;
+    };
 }
 
 export interface SkillsConfig {

@@ -186,6 +186,14 @@ function ensureFactoryDir(repoPath: string): void {
             version: 1,
             name: basename(repoPath),
             description: '',
+            factory_home: '.',
+            agentic: {
+                context_dir: '.factory/context',
+                task_queue: '.factory/task-manager/todo.toon',
+                skill_index: '.factory/skill-index.toon',
+                workflows_dir: '.factory/workflows',
+                knowledge_dir: '.factory/knowledge',
+            },
         };
         writeFileSync(yamlPath, toYaml(config));
         log('→', `Created .factory/factory.yaml`);

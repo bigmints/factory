@@ -16,7 +16,6 @@ summary:
 
   next:
     - us_000_fix_heartbeat_path: "factory/scripts/heartbeat/pulse.sh writes to .agents/context/ instead of .factory/context/ — verify FACTORY_PROJECT_ROOT env var is set and .factory/context/ dir exists before pulse; also delete stale .agents/ dir from factory project root if present." [P0 factory/scripts/heartbeat/pulse.sh]
-    - us_003_factory_yaml_schema: "Add factory_home and agentic to BridgeConfig in engine/types.ts. Update config.ts. Add resolveScript() helper in cli.ts." [P1 engine/types.ts engine/config.ts engine/cli.ts]
     - us_004_cli_facade: "Add CLI subcommands: factory pulse, factory task, factory context update, factory validate, factory compress, factory minions, factory hooks install. Each resolves script via resolveScript() and sets env vars." [P1 engine/cli.ts]
     - us_010_build_tool_schema: "Create engine/build-tools.ts — TOOL_DEFINITIONS (OpenAI format): read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed. Export BuildToolContext and ToolResult." [P1 engine/build-tools.ts]
     - us_011_tool_executor: "Export executeTool(name,args,ctx) in engine/build-tools.ts. Errors as {error:string}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true." [P1 engine/build-tools.ts]
@@ -37,6 +36,10 @@ summary:
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
 
   in_progress:
+    - us_003_factory_yaml_schema:
+        status: in_progress
+        priority: high
+        summary: "Working on us_002_factory_scaffold"
         status: in_progress
         priority: high
         summary: "Working on us_002_factory_scaffold"

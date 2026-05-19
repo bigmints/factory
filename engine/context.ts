@@ -143,6 +143,7 @@ export function loadQueueContext(repoPath: string): QueueBuildContext[] {
 export function gatherContext(repoPath: string, bridge: BridgeConfig): ProjectContext {
     const knowledgeFiles = gatherKnowledgeFiles(repoPath, bridge);
     const conventions = gatherConventions(repoPath, bridge);
+    const { toonSnapshot, projectSkills } = gatherToonSnapshot(repoPath);
 
     log('✓', `Gathered ${knowledgeFiles.length} knowledge files, ${conventions.length} convention files`);
 
@@ -152,6 +153,8 @@ export function gatherContext(repoPath: string, bridge: BridgeConfig): ProjectCo
         knowledgeFiles,
         conventions,
         stack: bridge.stack,
+        toonSnapshot,
+        projectSkills,
     };
 }
 
@@ -268,4 +271,29 @@ function extractAppName(filePath: string): string {
     const parts = filePath.split('/');
     // Look for the directory before the file name
     return parts.length >= 2 ? parts[parts.length - 2] : 'root';
+}
+
+// ─── TOON Context Bridge ─────────────────────────────────
+
+/**
+ * Gather TOON snapshot from .factory/context/context.toon and skill-index.toon.
+ * Returns { toonSnapshot, projectSkills } for injection into build prompts.
+ */
+export function gatherToonSnapshot(repoPath: string): { toonSnapshot?: string; projectSkills?: Array<{ name: string; path: string; description: string }> } {
+    const contextFile = join(repoPath, '.factory/context/context.toon');
+    const skillIndexFile = join(repoPath, '.factory/skill-index.toon');
+
+    const toonSnapshot = existsSync(contextFile) ? readFileSync(contextFile, 'utf-8') : undefined;
+    let projectSkills: Array<{ name: string; path: string; description: string }> | undefined;
+
+    if (existsSync(skillIndexFile)) {
+        try {
+            const data = JSON.parse(readFileSync(skillIndexFile, 'utf-8'));
+            projectSkills = data.skills?.map((s: any) => ({ name: s.name, path: s.path, description: s.description })) || undefined;
+        } catch {
+            // Ignore parse errors
+        }
+    }
+
+    return { toonSnapshot, projectSkills };
 }

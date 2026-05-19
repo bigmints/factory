@@ -280,6 +280,10 @@ export interface ProjectContext {
     knowledgeFiles: KnowledgeFile[];
     conventions: string[];
     stack: ProjectStack | undefined;
+    /** Raw TOON context snapshot from .factory/context/context.toon */
+    toonSnapshot?: string;
+    /** Parsed skill index entries from .factory/skill-index.toon */
+    projectSkills?: Array<{ name: string; path: string; description: string }>;
 }
 
 export interface ValidationResult {

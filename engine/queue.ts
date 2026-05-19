@@ -4,10 +4,11 @@
  */
 
 import { getDb } from './db.ts';
+import { writeHeartbeat } from './toon.ts';
 
 // ─── Types ───────────────────────────────────────────────
 
-export type BuildEngine = 'factory' | 'gemini-cli';
+export type BuildEngine = 'factory' | 'minions';
 
 export interface QueueItem {
     id: string;
@@ -211,6 +212,12 @@ export function updateItem(
 
 /** Mark an item as running. */
 export function markRunning(id: string): QueueItem | null {
+    try {
+        const projectPath = process.env.FACTORY_PROJECT_ROOT || process.cwd();
+        writeHeartbeat(projectPath, 'queue: build started');
+    } catch {
+        // ignore heartbeat errors
+    }
     return updateItem(id, { status: 'running', startedAt: timestamp() });
 }
 
@@ -295,4 +302,15 @@ export function setQueueRunning(running: boolean): void {
     if (running) {
         db.prepare(`UPDATE queue_state SET value = ? WHERE key = 'last_run_at'`).run(timestamp());
     }
+}
+
+// ─── Heartbeat Integration ───────────────────────────────
+
+/** Write heartbeat when a build starts. Wrapped in try/catch so it never breaks the queue. */
+function writeHeartbeatOnStart(projectPath: string): void {
+    try {
+        import('./toon.ts').then(({ writeHeartbeat }) => {
+            writeHeartbeat(projectPath, 'queue: build started');
+        }).catch(() => { /* ignore */ });
+    } catch { /* ignore */ }
 }

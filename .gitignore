@@ -9,3 +9,4 @@ reference/
 package-lock.json
 settings.json
 projects.json
+.agents/

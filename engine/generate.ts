@@ -1780,3 +1780,232 @@ export function parseGeneratedFiles(raw: string): GeneratedFile[] {
 
     return files;
 }
+
+// ─── Tool-Calling Loop (us_012 + us_013) ─────────────────
+
+import { TOOL_DEFINITIONS, executeTool, type BuildToolContext, type ToolResult } from './build-tools.ts';
+import { readToonFile, parseToonSkillIndex } from './toon.ts';
+
+/**
+ * Build the system prompt for the tool-calling LLM session.
+ * Includes role, rules, reason codes, TOON context block, spec YAML, skills table.
+ */
+export function buildToolSystemPrompt(
+    spec: AppSpec | FeatureSpec,
+    context: ProjectContext,
+): string {
+    const isApp = 'appName' in spec;
+    const specBlock = isApp ? formatSpec(spec as AppSpec) : formatFeatureSpec(spec as FeatureSpec);
+
+    // TOON context block
+    const toonContext = context.toonSnapshot
+        ? `\n## TOON Context\n\`\`\`toon\n${context.toonSnapshot}\n\`\`\`\n`
+        : '';
+
+    // Skills table
+    const skillsBlock = context.projectSkills && context.projectSkills.length > 0
+        ? `\n## Available Skills\n${context.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
+        : '';
+
+    return `You are an autonomous code generation engine. You have access to tools for reading, writing, and executing commands.
+
+## Rules
+1. Use tools to explore the project, read files, and write code.
+2. Always read a file before modifying it — never guess file contents.
+3. Use run_command for npm install, tsc, lint, test commands.
+4. When done, call mark_complete with a summary. If you cannot proceed, call mark_failed.
+5. Generate production-ready code — no placeholders, no TODOs, no stubs.
+6. Every "import ... from 'package'" must reference a real npm package.
+7. Match the coding style and patterns from the spec and existing code.
+
+## Reason Codes
+- Use log_step(level='info', message='...') to track progress
+- Use log_step(level='warn', message='...') for non-blocking issues
+- Use log_step(level='error', message='...') for blocking issues
+
+${specBlock}
+
+${toonContext}${skillsBlock}
+## Tools
+You have access to these tools:
+${TOOL_DEFINITIONS.map(t => `- ${t.name}: ${t.description}`).join('\n')}
+
+Use tools to explore, write, and validate code. Call mark_complete when done.`;
+}
+
+/**
+ * Run a tool-calling LLM session.
+ * Max 30 turns. Token guard trims to last 15 msgs at 20+.
+ * Replaces runPipeline() and runFeaturePipeline() bodies.
+ */
+export async function runToolSession(
+    spec: AppSpec | FeatureSpec,
+    context: ProjectContext,
+    targetDir: string,
+    specFile: string,
+): Promise<BuildResult> {
+    const { provider, model } = requireActiveProvider();
+    const systemPrompt = buildToolSystemPrompt(spec, context);
+    const ctx: BuildToolContext = {
+        targetDir,
+        specFile,
+        terminal: false,
+        generatedFiles: new Map(),
+        logs: [],
+    };
+
+    const messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }> = [
+        { role: 'system', content: systemPrompt },
+    ];
+
+    const MAX_TURNS = 30;
+    const TOKEN_GUARD_AT = 20;
+    const KEEP_LAST = 15;
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
+
+    for (let turn = 0; turn < MAX_TURNS && !ctx.terminal; turn++) {
+        // Token guard: trim messages at 20+ to keep last 15
+        if (messages.length >= TOKEN_GUARD_AT) {
+            const keep = messages.slice(0, 1).concat(messages.slice(-KEEP_LAST));
+            messages.length = 0;
+            messages.push(...keep);
+        }
+
+        log('●', `Turn ${turn + 1}/${MAX_TURNS} — calling LLM...`);
+
+        // Call LLM with tool definitions
+        const response = await callProviderWithTools(provider, model, messages, TOOL_DEFINITIONS);
+        totalTokensIn += response.tokensIn;
+        totalTokensOut += response.tokensOut;
+
+        // Process tool calls from response
+        const toolCalls = response.toolCalls || [];
+        if (toolCalls.length === 0) {
+            // No tool calls — treat as final response
+            messages.push({ role: 'assistant', content: response.text });
+            break;
+        }
+
+        messages.push({ role: 'assistant', content: response.text, tool_calls: toolCalls });
+
+        // Execute each tool call
+        for (const tc of toolCalls) {
+            const result = await executeTool(tc.function.name, tc.function.arguments, ctx);
+            messages.push({
+                role: 'tool',
+                content: result.content,
+                tool_call_id: tc.id,
+            });
+            if (result.isError) {
+                ctx.logs.push({ level: 'error', message: result.content });
+            } else {
+                ctx.logs.push({ level: 'info', message: result.content });
+            }
+        }
+
+        if (ctx.terminal) break;
+    }
+
+    // Build result from generated files
+    const files = Array.from(ctx.generatedFiles.entries()).map(([filename, content]) => ({
+        filename,
+        content,
+    }));
+
+    const success = ctx.logs.some(l => l.message.toLowerCase().includes('complete'));
+    const errors = ctx.logs.filter(l => l.level === 'error').map(l => l.message);
+
+    return {
+        success,
+        files,
+        plan: {
+            files: files.map(f => f.filename),
+            architecture: isAppSpec(spec) ? spec.appName : (spec as FeatureSpec).feature.name,
+            decisions: ['engine:tool-calling'],
+        },
+        iterations: 1,
+        errors: errors.length > 0 ? errors : undefined,
+        tokenUsage: { promptTokens: totalTokensIn, completionTokens: totalTokensOut },
+        model,
+        provider: provider.id,
+    };
+}
+
+function isAppSpec(spec: AppSpec | FeatureSpec): spec is AppSpec {
+    return 'appName' in spec;
+}
+
+/**
+ * Call the LLM provider with tool definitions for function calling.
+ */
+async function callProviderWithTools(
+    provider: LLMProvider,
+    model: string,
+    messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }>,
+    tools: typeof TOOL_DEFINITIONS,
+): Promise<LLMResponse & { toolCalls?: Array<{ id: string; function: { name: string; arguments: Record<string, unknown> } }> }> {
+    const baseUrl = provider.baseUrl || 'https://api.openai.com/v1';
+
+    // Build the messages array for the OpenAI-compatible API
+    const apiMessages = messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+        ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+    }));
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${provider.apiKey || ''}`,
+        },
+        body: JSON.stringify({
+            model,
+            messages: apiMessages,
+            tools: tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
+            temperature: 0.2,
+            max_tokens: 16384,
+        }),
+    });
+
+    if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Provider error (${res.status}): ${body.slice(0, 300)}`);
+    }
+
+    const data = await res.json();
+    const choice = data.choices?.[0];
+    if (!choice) throw new Error('Provider returned no choices');
+
+    const text = choice.message?.content || '';
+    const toolCalls = choice.message?.tool_calls?.map((tc: any) => ({
+        id: tc.id,
+        function: {
+            name: tc.function.name,
+            arguments: JSON.parse(tc.function.arguments || '{}'),
+        },
+    })) || [];
+
+    const tokensIn = data.usage?.prompt_tokens || 0;
+    const tokensOut = data.usage?.completion_tokens || 0;
+
+    return {
+        text,
+        tokensIn,
+        tokensOut,
+        toolCalls,
+    };
+}
+
+function formatFeatureSpec(spec: FeatureSpec): string {
+    return `## Feature Specification
+
+- **Name**: ${spec.feature.name}
+- **Slug**: ${spec.feature.slug}
+- **Target App**: ${spec.target.app}
+- **Phase**: ${spec.phase || 'unspecified'}
+${spec.dependsOn?.length ? `- **Depends on**: ${spec.dependsOn.join(', ')}` : ''}
+${spec.dependencies?.length ? `\n### Required Packages\n${spec.dependencies.map(d => `- ${d}`).join('\n')}` : ''}`;
+}

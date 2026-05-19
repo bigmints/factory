@@ -23,8 +23,6 @@ import { loadSpec, loadFeatureSpec, listSpecs, validateSpec, validateFeatureSpec
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherContext } from './context.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
-import { runGeminiCLIBuild, runGeminiCLIFeatureBuild, isGeminiCLIAvailable } from './gemini-cli-engine.ts';
-import { runPiCLIBuild, runPiCLIFeatureBuild, isPiCLIAvailable } from './pi-cli-engine.ts';
 import { writeFiles, setupProject, gitCommit, gitPush, writeKnowledgeEntry, writeAppAgentsMd, buildDebrief } from './writer.ts';
 import { autoFixSpec } from './autofix.ts';
 import { log, logHeader, logStep, logError } from './log.ts';
@@ -129,37 +127,24 @@ async function handleBuild(specPath?: string): Promise<void> {
 
     // Steps 3-5: Plan → Build → Test → Iterate (or Gemini CLI engine)
     const engineFlag = parseFlags(args.slice(2)).engine as string | undefined;
-    const useGeminiCLI = engineFlag === 'gemini-cli';
+    const useMinions = engineFlag === 'minions';
 
     let result;
-    if (useGeminiCLI) {
-        const check = isGeminiCLIAvailable();
-        if (!check.available) {
-            logError(check.error || 'Gemini CLI is not available');
-            process.exit(1);
-        }
-        logStep(3, 7, `Generating with Gemini CLI (${check.version})...`);
-        const slug = specSlug(spec);
-        const targetDir = bridge.apps_dir
-            ? resolve(project.path, bridge.apps_dir, slug)
-            : resolve(project.path, slug);
-        result = await runGeminiCLIBuild(spec, context, targetDir);
+    if (useMinions) {
+        logStep(3, 7, 'Generating with minions engine...');
+        result = await runMinionsBuild(spec, context);
     } else {
         result = await runPipeline(spec, context);
     }
 
-    // Step 6: Write files (skip for Gemini CLI — it writes directly to disk)
+    // Step 6: Write files
     const slug = specSlug(spec);
     const targetDir = bridge.apps_dir
         ? resolve(project.path, bridge.apps_dir, slug)
         : resolve(project.path, slug);
-    if (!useGeminiCLI) {
-        logStep(6, 7, 'Writing files to repo...');
-        writeFiles(targetDir, result.files);
-        setupProject(targetDir, spec.stack.packageManager);
-    } else {
-        logStep(6, 7, 'Files already written by Gemini CLI');
-    }
+    logStep(6, 7, 'Writing files to repo...');
+    writeFiles(targetDir, result.files);
+    setupProject(targetDir, spec.stack.packageManager);
 
     // Knowledge feedback + AGENTS.md
     writeKnowledgeEntry(project.path, spec.appName, result, spec.stack, specPath!);
@@ -397,33 +382,18 @@ async function handleFeature(subcommand?: string, specPath?: string): Promise<vo
 
             // Check for --engine flag
             const featureFlags = parseFlags(args.slice(3));
-            const useGeminiCLIFeature = featureFlags.engine === 'gemini-cli';
-            const usePiCLIFeature = featureFlags.engine === 'pi-cli';
+            const useMinionsFeature = featureFlags.engine === 'minions';
 
             const targetDir = bridge.apps_dir
                 ? resolve(project.path, bridge.apps_dir, spec.target.app)
                 : resolve(project.path, spec.target.app);
 
             let result;
-            if (useGeminiCLIFeature) {
-                const check = isGeminiCLIAvailable();
-                if (!check.available) {
-                    logError(check.error || 'Gemini CLI is not available');
-                    process.exit(1);
-                }
-                log('→', `Using Gemini CLI engine for feature (${check.version})`);
-                result = await runGeminiCLIFeatureBuild(spec, context, targetDir);
-            } else if (usePiCLIFeature) {
-                const check = isPiCLIAvailable();
-                if (!check.available) {
-                    logError(check.error || 'pi CLI is not available');
-                    process.exit(1);
-                }
-                log('→', `Using pi CLI engine for feature (${check.version})`);
-                result = await runPiCLIFeatureBuild(spec, context, targetDir);
+            if (useMinionsFeature) {
+                log('→', 'Using minions engine for feature...');
+                result = await runMinionsFeatureBuild(spec, context, targetDir);
             } else {
                 result = await runFeaturePipeline(spec, context);
-                // Write files only for factory engine
                 writeFiles(targetDir, result.files);
                 setupProject(targetDir, bridge.stack?.packageManager);
             }
@@ -516,7 +486,7 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
 
             // Detect engine flag from CLI args
             const queueFlags = parseFlags(args.slice(3));
-            const engine = (queueFlags.engine === 'gemini-cli') ? 'gemini-cli' as const : 'factory' as const;
+            const engine = (queueFlags.engine === 'minions') ? 'minions' as const : 'factory' as const;
 
             const item = enqueue(specPath, kind, { phase, dependsOn, engine });
             const phaseInfo = phase ? ` [phase ${phase}]` : '';
@@ -1118,6 +1088,17 @@ function handleHooks(): void {
         process.exit(0);
     }
     spawnScript(script, []);
+}
+
+
+// ─── Minions Engine Stubs (implemented in us_031_032) ───
+
+async function runMinionsBuild(spec: import('./types.ts').AppSpec, context: import('./types.ts').ProjectContext): Promise<import('./types.ts').BuildResult> {
+    throw new Error('Minions engine not yet implemented — run us_031_032 first');
+}
+
+async function runMinionsFeatureBuild(spec: import('./types.ts').FeatureSpec, context: import('./types.ts').ProjectContext, targetDir: string): Promise<import('./types.ts').BuildResult> {
+    throw new Error('Minions engine not yet implemented — run us_031_032 first');
 }
 
 // ─── Run ─────────────────────────────────────────────────

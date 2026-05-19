@@ -4,10 +4,46 @@
 
 summary:
   completed: 5
+    - us_031_032_minions_engine:
+        summary: "Created engine/minions-engine.ts with specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) and runMinionsEngine() (spawn, stream, return BuildResult). Added runMinionsBuild and runMinionsFeatureBuild exports for cli.ts integration."
+    - us_030_delete_old_engines:
+        summary: "Deleted gemini-cli-engine.ts and pi-cli-engine.ts. Updated BuildEngine type to factory|minions. Replaced engine-specific code in cli.ts with minions stubs (to be implemented in us_031_032)."
+    - us_023_heartbeat_on_queue:
+        summary: "Added writeHeartbeat() call in markRunning() with try/catch. Imports writeHeartbeat from toon.ts."
+    - us_021_gather_toon_context:
+        summary: "Added gatherToonSnapshot() to context.ts. Reads .factory/context/context.toon and .factory/skill-index.toon. Added toonSnapshot and projectSkills to ProjectContext in types.ts. Called inside gatherContext()."
+    - us_020_toon_helpers:
+        summary: "Created engine/toon.ts with readToonFile, compressToon, parseToonSkillIndex, writeHeartbeat, writeToonTasksSnapshot. Uses @toon-format/toon for encode/decode."
+    - us_013_tool_system_prompt:
+        summary: "Added buildToolSystemPrompt(spec, context) to generate.ts. Includes role, RULES, REASON CODES, TOON context block, spec YAML, skills table."
+    - us_012_tool_calling_loop:
+        summary: "Added runToolSession() to generate.ts. Max 30 turns, token guard trims to last 15 msgs at 20+. Calls LLM with tool definitions, executes tools via executeTool(), stops on ctx.terminal. Replaces runPipeline/runFeaturePipeline bodies."
+    - us_011_tool_executor:
+        summary: "Added async executeTool(name, args, ctx) to build-tools.ts. Errors returned as {content, isError}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true."
+    - us_010_build_tool_schema:
+        summary: "Created engine/build-tools.ts with 9 TOOL_DEFINITIONS (read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed) in OpenAI function-call format. Exported BuildToolContext and ToolResult types."
   next: 25
   cancelled: 0
 
   completed:
+    - us_031_032_minions_engine:
+        summary: "Created engine/minions-engine.ts with specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) and runMinionsEngine() (spawn, stream, return BuildResult). Added runMinionsBuild and runMinionsFeatureBuild exports for cli.ts integration."
+    - us_030_delete_old_engines:
+        summary: "Deleted gemini-cli-engine.ts and pi-cli-engine.ts. Updated BuildEngine type to factory|minions. Replaced engine-specific code in cli.ts with minions stubs (to be implemented in us_031_032)."
+    - us_023_heartbeat_on_queue:
+        summary: "Added writeHeartbeat() call in markRunning() with try/catch. Imports writeHeartbeat from toon.ts."
+    - us_021_gather_toon_context:
+        summary: "Added gatherToonSnapshot() to context.ts. Reads .factory/context/context.toon and .factory/skill-index.toon. Added toonSnapshot and projectSkills to ProjectContext in types.ts. Called inside gatherContext()."
+    - us_020_toon_helpers:
+        summary: "Created engine/toon.ts with readToonFile, compressToon, parseToonSkillIndex, writeHeartbeat, writeToonTasksSnapshot. Uses @toon-format/toon for encode/decode."
+    - us_013_tool_system_prompt:
+        summary: "Added buildToolSystemPrompt(spec, context) to generate.ts. Includes role, RULES, REASON CODES, TOON context block, spec YAML, skills table."
+    - us_012_tool_calling_loop:
+        summary: "Added runToolSession() to generate.ts. Max 30 turns, token guard trims to last 15 msgs at 20+. Calls LLM with tool definitions, executes tools via executeTool(), stops on ctx.terminal. Replaces runPipeline/runFeaturePipeline bodies."
+    - us_011_tool_executor:
+        summary: "Added async executeTool(name, args, ctx) to build-tools.ts. Errors returned as {content, isError}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true."
+    - us_010_build_tool_schema:
+        summary: "Created engine/build-tools.ts with 9 TOOL_DEFINITIONS (read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed) in OpenAI function-call format. Exported BuildToolContext and ToolResult types."
     - us_000_fix_heartbeat_path: "Verified pulse.sh uses .factory/context/ (already fixed in us_001). Removed stale .agents/ directory. Added .agents/ to .gitignore." [P0 factory/scripts/heartbeat/pulse.sh]
     - us_001_copy_scripts: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon." [P1 factory/scripts/]
     - us_002_factory_scaffold: "Created factory/.factory/ structure: context/, task-manager/, workflows/, knowledge/. Updated AGENTS.md with role, stack, quick commands." [P1 factory/.factory/]
@@ -17,18 +53,9 @@ summary:
   next:
     - us_005_write_factory_yaml: "factory.yaml is missing from .factory/ despite us_002 completing — write it now. Content: version:1, factory_home:'.', agentic:{context_dir:.factory/context, task_queue:.factory/task-manager/todo.toon, skill_index:.factory/skill-index.toon, workflows_dir:.factory/workflows, knowledge_dir:.factory/knowledge}. Verify config.ts loadBridgeConfig() reads it correctly." [P0 .factory/factory.yaml engine/config.ts]
     - us_006_task_summary_qa: "todo.toon summary: block must always stay in sync with actual completed/next counts. Add a validate-todo.sh script to factory/scripts/task-manager/ that checks counts match reality and warns if in_progress block has orphaned entries. Run as part of factory validate." [P1 factory/scripts/task-manager/]
-    - us_010_build_tool_schema: "Create engine/build-tools.ts — TOOL_DEFINITIONS (OpenAI format): read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed. Export BuildToolContext and ToolResult." [P1 engine/build-tools.ts]
-    - us_011_tool_executor: "Export executeTool(name,args,ctx) in engine/build-tools.ts. Errors as {error:string}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true." [P1 engine/build-tools.ts]
-    - us_012_tool_calling_loop: "Add runToolSession() to engine/generate.ts. Max 30 turns: call LLM+tools, execute via executeTool(), stop on ctx.terminal. Token guard at 20 msgs. Replace runPipeline() and runFeaturePipeline()." [P1 engine/generate.ts]
-    - us_013_tool_system_prompt: "Add buildToolSystemPrompt(spec,context):string — role, RULES, REASON CODES, toon context block, spec YAML, skills table." [P1 engine/generate.ts]
     - us_014_build_tool_ui: "Real-time tool call timeline in build panel — name, args, duration, outcome. SSE stream from API." [P2 ui/src/components/ ui/src/app/api/build-events/]
-    - us_020_toon_helpers: "Create engine/toon.ts — readToonFile, compressToon, parseToonSkillIndex, writeHeartbeat, writeToonTasksSnapshot." [P1 engine/toon.ts]
-    - us_021_gather_toon_context: "In engine/context.ts add gatherToonSnapshot(). Add toonSnapshot and projectSkills to ProjectContext in types.ts. Call inside gatherContext()." [P1 engine/context.ts engine/types.ts]
     - us_022_write_tasks_toon: "In engine/writer.ts writeKnowledgeEntry(): call writeToonTasksSnapshot() after knowledge .md write." [P2 engine/writer.ts engine/toon.ts]
-    - us_023_heartbeat_on_queue: "In engine/queue.ts markRunning(): call writeHeartbeat() with active project path. try/catch." [P1 engine/queue.ts engine/toon.ts]
     - us_024_human_toon_input: "manage.sh add auto-slugifies summary into task ID, appends to next: in todo.toon. writeToonTasksSnapshot() in writer.ts preserves human-added tasks (those not matching any spec slug) when Factory overwrites todo.toon." [P2 factory/scripts/task-manager/ engine/writer.ts]
-    - us_030_delete_old_engines: "Delete gemini-cli-engine.ts and pi-cli-engine.ts if they exist. Update BuildEngine: factory|minions." [P1 engine/]
-    - us_031_032_minions_engine: "Create engine/minions-engine.ts — specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) + runMinionsEngine() (spawn, stream, return BuildResult)." [P1 engine/minions-engine.ts]
     - us_033_034_engine_field: "Add engine field to AppSpec/FeatureSpec. Validate in spec.ts. Route in cli.ts. Add DB column. factory queue add --engine flag." [P2 engine/types.ts engine/spec.ts engine/cli.ts engine/db.ts]
     - us_040_043_workflows_hooks: "Verify .factory/workflows/ script paths. Create factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat warn) + post-commit (factory pulse + context update)." [P2 factory/scripts/heartbeat/]
     - us_050_ui_heartbeat: "API /api/heartbeat reads heartbeat.toon per project. HeartbeatMonitor.tsx — shadcn Table, 30s poll, status dots." [P3 ui/src/components/HeartbeatMonitor.tsx]
@@ -46,5 +73,32 @@ summary:
     - us_099_final_integration: "Final validation: npx tsc --noEmit passes clean. Run factory project add /Users/pretheesh/Projects/ag-starter. Verify factory status shows ag-starter. Update ag-starter .factory/context/context.toon project.status to active. Run update-context.sh 'Factory integration complete'. Final commits in both repos." [P1 engine/ .factory/]
 
   in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
 
   cancelled:

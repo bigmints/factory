@@ -4,6 +4,18 @@
 
 summary:
   completed: 5
+    - us_074_daemon_ui:
+        summary: "DaemonStatus.tsx (start/stop/restart, live status)"
+    - us_062_project_init_ui:
+        summary: "ProjectInitWizard.tsx (2-step modal, stack detection)"
+    - us_053_ui_engine_badge:
+        summary: "EngineBadge.tsx (factory=blue, minions=purple)"
+    - us_051_052_ui_context_skills:
+        summary: "ToonContextViewer.tsx, SkillRegistry.tsx (API routes)"
+    - us_050_ui_heartbeat:
+        summary: "HeartbeatMonitor.tsx (30s poll, status dots)"
+    - us_014_build_tool_ui:
+        summary: "BuildTimeline.tsx (SSE stream from /api/build-events)"
     - us_073_spec_watcher:
         summary: "Added factory queue watch <dir> — auto-enqueue new YAML specs, persistent file watcher"
     - us_072_daemon_process_mgr:
@@ -42,6 +54,18 @@ summary:
   cancelled: 0
 
   completed:
+    - us_074_daemon_ui:
+        summary: "DaemonStatus.tsx (start/stop/restart, live status)"
+    - us_062_project_init_ui:
+        summary: "ProjectInitWizard.tsx (2-step modal, stack detection)"
+    - us_053_ui_engine_badge:
+        summary: "EngineBadge.tsx (factory=blue, minions=purple)"
+    - us_051_052_ui_context_skills:
+        summary: "ToonContextViewer.tsx, SkillRegistry.tsx (API routes)"
+    - us_050_ui_heartbeat:
+        summary: "HeartbeatMonitor.tsx (30s poll, status dots)"
+    - us_014_build_tool_ui:
+        summary: "BuildTimeline.tsx (SSE stream from /api/build-events)"
     - us_073_spec_watcher:
         summary: "Added factory queue watch <dir> — auto-enqueue new YAML specs, persistent file watcher"
     - us_072_daemon_process_mgr:
@@ -85,18 +109,30 @@ summary:
   next:
     - us_005_write_factory_yaml: "factory.yaml is missing from .factory/ despite us_002 completing — write it now. Content: version:1, factory_home:'.', agentic:{context_dir:.factory/context, task_queue:.factory/task-manager/todo.toon, skill_index:.factory/skill-index.toon, workflows_dir:.factory/workflows, knowledge_dir:.factory/knowledge}. Verify config.ts loadBridgeConfig() reads it correctly." [P0 .factory/factory.yaml engine/config.ts]
     - us_006_task_summary_qa: "todo.toon summary: block must always stay in sync with actual completed/next counts. Add a validate-todo.sh script to factory/scripts/task-manager/ that checks counts match reality and warns if in_progress block has orphaned entries. Run as part of factory validate." [P1 factory/scripts/task-manager/]
-    - us_014_build_tool_ui: "Real-time tool call timeline in build panel — name, args, duration, outcome. SSE stream from API." [P2 ui/src/components/ ui/src/app/api/build-events/]
     - us_022_write_tasks_toon: "In engine/writer.ts writeKnowledgeEntry(): call writeToonTasksSnapshot() after knowledge .md write." [P2 engine/writer.ts engine/toon.ts]
     - us_024_human_toon_input: "manage.sh add auto-slugifies summary into task ID, appends to next: in todo.toon. writeToonTasksSnapshot() in writer.ts preserves human-added tasks (those not matching any spec slug) when Factory overwrites todo.toon." [P2 factory/scripts/task-manager/ engine/writer.ts]
     - us_033_034_engine_field: "Add engine field to AppSpec/FeatureSpec. Validate in spec.ts. Route in cli.ts. Add DB column. factory queue add --engine flag." [P2 engine/types.ts engine/spec.ts engine/cli.ts engine/db.ts]
-    - us_050_ui_heartbeat: "API /api/heartbeat reads heartbeat.toon per project. HeartbeatMonitor.tsx — shadcn Table, 30s poll, status dots." [P3 ui/src/components/HeartbeatMonitor.tsx]
-    - us_051_052_ui_context_skills: "API /api/toon-context and /api/skills. ToonContextViewer.tsx and SkillRegistry.tsx components." [P3 ui/src/]
-    - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
-    - us_062_project_init_ui: "UI onboarding wizard for Add Project: replace simple path input with a 2-step modal — Step 1: enter repo path + auto-detect stack preview; Step 2: init progress panel streaming file creation results via SSE (/api/project/init). Show per-file status (created/skipped/patched), agents.md outcome (Created/Patched), git-hooks toggle. 'Open in dashboard' button when done. Use shadcn Dialog, Progress, Badge, Switch." [P2 ui/src/components/ ui/src/app/api/project/init/]
 
-    - us_074_daemon_ui: "Factory dashboard shows daemon status prominently: green pulse animation when running, grey when stopped, red when stalled. 'Start Daemon' / 'Stop Daemon' buttons. Live build feed: SSE stream from /api/daemon/events showing current item, queue depth, ETA, recent completions. Auto-refreshes without page reload." [P2 ui/src/components/DaemonStatusPanel.tsx ui/src/app/api/daemon/]
 
   in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
         status: in_progress
         priority: high
         summary: "Working on us_010_build_tool_schema"

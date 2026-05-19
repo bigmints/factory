@@ -4,13 +4,18 @@
 
 summary:
   completed: 1
+    - us_002_factory_scaffold:
+        summary: "Created factory/.factory/factory.yaml with version:1, factory_home:'.', agentic fields (context_dir, task_queue, skill_index, workflows_dir, knowledge_dir). Updated AGENTS.md with role, stack, quick commands."
   next: 21
   cancelled: 0
 
   completed:
+    - us_002_factory_scaffold:
+        summary: "Created factory/.factory/factory.yaml with version:1, factory_home:'.', agentic fields (context_dir, task_queue, skill_index, workflows_dir, knowledge_dir). Updated AGENTS.md with role, stack, quick commands."
     - us_001_copy_scripts: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon." [P1 factory/scripts/]
 
   next:
+    - us_000_fix_heartbeat_path: "factory/scripts/heartbeat/pulse.sh writes to .agents/context/ instead of .factory/context/ — verify FACTORY_PROJECT_ROOT env var is set and .factory/context/ dir exists before pulse; also delete stale .agents/ dir from factory project root if present." [P0 factory/scripts/heartbeat/pulse.sh]
     - us_003_factory_yaml_schema: "Add factory_home and agentic to BridgeConfig in engine/types.ts. Update config.ts. Add resolveScript() helper in cli.ts." [P1 engine/types.ts engine/config.ts engine/cli.ts]
     - us_004_cli_facade: "Add CLI subcommands: factory pulse, factory task, factory context update, factory validate, factory compress, factory minions, factory hooks install. Each resolves script via resolveScript() and sets env vars." [P1 engine/cli.ts]
     - us_010_build_tool_schema: "Create engine/build-tools.ts — TOOL_DEFINITIONS (OpenAI format): read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed. Export BuildToolContext and ToolResult." [P1 engine/build-tools.ts]
@@ -22,6 +27,7 @@ summary:
     - us_021_gather_toon_context: "In engine/context.ts add gatherToonSnapshot(). Add toonSnapshot and projectSkills to ProjectContext in types.ts. Call inside gatherContext()." [P1 engine/context.ts engine/types.ts]
     - us_022_write_tasks_toon: "In engine/writer.ts writeKnowledgeEntry(): call writeToonTasksSnapshot() after knowledge .md write." [P2 engine/writer.ts engine/toon.ts]
     - us_023_heartbeat_on_queue: "In engine/queue.ts markRunning(): call writeHeartbeat() with active project path. try/catch." [P1 engine/queue.ts engine/toon.ts]
+    - us_024_human_toon_input: "manage.sh add auto-slugifies summary into task ID, appends to next: in todo.toon. writeToonTasksSnapshot() in writer.ts preserves human-added tasks (those not matching any spec slug) when Factory overwrites todo.toon." [P2 factory/scripts/task-manager/ engine/writer.ts]
     - us_030_delete_old_engines: "Delete gemini-cli-engine.ts and pi-cli-engine.ts if they exist. Update BuildEngine: factory|minions." [P1 engine/]
     - us_031_032_minions_engine: "Create engine/minions-engine.ts — specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) + runMinionsEngine() (spawn, stream, return BuildResult)." [P1 engine/minions-engine.ts]
     - us_033_034_engine_field: "Add engine field to AppSpec/FeatureSpec. Validate in spec.ts. Route in cli.ts. Add DB column. factory queue add --engine flag." [P2 engine/types.ts engine/spec.ts engine/cli.ts engine/db.ts]
@@ -31,9 +37,10 @@ summary:
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
 
   in_progress:
-    - us_002_factory_scaffold:
         status: in_progress
         priority: high
         summary: "Working on us_002_factory_scaffold"
+
+    - us_099_final_integration: "Final validation: npx tsc --noEmit passes clean. Run factory project add /Users/pretheesh/Projects/ag-starter. Verify factory status shows ag-starter. Update ag-starter .factory/context/context.toon project.status to active. Run update-context.sh 'Factory integration complete'. Final commits in both repos." [P1 engine/ .factory/]
 
   cancelled:

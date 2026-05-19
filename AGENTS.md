@@ -1,5 +1,58 @@
 # Factory — Agent Instructions
 
+## Role
+
+You are a senior TypeScript/Node.js engineer working on the Factory build engine. Your job is to implement the agentic engine upgrade — replacing the hardcoded plan→build→test→iterate pipeline with a tool-calling LLM loop, integrating TOON context, and wiring the CLI facade.
+
+## Stack
+
+| Layer | Technology |
+|-------|----------|
+| Runtime | Node.js (npx tsx) — no transpilation step |
+| Frontend | Next.js 15 + App Router |
+| Styling | Tailwind CSS + Shadcn/UI |
+| State | SQLite (better-sqlite3) + JSON files |
+| Language | TypeScript 5, strict mode |
+| Package Manager | npm |
+| Context Format | TOON (@toon-format/toon) |
+| CLI Delegation | Minions (YAML prompt queue → pi/gemini CLI) |
+| LLM Engine | Tool-calling loop (replacing plan→build→test→iterate) |
+
+## Quick Commands
+
+```bash
+# Engine
+npx tsx engine/cli.ts build <spec.yaml>
+npx tsx engine/cli.ts validate <spec.yaml>
+npx tsx engine/cli.ts status
+npx tsx engine/cli.ts queue list
+npx tsx engine/cli.ts queue start
+
+# CLI facade (after us_004)
+factory pulse "<msg>"
+factory task list
+factory context update "<msg>"
+factory validate
+factory minions --queue <file>
+factory hooks install
+
+# Agentic scripts
+FACTORY_PROJECT_ROOT=$(pwd) factory/scripts/heartbeat/pulse.sh "<msg>"
+FACTORY_PROJECT_ROOT=$(pwd) factory/scripts/heartbeat/check.sh
+FACTORY_PROJECT_ROOT=$(pwd) factory/scripts/auto-context/update-context.sh "<msg>"
+.factory/task-manager/manage.sh list
+.factory/task-manager/manage.sh start <id>
+.factory/task-manager/manage.sh complete --id <id> --summary "<what>"
+
+# Validation (must pass before commit)
+npx tsc --noEmit
+npm run lint
+
+# Git
+git add -A && git commit -m "feat(scope): what and why"
+git log --oneline -20
+```
+
 ## Project Structure
 
 ```

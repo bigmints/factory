@@ -606,7 +606,7 @@ function groupFilesByDirectory(files: GeneratedFile[]): Record<string, number> {
 
 // ─── Test ────────────────────────────────────────────────
 
-import { mkdtempSync, writeFileSync as fsWrite, mkdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync as fsWrite, readFileSync as fsRead, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { execSync, spawn as cpSpawn } from 'node:child_process';
@@ -952,7 +952,7 @@ async function testBuild(files: GeneratedFile[], stack: StackConfig, profile: Ta
         log('✓', 'Package versions bumped to latest');
 
         // Read back the updated package.json so future iterations have correct versions
-        const updatedPkg = require('node:fs').readFileSync(join(tmpDir, 'package.json'), 'utf-8');
+        const updatedPkg = fsRead(join(tmpDir, 'package.json'), 'utf-8');
         const pkgIdx = files.findIndex(f => f.filename === 'package.json');
         if (pkgIdx >= 0) {
             files[pkgIdx] = { ...files[pkgIdx], content: updatedPkg };
@@ -1555,18 +1555,29 @@ export function requireActiveProvider(): { provider: LLMProvider; model: string 
 }
 
 export async function callProvider(provider: LLMProvider, model: string, prompt: string): Promise<LLMResponse> {
-    switch (provider.id) {
-        case 'gemini':
-            if (!provider.apiKey) throw new Error('Gemini API key not configured');
-            return callGemini(provider.apiKey, model, prompt);
-        case 'openai':
-            if (!provider.apiKey) throw new Error('OpenAI API key not configured');
-            return callOpenAI(provider.apiKey, model, prompt);
-        case 'ollama':
-            return callOllama(provider.baseUrl || 'http://localhost:11434', model, prompt);
-        default:
-            throw new Error(`Unknown provider: ${provider.id}`);
+    // Determine the effective kind: treat missing/undefined kind as 'builtin' (legacy)
+    const kind = provider.kind || 'builtin';
+    
+    // Built-in providers
+    if (kind === 'builtin') {
+        switch (provider.id) {
+            case 'gemini':
+                if (!provider.apiKey) throw new Error('Gemini API key not configured');
+                return callGemini(provider.apiKey, model, prompt);
+            case 'openai':
+                return callOpenAI(provider.apiKey || '', model, prompt, provider.baseUrl);
+            case 'ollama':
+                return callOllama(provider.baseUrl || 'http://localhost:11434', model, prompt);
+            default:
+                throw new Error(`Unknown built-in provider: ${provider.id}`);
+        }
     }
+    // OpenAI-compatible custom providers
+    if (kind === 'openai-compat') {
+        if (!provider.baseUrl) throw new Error('Custom OpenAI provider needs a baseUrl');
+        return callOpenAI(provider.apiKey || '', model, prompt, provider.baseUrl);
+    }
+    throw new Error(`Unknown provider kind: ${kind} (id: ${provider.id})`);
 }
 
 async function callGemini(apiKey: string, model: string, prompt: string): Promise<LLMResponse> {
@@ -1603,10 +1614,11 @@ async function callGemini(apiKey: string, model: string, prompt: string): Promis
     return { text, tokensIn, tokensOut };
 }
 
-async function callOpenAI(apiKey: string, model: string, prompt: string): Promise<LLMResponse> {
+async function callOpenAI(apiKey: string, model: string, prompt: string, baseUrl?: string): Promise<LLMResponse> {
     log('→', `Calling OpenAI (${model})...`);
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const url = baseUrl ? `${baseUrl}/chat/completions` : 'https://api.openai.com/v1/chat/completions';
+    const res = await fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

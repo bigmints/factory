@@ -1,0 +1,46 @@
+# factory/.factory/factory.yaml — Self-referential bridge for the Factory project
+# This file describes the Factory project's own agentic configuration.
+
+version: 1
+name: factory
+description: "Autonomous app scaffolding factory — generate production-ready apps from YAML specs"
+factory_home: '.'
+namespace: factory
+
+stack:
+  runtime: Node.js (npx tsx)
+  frontend: Next.js 15 + App Router
+  styling: Tailwind CSS + Shadcn/UI
+  state: SQLite (better-sqlite3) + JSON files
+  language: TypeScript
+  package_manager: npm
+
+agentic:
+  context_dir: .factory/context
+  task_queue: .factory/task-manager/todo.toon
+  skill_index: .factory/skill-index.toon
+  workflows_dir: .factory/workflows
+  knowledge_dir: .factory/knowledge
+
+registry:
+  apps: .factory/specs/apps
+
+conventions:
+  rules: .factory/workflows/process.md
+  agents: AGENTS.md
+
+skills:
+  discovery: manual
+  files:
+    - factory/scripts/heartbeat/pulse.sh
+    - factory/scripts/heartbeat/check.sh
+    - factory/scripts/auto-context/update-context.sh
+    - factory/scripts/auto-context/update-context.mjs
+    - factory/scripts/compress-worklog/compress.sh
+    - factory/scripts/compress-worklog/compress.mjs
+    - factory/scripts/validate-code/validate.sh
+    - factory/scripts/minions/scripts/minions
+    - factory/scripts/minions/scripts/minions.mjs
+
+templates:
+  starter: .factory/specs/apps/_template.yaml

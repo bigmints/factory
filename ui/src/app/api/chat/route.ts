@@ -390,7 +390,7 @@ export async function POST(request: Request) {
     // Route to the right provider
     if (provider.id === 'ollama') {
       return streamOllama(provider, model, fullMessages);
-    } else if (provider.id === 'openai') {
+    } else if (provider.id === 'openai' || provider.kind === 'openai-compat') {
       return streamOpenAI(provider, model, fullMessages);
     } else if (provider.id === 'gemini') {
       return streamGemini(provider, model, fullMessages);
@@ -488,11 +488,13 @@ async function streamOpenAI(
   model: string,
   messages: any[]
 ) {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const baseUrl = provider.baseUrl || 'https://api.openai.com/v1';
+  const url = baseUrl.replace(/\/+$/, '') + '/chat/completions';
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${provider.apiKey}`,
+      ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
     },
     body: JSON.stringify({ model, messages, stream: true }),
   });

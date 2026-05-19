@@ -200,8 +200,9 @@ export interface ModelConfig {
 }
 
 export interface LLMProvider {
-    id: 'gemini' | 'openai' | 'ollama';
+    id: string;
     name: string;
+    kind: 'builtin' | 'openai-compat';
     enabled: boolean;
     apiKey?: string;
     baseUrl?: string;

@@ -2,7 +2,47 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
     try {
-        const { provider, apiKey, baseUrl } = await request.json();
+        const { provider, apiKey, baseUrl, kind } = await request.json();
+
+        // Custom openai-compat providers: call their /v1/models endpoint
+        if (kind === 'openai-compat') {
+            if (!baseUrl) return NextResponse.json({ ok: false, message: 'Base URL is required' });
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            try {
+                const modelsUrl = baseUrl.replace(/\/+$/, '') + '/models';
+                const res = await fetch(modelsUrl, {
+                    signal: controller.signal,
+                    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+                });
+                clearTimeout(timeout);
+                if (!res.ok) {
+                    const body = await res.text();
+                    return NextResponse.json({ ok: false, message: `API error (${res.status}): ${body.slice(0, 200)}` });
+                }
+                const data = await res.json();
+                const modelList = (data.data || data.models || [])
+                    .slice(0, 50)
+                    .map((m: any) => ({
+                        id: m.id || m.name,
+                        name: m.name || m.id || m.model || 'unknown',
+                    }));
+                modelList.sort((a: any, b: any) => a.id.localeCompare(b.id));
+                return NextResponse.json({
+                    ok: true,
+                    message: `Connected — ${modelList.length} models available`,
+                    models: modelList,
+                });
+            } catch (err: any) {
+                clearTimeout(timeout);
+                const msg = err.name === 'AbortError'
+                    ? 'Connection timed out'
+                    : err.code === 'ECONNREFUSED'
+                        ? 'Connection refused'
+                        : err.message || 'Connection failed';
+                return NextResponse.json({ ok: false, message: msg });
+            }
+        }
 
         switch (provider) {
             case 'gemini': {

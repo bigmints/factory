@@ -4,14 +4,13 @@
 
 summary:
   completed: 1
-  next: 19
+  next: 21
   cancelled: 0
 
   completed:
     - us_001_copy_scripts: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon." [P1 factory/scripts/]
 
   next:
-    - us_002_factory_scaffold: "Write factory/.factory/factory.yaml — version:1, factory_home:'.', agentic fields. Create/update agents.md at factory root with role, stack, quick commands." [P1 factory/.factory/]
     - us_003_factory_yaml_schema: "Add factory_home and agentic to BridgeConfig in engine/types.ts. Update config.ts. Add resolveScript() helper in cli.ts." [P1 engine/types.ts engine/config.ts engine/cli.ts]
     - us_004_cli_facade: "Add CLI subcommands: factory pulse, factory task, factory context update, factory validate, factory compress, factory minions, factory hooks install. Each resolves script via resolveScript() and sets env vars." [P1 engine/cli.ts]
     - us_010_build_tool_schema: "Create engine/build-tools.ts — TOOL_DEFINITIONS (OpenAI format): read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed. Export BuildToolContext and ToolResult." [P1 engine/build-tools.ts]
@@ -32,5 +31,9 @@ summary:
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
 
   in_progress:
+    - us_002_factory_scaffold:
+        status: in_progress
+        priority: high
+        summary: "Working on us_002_factory_scaffold"
 
   cancelled:

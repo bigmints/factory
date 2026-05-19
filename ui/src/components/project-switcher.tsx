@@ -27,7 +27,6 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
     loadProjects();
   }, [refreshKey]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -56,7 +55,6 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
       if (res.ok) {
         setActiveId(id);
         setOpen(false);
-        // Reload to refresh all data for the new project
         window.location.reload();
       }
     } catch {
@@ -72,7 +70,7 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
     return (
       <button
         onClick={onAddProject}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
       >
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-muted-foreground/30">
           <Plus className="h-3.5 w-3.5" />
@@ -84,13 +82,12 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Trigger */}
       <button
         onClick={() => setOpen(!open)}
         className={cn(
           'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-          'hover:bg-sidebar-accent/50',
-          open && 'bg-sidebar-accent'
+          'hover:bg-accent/50',
+          open && 'bg-accent'
         )}
       >
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
@@ -109,7 +106,6 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
         />
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-border bg-popover p-1 shadow-lg">
           {projects.map((project) => (

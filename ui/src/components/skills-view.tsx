@@ -57,8 +57,6 @@ import {
   Check,
 } from 'lucide-react';
 
-// ─── Types ───────────────────────────────────────────────
-
 interface Skill {
   id: string;
   name: string;
@@ -93,10 +91,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   ui: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
   integration: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
   custom: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
-  general: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+  general: 'bg-muted/50 text-muted-foreground border-muted/30',
 };
-
-// ─── Empty state for the form ────────────────────────────
 
 const EMPTY_FORM = {
   name: '',
@@ -108,8 +104,6 @@ const EMPTY_FORM = {
   template: '',
   enabled: true,
 };
-
-// ─── Component ───────────────────────────────────────────
 
 export function SkillsView() {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -123,8 +117,6 @@ export function SkillsView() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // ─── Data Fetching ───────────────────────────────────
 
   const fetchSkills = useCallback(async () => {
     try {
@@ -144,8 +136,6 @@ export function SkillsView() {
   useEffect(() => {
     fetchSkills();
   }, [fetchSkills]);
-
-  // ─── Handlers ────────────────────────────────────────
 
   const openNewDialog = () => {
     setEditingSkill(null);
@@ -250,8 +240,6 @@ export function SkillsView() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // ─── Filtered Skills ────────────────────────────────
-
   const filteredSkills = skills;
   const enabledCount = skills.filter(s => s.enabled).length;
 
@@ -260,29 +248,27 @@ export function SkillsView() {
     return found ? found.icon : Wand2;
   };
 
-  // ─── Render ──────────────────────────────────────────
-
   return (
     <TooltipProvider>
-      <div className="space-y-6">
+      <div className="space-responsive">
         {/* Header bar */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-violet-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-violet-500 shrink-0" />
               <span className="font-medium text-foreground">{skills.length}</span> Skills
             </span>
             <span className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
               <span className="font-medium text-foreground">{enabledCount}</span> Active
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-none">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="Search skills..."
-                className="h-8 w-56 pl-8 text-xs"
+                className="h-8 sm:h-9 w-full sm:w-56 pl-8 text-xs sm:text-sm"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -295,27 +281,28 @@ export function SkillsView() {
                 </button>
               )}
             </div>
-            <Button size="sm" onClick={openNewDialog} className="h-8 text-xs gap-1.5">
+            <Button size="sm" onClick={openNewDialog} className="h-8 sm:h-9 text-xs gap-1.5 shrink-0">
               <Plus className="h-3.5 w-3.5" />
-              New Skill
+              <span className="hidden sm:inline">New Skill</span>
+              <span className="sm:hidden">New</span>
             </Button>
           </div>
         </div>
 
-        {/* Category tabs */}
+        {/* Category tabs — scrollable on mobile */}
         <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-          <TabsList className="bg-muted/50">
+          <TabsList className="bg-muted/50 overflow-x-auto w-full justify-start sm:justify-start scrollbar-hide">
             {CATEGORIES.map(cat => {
               const Icon = cat.icon;
               const count = cat.id === 'all'
                 ? skills.length
                 : skills.filter(s => s.category === cat.id).length;
               return (
-                <TabsTrigger key={cat.id} value={cat.id} className="text-xs gap-1.5">
+                <TabsTrigger key={cat.id} value={cat.id} className="text-[10px] sm:text-xs gap-1.5 whitespace-nowrap px-2 sm:px-3">
                   <Icon className="h-3 w-3" />
                   {cat.label}
                   {count > 0 && (
-                    <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0 text-[10px] font-medium">
+                    <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0 text-[9px] font-medium">
                       {count}
                     </span>
                   )}
@@ -325,21 +312,21 @@ export function SkillsView() {
           </TabsList>
         </Tabs>
 
-        {/* Skills grid */}
+        {/* Skills grid — 1 col mobile, 2 cols desktop */}
         {loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {[1, 2, 3, 4].map(i => (
               <Skeleton key={i} className="h-44 rounded-lg" />
             ))}
           </div>
         ) : filteredSkills.length === 0 ? (
           <Card>
-            <CardContent className="py-16 text-center">
-              <Wand2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground">
+            <CardContent className="py-12 sm:py-16 text-center">
+              <Wand2 className="h-10 sm:h-12 w-10 sm:w-12 mx-auto mb-3 sm:mb-4 text-muted-foreground/30" />
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                 {searchQuery || activeCategory !== 'all' ? 'No skills match your filter' : 'No skills yet'}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                 {searchQuery || activeCategory !== 'all'
                   ? 'Try adjusting your search or category filter'
                   : 'Click "New Skill" to create your first reusable recipe'}
@@ -353,7 +340,7 @@ export function SkillsView() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {filteredSkills.map(skill => {
               const isExpanded = expandedSkill === skill.id;
               const CatIcon = categoryIcon(skill.category);
@@ -368,23 +355,23 @@ export function SkillsView() {
                   }`}
                 >
                   <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${CATEGORY_COLORS[skill.category] || CATEGORY_COLORS.general}`}>
-                          <CatIcon className="h-4 w-4" />
+                    <div className="flex items-start justify-between gap-2 sm:gap-3">
+                      <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+                        <div className={`flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg ${CATEGORY_COLORS[skill.category] || CATEGORY_COLORS.general}`}>
+                          <CatIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <CardTitle className="text-sm truncate">{skill.name}</CardTitle>
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <CardTitle className="text-xs sm:text-sm truncate">{skill.name}</CardTitle>
                             <Badge
                               variant="outline"
-                              className={`text-[10px] shrink-0 ${CATEGORY_COLORS[skill.category] || CATEGORY_COLORS.general}`}
+                              className={`text-[9px] sm:text-[10px] shrink-0 ${CATEGORY_COLORS[skill.category] || CATEGORY_COLORS.general}`}
                             >
                               {skill.category}
                             </Badge>
                           </div>
                           {skill.description && (
-                            <CardDescription className="text-xs mt-1 line-clamp-2">
+                            <CardDescription className="text-[10px] sm:text-xs mt-1 line-clamp-2">
                               {skill.description}
                             </CardDescription>
                           )}
@@ -400,16 +387,16 @@ export function SkillsView() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="pt-0 space-y-3">
+                  <CardContent className="pt-0 space-y-2 sm:space-y-3">
                     {/* Tags */}
                     {skill.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1">
                         {skill.tags.map(tag => (
                           <span
                             key={tag}
-                            className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                            className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-muted-foreground"
                           >
-                            <Tag className="h-2.5 w-2.5" />
+                            <Tag className="h-2 w-2 sm:h-2.5 sm:w-2.5" />
                             {tag}
                           </span>
                         ))}
@@ -418,9 +405,9 @@ export function SkillsView() {
 
                     {/* Trigger pattern */}
                     {skill.trigger && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Zap className="h-3 w-3 text-amber-400" />
-                        <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono">{skill.trigger}</code>
+                      <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
+                        <Zap className="h-3 w-3 text-amber-400 shrink-0" />
+                        <code className="bg-muted px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono">{skill.trigger}</code>
                       </div>
                     )}
 
@@ -428,20 +415,20 @@ export function SkillsView() {
                     <div>
                       <button
                         onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
-                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[44px] px-1"
                       >
-                        <FileText className="h-3 w-3" />
+                        <FileText className="h-3 w-3 shrink-0" />
                         <span>{isExpanded ? 'Hide instructions' : 'Show instructions'}</span>
-                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        {isExpanded ? <ChevronUp className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
                       </button>
                       {isExpanded && (
-                        <div className="mt-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
+                        <div className="mt-2 rounded-lg bg-muted/50 p-2 sm:p-3 text-[10px] sm:text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
                           {skill.instructions}
                           {skill.template && (
                             <>
-                              <Separator className="my-3" />
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">Template</p>
-                              <pre className="bg-background rounded p-2 overflow-x-auto text-[11px] font-mono">
+                              <Separator className="my-2 sm:my-3" />
+                              <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">Template</p>
+                              <pre className="bg-background rounded p-2 overflow-x-auto text-[10px] font-mono">
                                 {skill.template}
                               </pre>
                             </>
@@ -454,7 +441,7 @@ export function SkillsView() {
 
                     {/* Action buttons */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-[9px] sm:text-[10px] text-muted-foreground">
                         {skill.updatedAt ? `Updated ${new Date(skill.updatedAt).toLocaleDateString()}` : ''}
                       </span>
                       <div className="flex items-center gap-1">
@@ -510,22 +497,22 @@ export function SkillsView() {
           </div>
         )}
 
-        {/* ─── New / Edit Dialog ─────────────────────── */}
+        {/* New / Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto w-[95vw]">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
+              <DialogTitle className="flex items-center gap-2 text-sm sm:text-base">
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary shrink-0" />
                 {editingSkill ? 'Edit Skill' : 'New Skill'}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-[10px] sm:text-xs">
                 {editingSkill
                   ? 'Update this skill recipe. Changes are saved to a markdown file.'
                   : 'Create a reusable skill recipe. The engine will auto-match it to relevant builds.'}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-2">
+            <div className="space-y-3 sm:space-y-4 py-2">
               {/* Name */}
               <div className="space-y-2">
                 <Label htmlFor="skill-name" className="text-xs font-medium">Name *</Label>
@@ -534,7 +521,7 @@ export function SkillsView() {
                   placeholder="e.g. Scaffold shadcn Layout"
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="h-9 text-sm"
+                  className="h-9 text-xs sm:text-sm"
                 />
               </div>
 
@@ -546,16 +533,16 @@ export function SkillsView() {
                   placeholder="Brief summary of what this skill does"
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  className="h-9 text-sm"
+                  className="h-9 text-xs sm:text-sm"
                 />
               </div>
 
-              {/* Category + Tags row */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Category + Tags row — 1 col mobile, 2 cols desktop */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-medium">Category</Label>
                   <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
-                    <SelectTrigger className="h-9 text-sm">
+                    <SelectTrigger className="h-9 text-xs sm:text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -577,7 +564,7 @@ export function SkillsView() {
                     placeholder="e.g. shadcn, layout, sidebar"
                     value={form.tags}
                     onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
-                    className="h-9 text-sm"
+                    className="h-9 text-xs sm:text-sm"
                   />
                 </div>
               </div>
@@ -593,7 +580,7 @@ export function SkillsView() {
                   placeholder="e.g. shadcn|layout|sidebar"
                   value={form.trigger}
                   onChange={e => setForm(f => ({ ...f, trigger: e.target.value }))}
-                  className="h-9 text-sm font-mono"
+                  className="h-9 text-xs sm:text-sm font-mono"
                 />
                 <p className="text-[10px] text-muted-foreground">
                   Used for auto-matching. Pipe-separated keywords or a regex pattern.
@@ -610,7 +597,7 @@ export function SkillsView() {
                   placeholder="Step-by-step instructions for the LLM to follow when this skill is activated..."
                   value={form.instructions}
                   onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))}
-                  className="min-h-[160px] text-sm font-mono leading-relaxed"
+                  className="min-h-[120px] sm:min-h-[160px] text-xs sm:text-sm font-mono leading-relaxed"
                 />
               </div>
 
@@ -625,15 +612,15 @@ export function SkillsView() {
                   placeholder="Optional starter code template..."
                   value={form.template}
                   onChange={e => setForm(f => ({ ...f, template: e.target.value }))}
-                  className="min-h-[100px] text-sm font-mono leading-relaxed"
+                  className="min-h-[80px] sm:min-h-[100px] text-xs sm:text-sm font-mono leading-relaxed"
                 />
               </div>
 
               {/* Enabled toggle */}
-              <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="flex items-center justify-between rounded-lg border p-2 sm:p-3">
                 <div>
-                  <p className="text-sm font-medium">Enabled</p>
-                  <p className="text-xs text-muted-foreground">Active skills are auto-matched during builds</p>
+                  <p className="text-xs sm:text-sm font-medium">Enabled</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Active skills are auto-matched during builds</p>
                 </div>
                 <Switch
                   checked={form.enabled}
@@ -660,17 +647,17 @@ export function SkillsView() {
           </DialogContent>
         </Dialog>
 
-        {/* ─── Delete Confirmation Dialog ─────────────── */}
+        {/* Delete Confirmation Dialog */}
         <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md w-[95vw]">
             <DialogHeader>
-              <DialogTitle className="text-destructive flex items-center gap-2">
-                <Trash2 className="h-5 w-5" />
+              <DialogTitle className="text-destructive flex items-center gap-2 text-sm sm:text-base">
+                <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                 Delete Skill
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-[10px] sm:text-xs">
                 This will permanently delete the skill file <strong>&quot;{deleteTarget?.name}&quot;</strong> from{' '}
-                <code className="text-xs bg-muted px-1 py-0.5 rounded">~/.factory/skills/</code>.
+                <code className="text-[10px] bg-muted px-1 py-0.5 rounded">~/.factory/skills/</code>.
                 This action cannot be undone.
               </DialogDescription>
             </DialogHeader>

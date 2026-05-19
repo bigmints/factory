@@ -18,6 +18,7 @@
 import { resolve, basename, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { spawn, SpawnOptions } from 'node:child_process';
 import { loadSpec, loadFeatureSpec, listSpecs, validateSpec, validateFeatureSpec, updateSpecStatus, updateSpecBuildMeta, archiveSpec } from './spec.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherContext } from './context.ts';
@@ -81,6 +82,19 @@ async function main(): Promise<void> {
         case 'restart':
             handleStop();
             return handleStart();
+        // ─── CLI Facade (us_004) ─────────────────────────────
+        case 'pulse':
+            return handlePulse();
+        case 'task':
+            return handleTask();
+        case 'context':
+            return handleContext();
+        case 'compress':
+            return handleCompress();
+        case 'minions':
+            return handleMinions();
+        case 'hooks':
+            return handleHooks();
         default:
             printUsage();
             process.exit(command ? 1 : 0);
@@ -1014,6 +1028,96 @@ function handleStop(): void {
             }
         });
     });
+}
+
+// ─── CLI Facade Handlers (us_004) ────────────────────────
+
+/** Spawn a script with remaining CLI args, passing through stdout/stderr */
+function spawnScript(scriptPath: string, scriptArgs: string[]): void {
+    if (!existsSync(scriptPath)) {
+        logError(`Script not found: ${scriptPath}`);
+        process.exit(1);
+    }
+    const child = spawn(scriptPath, scriptArgs, {
+        stdio: 'inherit',
+        env: {
+            ...process.env,
+            FACTORY_PROJECT_ROOT: process.env.FACTORY_PROJECT_ROOT || process.cwd(),
+        },
+    });
+    child.on('close', (code: number | null) => {
+        process.exit(code ?? 0);
+    });
+}
+
+/** factory pulse "<msg>" — write heartbeat */
+function handlePulse(): void {
+    const script = resolveScript('heartbeat/pulse.sh');
+    const msg = args.slice(1).join(' ') || 'pulse';
+    spawnScript(script, [msg]);
+}
+
+/** factory task <list|start|complete|add> [args...] — manage tasks */
+function handleTask(): void {
+    const script = resolve(process.cwd(), '.factory/task-manager/manage.sh');
+    const subcommand = args[1];
+    if (!subcommand) {
+        console.error('Usage: factory task <list|start|complete|add> [args...]');
+        process.exit(1);
+    }
+    const env = {
+        ...process.env,
+        FACTORY_PROJECT_ROOT: process.env.FACTORY_PROJECT_ROOT || process.cwd(),
+        TASKS_FILE: resolve(process.cwd(), '.factory/task-manager/todo.toon'),
+    };
+    const child = spawn(script, args.slice(1), {
+        stdio: 'inherit',
+        env,
+    });
+    child.on('close', (code: number | null) => {
+        process.exit(code ?? 0);
+    });
+}
+
+/** factory context update "<msg>" — append to worklog */
+function handleContext(): void {
+    const subcommand = args[1];
+    if (!subcommand || subcommand !== 'update') {
+        console.error('Usage: factory context update "<message>"');
+        process.exit(1);
+    }
+    const script = resolveScript('auto-context/update-context.sh');
+    const msg = args.slice(2).join(' ') || 'context update';
+    spawnScript(script, [msg]);
+}
+
+/** factory compress — compress worklog */
+function handleCompress(): void {
+    const script = resolveScript('compress-worklog/compress.sh');
+    spawnScript(script, []);
+}
+
+/** factory minions [--queue <file>] [options...] — run minions queue */
+function handleMinions(): void {
+    const script = resolveScript('minions/scripts/minions');
+    spawnScript(script, args.slice(1));
+}
+
+/** factory hooks install — install git hooks */
+function handleHooks(): void {
+    const subcommand = args[1];
+    if (!subcommand || subcommand !== 'install') {
+        console.error('Usage: factory hooks install');
+        process.exit(1);
+    }
+    // For now, hooks are installed manually via factory/scripts/heartbeat/setup-hooks.sh
+    // This will be implemented in us_040_043
+    const script = resolveScript('heartbeat/setup-hooks.sh');
+    if (!existsSync(script)) {
+        log('!', 'Git hooks not yet available — will be provided by us_040_043');
+        process.exit(0);
+    }
+    spawnScript(script, []);
 }
 
 // ─── Run ─────────────────────────────────────────────────

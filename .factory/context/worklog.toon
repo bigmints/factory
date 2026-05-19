@@ -1,2 +1,3 @@
-entries[1]{date,message}:
+entries[2]{date,message}:
   "2026-05-19 17:38:02","us_001_copy_scripts: scripts copied to factory/scripts/"
+  "2026-05-19 17:43:37","us_001_copy_scripts: completed — scripts copied to factory/scripts/, tsc fixed, skill-index updated"

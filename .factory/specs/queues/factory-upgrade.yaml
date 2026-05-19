@@ -1,0 +1,490 @@
+queue:
+
+  - name: "US-001: Copy agent scripts into factory/scripts/"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Read .factory/task-manager/todo.toon and start task us_001_copy_scripts.
+      Read .factory/context/context.toon for project context.
+
+      Create factory/scripts/ with subdirectories and copy scripts from ag-starter:
+        mkdir -p factory/scripts/{heartbeat,task-manager,minions,auto-context,validate-code,compress-worklog}
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/heartbeat/pulse.sh factory/scripts/heartbeat/
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/heartbeat/check.sh factory/scripts/heartbeat/
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/task-manager/manage.sh factory/scripts/task-manager/
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/minions/scripts/minions factory/scripts/minions/
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/auto-context/update-context.sh factory/scripts/auto-context/
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/auto-context/update-context.mjs factory/scripts/auto-context/
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/validate-code/validate.sh factory/scripts/validate-code/
+        cp /Users/pretheesh/Projects/ag-starter/.agents/skills/compress-worklog/compress.sh factory/scripts/compress-worklog/
+
+      Update factory/scripts/heartbeat/pulse.sh:
+        Replace the HEARTBEAT_FILE= line with:
+        HEARTBEAT_FILE="${FACTORY_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}/.factory/context/heartbeat.toon"
+
+      Update factory/scripts/heartbeat/check.sh similarly.
+
+      Update factory/scripts/task-manager/manage.sh:
+        Replace TASKS_FILE= default with:
+        TASKS_FILE="${TASKS_FILE:-${FACTORY_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}/.factory/task-manager/todo.toon}"
+
+      Update factory/scripts/auto-context/update-context.sh and .mjs:
+        Worklog path: "${FACTORY_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}/.factory/context/worklog.toon"
+
+      chmod +x factory/scripts/**/*
+
+      Create factory/scripts/heartbeat/setup-hooks.sh that writes .git/hooks/pre-commit and post-commit
+      using `factory pulse` and `factory context update` commands (not shell script paths).
+
+      Verify: ls factory/scripts/ shows all directories. Run factory/scripts/heartbeat/pulse.sh --help or similar.
+      Commit: "feat(scripts): migrate agent scripts from ag-starter — factory/scripts/ created"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-002: Bootstrap factory/.factory/ scaffold"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      The .factory/ directory already has context.toon, task-manager/todo.toon, skill-index.toon, workflows/.
+
+      Now write factory/.factory/factory.yaml:
+        version: 1
+        name: factory
+        description: "Factory — agentic build engine"
+        factory_home: "."
+        agentic:
+          context_dir: .factory/context/
+          task_queue: .factory/task-manager/todo.toon
+          skill_index: .factory/skill-index.toon
+          workflows_dir: .factory/workflows/
+          knowledge_dir: .factory/knowledge/
+        conventions:
+          agents: agents.md
+        skills:
+          discovery: auto
+
+      Check if agents.md exists at factory root. If AGENTS.md exists (uppercase), read it.
+      Create/update agents.md (lowercase) at factory root with:
+        - Role: senior TypeScript/Node.js engineer upgrading the Factory build engine
+        - Stack: Node.js + tsx, Next.js 15, SQLite, TypeScript
+        - Quick commands using the script paths from skill-index.toon
+        - Reference to .factory/workflows/bootstrap.md for session start
+        - Reference to .factory/task-manager/todo.toon for tasks
+
+      Commit: "chore(scaffold): factory/.factory/ scaffold — factory.yaml + agents.md"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-003 + US-004: factory.yaml schema + CLI facade subcommands"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Read .factory/context/context.toon and .factory/task-manager/todo.toon.
+      Start tasks us_003_factory_yaml_schema and us_004_cli_facade.
+
+      In engine/types.ts add to BridgeConfig interface:
+        factory_home?: string;
+        agentic?: {
+          context_dir?: string;
+          task_queue?: string;
+          skill_index?: string;
+          workflows_dir?: string;
+          knowledge_dir?: string;
+        };
+
+      In engine/config.ts ensure loadBridgeConfig() returns the new fields (should work automatically if YAML parsing is generic).
+
+      In engine/cli.ts add a resolveScript(name: string): string helper at top:
+        - Resolves to path.join(new URL(import.meta.url).pathname, '../../scripts', name)
+        - This works whether factory is run from source or installed
+
+      Add getActiveProjectPath(): string | null helper:
+        - Reads projects.json, returns path for activeProject, or null
+
+      Add these CLI command cases to the main switch:
+
+      case 'pulse': {
+        const msg = args[1] || 'heartbeat';
+        const projectPath = getActiveProjectPath() || process.cwd();
+        const script = resolveScript('heartbeat/pulse.sh');
+        execSync(`bash "${script}" "${msg}"`, {
+          env: { ...process.env, FACTORY_PROJECT_ROOT: projectPath },
+          stdio: 'inherit'
+        });
+        break;
+      }
+
+      case 'task': {
+        const subCmd = args[1]; // list, add, start, complete
+        const projectPath = getActiveProjectPath() || process.cwd();
+        const tasksFile = path.join(projectPath, '.factory/task-manager/todo.toon');
+        const script = resolveScript('task-manager/manage.sh');
+        const taskArgs = args.slice(1).join(' ');
+        execSync(`bash "${script}" ${taskArgs}`, {
+          env: { ...process.env, FACTORY_PROJECT_ROOT: projectPath, TASKS_FILE: tasksFile },
+          stdio: 'inherit'
+        });
+        break;
+      }
+
+      case 'context': {
+        if (args[1] === 'update') {
+          const msg = args.slice(2).join(' ') || 'context update';
+          const projectPath = getActiveProjectPath() || process.cwd();
+          const script = resolveScript('auto-context/update-context.sh');
+          execSync(`bash "${script}" "${msg}"`, {
+            env: { ...process.env, FACTORY_PROJECT_ROOT: projectPath },
+            stdio: 'inherit'
+          });
+        }
+        break;
+      }
+
+      case 'validate': {
+        const projectPath = getActiveProjectPath() || process.cwd();
+        const script = resolveScript('validate-code/validate.sh');
+        execSync(`bash "${script}"`, {
+          env: { ...process.env, FACTORY_PROJECT_ROOT: projectPath },
+          cwd: projectPath,
+          stdio: 'inherit'
+        });
+        break;
+      }
+
+      case 'minions': {
+        const script = resolveScript('minions/minions');
+        const minionArgs = args.slice(1).join(' ');
+        execSync(`"${script}" ${minionArgs}`, { stdio: 'inherit' });
+        break;
+      }
+
+      case 'hooks': {
+        if (args[1] === 'install') {
+          const projectPath = getActiveProjectPath() || process.cwd();
+          const script = resolveScript('heartbeat/setup-hooks.sh');
+          execSync(`bash "${script}"`, {
+            env: { ...process.env, FACTORY_PROJECT_ROOT: projectPath },
+            cwd: projectPath,
+            stdio: 'inherit'
+          });
+        }
+        break;
+      }
+
+      Also in 'project add' case: after writing to projects.json, update the project's factory.yaml
+      to add factory_home pointing at the factory install directory (path.resolve(__dirname, '../..') or similar).
+
+      Run: npx tsc --noEmit — fix any type errors.
+      Commit: "feat(cli): factory pulse/task/context/validate/minions/hooks facade subcommands"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-010 + US-011: engine/build-tools.ts — tool schema and executor"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Read .factory/context/context.toon. Start task us_010_build_tool_schema and us_011_tool_executor.
+
+      Create engine/build-tools.ts with:
+
+      1. Interface BuildToolContext:
+         workDir: string
+         spec: AppSpec | FeatureSpec
+         context: ProjectContext
+         toonSnapshot: string
+         terminal?: boolean
+         result?: { success: boolean; summary: string; reason?: string }
+
+      2. Interface ToolResult:
+         content: string  (JSON string of result)
+         isError?: boolean
+
+      3. TOOL_DEFINITIONS array — OpenAI function-call format:
+         - read_file: { path: string } → returns file content as string
+         - write_file: { path: string, content: string } → returns "written"
+         - list_dir: { path: string } → returns JSON array of filenames
+         - run_command: { cmd: string, cwd?: string } → returns { stdout, stderr, exitCode }
+         - read_spec: {} → returns JSON.stringify(ctx.spec)
+         - read_context: {} → returns ctx.toonSnapshot
+         - log_step: { message: string } → returns "logged"
+         - mark_complete: { success: boolean, summary: string } → sets ctx.terminal=true
+         - mark_failed: { reason: string, error: string } → sets ctx.terminal=true, success=false
+
+      4. async function executeTool(name: string, args: Record<string, unknown>, ctx: BuildToolContext): Promise<ToolResult>
+         - read_file: fs.readFileSync(resolve(ctx.workDir, args.path), 'utf-8')
+         - write_file: mkdirSync(dirname(...), {recursive:true}), writeFileSync(...)
+         - list_dir: readdirSync(...).join(', ')
+         - run_command: execSync(args.cmd, { cwd: args.cwd || ctx.workDir, timeout: 120_000 }) → capture stdout/stderr
+         - All errors → return { content: JSON.stringify({ error: msg }), isError: true } — never throw
+         - mark_complete / mark_failed: set ctx.terminal = true, ctx.result = {...}
+
+      5. Export TOOL_DEFINITIONS and executeTool
+
+      Run: npx tsc --noEmit — fix all type errors.
+      Commit: "feat(engine): build-tools.ts — tool schema and executor"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-012 + US-013: Tool-calling loop replaces hardcoded pipeline"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Read engine/generate.ts (full file), engine/build-tools.ts.
+      Start task us_012_tool_calling_loop and us_013_tool_system_prompt.
+
+      Add to engine/generate.ts:
+
+      1. function buildToolSystemPrompt(spec: AppSpec | FeatureSpec, context: ProjectContext): string
+         Returns a system prompt with:
+         - Role: "You are a senior engineer inside the Factory build engine. Implement the spec completely."
+         - RULES section (read before write, run install+typecheck+lint after writing, fix all errors, call mark_complete when clean)
+         - REASON CODES for mark_failed: typecheck | lint | tests | scope_too_large | ambiguous_spec | infra_error
+         - Fenced toon block: ```toon\n{context.toonSnapshot || 'no context available'}\n```
+         - Spec block: ```yaml\n{yamlStringify(spec)}\n```
+         - Skills block if context.projectSkills: ## Project Skills\n{context.projectSkills}
+
+      2. async function runToolSession(spec, context, systemPrompt): Promise<BuildResult>
+         - Import TOOL_DEFINITIONS and executeTool from ./build-tools.ts
+         - Build BuildToolContext: { workDir: tmpdir or targetDir, spec, context, toonSnapshot: context.toonSnapshot || '' }
+         - messages array starting with { role: 'system', content: systemPrompt }
+         - Loop (max 30 turns):
+           a. Call LLM (callProvider) with messages + tools=TOOL_DEFINITIONS
+           b. If response has tool_calls: execute each via executeTool(), append tool results to messages
+           c. If ctx.terminal: break
+           d. Token guard: if messages.length > 20, trim to system + last 15 messages
+         - Return BuildResult from ctx.result, with files scanned from workDir
+
+      3. Replace runPipeline() body with:
+         const systemPrompt = buildToolSystemPrompt(spec, context);
+         return runToolSession(spec, context, systemPrompt);
+
+      4. Replace runFeaturePipeline() body with feature-adapted system prompt and same runToolSession call.
+
+      5. Mark old planBuild/executeBuild/testBuild/iterateBuild as // @deprecated — do not delete yet.
+
+      Run: npx tsc --noEmit — fix all errors.
+      Commit: "feat(engine): tool-calling loop replaces hardcoded plan→build→test→iterate pipeline"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-020 + US-021: TOON context bridge — gatherToonSnapshot + prompt injection"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Read engine/context.ts and engine/types.ts. Start us_020_toon_helpers and us_021_gather_toon_context.
+
+      Create engine/toon.ts:
+      - readToonFile(repoPath: string, relPath: string): string | null
+        → join(repoPath, relPath), return readFileSync if exists, null otherwise
+      - compressToon(content: string): string
+        → if content.length <= 12000 return as-is
+        → else write to tmp file, run: npx @toon-format/cli {tmpFile} -o {outFile}
+        → read and return outFile content, or original if command fails
+      - parseToonSkillIndex(content: string): Array<{name, path, description}>
+        → parse "skills[N]{name,path,description}:" table format line by line
+        → each data line: "  name,path,\"description\""
+      - writeHeartbeat(repoPath: string, task: string): void (from earlier plan)
+      - writeToonTasksSnapshot(repoPath: string, queueItems: QueueItem[]): void (from earlier plan)
+
+      In engine/types.ts add to ProjectContext:
+        toonSnapshot?: string;
+        projectSkills?: string;
+
+      In engine/context.ts add:
+      - gatherToonSnapshot(repoPath, bridge): { toonSnapshot: string, projectSkills: string }
+        → reads bridge.agentic?.context_dir + 'context.toon' via readToonFile
+        → compresses via compressToon if found
+        → reads bridge.agentic?.skill_index via readToonFile
+        → parses via parseToonSkillIndex
+        → formats projectSkills as markdown table: | Name | Path | Description |
+        → returns both (empty strings if files not found)
+
+      In gatherContext(): call gatherToonSnapshot(repoPath, bridge) and spread result into returned ProjectContext.
+
+      Run: npx tsc --noEmit — fix all errors.
+      Commit: "feat(context): TOON context bridge — context.toon + skill-index.toon injection"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-023 + US-022: writeHeartbeat on queue start + writeToonTasksSnapshot after build"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Read engine/queue.ts and engine/writer.ts. Start us_023_heartbeat_on_queue and us_022_write_tasks_toon.
+
+      In engine/queue.ts markRunning():
+        Import { writeHeartbeat } from './toon.ts'
+        Import { getActiveProject } from './config.ts' (or read projects.json directly)
+        After setting status = 'running' in DB, call:
+          try {
+            const project = getActiveProject();
+            if (project?.path) writeHeartbeat(project.path, `Building: ${item.spec_file}`);
+          } catch { /* silent — heartbeat failure never blocks build */ }
+
+      In engine/writer.ts writeKnowledgeEntry():
+        Import { writeToonTasksSnapshot } from './toon.ts'
+        After writing the .md knowledge file, call:
+          try { writeToonTasksSnapshot(repoPath, []); } catch { /* silent */ }
+        (queue items will be passed in from the caller in a future iteration — empty array for now)
+
+      Run: npx tsc --noEmit — fix all errors.
+      Commit: "feat(engine): heartbeat on queue start + tasks.toon snapshot after build"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-030 + US-031 + US-032: Delete old engines, build minions-engine.ts"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Read engine/cli.ts and engine/queue.ts. Start us_030, us_031, us_032.
+
+      Step 1 — Delete old engines:
+        Check if engine/gemini-cli-engine.ts exists, delete if so.
+        Check if engine/pi-cli-engine.ts exists, delete if so.
+        Remove their imports from cli.ts.
+        Update BuildEngine type in queue.ts to: 'factory' | 'minions'
+
+      Step 2 — Create engine/minions-engine.ts:
+
+      Export specToQueueYaml(spec: AppSpec | FeatureSpec, context: ProjectContext, targetDir: string, specPath: string): string
+        For AppSpec, generate 5-step queue.yaml string with steps:
+          1. Orient: read context.toon + skill-index.toon + spec, acknowledge full task
+          2. Plan: list all files with path/purpose/exports — no code yet
+          3. Implement: write all files, follow conventions, npm install
+          4. Validate: npx tsc --noEmit + lint, fix ALL errors until both exit 0
+          5. Commit: update-context + git commit + pulse
+        For FeatureSpec add step 0: read existing app structure first.
+        Inject targetDir as workdir for each step.
+        Inject context.toonSnapshot into Orient step prompt if available.
+
+      Export runMinionsEngine(spec: AppSpec | FeatureSpec, context: ProjectContext, targetDir: string): Promise<BuildResult>
+        - Write specToQueueYaml() output to temp file (os.tmpdir())
+        - Resolve minions binary: check context.bridge.agentic?.scripts_source path, fall back to path.join(__dirname, '../scripts/minions/minions')
+        - Spawn: minions --queue {tmpFile} --workdir {targetDir} --log-dir {logDir} --continue-on-error
+        - Stream stdout/stderr to log via log() from ./log.ts
+        - On exit 0: scan targetDir for .ts .tsx .js .jsx .json .css files → GeneratedFile[]
+        - Return BuildResult { success, files, plan: { files: [], architecture: 'minions', decisions: [] }, iterations: 1 }
+        - Cleanup tmp file in finally block
+
+      Step 3 — Wire in cli.ts build dispatcher:
+        In the build case, after loading spec: if (spec.engine === 'minions') use runMinionsEngine, else existing runPipeline.
+
+      Run: npx tsc --noEmit — fix all type errors.
+      Commit: "feat(engine): minions-engine.ts — replaces gemini-cli and pi-cli engines"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-033 + US-034: engine field in spec + queue add --engine flag"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      Start us_033_engine_field_spec and us_034_queue_add_engine_flag.
+
+      In engine/types.ts:
+        Add engine?: 'factory' | 'minions' to AppSpec interface
+        Add engine?: 'factory' | 'minions' to FeatureSpec interface
+
+      In engine/spec.ts validateSpec():
+        If spec.engine is set and not 'factory' or 'minions', add error: "engine must be 'factory' or 'minions'"
+
+      In engine/db.ts queue_items table:
+        Add engine TEXT column — use: ALTER TABLE queue_items ADD COLUMN engine TEXT DEFAULT 'factory'
+        Or recreate table with new column if ALTER fails (check schema first)
+        Update QueueItem type to include engine?: string
+
+      In engine/cli.ts queue add case:
+        Parse --engine flag from args
+        Pass to enqueue() as opts.engine
+
+      In engine/queue.ts enqueue():
+        Accept engine in opts, store in DB
+
+      Update specs/apps/_template.yaml:
+        Add commented: "# engine: factory  # factory (default) | minions"
+
+      Run: npx tsc --noEmit — fix all errors.
+      Commit: "feat(spec): engine field + queue add --engine flag + DB column"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-040 + US-041 + US-042 + US-043: Workflows and git hooks"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory.
+      The .factory/workflows/ directory already has bootstrap.md, process.md, commit.md.
+      Start tasks us_040, us_041, us_042, us_043.
+
+      Review the existing workflow files in .factory/workflows/ — they reference ag-starter absolute paths.
+      This is intentional for now (pi-driven development uses ag-starter scripts).
+      No changes needed to workflow docs unless there are errors.
+
+      Create factory/scripts/heartbeat/setup-hooks.sh:
+      #!/usr/bin/env bash
+      set -euo pipefail
+      PROJECT_ROOT="${FACTORY_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+      HOOKS_DIR="$PROJECT_ROOT/.git/hooks"
+
+      Write pre-commit hook to $HOOKS_DIR/pre-commit:
+        #!/usr/bin/env bash
+        TASKS_FILE="$PROJECT_ROOT/.factory/task-manager/todo.toon"
+        if [ -f "$TASKS_FILE" ]; then
+          if ! grep -q "in_progress" "$TASKS_FILE"; then
+            echo "ERROR: No in_progress task. Run: factory task start <id>" >&2
+            exit 1
+          fi
+          HEARTBEAT="$PROJECT_ROOT/.factory/context/heartbeat.toon"
+          if [ -f "$HEARTBEAT" ]; then
+            # warn if >30 min old (using find -mmin)
+            if find "$HEARTBEAT" -mmin +30 -print | grep -q .; then
+              echo "WARNING: Heartbeat is >30 min stale. Run: factory pulse 'resuming'" >&2
+            fi
+          fi
+        fi
+
+      Write post-commit hook to $HOOKS_DIR/post-commit:
+        #!/usr/bin/env bash
+        MSG=$(git log -1 --format='%s')
+        factory pulse "Committed: $MSG" 2>/dev/null || true
+        factory context update "$MSG" 2>/dev/null || true
+
+      chmod +x $HOOKS_DIR/pre-commit $HOOKS_DIR/post-commit setup-hooks.sh
+
+      Run: npx tsc --noEmit to confirm no regressions.
+      Commit: "feat(scripts): setup-hooks.sh — pre-commit task check + post-commit heartbeat/context"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo
+
+  - name: "US-050 + US-051 + US-052 + US-053: Factory UI — heartbeat, TOON viewer, skill registry, engine badge"
+    prompt: |
+      Working in /Users/pretheesh/Projects/factory/ui.
+      Read .factory/context/context.toon for project context. Start tasks us_050, us_051, us_052, us_053.
+
+      Create ui/src/app/api/heartbeat/route.ts:
+        GET: reads projects.json, for each project reads {path}/.factory/context/heartbeat.toon
+        Parse YAML (use js-yaml or split lines), extract last_seen, task, status
+        Compute ageMinutes from last_seen to now
+        Returns JSON: [{ projectId, name, path, lastSeen, task, status, ageMinutes }]
+
+      Create ui/src/app/api/toon-context/route.ts:
+        GET ?projectId=: reads {projectPath}/.factory/context/context.toon
+        Returns { content: string }
+
+      Create ui/src/app/api/skills/route.ts:
+        GET ?projectId=: reads {projectPath}/.factory/skill-index.toon
+        Parse skills[N]{name,path,description}: table format
+        Returns [{ name, path, description }]
+
+      Create ui/src/components/HeartbeatMonitor.tsx:
+        Polls /api/heartbeat every 30s
+        Renders shadcn Table with columns: Project | Task (truncated 40 chars) | Age | Status
+        Status: shadcn Badge — green variant <5min, yellow 5-30min, destructive >30min, secondary no file
+        Shows last poll time
+
+      Create ui/src/components/ToonContextViewer.tsx:
+        Fetches /api/toon-context?projectId=active
+        Renders a shadcn Card with the raw TOON content in a pre block (monospace, small font)
+        Title: "Project Context" with last_updated from content if parseable
+
+      Create ui/src/components/SkillRegistry.tsx:
+        Fetches /api/skills?projectId=active
+        Renders list of skills: name (font-mono bold) | description | path (text-xs text-muted-foreground)
+
+      In queue list UI (find existing component rendering queue items):
+        Add a shadcn Badge next to spec name: engine === 'minions' → purple/violet variant, else blue/default
+
+      Wire HeartbeatMonitor, ToonContextViewer, SkillRegistry into dashboard.tsx as cards or sidebar sections.
+
+      Run: npx tsc --noEmit in ui/ — fix all type errors.
+      Commit: "feat(ui): heartbeat monitor, TOON context viewer, skill registry, engine badge"
+    workdir: /Users/pretheesh/Projects/factory
+    approval_mode: yolo

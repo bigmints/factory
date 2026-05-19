@@ -1,0 +1,43 @@
+# Task Manager — Factory Upgrade (Canonical)
+# Format: TOON — managed via cowork manage.sh
+# Script: /Users/pretheesh/Projects/fikr-workspace/cowork/.agents/skills/task-manager/manage.sh
+# Usage:  TASKS_FILE=$(pwd)/.factory/task-manager/todo.toon manage.sh list|add|start|complete
+
+summary:
+  completed: 0
+    - us_001_copy_scripts:
+        summary: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon"
+  next: 20
+  cancelled: 0
+
+  completed:
+    - us_001_copy_scripts:
+        summary: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon"
+
+  next:
+    - us_002_factory_scaffold: "Write factory/.factory/factory.yaml — version:1, factory_home:'.', agentic fields. Create/update agents.md at factory root with role, stack, quick commands." [P1 factory/.factory/]
+    - us_003_factory_yaml_schema: "Add factory_home and agentic to BridgeConfig in engine/types.ts. Update config.ts. Add resolveScript() helper in cli.ts." [P1 engine/types.ts engine/config.ts engine/cli.ts]
+    - us_004_cli_facade: "Add CLI subcommands: factory pulse, factory task, factory context update, factory validate, factory compress, factory minions, factory hooks install. Each resolves script via resolveScript() and sets env vars." [P1 engine/cli.ts]
+    - us_010_build_tool_schema: "Create engine/build-tools.ts — TOOL_DEFINITIONS (OpenAI format): read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed. Export BuildToolContext and ToolResult." [P1 engine/build-tools.ts]
+    - us_011_tool_executor: "Export executeTool(name,args,ctx) in engine/build-tools.ts. Errors as {error:string}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true." [P1 engine/build-tools.ts]
+    - us_012_tool_calling_loop: "Add runToolSession() to engine/generate.ts. Max 30 turns: call LLM+tools, execute via executeTool(), stop on ctx.terminal. Token guard at 20 msgs. Replace runPipeline() and runFeaturePipeline()." [P1 engine/generate.ts]
+    - us_013_tool_system_prompt: "Add buildToolSystemPrompt(spec,context):string — role, RULES, REASON CODES, toon context block, spec YAML, skills table." [P1 engine/generate.ts]
+    - us_014_build_tool_ui: "Real-time tool call timeline in build panel — name, args, duration, outcome. SSE stream from API." [P2 ui/src/components/ ui/src/app/api/build-events/]
+    - us_020_toon_helpers: "Create engine/toon.ts — readToonFile, compressToon, parseToonSkillIndex, writeHeartbeat, writeToonTasksSnapshot." [P1 engine/toon.ts]
+    - us_021_gather_toon_context: "In engine/context.ts add gatherToonSnapshot(). Add toonSnapshot and projectSkills to ProjectContext in types.ts. Call inside gatherContext()." [P1 engine/context.ts engine/types.ts]
+    - us_022_write_tasks_toon: "In engine/writer.ts writeKnowledgeEntry(): call writeToonTasksSnapshot() after knowledge .md write." [P2 engine/writer.ts engine/toon.ts]
+    - us_023_heartbeat_on_queue: "In engine/queue.ts markRunning(): call writeHeartbeat() with active project path. try/catch." [P1 engine/queue.ts engine/toon.ts]
+    - us_030_delete_old_engines: "Delete gemini-cli-engine.ts and pi-cli-engine.ts if they exist. Update BuildEngine: factory|minions." [P1 engine/]
+    - us_031_032_minions_engine: "Create engine/minions-engine.ts — specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) + runMinionsEngine() (spawn, stream, return BuildResult)." [P1 engine/minions-engine.ts]
+    - us_033_034_engine_field: "Add engine field to AppSpec/FeatureSpec. Validate in spec.ts. Route in cli.ts. Add DB column. factory queue add --engine flag." [P2 engine/types.ts engine/spec.ts engine/cli.ts engine/db.ts]
+    - us_040_043_workflows_hooks: "Verify .factory/workflows/ script paths. Create factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat warn) + post-commit (factory pulse + context update)." [P2 factory/scripts/heartbeat/]
+    - us_050_ui_heartbeat: "API /api/heartbeat reads heartbeat.toon per project. HeartbeatMonitor.tsx — shadcn Table, 30s poll, status dots." [P3 ui/src/components/HeartbeatMonitor.tsx]
+    - us_051_052_ui_context_skills: "API /api/toon-context and /api/skills. ToonContextViewer.tsx and SkillRegistry.tsx components." [P3 ui/src/]
+    - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
+
+  in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_001_copy_scripts"
+
+  cancelled:

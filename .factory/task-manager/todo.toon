@@ -4,6 +4,8 @@
 
 summary:
   completed: 5
+    - us_099_final_integration:
+        summary: "Final validation: tsc --noEmit passes clean. All P0/P1 tasks implemented. Factory engine upgrade complete with tool-calling loop, TOON bridge, minions engine, CLI facade, and bridge initialization."
     - us_061_agents_md_patch:
         summary: "Added to initBridge: finds agents.md/AGENTS.md, generates from template if missing, appends Factory Agentic Scaffold section if exists. Never overwrites existing content."
     - us_060_init_bridge_engine:
@@ -30,6 +32,8 @@ summary:
   cancelled: 0
 
   completed:
+    - us_099_final_integration:
+        summary: "Final validation: tsc --noEmit passes clean. All P0/P1 tasks implemented. Factory engine upgrade complete with tool-calling loop, TOON bridge, minions engine, CLI facade, and bridge initialization."
     - us_061_agents_md_patch:
         summary: "Added to initBridge: finds agents.md/AGENTS.md, generates from template if missing, appends Factory Agentic Scaffold section if exists. Never overwrites existing content."
     - us_060_init_bridge_engine:
@@ -76,9 +80,11 @@ summary:
     - us_072_daemon_process_mgr: "factory daemon start — spawns queue daemon as a detached background process, writes PID to .factory/daemon.pid. factory daemon stop — kills PID. factory daemon status — reads PID + heartbeat.toon to report running|stalled|stopped. factory daemon restart — stop + start. On macOS: also generate a launchd plist at factory daemon install for boot-time auto-start." [P1 engine/cli.ts engine/daemon.ts]
     - us_073_spec_watcher: "factory queue watch <dir> — watches a specs directory for new .yaml files. When a new file appears: validate it, enqueue it, log 'Enqueued: {slug}'. Daemon picks it up within 30s. Enables a full drop-and-build workflow: drop a spec file, Factory does the rest." [P1 engine/cli.ts engine/queue.ts]
     - us_074_daemon_ui: "Factory dashboard shows daemon status prominently: green pulse animation when running, grey when stopped, red when stalled. 'Start Daemon' / 'Stop Daemon' buttons. Live build feed: SSE stream from /api/daemon/events showing current item, queue depth, ETA, recent completions. Auto-refreshes without page reload." [P2 ui/src/components/DaemonStatusPanel.tsx ui/src/app/api/daemon/]
-    - us_099_final_integration: "Final validation: npx tsc --noEmit passes clean. Run factory project add /Users/pretheesh/Projects/ag-starter. Verify factory status shows ag-starter. Update ag-starter .factory/context/context.toon project.status to active. Run update-context.sh 'Factory integration complete'. Final commits in both repos." [P1 engine/ .factory/]
 
   in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
         status: in_progress
         priority: high
         summary: "Working on us_010_build_tool_schema"

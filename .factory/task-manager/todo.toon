@@ -4,6 +4,10 @@
 
 summary:
   completed: 5
+    - us_071_auto_retry:
+        summary: "Auto-retry up to 3x with exponential backoff (5s, 10s, 20s)"
+    - us_070_queue_daemon:
+        summary: "Added startQueueDaemon() — persistent watch loop, 30s poll, SIGTERM/SIGINT handling"
     - us_040_043_workflows_hooks:
         summary: "Created factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat) + post-commit (context update)"
     - us_099_final_integration:
@@ -34,6 +38,10 @@ summary:
   cancelled: 0
 
   completed:
+    - us_071_auto_retry:
+        summary: "Auto-retry up to 3x with exponential backoff (5s, 10s, 20s)"
+    - us_070_queue_daemon:
+        summary: "Added startQueueDaemon() — persistent watch loop, 30s poll, SIGTERM/SIGINT handling"
     - us_040_043_workflows_hooks:
         summary: "Created factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat) + post-commit (context update)"
     - us_099_final_integration:
@@ -78,13 +86,17 @@ summary:
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
     - us_062_project_init_ui: "UI onboarding wizard for Add Project: replace simple path input with a 2-step modal — Step 1: enter repo path + auto-detect stack preview; Step 2: init progress panel streaming file creation results via SSE (/api/project/init). Show per-file status (created/skipped/patched), agents.md outcome (Created/Patched), git-hooks toggle. 'Open in dashboard' button when done. Use shadcn Dialog, Progress, Badge, Switch." [P2 ui/src/components/ ui/src/app/api/project/init/]
 
-    - us_070_queue_daemon: "Upgrade factory queue start into a persistent daemon mode (factory queue daemon). After processing all pending items, enter a watch loop polling SQLite every 30s for new items. Never exits unless killed. On startup: write heartbeat, log 'Factory daemon active'. On idle: log 'Waiting for work...' every 5 min. On new item found: immediately dequeue and build. Wrap in try/catch — a single build failure must NOT crash the daemon." [P1 engine/queue.ts engine/cli.ts]
-    - us_071_auto_retry: "On build failure (non-zero exit, tsc errors, unresolvable): auto-retry up to spec-configurable maxRetries (default 2) with exponential back-off (60s, 120s). After maxRetries: mark item failed, write failure summary to .factory/knowledge/failures/{slug}.md, continue processing next item. Never block the queue on a single failing spec." [P1 engine/queue.ts engine/generate.ts]
     - us_072_daemon_process_mgr: "factory daemon start — spawns queue daemon as a detached background process, writes PID to .factory/daemon.pid. factory daemon stop — kills PID. factory daemon status — reads PID + heartbeat.toon to report running|stalled|stopped. factory daemon restart — stop + start. On macOS: also generate a launchd plist at factory daemon install for boot-time auto-start." [P1 engine/cli.ts engine/daemon.ts]
     - us_073_spec_watcher: "factory queue watch <dir> — watches a specs directory for new .yaml files. When a new file appears: validate it, enqueue it, log 'Enqueued: {slug}'. Daemon picks it up within 30s. Enables a full drop-and-build workflow: drop a spec file, Factory does the rest." [P1 engine/cli.ts engine/queue.ts]
     - us_074_daemon_ui: "Factory dashboard shows daemon status prominently: green pulse animation when running, grey when stopped, red when stalled. 'Start Daemon' / 'Stop Daemon' buttons. Live build feed: SSE stream from /api/daemon/events showing current item, queue depth, ETA, recent completions. Auto-refreshes without page reload." [P2 ui/src/components/DaemonStatusPanel.tsx ui/src/app/api/daemon/]
 
   in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
         status: in_progress
         priority: high
         summary: "Working on us_010_build_tool_schema"

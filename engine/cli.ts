@@ -15,8 +15,8 @@
  *   factory feature validate <spec.yaml>     Validate a feature spec
  */
 
-import { resolve, basename, dirname } from 'node:path';
-import { existsSync } from 'node:fs';
+import { resolve, basename, dirname, join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawn, SpawnOptions } from 'node:child_process';
 import { loadSpec, loadFeatureSpec, listSpecs, validateSpec, validateFeatureSpec, updateSpecStatus, updateSpecBuildMeta, archiveSpec } from './spec.ts';
@@ -508,6 +508,22 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
 
         case 'start': {
             return handleQueueStart();
+        }
+
+        case 'daemon': {
+            return handleDaemon(args[3]);
+        }
+
+        case 'watch': {
+            return handleWatch(args[3]);
+        }
+
+        case 'daemon': {
+            return handleDaemon(args[3]);
+        }
+
+        case 'watch': {
+            return handleWatch(args[3]);
         }
 
         case 'stats': {
@@ -1127,3 +1143,141 @@ main().catch(err => {
     logError(err.message || String(err));
     process.exit(1);
 });
+
+// ─── Daemon Management ───────────────────────────────────
+
+/**
+ * Handle daemon start/stop/status/restart commands.
+ */
+async function handleDaemon(command?: string): Promise<void> {
+    const pidFile = join(process.cwd(), '.factory', 'daemon.pid');
+
+    switch (command) {
+        case 'start': {
+            if (existsSync(pidFile)) {
+                const oldPid = parseInt(readFileSync(pidFile, 'utf-8'));
+                try {
+                    process.kill(oldPid, 0);
+                    log('!', `Daemon already running (PID ${oldPid})`);
+                    process.exit(0);
+                } catch {
+                    // Old PID is stale, continue
+                }
+            }
+
+            const child = spawn('npx', ['tsx', 'engine/cli.ts', 'queue', 'daemon'], {
+                detached: true,
+                stdio: 'ignore',
+            });
+
+            writeFileSync(pidFile, String(child.pid));
+            child.unref();
+            log('✓', `Daemon started (PID ${child.pid})`);
+            break;
+        }
+
+        case 'stop': {
+            if (!existsSync(pidFile)) {
+                logError('No daemon running (no PID file)');
+                process.exit(1);
+            }
+            const pid = parseInt(readFileSync(pidFile, 'utf-8'));
+            try {
+                process.kill(pid, 'SIGTERM');
+                log('✓', `Daemon stopped (PID ${pid})`);
+            } catch {
+                logError(`Failed to stop daemon (PID ${pid})`);
+            }
+            break;
+        }
+
+        case 'status': {
+            if (!existsSync(pidFile)) {
+                log('  ', 'Daemon: stopped');
+                break;
+            }
+            const pid = parseInt(readFileSync(pidFile, 'utf-8'));
+            try {
+                process.kill(pid, 0);
+                log('✓', `Daemon: running (PID ${pid})`);
+            } catch {
+                log('✗', 'Daemon: stalled (PID file exists but process dead)');
+            }
+            break;
+        }
+
+        case 'restart': {
+            log('●', 'Restarting daemon...');
+            // Stop then start
+            const pid = parseInt(readFileSync(pidFile, 'utf-8'));
+            try {
+                process.kill(pid, 'SIGTERM');
+            } catch {
+                // Ignore if not running
+            }
+            const child = spawn('npx', ['tsx', 'engine/cli.ts', 'queue', 'daemon'], {
+                detached: true,
+                stdio: 'ignore',
+            });
+            writeFileSync(pidFile, String(child.pid));
+            child.unref();
+            log('✓', `Daemon restarted (PID ${child.pid})`);
+            break;
+        }
+
+        default:
+            logError(`Unknown daemon command: ${command}. Use: start|stop|status|restart`);
+            process.exit(1);
+    }
+}
+
+// ─── Spec Watcher ─────────────────────────────────────────
+
+/**
+ * Handle spec watch command — watches specs directory for new YAML files.
+ */
+async function handleWatch(watchDir?: string): Promise<void> {
+    if (!watchDir) {
+        logError('Usage: factory queue watch <dir>');
+        process.exit(1);
+    }
+
+    const { watch } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { resolve } = await import('node:path');
+
+    const resolvedDir = resolve(watchDir);
+    if (!existsSync(resolvedDir)) {
+        logError(`Directory not found: ${resolvedDir}`);
+        process.exit(1);
+    }
+
+    log('●', `Watching specs directory: ${resolvedDir}`);
+
+    const watcher = watch(resolvedDir, { persistent: true }, (eventType, filename) => {
+        if (!filename || !filename.endsWith('.yaml')) return;
+        if (eventType === 'rename' || eventType === 'change') {
+            const specPath = join(resolvedDir, filename);
+            log('→', `New spec detected: ${filename}`);
+            // Auto-add to queue
+            try {
+                const { enqueue } = require('./queue.ts');
+                enqueue(specPath, 'AppSpec');
+                log('✓', `Enqueued: ${filename}`);
+            } catch (error) {
+                logError(`Failed to enqueue: ${error}`);
+            }
+        }
+    });
+
+    log('✓', `Spec watcher started (press Ctrl+C to stop)`);
+
+    process.on('SIGTERM', () => {
+        watcher.close();
+        log('✓', 'Spec watcher stopped');
+    });
+    process.on('SIGINT', () => {
+        watcher.close();
+        process.exit(0);
+    });
+}

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-19T20:00:29Z"
+  last_seen: "2026-05-19T20:02:23Z"
   host: "BigMac-2"
-  task: "us_002_factory_scaffold: starting"
+  task: "Committed: us_002_factory_scaffold"
   status: alive

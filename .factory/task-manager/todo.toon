@@ -4,12 +4,16 @@
 
 summary:
   completed: 1
+    - us_003_factory_yaml_schema:
+        summary: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts ensureFactoryDir() to include agentic defaults. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts that resolve factory/scripts/ paths."
     - us_002_factory_scaffold:
         summary: "Created factory/.factory/factory.yaml with version:1, factory_home:'.', agentic fields (context_dir, task_queue, skill_index, workflows_dir, knowledge_dir). Updated AGENTS.md with role, stack, quick commands."
   next: 21
   cancelled: 0
 
   completed:
+    - us_003_factory_yaml_schema:
+        summary: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts ensureFactoryDir() to include agentic defaults. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts that resolve factory/scripts/ paths."
     - us_002_factory_scaffold:
         summary: "Created factory/.factory/factory.yaml with version:1, factory_home:'.', agentic fields (context_dir, task_queue, skill_index, workflows_dir, knowledge_dir). Updated AGENTS.md with role, stack, quick commands."
     - us_001_copy_scripts: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon." [P1 factory/scripts/]
@@ -36,7 +40,6 @@ summary:
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
 
   in_progress:
-    - us_003_factory_yaml_schema:
         status: in_progress
         priority: high
         summary: "Working on us_002_factory_scaffold"

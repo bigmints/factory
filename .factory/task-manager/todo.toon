@@ -4,6 +4,8 @@
 
 summary:
   completed: 1
+    - us_004_cli_facade:
+        summary: "Added CLI facade subcommands: pulse, task, context update, compress, minions, hooks install. Each resolves script via resolveScript() and spawns with FACTORY_PROJECT_ROOT env var. All commands tested and working."
     - us_003_factory_yaml_schema:
         summary: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts ensureFactoryDir() to include agentic defaults. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts that resolve factory/scripts/ paths."
     - us_002_factory_scaffold:
@@ -12,6 +14,8 @@ summary:
   cancelled: 0
 
   completed:
+    - us_004_cli_facade:
+        summary: "Added CLI facade subcommands: pulse, task, context update, compress, minions, hooks install. Each resolves script via resolveScript() and spawns with FACTORY_PROJECT_ROOT env var. All commands tested and working."
     - us_003_factory_yaml_schema:
         summary: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts ensureFactoryDir() to include agentic defaults. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts that resolve factory/scripts/ paths."
     - us_002_factory_scaffold:
@@ -42,7 +46,6 @@ summary:
     - us_062_project_init_ui: "UI onboarding wizard for Add Project: replace simple path input with a 2-step modal — Step 1: enter repo path + auto-detect stack preview; Step 2: init progress panel streaming file creation results via SSE (/api/project/init). Show per-file status (created/skipped/patched), agents.md outcome (Created/Patched), git-hooks toggle. 'Open in dashboard' button when done. Use shadcn Dialog, Progress, Badge, Switch." [P2 ui/src/components/ ui/src/app/api/project/init/]
 
   in_progress:
-    - us_004_cli_facade:
         status: in_progress
         priority: high
         summary: "Working on us_002_factory_scaffold"

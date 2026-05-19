@@ -8,7 +8,7 @@ summary:
         summary: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts ensureFactoryDir() to include agentic defaults. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts that resolve factory/scripts/ paths."
     - us_002_factory_scaffold:
         summary: "Created factory/.factory/factory.yaml with version:1, factory_home:'.', agentic fields (context_dir, task_queue, skill_index, workflows_dir, knowledge_dir). Updated AGENTS.md with role, stack, quick commands."
-  next: 21
+  next: 24
   cancelled: 0
 
   completed:
@@ -20,7 +20,6 @@ summary:
 
   next:
     - us_000_fix_heartbeat_path: "factory/scripts/heartbeat/pulse.sh writes to .agents/context/ instead of .factory/context/ — verify FACTORY_PROJECT_ROOT env var is set and .factory/context/ dir exists before pulse; also delete stale .agents/ dir from factory project root if present." [P0 factory/scripts/heartbeat/pulse.sh]
-    - us_004_cli_facade: "Add CLI subcommands: factory pulse, factory task, factory context update, factory validate, factory compress, factory minions, factory hooks install. Each resolves script via resolveScript() and sets env vars." [P1 engine/cli.ts]
     - us_010_build_tool_schema: "Create engine/build-tools.ts — TOOL_DEFINITIONS (OpenAI format): read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed. Export BuildToolContext and ToolResult." [P1 engine/build-tools.ts]
     - us_011_tool_executor: "Export executeTool(name,args,ctx) in engine/build-tools.ts. Errors as {error:string}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true." [P1 engine/build-tools.ts]
     - us_012_tool_calling_loop: "Add runToolSession() to engine/generate.ts. Max 30 turns: call LLM+tools, execute via executeTool(), stop on ctx.terminal. Token guard at 20 msgs. Replace runPipeline() and runFeaturePipeline()." [P1 engine/generate.ts]
@@ -38,8 +37,15 @@ summary:
     - us_050_ui_heartbeat: "API /api/heartbeat reads heartbeat.toon per project. HeartbeatMonitor.tsx — shadcn Table, 30s poll, status dots." [P3 ui/src/components/HeartbeatMonitor.tsx]
     - us_051_052_ui_context_skills: "API /api/toon-context and /api/skills. ToonContextViewer.tsx and SkillRegistry.tsx components." [P3 ui/src/]
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
+    - us_060_init_bridge_engine: "Create engine/init.ts — initBridge(repoPath): creates .factory/ scaffold (factory.yaml, skill-index.toon, context.toon template, worklog.toon, heartbeat.toon, todo.toon, workflows/). Auto-detects stack from package.json/tsconfig.json. Copies bootstrap.md, process.md, commit.md from factory's own .factory/workflows/. Call from both init-bridge and project add handlers in cli.ts. Return InitResult with list of files created." [P1 engine/init.ts engine/cli.ts]
+    - us_061_agents_md_patch: "In engine/init.ts — after scaffold: find agents.md or AGENTS.md (case-insensitive glob) in project root. If missing: generate from template with role, stack, quick-commands table (factory pulse|task|validate|minions), skill-index ref, workflow docs ref. If exists: parse it, check for '## Factory' section — if absent, append Factory Agentic Scaffold section with commands and file-roles table. Never overwrite existing content." [P1 engine/init.ts]
+    - us_062_project_init_ui: "UI onboarding wizard for Add Project: replace simple path input with a 2-step modal — Step 1: enter repo path + auto-detect stack preview; Step 2: init progress panel streaming file creation results via SSE (/api/project/init). Show per-file status (created/skipped/patched), agents.md outcome (Created/Patched), git-hooks toggle. 'Open in dashboard' button when done. Use shadcn Dialog, Progress, Badge, Switch." [P2 ui/src/components/ ui/src/app/api/project/init/]
 
   in_progress:
+    - us_004_cli_facade:
+        status: in_progress
+        priority: high
+        summary: "Working on us_002_factory_scaffold"
         status: in_progress
         priority: high
         summary: "Working on us_002_factory_scaffold"

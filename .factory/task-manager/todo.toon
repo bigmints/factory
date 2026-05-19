@@ -1,18 +1,14 @@
 # Task Manager — Factory Upgrade (Canonical)
-# Format: TOON — managed via cowork manage.sh
-# Script: /Users/pretheesh/Projects/fikr-workspace/cowork/.agents/skills/task-manager/manage.sh
-# Usage:  TASKS_FILE=$(pwd)/.factory/task-manager/todo.toon manage.sh list|add|start|complete
+# Format: TOON — managed via manage.sh
+# Usage:  .factory/task-manager/manage.sh list|add|start|complete
 
 summary:
-  completed: 0
-    - us_001_copy_scripts:
-        summary: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon"
-  next: 20
+  completed: 1
+  next: 19
   cancelled: 0
 
   completed:
-    - us_001_copy_scripts:
-        summary: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon"
+    - us_001_copy_scripts: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon." [P1 factory/scripts/]
 
   next:
     - us_002_factory_scaffold: "Write factory/.factory/factory.yaml — version:1, factory_home:'.', agentic fields. Create/update agents.md at factory root with role, stack, quick commands." [P1 factory/.factory/]
@@ -36,8 +32,5 @@ summary:
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
 
   in_progress:
-        status: in_progress
-        priority: high
-        summary: "Working on us_001_copy_scripts"
 
   cancelled:

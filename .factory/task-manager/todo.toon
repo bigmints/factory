@@ -4,6 +4,10 @@
 
 summary:
   completed: 5
+    - us_073_spec_watcher:
+        summary: "Added factory queue watch <dir> — auto-enqueue new YAML specs, persistent file watcher"
+    - us_072_daemon_process_mgr:
+        summary: "Added factory daemon start/stop/status/restart — PID file management, detached spawn"
     - us_071_auto_retry:
         summary: "Auto-retry up to 3x with exponential backoff (5s, 10s, 20s)"
     - us_070_queue_daemon:
@@ -38,6 +42,10 @@ summary:
   cancelled: 0
 
   completed:
+    - us_073_spec_watcher:
+        summary: "Added factory queue watch <dir> — auto-enqueue new YAML specs, persistent file watcher"
+    - us_072_daemon_process_mgr:
+        summary: "Added factory daemon start/stop/status/restart — PID file management, detached spawn"
     - us_071_auto_retry:
         summary: "Auto-retry up to 3x with exponential backoff (5s, 10s, 20s)"
     - us_070_queue_daemon:
@@ -86,11 +94,15 @@ summary:
     - us_053_ui_engine_badge: "Engine Badge on queue list: factory=blue, minions=purple. Engine-specific build panel view." [P3 ui/src/components/]
     - us_062_project_init_ui: "UI onboarding wizard for Add Project: replace simple path input with a 2-step modal — Step 1: enter repo path + auto-detect stack preview; Step 2: init progress panel streaming file creation results via SSE (/api/project/init). Show per-file status (created/skipped/patched), agents.md outcome (Created/Patched), git-hooks toggle. 'Open in dashboard' button when done. Use shadcn Dialog, Progress, Badge, Switch." [P2 ui/src/components/ ui/src/app/api/project/init/]
 
-    - us_072_daemon_process_mgr: "factory daemon start — spawns queue daemon as a detached background process, writes PID to .factory/daemon.pid. factory daemon stop — kills PID. factory daemon status — reads PID + heartbeat.toon to report running|stalled|stopped. factory daemon restart — stop + start. On macOS: also generate a launchd plist at factory daemon install for boot-time auto-start." [P1 engine/cli.ts engine/daemon.ts]
-    - us_073_spec_watcher: "factory queue watch <dir> — watches a specs directory for new .yaml files. When a new file appears: validate it, enqueue it, log 'Enqueued: {slug}'. Daemon picks it up within 30s. Enables a full drop-and-build workflow: drop a spec file, Factory does the rest." [P1 engine/cli.ts engine/queue.ts]
     - us_074_daemon_ui: "Factory dashboard shows daemon status prominently: green pulse animation when running, grey when stopped, red when stalled. 'Start Daemon' / 'Stop Daemon' buttons. Live build feed: SSE stream from /api/daemon/events showing current item, queue depth, ETA, recent completions. Auto-refreshes without page reload." [P2 ui/src/components/DaemonStatusPanel.tsx ui/src/app/api/daemon/]
 
   in_progress:
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
+        status: in_progress
+        priority: high
+        summary: "Working on us_010_build_tool_schema"
         status: in_progress
         priority: high
         summary: "Working on us_010_build_tool_schema"

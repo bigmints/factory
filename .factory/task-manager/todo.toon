@@ -3,27 +3,20 @@
 # Usage:  .factory/task-manager/manage.sh list|add|start|complete
 
 summary:
-  completed: 1
-    - us_004_cli_facade:
-        summary: "Added CLI facade subcommands: pulse, task, context update, compress, minions, hooks install. Each resolves script via resolveScript() and spawns with FACTORY_PROJECT_ROOT env var. All commands tested and working."
-    - us_003_factory_yaml_schema:
-        summary: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts ensureFactoryDir() to include agentic defaults. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts that resolve factory/scripts/ paths."
-    - us_002_factory_scaffold:
-        summary: "Created factory/.factory/factory.yaml with version:1, factory_home:'.', agentic fields (context_dir, task_queue, skill_index, workflows_dir, knowledge_dir). Updated AGENTS.md with role, stack, quick commands."
-  next: 24
+  completed: 5
+  next: 25
   cancelled: 0
 
   completed:
-    - us_004_cli_facade:
-        summary: "Added CLI facade subcommands: pulse, task, context update, compress, minions, hooks install. Each resolves script via resolveScript() and spawns with FACTORY_PROJECT_ROOT env var. All commands tested and working."
-    - us_003_factory_yaml_schema:
-        summary: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts ensureFactoryDir() to include agentic defaults. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts that resolve factory/scripts/ paths."
-    - us_002_factory_scaffold:
-        summary: "Created factory/.factory/factory.yaml with version:1, factory_home:'.', agentic fields (context_dir, task_queue, skill_index, workflows_dir, knowledge_dir). Updated AGENTS.md with role, stack, quick commands."
+    - us_000_fix_heartbeat_path: "Verified pulse.sh uses .factory/context/ (already fixed in us_001). Removed stale .agents/ directory. Added .agents/ to .gitignore." [P0 factory/scripts/heartbeat/pulse.sh]
     - us_001_copy_scripts: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon." [P1 factory/scripts/]
+    - us_002_factory_scaffold: "Created factory/.factory/ structure: context/, task-manager/, workflows/, knowledge/. Updated AGENTS.md with role, stack, quick commands." [P1 factory/.factory/]
+    - us_003_factory_yaml_schema: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts." [P1 engine/types.ts engine/config.ts engine/cli.ts]
+    - us_004_cli_facade: "Added CLI facade subcommands: pulse, task, context update, compress, minions, hooks install. Each resolves script via resolveScript() and spawns with FACTORY_PROJECT_ROOT env var." [P1 engine/cli.ts]
 
   next:
-    - us_000_fix_heartbeat_path: "factory/scripts/heartbeat/pulse.sh writes to .agents/context/ instead of .factory/context/ — verify FACTORY_PROJECT_ROOT env var is set and .factory/context/ dir exists before pulse; also delete stale .agents/ dir from factory project root if present." [P0 factory/scripts/heartbeat/pulse.sh]
+    - us_005_write_factory_yaml: "factory.yaml is missing from .factory/ despite us_002 completing — write it now. Content: version:1, factory_home:'.', agentic:{context_dir:.factory/context, task_queue:.factory/task-manager/todo.toon, skill_index:.factory/skill-index.toon, workflows_dir:.factory/workflows, knowledge_dir:.factory/knowledge}. Verify config.ts loadBridgeConfig() reads it correctly." [P0 .factory/factory.yaml engine/config.ts]
+    - us_006_task_summary_qa: "todo.toon summary: block must always stay in sync with actual completed/next counts. Add a validate-todo.sh script to factory/scripts/task-manager/ that checks counts match reality and warns if in_progress block has orphaned entries. Run as part of factory validate." [P1 factory/scripts/task-manager/]
     - us_010_build_tool_schema: "Create engine/build-tools.ts — TOOL_DEFINITIONS (OpenAI format): read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed. Export BuildToolContext and ToolResult." [P1 engine/build-tools.ts]
     - us_011_tool_executor: "Export executeTool(name,args,ctx) in engine/build-tools.ts. Errors as {error:string}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true." [P1 engine/build-tools.ts]
     - us_012_tool_calling_loop: "Add runToolSession() to engine/generate.ts. Max 30 turns: call LLM+tools, execute via executeTool(), stop on ctx.terminal. Token guard at 20 msgs. Replace runPipeline() and runFeaturePipeline()." [P1 engine/generate.ts]
@@ -45,17 +38,13 @@ summary:
     - us_061_agents_md_patch: "In engine/init.ts — after scaffold: find agents.md or AGENTS.md (case-insensitive glob) in project root. If missing: generate from template with role, stack, quick-commands table (factory pulse|task|validate|minions), skill-index ref, workflow docs ref. If exists: parse it, check for '## Factory' section — if absent, append Factory Agentic Scaffold section with commands and file-roles table. Never overwrite existing content." [P1 engine/init.ts]
     - us_062_project_init_ui: "UI onboarding wizard for Add Project: replace simple path input with a 2-step modal — Step 1: enter repo path + auto-detect stack preview; Step 2: init progress panel streaming file creation results via SSE (/api/project/init). Show per-file status (created/skipped/patched), agents.md outcome (Created/Patched), git-hooks toggle. 'Open in dashboard' button when done. Use shadcn Dialog, Progress, Badge, Switch." [P2 ui/src/components/ ui/src/app/api/project/init/]
 
-  in_progress:
-        status: in_progress
-        priority: high
-        summary: "Working on us_002_factory_scaffold"
-        status: in_progress
-        priority: high
-        summary: "Working on us_002_factory_scaffold"
-        status: in_progress
-        priority: high
-        summary: "Working on us_002_factory_scaffold"
-
+    - us_070_queue_daemon: "Upgrade factory queue start into a persistent daemon mode (factory queue daemon). After processing all pending items, enter a watch loop polling SQLite every 30s for new items. Never exits unless killed. On startup: write heartbeat, log 'Factory daemon active'. On idle: log 'Waiting for work...' every 5 min. On new item found: immediately dequeue and build. Wrap in try/catch — a single build failure must NOT crash the daemon." [P1 engine/queue.ts engine/cli.ts]
+    - us_071_auto_retry: "On build failure (non-zero exit, tsc errors, unresolvable): auto-retry up to spec-configurable maxRetries (default 2) with exponential back-off (60s, 120s). After maxRetries: mark item failed, write failure summary to .factory/knowledge/failures/{slug}.md, continue processing next item. Never block the queue on a single failing spec." [P1 engine/queue.ts engine/generate.ts]
+    - us_072_daemon_process_mgr: "factory daemon start — spawns queue daemon as a detached background process, writes PID to .factory/daemon.pid. factory daemon stop — kills PID. factory daemon status — reads PID + heartbeat.toon to report running|stalled|stopped. factory daemon restart — stop + start. On macOS: also generate a launchd plist at factory daemon install for boot-time auto-start." [P1 engine/cli.ts engine/daemon.ts]
+    - us_073_spec_watcher: "factory queue watch <dir> — watches a specs directory for new .yaml files. When a new file appears: validate it, enqueue it, log 'Enqueued: {slug}'. Daemon picks it up within 30s. Enables a full drop-and-build workflow: drop a spec file, Factory does the rest." [P1 engine/cli.ts engine/queue.ts]
+    - us_074_daemon_ui: "Factory dashboard shows daemon status prominently: green pulse animation when running, grey when stopped, red when stalled. 'Start Daemon' / 'Stop Daemon' buttons. Live build feed: SSE stream from /api/daemon/events showing current item, queue depth, ETA, recent completions. Auto-refreshes without page reload." [P2 ui/src/components/DaemonStatusPanel.tsx ui/src/app/api/daemon/]
     - us_099_final_integration: "Final validation: npx tsc --noEmit passes clean. Run factory project add /Users/pretheesh/Projects/ag-starter. Verify factory status shows ag-starter. Update ag-starter .factory/context/context.toon project.status to active. Run update-context.sh 'Factory integration complete'. Final commits in both repos." [P1 engine/ .factory/]
+
+  in_progress:
 
   cancelled:

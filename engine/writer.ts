@@ -2,7 +2,7 @@
  * Writer — writes generated files to the target repo and handles git operations.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { execSync } from 'node:child_process';
 import type { GeneratedFile, AppSpec, FeatureSpec, BuildResult, StackConfig } from './types.ts';
@@ -252,6 +252,7 @@ export function writeKnowledgeEntry(
 
     writeFileSync(filePath, content);
     log('✓', `Knowledge entry written: .factory/knowledge/builds/${slug}.md`);
+    writeTasksToon(repoPath, slug);
 }
 
 // ─── AGENTS.md Generation ────────────────────────────────
@@ -347,3 +348,43 @@ function testCmdForAgents(testing: string): string {
     };
     return map[testing.toLowerCase()] || `npx ${testing}`;
 }
+
+// ─── TOON Tasks Snapshot ─────────────────────────────────
+
+/**
+ * Write .factory/task-manager/todo.toon snapshot of completed tasks.
+ * Called after each successful build so the task queue reflects reality.
+ */
+export function writeTasksToon(repoPath: string, specSlug: string): void {
+    const todoPath = join(repoPath, '.factory', 'task-manager', 'todo.toon');
+    if (!existsSync(todoPath)) return;
+    try {
+        const content = readFileSync(todoPath, 'utf-8');
+        const data = JSON.parse(content);
+        // Move specSlug from in_progress/next to completed if present
+        for (const section of ['in_progress', 'next']) {
+            if (data[section]) {
+                data[section] = data[section].filter((t: any) => t.id !== specSlug);
+            }
+        }
+        if (!data.completed) data.completed = [];
+        data.completed.push({ id: specSlug, completed: new Date().toISOString() });
+        // Update summary counts
+        data.summary = {
+            completed: data.completed.length,
+            next: (data.next || []).length,
+            in_progress: (data.in_progress || []).length,
+            cancelled: (data.cancelled || []).length,
+        };
+        writeFileSync(todoPath, JSON.stringify(data, null, 2));
+    } catch (e) {
+        // Silently fail — don't break the build
+    }
+}
+
+// ─── TOON Tasks Snapshot ─────────────────────────────────
+
+/**
+ * Write .factory/task-manager/todo.toon snapshot of completed tasks.
+ * Called after each successful build so the task queue reflects reality.
+ */

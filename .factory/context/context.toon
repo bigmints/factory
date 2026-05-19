@@ -1,0 +1,41 @@
+project:
+  name: factory
+  status: in-development
+  created: "2026-05-20"
+  last_updated: "2026-05-20"
+  last_commit: "initial .factory scaffold"
+
+stack:
+  runtime: Node.js (npx tsx)
+  frontend: Next.js 15 + App Router
+  styling: Tailwind CSS + Shadcn/UI
+  state: SQLite (better-sqlite3) + JSON files
+  language: TypeScript
+  package_manager: npm
+
+agentic:
+  context_format: TOON
+  scripts_source: /Users/pretheesh/Projects/ag-starter/.agents/skills/
+  task_manager: /Users/pretheesh/Projects/ag-starter/.agents/skills/task-manager/manage.sh
+  minions: /Users/pretheesh/Projects/ag-starter/.agents/skills/minions/scripts/minions
+  context_dir: .factory/context/
+  task_queue: .factory/task-manager/todo.toon
+  skill_index: .factory/skill-index.toon
+
+architecture:
+  philosophy: "LLM is the runtime. Tools are the execution boundary. No hardcoded sequences."
+  engine: tool-calling loop (replacing plan→build→test→iterate)
+  cli_delegation: minions (replacing gemini-cli-engine and pi-cli-engine)
+  context_format: TOON (token-efficient project snapshots)
+  script_host: factory/scripts/ (absorbing ag-starter skills)
+  connected_projects: data-only — .factory/ contains context + queue + specs, no scripts
+
+key_decisions[6]{id,summary}:
+  001,"Tool-based LLM engine — LLM calls tools (read_file/write_file/run_command/mark_complete), no hardcoded pipeline"
+  002,"Minions replaces gemini-cli-engine and pi-cli-engine — single CLI delegation path via queue.yaml"
+  003,"TOON context bridge — gatherContext() reads context.toon + skill-index.toon, injects into build prompt"
+  004,"Factory owns all scripts — factory/scripts/ is the tooling host, connected projects are data-only"
+  005,"factory CLI facade — factory pulse/task/validate/context/minions/hooks subcommands"
+  006,"factory/.factory/ self-referential bridge — Factory runs its own agentic process against itself"
+
+# Active tasks tracked in .factory/task-manager/todo.toon

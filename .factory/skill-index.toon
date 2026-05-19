@@ -1,0 +1,7 @@
+skills[6]{name,path,description}:
+  heartbeat,factory/scripts/heartbeat/pulse.sh,"Write a liveness timestamp before each task so humans can detect a stalled agent"
+  auto-context,factory/scripts/auto-context/update-context.sh,"Append a timestamped entry to the worklog in TOON format"
+  compress-worklog,factory/scripts/compress-worklog/compress.sh,"Archive old worklog entries to keep context token count low"
+  validate-code,factory/scripts/validate-code/validate.sh,"Run lint and type checks before committing"
+  minions,factory/scripts/minions/scripts/minions,"Run a YAML prompt queue sequentially against the pi (Gemini) CLI"
+  task-manager,.factory/task-manager/manage.sh,"Manage task lifecycle: list / add / start / complete tasks in todo.toon"

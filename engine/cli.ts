@@ -22,6 +22,7 @@ import { loadProjects, getActiveProject, addProject, removeProject, switchProjec
 import { gatherContext } from './context.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
 import { runGeminiCLIBuild, runGeminiCLIFeatureBuild, isGeminiCLIAvailable } from './gemini-cli-engine.ts';
+import { runPiCLIBuild, runPiCLIFeatureBuild, isPiCLIAvailable } from './pi-cli-engine.ts';
 import { writeFiles, setupProject, gitCommit, gitPush, writeKnowledgeEntry, writeAppAgentsMd, buildDebrief } from './writer.ts';
 import { autoFixSpec } from './autofix.ts';
 import { log, logHeader, logStep, logError } from './log.ts';
@@ -367,6 +368,7 @@ async function handleFeature(subcommand?: string, specPath?: string): Promise<vo
             // Check for --engine flag
             const featureFlags = parseFlags(args.slice(3));
             const useGeminiCLIFeature = featureFlags.engine === 'gemini-cli';
+            const usePiCLIFeature = featureFlags.engine === 'pi-cli';
 
             const targetDir = bridge.apps_dir
                 ? resolve(project.path, bridge.apps_dir, spec.target.app)
@@ -381,6 +383,14 @@ async function handleFeature(subcommand?: string, specPath?: string): Promise<vo
                 }
                 log('→', `Using Gemini CLI engine for feature (${check.version})`);
                 result = await runGeminiCLIFeatureBuild(spec, context, targetDir);
+            } else if (usePiCLIFeature) {
+                const check = isPiCLIAvailable();
+                if (!check.available) {
+                    logError(check.error || 'pi CLI is not available');
+                    process.exit(1);
+                }
+                log('→', `Using pi CLI engine for feature (${check.version})`);
+                result = await runPiCLIFeatureBuild(spec, context, targetDir);
             } else {
                 result = await runFeaturePipeline(spec, context);
                 // Write files only for factory engine

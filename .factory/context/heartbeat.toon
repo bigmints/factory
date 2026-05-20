@@ -1,5 +1,0 @@
-heartbeat:
-  last_seen: "2026-05-20T08:51:58Z"
-  host: "BigMac-2"
-  task: "Fixed 3 bugs: factory.yaml, stale API routes, daemon.ts separation"
-  status: alive

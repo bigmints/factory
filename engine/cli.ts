@@ -1078,10 +1078,12 @@ function handleTask(): void {
         console.error('Usage: factory task <list|start|complete|add> [args...]');
         process.exit(1);
     }
+    const todoYaml = resolve(process.cwd(), '.factory/task-manager/todo.yaml');
+    const todoToon = resolve(process.cwd(), '.factory/task-manager/todo.toon');
     const env = {
         ...process.env,
         FACTORY_PROJECT_ROOT: process.env.FACTORY_PROJECT_ROOT || process.cwd(),
-        TASKS_FILE: resolve(process.cwd(), '.factory/task-manager/todo.toon'),
+        TASKS_FILE: existsSync(todoYaml) ? todoYaml : todoToon,
     };
     const child = spawn(script, args.slice(1), {
         stdio: 'inherit',

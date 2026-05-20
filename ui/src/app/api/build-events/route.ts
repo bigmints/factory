@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse } from 'yaml';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -10,20 +11,35 @@ export async function GET(request: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
         start(controller) {
-            const heartbeatPath = join(process.cwd(), '.factory', 'context', 'heartbeat.toon');
+            const yamlPath = join(process.cwd(), '.factory', 'context', 'heartbeat.yaml');
+            const toonPath = join(process.cwd(), '.factory', 'context', 'heartbeat.toon');
+
+            const getHeartbeatData = () => {
+                if (existsSync(yamlPath)) {
+                    try {
+                        return parse(readFileSync(yamlPath, 'utf-8'));
+                    } catch {}
+                }
+                if (existsSync(toonPath)) {
+                    try {
+                        return JSON.parse(readFileSync(toonPath, 'utf-8'));
+                    } catch {}
+                }
+                return null;
+            };
 
             // Send initial state
-            if (existsSync(heartbeatPath)) {
-                const data = readFileSync(heartbeatPath, 'utf-8');
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'heartbeat', data: JSON.parse(data) })}\n\n`));
+            const initialData = getHeartbeatData();
+            if (initialData) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'heartbeat', data: initialData })}\n\n`));
             }
 
             // Poll for updates every 2 seconds
             const interval = setInterval(() => {
                 try {
-                    if (existsSync(heartbeatPath)) {
-                        const data = readFileSync(heartbeatPath, 'utf-8');
-                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'update', data: JSON.parse(data) })}\n\n`));
+                    const data = getHeartbeatData();
+                    if (data) {
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'update', data: data })}\n\n`));
                     }
                 } catch {
                     // Ignore read errors

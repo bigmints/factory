@@ -7,6 +7,7 @@ import { resolve, dirname, join } from 'node:path';
 import { execSync } from 'node:child_process';
 import type { GeneratedFile, AppSpec, FeatureSpec, BuildResult, StackConfig } from './types.ts';
 import { log, logError } from './log.ts';
+import { parse as parseYaml, stringify as toYaml } from 'yaml';
 
 /**
  * Write generated files to a target directory.
@@ -352,31 +353,77 @@ function testCmdForAgents(testing: string): string {
 // ─── TOON Tasks Snapshot ─────────────────────────────────
 
 /**
- * Write .factory/task-manager/todo.toon snapshot of completed tasks.
+ * Write .factory/task-manager/todo.yaml (or legacy todo.toon) snapshot of completed tasks.
  * Called after each successful build so the task queue reflects reality.
  */
 export function writeTasksToon(repoPath: string, specSlug: string): void {
-    const todoPath = join(repoPath, '.factory', 'task-manager', 'todo.toon');
-    if (!existsSync(todoPath)) return;
+    const todoYamlPath = join(repoPath, '.factory', 'task-manager', 'todo.yaml');
+    const todoToonPath = join(repoPath, '.factory', 'task-manager', 'todo.toon');
+    const todoPath = existsSync(todoYamlPath) ? todoYamlPath : (existsSync(todoToonPath) ? todoToonPath : null);
+    if (!todoPath) return;
+
     try {
         const content = readFileSync(todoPath, 'utf-8');
-        const data = JSON.parse(content);
+        let data: any;
+        if (todoPath.endsWith('.yaml') || todoPath.endsWith('.yml')) {
+            data = parseYaml(content);
+        } else {
+            data = JSON.parse(content);
+        }
+
+        if (!data) data = {};
+
         // Move specSlug from in_progress/next to completed if present
         for (const section of ['in_progress', 'next']) {
-            if (data[section]) {
-                data[section] = data[section].filter((t: any) => t.id !== specSlug);
+            if (data[section] && Array.isArray(data[section])) {
+                data[section] = data[section].filter((t: any) => {
+                    if (typeof t === 'string') return t !== specSlug;
+                    if (t && typeof t === 'object') {
+                        // Check if it's in format: { [specSlug]: summary } or { id: specSlug }
+                        const keys = Object.keys(t);
+                        if (keys.length > 0 && keys[0] === specSlug) return false;
+                        return t.id !== specSlug;
+                    }
+                    return true;
+                });
             }
         }
+
         if (!data.completed) data.completed = [];
-        data.completed.push({ id: specSlug, completed: new Date().toISOString() });
+        if (Array.isArray(data.completed)) {
+            // Check if already completed
+            const alreadyCompleted = data.completed.some((t: any) => {
+                if (typeof t === 'string') return t === specSlug;
+                if (t && typeof t === 'object') {
+                    const keys = Object.keys(t);
+                    if (keys.length > 0 && keys[0] === specSlug) return true;
+                    return t.id === specSlug;
+                }
+                return false;
+            });
+
+            if (!alreadyCompleted) {
+                if (todoPath.endsWith('.yaml') || todoPath.endsWith('.yml')) {
+                    data.completed.push({ [specSlug]: `Completed build for ${specSlug}` });
+                } else {
+                    data.completed.push({ id: specSlug, completed: new Date().toISOString() });
+                }
+            }
+        }
+
         // Update summary counts
         data.summary = {
-            completed: data.completed.length,
+            completed: (data.completed || []).length,
             next: (data.next || []).length,
             in_progress: (data.in_progress || []).length,
             cancelled: (data.cancelled || []).length,
         };
-        writeFileSync(todoPath, JSON.stringify(data, null, 2));
+
+        if (todoPath.endsWith('.yaml') || todoPath.endsWith('.yml')) {
+            writeFileSync(todoPath, toYaml(data));
+        } else {
+            writeFileSync(todoPath, JSON.stringify(data, null, 2));
+        }
     } catch (e) {
         // Silently fail — don't break the build
     }

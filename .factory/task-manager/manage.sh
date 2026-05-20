@@ -6,7 +6,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-TASKS_FILE="${TASKS_FILE:-$SCRIPT_DIR/todo.toon}"
+
+if [[ -z "${TASKS_FILE:-}" ]]; then
+  if [[ -f "$SCRIPT_DIR/todo.yaml" ]]; then
+    TASKS_FILE="$SCRIPT_DIR/todo.yaml"
+  elif [[ -f "$SCRIPT_DIR/todo.toon" ]]; then
+    TASKS_FILE="$SCRIPT_DIR/todo.toon"
+  else
+    TASKS_FILE="$SCRIPT_DIR/todo.yaml"
+  fi
+fi
 
 BLUE=$(printf '\033[0;34m')
 GREEN=$(printf '\033[0;32m')

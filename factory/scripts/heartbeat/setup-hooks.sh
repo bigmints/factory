@@ -15,9 +15,12 @@ cat > "$HOOKS_DIR/pre-commit" << 'HOOKEOF'
 #!/bin/bash
 # Factory pre-commit: warn about in-progress tasks
 
-TODO_FILE="$(git rev-parse --show-toplevel)/.factory/task-manager/todo.toon"
+TODO_FILE="$(git rev-parse --show-toplevel)/.factory/task-manager/todo.yaml"
+if [ ! -f "$TODO_FILE" ]; then
+    TODO_FILE="$(git rev-parse --show-toplevel)/.factory/task-manager/todo.toon"
+fi
 if [ -f "$TODO_FILE" ]; then
-    IN_PROGRESS=$(grep -c '"in_progress"' "$TODO_FILE" 2>/dev/null || echo 0)
+    IN_PROGRESS=$(grep -c 'in_progress' "$TODO_FILE" 2>/dev/null || echo 0)
     if [ "$IN_PROGRESS" -gt 0 ]; then
         echo "⚠ Warning: There are in-progress tasks. Consider completing them first."
     fi

@@ -20,7 +20,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_ROOT="${FACTORY_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo ".")}"
-HEARTBEAT_FILE="$PROJECT_ROOT/.factory/context/heartbeat.toon"
+HEARTBEAT_FILE="$PROJECT_ROOT/.factory/context/heartbeat.yaml"
+if [[ ! -f "$HEARTBEAT_FILE" && -f "$PROJECT_ROOT/.factory/context/heartbeat.toon" ]]; then
+  HEARTBEAT_FILE="$PROJECT_ROOT/.factory/context/heartbeat.toon"
+fi
 
 if [[ ! -f "$HEARTBEAT_FILE" ]]; then
   echo "[heartbeat] ⚠️  No heartbeat file found. Agent has never pulsed or the file was deleted."
@@ -29,8 +32,8 @@ if [[ ! -f "$HEARTBEAT_FILE" ]]; then
 fi
 
 # Extract last_seen value
-LAST_SEEN=$(grep 'last_seen:' "$HEARTBEAT_FILE" | sed 's/.*"\(.*\)"/\1/')
-TASK=$(grep 'task:' "$HEARTBEAT_FILE" | sed 's/.*"\(.*\)"/\1/')
+LAST_SEEN=$(grep 'last_seen:' "$HEARTBEAT_FILE" | sed -E 's/[[:space:]]*last_seen:[[:space:]]*"?([^"]*)"?/\1/')
+TASK=$(grep 'task:' "$HEARTBEAT_FILE" | sed -E 's/[[:space:]]*task:[[:space:]]*"?([^"]*)"?/\1/')
 
 if [[ -z "$LAST_SEEN" ]]; then
   echo "[heartbeat] ⚠️  Heartbeat file exists but last_seen is empty or malformed."

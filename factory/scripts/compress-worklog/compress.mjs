@@ -3,9 +3,11 @@ import path from 'path';
 import { encode, decode } from '@toon-format/toon';
 
 const PROJECT_ROOT = process.env.FACTORY_PROJECT_ROOT || process.cwd();
-const WORKLOG_PATH = path.join(PROJECT_ROOT, '.factory/context/worklog.toon');
+const yamlPath = path.join(PROJECT_ROOT, '.factory/context/worklog.yaml');
+const toonPath = path.join(PROJECT_ROOT, '.factory/context/worklog.toon');
+const WORKLOG_PATH = fs.existsSync(yamlPath) ? yamlPath : (fs.existsSync(toonPath) ? toonPath : null);
 
-if (!fs.existsSync(WORKLOG_PATH)) {
+if (!WORKLOG_PATH) {
   console.log('No worklog found to compress.');
   process.exit(0);
 }

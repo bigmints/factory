@@ -211,31 +211,29 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
 
   const isDirty = content !== originalContent;
   const lineCount = content.split('\n').length;
-  const kindGlowClass = parsedFields.isFeature ? 'glow-purple shadow-purple-500/5' : 'glow-blue shadow-sky-500/5';
 
   return (
     <div className="space-y-4 pb-20 sm:pb-8">
       {/* Header Controls */}
-      <div className="relative overflow-hidden rounded-2xl glass-panel p-4 shadow-lg border-border/40">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9 rounded-full tap-shrink border border-border/20 bg-muted/30">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <Button variant="outline" size="icon" onClick={onClose} className="h-9 w-9 rounded-md shrink-0 border border-border bg-background">
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 {parsedFields.isFeature ? (
-                  <Layers className="h-4 w-4 text-purple-400 shrink-0" />
+                  <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
                 ) : (
-                  <Cpu className="h-4 w-4 text-sky-400 shrink-0" />
+                  <Cpu className="h-4 w-4 text-muted-foreground shrink-0" />
                 )}
                 <h2 className="text-sm sm:text-base font-bold truncate text-foreground">{specName}</h2>
               </div>
               <p className="text-[10px] sm:text-xs text-muted-foreground font-mono truncate mt-0.5">{specFile}</p>
             </div>
             {isDirty && (
-              <Badge variant="outline" className="text-[9px] text-amber-400 border-amber-500/20 bg-amber-500/5 font-semibold px-2 h-5 rounded-full animate-pulse shrink-0">
+              <Badge variant="outline" className="text-[9px] font-semibold px-2 h-5 rounded-full shrink-0">
                 Unsaved
               </Badge>
             )}
@@ -243,14 +241,14 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             {/* Sliding segment tabs */}
-            <div className="rounded-xl bg-muted/60 p-0.5 flex items-center border border-border/30 shadow-inner">
+            <div className="rounded-lg bg-muted p-1 flex items-center border border-border">
               <button
                 onClick={() => setEditorTab('form')}
-                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[10px] sm:text-xs font-bold transition-all min-h-[34px] tap-shrink ${
-                  editorTab === 'form' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-[10px] sm:text-xs font-bold transition-all min-h-[34px] tap-shrink ${
+                  editorTab === 'form' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Eye className="h-3.5 w-3.5 text-sky-400" />
+                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                 Form
               </button>
               <button
@@ -258,25 +256,25 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                   setEditorTab('code');
                   setTimeout(() => textareaRef.current?.focus(), 80);
                 }}
-                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[10px] sm:text-xs font-bold transition-all min-h-[34px] tap-shrink ${
-                  editorTab === 'code' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-[10px] sm:text-xs font-bold transition-all min-h-[34px] tap-shrink ${
+                  editorTab === 'code' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Pencil className="h-3.5 w-3.5 text-purple-400" />
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                 Code
               </button>
             </div>
 
-            <Separator orientation="vertical" className="h-6 hidden sm:block bg-border/40" />
+            <Separator orientation="vertical" className="h-6 hidden sm:block bg-border" />
 
             <div className="flex items-center gap-1.5">
-              <Button variant="ghost" size="icon" onClick={handleCopy} className="h-9 w-9 rounded-full bg-muted/20 border border-border/20 hover:bg-muted/50 tap-shrink">
+              <Button variant="outline" size="icon" onClick={handleCopy} className="h-9 w-9 rounded-md shrink-0 bg-background">
                 <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
               </Button>
 
               {isDirty && (
-                <Button variant="ghost" size="icon" onClick={handleReset} className="h-9 w-9 rounded-full bg-muted/20 border border-border/20 hover:bg-rose-500/10 hover:text-rose-400 tap-shrink">
-                  <RotateCcw className="h-3.5 w-3.5 text-rose-400/80" />
+                <Button variant="outline" size="icon" onClick={handleReset} className="h-9 w-9 rounded-md shrink-0 text-destructive bg-background hover:bg-accent hover:text-destructive">
+                  <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
               )}
 
@@ -284,10 +282,10 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                 size="sm"
                 onClick={handleSave}
                 disabled={saving || !isDirty}
-                className="h-9 rounded-full px-4 text-xs gap-1.5 bg-sky-500 hover:bg-sky-600 active:scale-95 text-white font-bold shadow-md shadow-sky-500/10 tap-shrink"
+                className="h-9 rounded-md px-4 text-xs gap-1.5 font-semibold shrink-0"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saveSuccess ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                {saving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Specification'}
+                {saving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Spec'}
               </Button>
             </div>
           </div>
@@ -295,24 +293,24 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4.5 py-3 text-xs sm:text-sm text-rose-400 shadow-md">
-          <AlertCircle className="h-4.5 w-4.5 shrink-0" />
+        <div className="flex items-center gap-2 rounded-md border border-destructive bg-muted px-4 py-3 text-xs sm:text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="font-medium">{error}</span>
         </div>
       )}
 
       {loading ? (
-        <Card className="rounded-2xl border-none glass-panel">
+        <Card className="rounded-lg border border-border bg-card">
           <CardContent className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-sky-400" />
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
       ) : (
-        <Card className={`overflow-hidden rounded-2xl border glass-panel shadow-xl transition-all duration-300 ${kindGlowClass}`}>
+        <Card className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
           {/* Status Header */}
-          <div className="flex items-center justify-between border-b border-border/30 bg-muted/30 px-4 py-2.5">
+          <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2.5">
             <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              {editorTab === 'form' ? <Wrench className="h-3.5 w-3.5 text-sky-400" /> : <Code2 className="h-3.5 w-3.5 text-purple-400" />}
+              {editorTab === 'form' ? <Wrench className="h-3.5 w-3.5 text-muted-foreground" /> : <Code2 className="h-3.5 w-3.5 text-muted-foreground" />}
               {editorTab === 'form' ? 'Interactive Form Builder' : 'Raw Specification YAML'}
             </div>
             <span className="text-[10px] sm:text-[11px] font-mono text-muted-foreground/60">{lineCount} lines</span>
@@ -328,7 +326,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                   {/* Category 1: General Metadata */}
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-border/20 pb-2">
-                      <Sparkles className="h-4 w-4 text-sky-400" />
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
                       <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-foreground/90">General Metadata</h4>
                     </div>
 
@@ -339,7 +337,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                           type="text"
                           value={parsedFields.appName}
                           onChange={(e) => updateField('appName', e.target.value)}
-                          className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-sky-500/20 text-foreground transition-all"
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
                           placeholder="e.g. feedback-app"
                         />
                       </div>
@@ -350,7 +348,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                           type="text"
                           value={parsedFields.featureName}
                           onChange={(e) => updateField('featureName', e.target.value)}
-                          className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-purple-500/20 text-foreground transition-all"
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
                           placeholder="e.g. Admin Authentication"
                         />
                       </div>
@@ -361,7 +359,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                       <textarea
                         value={parsedFields.description}
                         onChange={(e) => updateField('description', e.target.value)}
-                        className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-sky-500/20 text-foreground transition-all min-h-[80px] resize-none"
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all min-h-[80px] resize-none"
                         placeholder="Detail what this specification builds..."
                       />
                     </div>
@@ -370,7 +368,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                   {/* Category 2: Stack & Target Configurations */}
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-border/20 pb-2">
-                      <Database className="h-4 w-4 text-purple-400" />
+                      <Database className="h-4 w-4 text-muted-foreground" />
                       <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-foreground/90">Stack Configuration</h4>
                     </div>
 
@@ -382,7 +380,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                             type="text"
                             value={parsedFields.framework}
                             onChange={(e) => updateField('framework', e.target.value)}
-                            className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-sky-500/20 text-foreground transition-all"
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -391,7 +389,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                             type="text"
                             value={parsedFields.database}
                             onChange={(e) => updateField('database', e.target.value)}
-                            className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-sky-500/20 text-foreground transition-all"
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
                             placeholder="e.g. SQLite"
                           />
                         </div>
@@ -399,7 +397,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                     ) : (
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Target Connected App Slug</label>
-                        <div className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm text-foreground/80 bg-muted/20">
+                        <div className="w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-xs sm:text-sm text-muted-foreground">
                           {parsedFields.targetApp || 'Default Active Spec'}
                         </div>
                       </div>
@@ -411,7 +409,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                         type="number"
                         value={parsedFields.port}
                         onChange={(e) => updateField('port', parseInt(e.target.value) || 3000)}
-                        className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-sky-500/20 text-foreground transition-all"
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
                         placeholder="3000"
                       />
                     </div>
@@ -422,7 +420,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                 {parsedFields.isFeature && (
                   <div className="border-t border-border/20 pt-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-border/20 pb-2">
-                      <Network className="h-4 w-4 text-emerald-400" />
+                      <Network className="h-4 w-4 text-muted-foreground" />
                       <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-foreground/90">Feature Ordering & Pipeline Priority</h4>
                     </div>
 
@@ -435,10 +433,10 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                               key={p}
                               type="button"
                               onClick={() => updateField('phase', p)}
-                              className={`flex-1 py-2.5 rounded-xl border text-xs font-bold transition-all tap-shrink ${
+                              className={`flex-1 py-2 rounded-md border text-xs font-bold transition-all tap-shrink ${
                                 parsedFields.phase === p
-                                  ? 'bg-purple-500/10 border-purple-500/30 text-purple-400 shadow-sm'
-                                  : 'border-border/30 bg-muted/10 text-muted-foreground hover:text-foreground'
+                                  ? 'bg-primary border-primary text-primary-foreground shadow-sm'
+                                  : 'border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
                               }`}
                             >
                               Phase {p}
@@ -456,7 +454,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                           type="text"
                           value={parsedFields.dependsOn}
                           onChange={(e) => updateField('dependsOn', e.target.value)}
-                          className="w-full glass-input rounded-xl border border-border/40 px-3.5 py-2.5 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-purple-500/20 text-foreground transition-all"
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
                           placeholder="e.g. database-schemas, auth-system"
                         />
                         <span className="text-[9px] text-muted-foreground/70 block mt-1">Provide comma-separated slugs. Dequeues only when dependencies are fully completed.</span>
@@ -472,7 +470,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   spellCheck={false}
-                  className="w-full resize-none border-0 bg-transparent p-4 sm:p-5 text-[11px] sm:text-sm leading-relaxed font-mono text-emerald-400/90 focus:outline-none max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-320px)] min-h-[350px] sm:min-h-[450px]"
+                  className="w-full resize-none border-0 bg-transparent p-4 sm:p-5 text-[11px] sm:text-sm leading-relaxed font-mono text-foreground focus:outline-none max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-320px)] min-h-[350px] sm:min-h-[450px]"
                   style={{ tabSize: 2 }}
                   onKeyDown={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -487,17 +485,17 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                 />
 
                 {/* Mobile keyboard helper accessory bar */}
-                <div className="sticky bottom-0 left-0 right-0 h-10 border-t border-border/30 bg-muted/80 backdrop-blur-md flex items-center px-3 gap-1 overflow-x-auto scrollbar-none z-30 select-none">
+                <div className="sticky bottom-0 left-0 right-0 h-10 border-t border-border bg-muted flex items-center px-3 gap-1 overflow-x-auto scrollbar-none z-30 select-none">
                   <span className="text-[8px] font-bold font-mono text-muted-foreground/60 mr-2 uppercase tracking-wide">Accessories:</span>
                   <button
                     onClick={handleInsertTab}
-                    className="h-7 px-2.5 rounded bg-card border border-border/20 text-[10px] font-semibold font-mono hover:bg-muted active:scale-95 shrink-0 select-none"
+                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
                   >
                     TAB (2s)
                   </button>
                   <button
                     onClick={handleInsertComment}
-                    className="h-7 px-2.5 rounded bg-card border border-border/20 text-[10px] font-semibold font-mono hover:bg-muted active:scale-95 shrink-0 select-none"
+                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
                   >
                     # Comment
                   </button>
@@ -511,13 +509,13 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                         toast.info('Toolbar selection active');
                       }
                     }}
-                    className="h-7 px-2.5 rounded bg-card border border-border/20 text-[10px] font-semibold hover:bg-muted active:scale-95 shrink-0 select-none"
+                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold hover:bg-muted shrink-0 select-none text-foreground transition-colors"
                   >
                     Select Text
                   </button>
                   <button
                     onClick={handleReset}
-                    className="h-7 px-2.5 rounded bg-card border border-border/20 text-[10px] font-semibold text-rose-400 hover:bg-rose-500/5 active:scale-95 shrink-0 ml-auto select-none"
+                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold text-destructive hover:bg-muted shrink-0 ml-auto select-none transition-colors"
                   >
                     Restore
                   </button>

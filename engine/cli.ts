@@ -95,6 +95,8 @@ async function main(): Promise<void> {
             return handleMinions();
         case 'hooks':
             return handleHooks();
+        case 'repl':
+            return handleRepl(target);
         default:
             printUsage();
             process.exit(command ? 1 : 0);
@@ -942,6 +944,7 @@ Usage: factory <command> [options]
 Commands:
   build <spec.yaml> [--engine minions]   Full pipeline (or minions engine)
   validate <spec.yaml>       Validate a spec
+  repl [<spec.yaml>] [--auto] Start the beautiful interactive CLI terminal UI (REPL)
   status                     Show spec statuses
   sync <repo-path>           Sync .factory from repo
   init-bridge <repo-path>    Init .factory bridge in repo
@@ -1169,6 +1172,13 @@ function installGitHooks(projectRoot: string): void {
 
     log('✓', `Git hooks installed in ${projectRoot}`);
     log('→', 'post-commit: heartbeat + worklog auto-updated on every commit');
+}
+
+async function handleRepl(specPath?: string): Promise<void> {
+    const isAuto = args.includes('--auto') || args.includes('-a');
+    const { runRepl } = await import('./repl.ts');
+    await runRepl(specPath, { auto: isAuto });
+    process.exit(0);
 }
 
 

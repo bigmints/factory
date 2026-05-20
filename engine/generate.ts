@@ -1781,15 +1781,15 @@ function isAppSpec(spec: AppSpec | FeatureSpec): spec is AppSpec {
     return 'appName' in spec;
 }
 
-type ToolCallResult = Array<{ id: string; function: { name: string; arguments: Record<string, unknown> } }>;
-type ToolResponse = LLMResponse & { toolCalls?: ToolCallResult };
-type ToolMessages = Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }>;
+export type ToolCallResult = Array<{ id: string; function: { name: string; arguments: Record<string, unknown> } }>;
+export type ToolResponse = LLMResponse & { toolCalls?: ToolCallResult };
+export type ToolMessages = Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }>;
 
 /**
  * Route tool-calling to the correct provider implementation.
  * Supports: Gemini (native function calling), Ollama (/api/chat), OpenAI-compat (everything else).
  */
-async function callProviderWithTools(
+export async function callProviderWithTools(
     provider: LLMProvider,
     model: string,
     messages: ToolMessages,

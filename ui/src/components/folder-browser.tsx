@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Folder, FolderOpen, ChevronRight, ArrowUp, Home, Loader2, GitBranch, Factory } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -214,7 +215,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
               {visibleEntries.map((entry) => (
                 <button
                   key={entry.path}
-                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 hover:bg-muted/50 transition-colors text-left group min-h-[44px]"
+                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 hover:bg-accent hover:text-accent-foreground transition-colors text-left group min-h-[44px]"
                   onClick={() => browse(entry.path)}
                   onDoubleClick={() => {
                     if (mode === 'existing') {
@@ -236,10 +237,10 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {entry.hasFactory && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] sm:text-[10px] text-primary font-medium">
+                      <Badge variant="secondary" className="gap-1 rounded-full text-[9px] sm:text-[10px]">
                         <Factory className="h-2.5 w-2.5" />
                         <span className="hidden sm:inline">factory</span>
-                      </span>
+                      </Badge>
                     )}
                     {entry.hasGit && (
                       <GitBranch className="h-3 w-3 text-muted-foreground/60" />
@@ -258,16 +259,16 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
             <span className="text-muted-foreground">Selected:</span>
             <span className="font-mono text-foreground truncate">{currentPath}</span>
             {data.hasFactory && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] sm:text-[10px] text-primary font-medium shrink-0">
+              <Badge variant="secondary" className="gap-1 rounded-full text-[9px] sm:text-[10px] shrink-0">
                 <Factory className="h-2.5 w-2.5" />
                 .factory exists
-              </span>
+              </Badge>
             )}
             {data.hasGit && !data.hasFactory && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2 py-0.5 text-[9px] sm:text-[10px] text-orange-500 font-medium shrink-0">
+              <Badge variant="outline" className="gap-1 rounded-full text-[9px] sm:text-[10px] shrink-0">
                 <GitBranch className="h-2.5 w-2.5" />
                 git repo
-              </span>
+              </Badge>
             )}
           </div>
         )}

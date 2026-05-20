@@ -14,6 +14,7 @@ import { KnowledgeView } from '@/components/knowledge-view';
 import { SettingsView } from '@/components/settings-view';
 import { SkillsView } from '@/components/skills-view';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -428,97 +429,101 @@ export default function Dashboard() {
 
   // ─── Render: Dashboard ──────────────────────────────────
   const renderDashboard = () => (
-    <div className="space-y-6 md:space-y-8">
+    <div className="space-y-6 md:space-y-10">
       {activeProject && (
-        <div className="glass-panel rounded-2xl glow-blue p-5 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3 md:gap-4">
-            <div className="relative flex h-10 w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
-              <FolderOpen className="h-5 w-5 md:h-6 md:w-6 text-blue-400" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-              </span>
+        <Card>
+          <CardContent className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="relative flex h-10 w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-lg bg-secondary border border-border">
+                <FolderOpen className="h-5 w-5 md:h-6 md:w-6 text-foreground" />
+                <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm md:text-base font-bold truncate flex items-center gap-1.5">
+                  {activeProject.name}
+                </p>
+                <p className="text-[10px] md:text-xs text-muted-foreground font-mono truncate">{activeProject.path}</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm md:text-base font-bold truncate flex items-center gap-1.5">
-                {activeProject.name}
-              </p>
-              <p className="text-[10px] md:text-xs text-muted-foreground font-mono truncate">{activeProject.path}</p>
+            <div className="flex items-center gap-2 mt-2 sm:mt-0 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleBuildAll()}
+                disabled={isBuildingAll}
+                className="text-xs font-semibold h-8 px-3 gap-1.5"
+              >
+                {isBuildingAll ? <Spinner className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
+                Build All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSpecChat(true)}
+                className="text-xs font-semibold h-8 px-3 gap-1.5"
+              >
+                <Sparkles className="h-3 w-3 text-purple-500" />
+                New Spec
+              </Button>
             </div>
-          </div>
-          <div className="flex items-center gap-2 mt-2 sm:mt-0 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleBuildAll()}
-              disabled={isBuildingAll}
-              className="tap-shrink text-xs font-semibold h-8 rounded-xl px-3 border-blue-500/30 text-blue-400 hover:bg-blue-500/10 gap-1.5"
-            >
-              {isBuildingAll ? <Spinner className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
-              Build All
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSpecChat(true)}
-              className="tap-shrink text-xs font-semibold h-8 rounded-xl px-3 gap-1.5"
-            >
-              <Sparkles className="h-3 w-3 text-purple-400" />
-              New Spec
-            </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats row — 2 cols mobile, 4 cols desktop with premium spacing & larger cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { icon: FileText, glowClass: 'glow-blue hover:border-blue-500/20', value: specs.length, label: 'App Specs', iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-          { icon: Activity, glowClass: 'glow-purple hover:border-purple-500/20', value: featureSpecs.length, label: 'Features', iconColor: 'text-purple-400', bgColor: 'bg-purple-500/10' },
-          { icon: CheckCircle2, glowClass: 'glow-emerald hover:border-emerald-500/20', value: specs.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Specs', iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-          { icon: Package, glowClass: 'glass-panel border-muted-foreground/10 hover:border-muted-foreground/20', value: reportStats?.totalBuilds || 0, label: 'Total Builds', iconColor: 'text-muted-foreground', bgColor: 'bg-muted/40' },
+          { icon: FileText, value: specs.length, label: 'App Specs', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
+          { icon: Activity, value: featureSpecs.length, label: 'Features', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
+          { icon: CheckCircle2, value: specs.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Specs', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
+          { icon: Package, value: reportStats?.totalBuilds || 0, label: 'Total Builds', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
         ].map((stat, i) => (
-          <div key={i} className={cn("glass-panel rounded-2xl p-5 md:p-6 transition-all duration-300 hover:shadow-md tap-shrink", stat.glowClass)}>
-            <div className="flex items-center gap-4">
-              <div className={cn("flex h-11 w-11 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-2xl", stat.bgColor)}>
-                <stat.icon className={cn("h-5 md:h-6 w-5 md:w-6", stat.iconColor)} />
+          <Card key={i}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg", stat.bgColor)}>
+                  <stat.icon className={cn("h-5 w-5", stat.iconColor)} />
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-xl md:text-2xl font-bold tracking-tight leading-none">{stat.value}</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground font-bold truncate uppercase tracking-wider">{stat.label}</p>
+                </div>
               </div>
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-xl md:text-2xl font-black tracking-tight leading-none">{stat.value}</p>
-                <p className="text-[10px] md:text-xs text-muted-foreground font-bold truncate uppercase tracking-wider">{stat.label}</p>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {/* Spec Queue Header Block & Cards Grid (No double nesting!) */}
+      {/* App Specifications Section */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="space-y-1">
             <h2 className="text-base md:text-lg font-bold tracking-tight flex items-center gap-2">
-              <ListOrdered className="h-4.5 w-4.5 text-blue-400" />
-              Spec Queue
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              App Specifications
             </h2>
             <p className="text-xs text-muted-foreground">
-              Connected application specs queued for direct compilation and validation.
+              Core application specs queued for direct compilation and validation.
             </p>
           </div>
           {specs.length > 0 && (
-            <Badge variant="outline" className="text-[10px] md:text-xs font-semibold bg-blue-500/5 border-blue-500/20 text-blue-400 w-fit shrink-0">
+            <Badge variant="secondary" className="text-[10px] md:text-xs font-semibold w-fit shrink-0">
               {specs.length} Apps Active
             </Badge>
           )}
         </div>
 
         {specs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border/60 glass-panel py-8 md:py-12 text-center">
+          <Card className="border-dashed py-8 md:py-12 text-center flex flex-col items-center justify-center">
             <p className="text-sm text-muted-foreground">
-              No specs found. Add YAML files to the specs/ directory.
+              No app specifications found. Create one using the &apos;New Spec&apos; button.
             </p>
-          </div>
+          </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
             {specs.map((spec) => (
               <SpecCard
                 key={spec.file}
@@ -535,51 +540,90 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Feature Specifications Section */}
+      {featureSpecs.length > 0 && (
+        <div className="space-y-4 mt-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="space-y-1">
+              <h2 className="text-base md:text-lg font-bold tracking-tight flex items-center gap-2">
+                <Puzzle className="h-4 w-4 text-muted-foreground" />
+                Feature Specifications
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Sequenced features, UI pages, and model logic flows.
+              </p>
+            </div>
+            <Badge variant="secondary" className="text-[10px] md:text-xs font-semibold w-fit shrink-0">
+              {featureSpecs.length} Features Active
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+            {featureSpecs.map((fs) => (
+              <SpecCard
+                key={fs.file}
+                spec={{ ...fs, kind: 'FeatureSpec' }}
+                onValidate={(file) => handleFeatureAction(file, 'validate')}
+                onBuild={(file) => handleFeatureAction(file, 'build')}
+                onEnqueue={handleEnqueue}
+                onView={(file, name) => setEditingSpec({ file, name })}
+                isValidating={activeAction?.type === 'feature-validate' && activeAction?.file === fs.file}
+                isBuilding={activeAction?.type === 'feature-build' && activeAction?.file === fs.file}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Validation & Build output */}
       {(validationResult || buildOutput) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {validationResult && (
-            <div className="glass-panel rounded-2xl border border-border/40 p-5 md:p-6 space-y-4 glow-blue">
-              <div className="flex items-center gap-2">
-                {validationResult.passed ? (
-                  <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400" />
-                ) : (
-                  <AlertCircle className="h-4.5 w-4.5 text-rose-400" />
-                )}
-                <h4 className="text-sm font-bold text-foreground">
-                  Validation {validationResult.passed ? 'Passed' : 'Failed'}
-                </h4>
-                <Badge variant={validationResult.passed ? 'default' : 'destructive'} className="ml-auto text-[10px] font-bold">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <div className="flex items-center gap-2">
+                  {validationResult.passed ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-destructive" />
+                  )}
+                  <CardTitle className="text-sm font-bold">
+                    Validation {validationResult.passed ? 'Passed' : 'Failed'}
+                  </CardTitle>
+                </div>
+                <Badge variant={validationResult.passed ? 'default' : 'destructive'} className="text-[10px] font-bold">
                   {validationResult.checks.filter((c) => c.passed).length}/{validationResult.checks.length}
                 </Badge>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8"></TableHead>
-                      <TableHead className="text-xs">Check</TableHead>
-                      <TableHead className="text-xs">Details</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {validationResult.checks.map((check, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          {check.passed ? (
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                          ) : (
-                            <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs font-medium">{check.name}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead className="text-xs">Check</TableHead>
+                        <TableHead className="text-xs">Details</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {validationResult.checks.map((check, i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            {check.passed ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                            ) : (
+                              <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs font-medium">{check.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
           )}
           {buildOutput && (
             <BuildLog
@@ -608,7 +652,7 @@ export default function Dashboard() {
     return (
       <div className="space-y-8">
         {/* Header row & control bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-muted/20 border border-border/40 p-5 md:p-6 rounded-2xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-muted border border-border p-4 rounded-lg">
           <div className="flex flex-wrap items-center gap-4 text-xs md:text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
@@ -621,10 +665,10 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center border rounded-xl h-9 overflow-x-auto text-xs bg-background/50 p-1 shrink-0">
+            <div className="flex items-center border rounded-lg h-9 overflow-x-auto text-xs bg-background p-1 shrink-0">
               <span className="text-[10px] text-muted-foreground font-bold px-2 uppercase tracking-wider">Engine:</span>
               <button
-                className={`px-3 py-1 rounded-lg transition-all text-[11px] font-semibold shrink-0 ${buildEngine === 'factory' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+                className={`px-3 py-1 rounded-md transition-all text-[11px] font-semibold shrink-0 ${buildEngine === 'factory' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
                 onClick={() => setBuildEngine('factory')}
               >
                 Factory
@@ -636,7 +680,7 @@ export default function Dashboard() {
               variant="outline"
               onClick={handleBuildAll}
               disabled={isBuildingAll || (specs.length === 0 && featureSpecs.length === 0)}
-              className="h-9 text-xs gap-1.5 rounded-xl border-border/50 hover:bg-muted/80 font-semibold"
+              className="h-9 text-xs gap-1.5 rounded-lg border hover:bg-muted font-semibold"
             >
               {isBuildingAll ? <Spinner className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
               <span>Build All</span>
@@ -645,7 +689,7 @@ export default function Dashboard() {
             <Button
               size="sm"
               onClick={() => setShowSpecChat(true)}
-              className="h-9 text-xs gap-1.5 rounded-xl font-bold bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm"
+              className="h-9 text-xs gap-1.5 rounded-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>New Spec</span>
@@ -656,19 +700,19 @@ export default function Dashboard() {
         <SpecChat open={showSpecChat} onOpenChange={setShowSpecChat} onSpecSaved={() => fetchSpecs()} />
 
         {loading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
             {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-[180px] rounded-2xl" />
+              <Skeleton key={i} className="h-[180px] rounded-lg" />
             ))}
           </div>
         ) : specs.length === 0 && featureSpecs.length === 0 ? (
-          <div className="glass-panel rounded-2xl border border-dashed border-border/60 p-6 sm:p-10 text-center glow-purple">
-            <FileText className="h-10 w-10 md:h-12 md:w-12 mx-auto mb-3 md:mb-4 text-muted-foreground/30" />
+          <Card className="border-dashed p-6 sm:p-10 text-center flex flex-col items-center justify-center">
+            <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
             <p className="text-sm font-semibold text-foreground">No specs found</p>
             <p className="text-xs text-muted-foreground mt-1.5 max-w-xs mx-auto leading-relaxed">
               Add YAML files to specs/apps/ or specs/features/ to get started
             </p>
-          </div>
+          </Card>
         ) : (
           <div className="space-y-8 md:space-y-10">
             {/* App Specs Section */}
@@ -676,7 +720,7 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <h3 className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <Globe className="h-4.5 w-4.5 text-blue-400" />
+                    <Globe className="h-4 w-4 text-muted-foreground" />
                     App Specifications
                   </h3>
                   <p className="text-xs text-muted-foreground">
@@ -684,7 +728,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
                   {specs.map((spec) => (
                     <SpecCard
                       key={spec.file}
@@ -706,7 +750,7 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <h3 className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <Puzzle className="h-4.5 w-4.5 text-purple-400" />
+                    <Puzzle className="h-4 w-4 text-muted-foreground" />
                     Feature Specifications
                   </h3>
                   <p className="text-xs text-muted-foreground">
@@ -714,7 +758,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
                   {featureSpecs.map((fs) => (
                     <SpecCard
                       key={fs.file}
@@ -771,9 +815,9 @@ export default function Dashboard() {
         projectRefreshKey={projectRefreshKey}
       />
 
-      <main className="flex-1 overflow-auto pb-16 md:pb-0">
+      <main className="flex-1 overflow-auto pt-16 md:pt-0 pb-6 md:pb-0">
         {showAddProject ? (
-          <div className="p-4 md:p-8 h-full">
+          <div className="p-4 md:p-8 w-full h-full">
             <AddProject onProjectAdded={() => {
               setShowAddProject(false);
               setHasProjects(true);
@@ -784,7 +828,7 @@ export default function Dashboard() {
             }} />
           </div>
         ) : (
-          <div className="p-4 md:p-8">
+          <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto">
             {/* Page header */}
             {['dashboard', 'specs', 'skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
               <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
@@ -854,7 +898,7 @@ export default function Dashboard() {
 
       {/* Output panel — desktop: sidebar, mobile: bottom sheet */}
       <aside
-        className={`border-l border-border bg-background/95 backdrop-blur-sm transition-all duration-300 ease-in-out overflow-hidden ${
+        className={`border-l border-border bg-background transition-all duration-300 ease-in-out overflow-hidden ${
           outputPanelOpen && hasOutput ? 'w-[320px] md:w-[420px]' : 'w-0'
         } md:block hidden`}
       >
@@ -876,44 +920,48 @@ export default function Dashboard() {
           </div>
           <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
             {validationResult && (
-              <div className="glass-panel rounded-2xl border border-border/40 p-4 md:p-5 space-y-3 glow-blue">
-                <div className="flex items-center gap-2">
-                  {validationResult.passed ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-400" />
-                  ) : (
-                    <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4 text-rose-400" />
-                  )}
-                  <h4 className="text-xs md:text-sm font-bold text-foreground">
-                    Validation {validationResult.passed ? 'Passed' : 'Failed'}
-                  </h4>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8"></TableHead>
-                        <TableHead className="text-xs">Check</TableHead>
-                        <TableHead className="text-xs">Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {validationResult.checks.map((check, i) => (
-                        <TableRow key={i}>
-                          <TableCell>
-                            {check.passed ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                            ) : (
-                              <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs font-medium">{check.name}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                  <div className="flex items-center gap-2">
+                    {validationResult.passed ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                    )}
+                    <CardTitle className="text-xs md:text-sm font-bold text-foreground">
+                      Validation {validationResult.passed ? 'Passed' : 'Failed'}
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-8"></TableHead>
+                          <TableHead className="text-xs">Check</TableHead>
+                          <TableHead className="text-xs">Details</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
+                      </TableHeader>
+                      <TableBody>
+                        {validationResult.checks.map((check, i) => (
+                          <TableRow key={i}>
+                            <TableCell>
+                              {check.passed ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              ) : (
+                                <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs font-medium">{check.name}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
             )}
             {buildOutput && (
               <BuildLog

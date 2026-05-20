@@ -134,7 +134,7 @@ function StepIndicator({ completed }: { completed: boolean }) {
   if (completed) {
     return (
       <IconCircleCheckFilled
-        className="mt-1 size-4.5 shrink-0 text-primary"
+        className="mt-1 size-4 shrink-0 text-primary"
         aria-hidden="true"
       />
     );

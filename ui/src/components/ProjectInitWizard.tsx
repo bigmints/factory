@@ -176,7 +176,7 @@ export function ProjectInitWizard() {
                 {step === 'init' && (
                     <div className="space-y-3">
                         <h3 className="font-medium text-sm">Initializing bridge…</h3>
-                        <div className="max-h-64 overflow-y-auto space-y-1 rounded-md border p-3 bg-muted/30 font-mono text-xs">
+                        <div className="max-h-64 overflow-y-auto space-y-1 rounded-md border p-3 bg-muted font-mono text-xs">
                             {fileEvents.length === 0 && (
                                 <p className="text-muted-foreground animate-pulse">Starting…</p>
                             )}
@@ -204,7 +204,7 @@ export function ProjectInitWizard() {
                             </p>
                         )}
                         {fileEvents.length > 0 && (
-                            <div className="max-h-40 overflow-y-auto rounded-md border p-3 bg-muted/30 font-mono text-xs text-left space-y-1">
+                            <div className="max-h-40 overflow-y-auto rounded-md border p-3 bg-muted font-mono text-xs text-left space-y-1">
                                 {fileEvents.map((ev, i) => (
                                     <div key={i} className="flex items-center gap-2">
                                         <span>{ACTION_ICON[ev.action] ?? '⬜'}</span>

@@ -374,9 +374,9 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
 
   const phaseColor = (phase?: number) => {
     switch (phase) {
-      case 1: return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-      case 2: return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-      case 3: return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+      case 1: return 'bg-muted text-emerald-600 dark:text-emerald-400 border-emerald-500';
+      case 2: return 'bg-muted text-amber-600 dark:text-amber-500 border-amber-500';
+      case 3: return 'bg-muted text-purple-600 dark:text-purple-400 border-purple-500';
       default: return 'bg-muted text-muted-foreground border-border';
     }
   };
@@ -386,10 +386,10 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
       <DialogContent className="fixed inset-0 z-50 flex flex-col w-screen h-screen max-w-none m-0 rounded-none border-0 p-0 gap-0 overflow-hidden outline-none bg-background translate-x-0 translate-y-0 sm:max-w-none top-0 left-0 [&>button]:hidden">
         
         {/* Top Header */}
-        <DialogHeader className="border-b border-border/40 px-4 py-3 flex-row items-center justify-between space-y-0 h-14 sm:h-16 shrink-0 bg-card/60 backdrop-blur-xl sticky top-0 z-50 shadow-xs">
+        <DialogHeader className="border-b border-border px-4 py-3 flex-row items-center justify-between space-y-0 h-14 sm:h-16 shrink-0 bg-card sticky top-0 z-50 shadow-sm">
           <div className="flex items-center space-x-3 min-w-0">
-            <div className="inline-flex shrink-0 items-center justify-center rounded-xl bg-sky-500/10 p-2 shadow-xs glow-blue">
-              <Sparkles className="size-4.5 text-sky-400 animate-pulse" />
+            <div className="inline-flex shrink-0 items-center justify-center rounded-lg bg-muted p-2 border border-border text-foreground">
+              <Sparkles className="size-4 text-foreground" />
             </div>
             <div className="space-y-0.5 min-w-0">
               <DialogTitle className="text-sm sm:text-base font-bold tracking-tight truncate text-foreground">
@@ -409,16 +409,16 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-full tap-shrink border-border/50 hover:bg-muted/40"
+                  className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-md tap-shrink"
                   onClick={handleCopy}
                 >
-                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                   <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
                 </Button>
                 {!allSaved && (
                   <Button
                     size="sm"
-                    className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-full tap-shrink bg-sky-500 hover:bg-sky-600 active:scale-95 shadow-md shadow-sky-500/10 text-white"
+                    className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-md tap-shrink"
                     onClick={handleSaveAll}
                     disabled={savingAll}
                   >
@@ -428,18 +428,18 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                   </Button>
                 )}
                 {allSaved && (
-                  <Badge variant="outline" className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 border-emerald-500/20 bg-emerald-500/5 text-emerald-400 rounded-full">
-                    <Check className="h-3.5 w-3.5" />
+                  <Badge variant="secondary" className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-md">
+                    <Check className="h-3.5 w-3.5 text-green-500 dark:text-green-400" />
                     <span>All Saved</span>
                   </Badge>
                 )}
               </>
             )}
-            <Separator orientation="vertical" className="h-6 mx-1 hidden sm:block bg-border/40" />
+            <Separator orientation="vertical" className="h-6 mx-1 hidden sm:block bg-border" />
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-full hover:bg-rose-500/10 hover:text-rose-400 transition-colors tap-shrink border border-border/10"
+              className="h-8 w-8 rounded-md transition-colors tap-shrink"
               onClick={() => onOpenChange(false)}
             >
               <X className="h-4 w-4" />
@@ -449,26 +449,26 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
 
         {/* Mobile Tab Segment Switcher */}
         {hasSpecs && (
-          <div className="lg:hidden flex bg-muted/40 px-3 py-2 border-b border-border/30 shrink-0">
-            <div className="w-full rounded-xl bg-muted/70 p-1 flex items-center border border-border/30 shadow-inner">
+          <div className="lg:hidden flex bg-muted px-3 py-2 border-b border-border shrink-0">
+            <div className="w-full rounded-lg bg-muted p-1 flex items-center border border-border">
               <button
                 className={cn(
-                  "flex-1 text-xs font-bold py-1.5 rounded-lg transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
-                  mobilePane === 'chat' ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                  "flex-1 text-xs font-bold py-1.5 rounded-md transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
+                  mobilePane === 'chat' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
                 onClick={() => setMobilePane('chat')}
               >
-                <Bot className="h-3.5 w-3.5 text-sky-400" />
+                <Bot className="h-3.5 w-3.5" />
                 Chat Workspace
               </button>
               <button
                 className={cn(
-                  "flex-1 text-xs font-bold py-1.5 rounded-lg transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
-                  mobilePane === 'preview' ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                  "flex-1 text-xs font-bold py-1.5 rounded-md transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
+                  mobilePane === 'preview' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
                 onClick={() => setMobilePane('preview')}
               >
-                <FileText className="h-3.5 w-3.5 text-emerald-400" />
+                <FileText className="h-3.5 w-3.5" />
                 Specs Output ({allSpecs.length})
               </button>
             </div>
@@ -480,35 +480,35 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
 
           {/* Left Panel: Chat Interface */}
           <div className={cn(
-            "flex flex-col border-r border-border/40 bg-card/20 backdrop-blur-md relative",
+            "flex flex-col border-r border-border bg-card relative",
             mobilePane === 'chat' || !hasSpecs ? "flex w-full lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]" : "hidden lg:flex lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]"
           )}>
             
             {/* Context Banners */}
             {isExistingApp && isEmpty && (
-              <div className="mx-4 mt-4 px-3 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-amber-400 text-[10px] sm:text-xs font-medium flex items-center gap-2 shadow-inner">
-                <Layers className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" />
+              <div className="mx-4 mt-4 px-3 py-2.5 rounded-lg bg-muted border border-border text-foreground text-[10px] sm:text-xs font-medium flex items-center gap-2">
+                <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="truncate">Active Project Context: <strong className="text-foreground">{existingAppName}</strong></span>
               </div>
             )}
 
             {isEmpty && (
               <div className={cn(
-                "mx-4 mt-3 px-3 py-2.5 rounded-xl border text-[10px] sm:text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors",
-                scanning ? "border-sky-500/20 bg-sky-500/5 text-sky-400" :
-                repoContext ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400" :
-                scanError ? "border-rose-500/20 bg-rose-500/5 text-rose-400" : ""
+                "mx-4 mt-3 px-3 py-2.5 rounded-lg border text-[10px] sm:text-xs font-semibold flex items-center gap-2 transition-colors",
+                scanning ? "border-border bg-muted text-foreground" :
+                repoContext ? "border-border bg-muted text-foreground" :
+                scanError ? "border-destructive bg-muted text-destructive" : ""
               )}>
                 {scanning ? (
-                  <><ScanSearch className="h-4 w-4 text-sky-400 animate-pulse shrink-0" /> <span>Analyzing codebase structure...</span></>
+                  <><ScanSearch className="h-4 w-4 text-muted-foreground shrink-0 animate-pulse" /> <span>Analyzing codebase structure...</span></>
                 ) : repoContext ? (
-                  <><ScanSearch className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <><ScanSearch className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="truncate text-foreground/90 font-medium">
                       Codebase Base: {repoContext.stack?.framework || 'Next.js'} ({Object.keys(repoContext.dependencies || {}).length} packages detected)
                     </span>
                   </>
                 ) : scanError ? (
-                  <><ScanSearch className="h-4 w-4 text-rose-400 shrink-0" /> <span>Codebase lookup unavailable</span></>
+                  <><ScanSearch className="h-4 w-4 text-destructive shrink-0" /> <span>Codebase lookup unavailable</span></>
                 ) : null}
               </div>
             )}
@@ -518,8 +518,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
               {isEmpty ? (
                 <div className="flex flex-col items-center justify-center h-full text-center gap-5 sm:gap-6 py-10 max-w-sm mx-auto">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-sky-500/20 blur-2xl rounded-full animate-pulse" />
-                    <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-2xl transition-transform duration-300 hover:scale-105">
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-xl bg-muted border border-border text-foreground shadow-sm">
                       <Bot className="h-8 w-8" />
                     </div>
                   </div>
@@ -527,7 +526,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                     <h3 className="text-sm sm:text-base font-bold text-foreground">Describe your project goal</h3>
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       {repoContext
-                        ? "State the page, system, or features you\'d like to construct. The engine will decompose the requirement into a production-grade plan."
+                        ? "State the page, system, or features you'd like to construct. The engine will decompose the requirement into a production-grade plan."
                         : "Describe the application idea and stack preferences. I'll translate it into modular, clean spec models."}
                     </p>
                   </div>
@@ -536,19 +535,19 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                   {repoContext && (
                     <div className="w-full pt-4 space-y-2">
                       {repoContext.agentInstructions && (
-                        <div className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-[11px] sm:text-xs border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-left">
+                        <div className="flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-[11px] sm:text-xs border border-border bg-muted text-foreground text-left">
                           <FileCode className="h-4 w-4 shrink-0" />
                           <span className="font-semibold truncate">Loaded agent rules context (AGENTS.md)</span>
                         </div>
                       )}
                       
                       <div className="grid grid-cols-2 gap-2 text-left text-[10px] sm:text-xs">
-                        <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-border/30 bg-muted/20">
-                          <Blocks className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 border border-border bg-muted">
+                          <Blocks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                           <span className="text-muted-foreground truncate">{repoContext.stack?.framework || 'Next.js 15'}</span>
                         </div>
-                        <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-border/30 bg-muted/20">
-                          <FolderTree className="h-3.5 w-3.5 shrink-0 text-purple-400" />
+                        <div className="flex items-center gap-2 rounded-lg px-3 py-2 border border-border bg-muted">
+                          <FolderTree className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                           <span className="text-muted-foreground truncate">{repoContext.fileTree?.length || 0} files</span>
                         </div>
                       </div>
@@ -566,15 +565,14 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                       )}
                     >
                       <Avatar className={cn(
-                        "h-7 w-7 shrink-0 mt-0.5 border",
-                        msg.role === 'assistant' ? "border-sky-500/20 shadow-xs" : "border-border/60 shadow-xs"
+                        "h-7 w-7 shrink-0 mt-0.5 border border-border"
                       )}>
                         <AvatarFallback
                           className={cn(
                             'text-[9px] font-bold',
                             msg.role === 'assistant'
-                              ? 'bg-sky-500 text-white'
-                              : 'bg-zinc-800 text-zinc-100'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-muted-foreground'
                           )}
                         >
                           {msg.role === 'assistant' ? 'AI' : 'US'}
@@ -588,10 +586,10 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                           {msg.role === 'assistant' ? 'Architect Engine' : 'Requestor'}
                         </span>
                         <div className={cn(
-                          "max-w-[92%] text-xs sm:text-sm rounded-2xl p-3 sm:p-4 leading-relaxed",
+                          "max-w-[92%] text-xs sm:text-sm rounded-xl p-3 sm:p-4 leading-relaxed border",
                           msg.role === 'assistant'
-                            ? "bg-card border border-border/40 text-foreground/90 shadow-sm glass-panel"
-                            : "bg-sky-500 text-white shadow-md shadow-sky-500/10 font-medium"
+                            ? "bg-card border-border text-card-foreground shadow-sm"
+                            : "bg-primary text-primary-foreground border-primary font-medium"
                         )}>
                           {msg.role === 'assistant'
                             ? <div className="prose prose-sm dark:prose-invert max-w-none">{renderAssistantContent(msg.content)}</div>
@@ -599,9 +597,9 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                           }
                           {streaming && i === messages.length - 1 && msg.role === 'assistant' && (
                             <div className="flex gap-1 mt-3 h-4 items-center">
-                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce delay-0" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce delay-150" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce delay-300" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-foreground animate-bounce delay-0" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-foreground animate-bounce delay-150" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-foreground animate-bounce delay-300" />
                             </div>
                           )}
                         </div>
@@ -613,31 +611,31 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
             </div>
 
             {/* Input Bar */}
-            <div className="p-3 sm:p-4 shrink-0 bg-transparent border-t border-border/30 backdrop-blur-sm relative z-30">
-              <div className="relative flex flex-col rounded-2xl bg-card border border-border/50 shadow-xl overflow-hidden focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500/30 transition-all duration-200">
+            <div className="p-3 sm:p-4 shrink-0 border-t border-border relative z-30">
+              <div className="relative flex flex-col rounded-lg bg-card border border-border overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all duration-200">
                 <Textarea
                   ref={inputRef}
                   value={input}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
                   placeholder={isExistingApp ? "Tweak or define feature specs..." : "e.g., build a sleek feedback widget..."}
-                  className="w-full border-0 p-3.5 pr-12 min-h-[50px] max-h-[140px] outline-none text-xs sm:text-sm leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
+                  className="w-full border-0 p-3.5 pr-12 min-h-[50px] max-h-[140px] outline-hidden text-xs sm:text-sm leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
                   rows={1}
                   disabled={streaming}
                 />
                 <div className="flex items-center justify-between px-3.5 pb-2.5">
-                  <div className="flex items-center gap-1 opacity-45 hover:opacity-100 transition-opacity">
-                    <Terminal className="h-3 w-3 text-sky-400" />
+                  <div className="flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+                    <Terminal className="h-3 w-3 text-muted-foreground" />
                     <span className="text-[9px] font-semibold font-mono tracking-tight text-muted-foreground uppercase">v2.1 active</span>
                   </div>
                   <div className="absolute right-2.5 bottom-2.5">
                     <Button
                       size="icon"
                       className={cn(
-                        'rounded-xl h-8 w-8 p-0 transition-all duration-200 tap-shrink',
+                        'rounded-md h-8 w-8 p-0 transition-all duration-200 tap-shrink',
                         input.trim()
-                          ? 'bg-sky-500 hover:bg-sky-600 text-white hover:scale-105 active:scale-95 shadow-lg shadow-sky-500/10'
-                          : 'bg-muted text-muted-foreground'
+                          ? 'bg-primary text-primary-foreground hover:scale-105 active:scale-95 shadow-sm'
+                          : 'bg-muted text-muted-foreground hover:bg-muted'
                       )}
                       disabled={!input.trim() || streaming}
                       onClick={() => handleSend()}
@@ -645,7 +643,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                       {streaming ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <ArrowUp className="h-3.5 w-3.5 text-white" />
+                        <ArrowUp className="h-3.5 w-3.5" />
                       )}
                     </Button>
                   </div>
@@ -661,7 +659,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
           )}>
             
             {/* Horizontal Swipeable Specs Tabs */}
-            <div className="border-b border-border/40 bg-muted/20 shrink-0">
+            <div className="border-b border-border bg-muted shrink-0">
               <div className="flex items-center h-12 px-3 justify-between">
                 <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 mr-4 pb-1.5 pt-1.5 select-none snap-x snap-mandatory">
                   {allSpecs.length > 0 ? (
@@ -670,31 +668,31 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                         key={spec.filename}
                         onClick={() => setActiveTab(idx)}
                         className={cn(
-                          'flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-all shrink-0 min-h-[34px] snap-center tap-shrink',
+                          'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-all shrink-0 min-h-[34px] snap-center tap-shrink',
                           idx === activeTab
-                            ? 'bg-card border border-border/50 text-foreground shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-card/40'
+                            ? 'bg-card border border-border text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent hover:text-accent-foreground'
                         )}
                       >
                         {spec.kind === 'app' ? (
-                          <Package className="h-3 w-3 text-sky-400" />
+                          <Package className="h-3 w-3 text-muted-foreground" />
                         ) : (
-                          <Layers className="h-3 w-3 text-purple-400" />
+                          <Layers className="h-3 w-3 text-muted-foreground" />
                         )}
                         <span className="max-w-[90px] sm:max-w-[130px] truncate">{spec.name}</span>
                         {spec.phase && (
-                          <span className={cn('text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full border font-bold', phaseColor(spec.phase))}>
+                          <span className={cn('text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-md border font-bold', phaseColor(spec.phase))}>
                             P{spec.phase}
                           </span>
                         )}
                         {savedSpecs.has(spec.filename) && (
-                          <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                          <Check className="h-3 w-3 text-green-500 shrink-0" />
                         )}
                       </button>
                     ))
                   ) : (
                     <div className="flex items-center gap-1.5 text-muted-foreground/60">
-                      <FileText className="h-3.5 w-3.5 text-sky-400/30" />
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground/40" />
                       <span className="text-[10px] font-bold tracking-widest uppercase font-mono">
                         {streaming ? 'generating spec blueprints...' : 'awaiting spec instructions'}
                       </span>
@@ -705,12 +703,12 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                 <div className="flex items-center gap-2 shrink-0">
                   {allSpecs.length > 0 && (
                     <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-semibold">
-                      <span className="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/10">
+                      <Badge variant="secondary" className="rounded-md">
                         {allSpecs.filter(s => s.kind === 'app').length} App
-                      </span>
-                      <span className="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/10">
+                      </Badge>
+                      <Badge variant="secondary" className="rounded-md">
                         {allSpecs.filter(s => s.kind === 'feature').length} Features
-                      </span>
+                      </Badge>
                     </div>
                   )}
                 </div>
@@ -718,21 +716,19 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
             </div>
 
             {/* Spec YAML View */}
-            <div className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.02),transparent)]">
+            <div className="flex-1 overflow-auto bg-card">
               {activeSpec ? (
                 <div className="p-4 sm:p-6 md:p-8 font-mono text-[10px] sm:text-xs md:text-sm leading-relaxed relative">
-                  {/* Glow accent */}
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
-                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/40 relative z-10">
+                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-border relative z-10">
                     <div className="flex items-center gap-2 min-w-0">
                       {activeSpec.kind === 'app' ? (
-                        <div className="p-2 rounded-xl bg-sky-500/10 glow-blue shrink-0">
-                          <Package className="h-4 w-4 text-sky-400" />
+                        <div className="p-2 rounded-lg bg-muted border border-border shrink-0">
+                          <Package className="h-4 w-4 text-foreground" />
                         </div>
                       ) : (
-                        <div className="p-2 rounded-xl bg-purple-500/10 glow-purple shrink-0">
-                          <Layers className="h-4 w-4 text-purple-400" />
+                        <div className="p-2 rounded-lg bg-muted border border-border shrink-0">
+                          <Layers className="h-4 w-4 text-foreground" />
                         </div>
                       )}
                       <div className="min-w-0">
@@ -740,7 +736,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                         <p className="text-muted-foreground text-[8px] sm:text-[10px] font-semibold truncate mt-0.5">{activeSpec.filename}</p>
                       </div>
                       {activeSpec.phase && (
-                        <span className={cn('text-[8px] sm:text-[9px] px-2 py-0.5 rounded-full border font-bold ml-2 shrink-0', phaseColor(activeSpec.phase))}>
+                        <span className={cn('text-[8px] sm:text-[9px] px-2 py-0.5 rounded-md border font-bold ml-2 shrink-0', phaseColor(activeSpec.phase))}>
                           Phase {activeSpec.phase}
                         </span>
                       )}
@@ -749,31 +745,30 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 px-3 text-[10px] sm:text-xs font-bold gap-1.5 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50 rounded-full tap-shrink"
+                        className="h-8 px-3 text-[10px] sm:text-xs font-bold gap-1.5 rounded-md tap-shrink"
                         onClick={() => handleSaveSpec(activeSpec)}
                         disabled={saving || streaming}
                       >
-                        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5 text-emerald-400" />}
+                        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                         <span>Save Spec</span>
                       </Button>
                     ) : (
-                      <span className="text-emerald-400 text-[10px] sm:text-xs font-bold flex items-center gap-1 bg-emerald-500/5 px-2.5 py-1 rounded-full border border-emerald-500/20 shrink-0">
+                      <span className="text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-bold flex items-center gap-1 bg-muted px-2.5 py-1 rounded-md border border-emerald-500 shrink-0">
                         <Check className="h-3.5 w-3.5" /> Saved Blueprint
                       </span>
                     )}
                   </div>
                   
-                  <div className="rounded-2xl border border-border/30 bg-card/65 glass-panel p-4 shadow-lg relative overflow-hidden">
+                  <div className="rounded-lg border border-border bg-card p-4 shadow-sm relative overflow-hidden">
                     <pre className="relative z-10 whitespace-pre-wrap overflow-x-auto leading-relaxed">
-                      <code className="text-emerald-400/90">{activeSpec.yaml}</code>
+                      <code className="text-foreground/80">{activeSpec.yaml}</code>
                     </pre>
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-6">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-sky-500/10 blur-3xl rounded-full scale-150 animate-pulse" />
-                    <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-muted border border-border/30 shadow-inner">
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-xl bg-muted border border-border shadow-inner">
                       <FileCode className="h-7 w-7 text-muted-foreground/35" />
                     </div>
                   </div>
@@ -788,7 +783,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
             </div>
 
             {/* Footer Bar info */}
-            <div className="h-9 border-t border-border/40 bg-muted/30 shrink-0 px-4 flex items-center justify-between text-[9px] font-bold font-mono text-muted-foreground/60 uppercase tracking-wider">
+            <div className="h-9 border-t border-border bg-muted shrink-0 px-4 flex items-center justify-between text-[9px] font-bold font-mono text-muted-foreground/60 uppercase tracking-wider">
                <div className="flex items-center gap-4">
                   <span>SPEC ENGINE MODE</span>
                   <span className="hidden sm:inline">{allSpecs.length > 0 ? `${allSpecs.length} specs compiled` : 'Standby'}</span>
@@ -821,17 +816,17 @@ function renderAssistantContent(content: string) {
       elements.push(
         <div
           key={`spec-${i}`}
-          className="my-3 px-3.5 py-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 text-[10px] sm:text-[11px] text-emerald-400 flex items-center gap-3 transition-all hover:bg-emerald-500/10 relative overflow-hidden glow-emerald shadow-xs"
+          className="my-3 px-3.5 py-3 rounded-lg bg-muted border border-border text-[10px] sm:text-[11px] text-foreground flex items-center gap-3 transition-all hover:bg-accent relative overflow-hidden"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
-             <FileText className="h-4 w-4 text-emerald-400" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border shrink-0">
+             <FileText className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex flex-col text-left gap-0.5">
-             <span className="font-extrabold uppercase tracking-widest text-[8px] sm:text-[9px] text-emerald-400/80">Spec Blueprint Compiled</span>
+             <span className="font-extrabold uppercase tracking-widest text-[8px] sm:text-[9px] text-foreground">Spec Blueprint Compiled</span>
              <span className="font-semibold opacity-75 text-[9px] sm:text-[10px] text-muted-foreground">Select panel view to inspect YAML spec</span>
           </div>
-          <div className="ml-auto bg-emerald-500/15 p-1 rounded-lg">
-             <Check className="h-3.5 w-3.5 text-emerald-400" />
+          <div className="ml-auto bg-background border border-border p-1 rounded-lg">
+             <Check className="h-3.5 w-3.5 text-green-500" />
           </div>
         </div>
       );

@@ -70,7 +70,7 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
     return (
       <button
         onClick={onAddProject}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
       >
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-muted-foreground/30">
           <Plus className="h-3.5 w-3.5" />
@@ -86,12 +86,12 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
         onClick={() => setOpen(!open)}
         className={cn(
           'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-          'hover:bg-accent/50',
-          open && 'bg-accent'
+          'hover:bg-accent hover:text-accent-foreground',
+          open && 'bg-accent text-accent-foreground'
         )}
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
-          <FolderOpen className="h-3.5 w-3.5 text-primary" />
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-secondary border">
+          <FolderOpen className="h-3.5 w-3.5 text-foreground" />
         </div>
         <div className="flex-1 text-left min-w-0">
           <p className="truncate text-xs font-medium">
@@ -117,7 +117,7 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
                 'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
                 project.id === activeId
                   ? 'bg-accent text-accent-foreground'
-                  : 'hover:bg-accent/50'
+                  : 'hover:bg-accent hover:text-accent-foreground'
               )}
             >
               <div className="flex-1 min-w-0">
@@ -139,7 +139,7 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
               setOpen(false);
               onAddProject();
             }}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Project

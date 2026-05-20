@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-// Card imports removed
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -46,11 +46,11 @@ interface ActivityStep {
 }
 
 const statusConfig: Record<string, { label: string; color: string; glowClass: string; icon: any; bg: string }> = {
-  pending: { label: 'Pending', color: 'text-zinc-400', glowClass: '', icon: Clock, bg: 'bg-zinc-500/10' },
-  running: { label: 'Running', color: 'text-sky-400', glowClass: 'glow-blue border-sky-500/30 shadow-sky-500/10', icon: Loader2, bg: 'bg-sky-500/10' },
-  completed: { label: 'Completed', color: 'text-emerald-400', glowClass: 'glow-emerald border-emerald-500/30 shadow-emerald-500/10', icon: CheckCircle2, bg: 'bg-emerald-500/10' },
-  failed: { label: 'Failed', color: 'text-rose-400', glowClass: 'border-rose-500/30 shadow-rose-500/10', icon: XCircle, bg: 'bg-rose-500/10' },
-  'needs-attention': { label: 'Attention', color: 'text-amber-400', glowClass: 'glow-purple border-amber-500/30 shadow-amber-500/10', icon: AlertTriangle, bg: 'bg-amber-500/10' },
+  pending: { label: 'Pending', color: 'text-muted-foreground', glowClass: 'border-border shadow-sm', icon: Clock, bg: 'bg-muted' },
+  running: { label: 'Running', color: 'text-primary', glowClass: 'border-border shadow-sm', icon: Loader2, bg: 'bg-muted' },
+  completed: { label: 'Completed', color: 'text-emerald-500', glowClass: 'border-border shadow-sm', icon: CheckCircle2, bg: 'bg-muted' },
+  failed: { label: 'Failed', color: 'text-destructive', glowClass: 'border-border shadow-sm', icon: XCircle, bg: 'bg-muted' },
+  'needs-attention': { label: 'Attention', color: 'text-amber-500', glowClass: 'border-border shadow-sm', icon: AlertTriangle, bg: 'bg-muted' },
 };
 
 function parseActivities(output: string): ActivityStep[] {
@@ -139,10 +139,10 @@ function CircularProgress({ completed, total }: { completed: number; total: numb
 }
 
 function StepIndicator({ status, isActive }: { status: 'success' | 'error' | 'running' | 'info' | 'warning'; isActive: boolean }) {
-  if (status === 'success') return <CheckCircle2 className="mt-0.5 h-[18px] w-[18px] shrink-0 text-emerald-400" />;
-  if (status === 'error') return <XCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-rose-400" />;
-  if (status === 'running' && isActive) return <Loader2 className="mt-0.5 h-[18px] w-[18px] shrink-0 text-sky-400 animate-spin" />;
-  return <div className="mt-1.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-muted-foreground/30 bg-muted/50" />;
+  if (status === 'success') return <CheckCircle2 className="mt-0.5 h-[18px] w-[18px] shrink-0 text-emerald-500" />;
+  if (status === 'error') return <XCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-destructive" />;
+  if (status === 'running' && isActive) return <Loader2 className="mt-0.5 h-[18px] w-[18px] shrink-0 text-primary animate-spin" />;
+  return <div className="mt-1.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-muted-foreground/30 bg-muted" />;
 }
 
 function ActivityTimeline({ output, error, itemStatus }: { output: string; error: string | null; itemStatus: string }) {
@@ -170,7 +170,7 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
 
   if (activities.length === 0 && !error) {
     return output ? (
-      <div className="rounded-xl border glass-panel p-3 max-h-64 overflow-y-auto">
+      <div className="rounded-xl border bg-card text-card-foreground p-3 max-h-64 overflow-y-auto">
         <pre className="text-[10px] sm:text-xs font-mono text-foreground/80 whitespace-pre-wrap">{output}</pre>
       </div>
     ) : null;
@@ -178,16 +178,13 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border glass-panel p-5 md:p-6 shadow-lg relative overflow-hidden">
-        {/* Glow accent */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex items-center justify-between mb-4 border-b border-border/40 pb-3">
+      <div className="rounded-lg border bg-card text-card-foreground p-5 md:p-6 shadow-sm relative overflow-hidden">
+        <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-sky-400" />
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
             <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-foreground">Build Pipeline Activities</h4>
           </div>
-          <div className="flex items-center gap-2 bg-muted/40 px-2.5 py-1 rounded-full border border-border/30">
+          <div className="flex items-center gap-2 bg-muted px-2.5 py-1 rounded-full border border-border">
             <CircularProgress completed={completedCount} total={activities.length} />
             <span className="text-[10px] sm:text-xs text-muted-foreground">
               <span className="font-semibold text-foreground">{completedCount}</span>
@@ -197,18 +194,18 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
         </div>
 
         <ScrollArea className="max-h-[450px] pr-1">
-          <div className="space-y-2.5 relative before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-0.5 before:bg-border/30">
+          <div className="space-y-2.5 relative before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
             {activities.map((step, index) => {
               const isOpen = openStepId === step.id;
               const StepIcon = step.icon;
 
               return (
                 <div key={step.id} className="relative transition-all duration-300">
-                  <div className={`relative overflow-hidden rounded-xl transition-all duration-200 ${
-                    isOpen ? 'border border-border/80 bg-muted/30 shadow-inner' : 'hover:bg-muted/10'
+                  <div className={`relative overflow-hidden rounded-lg transition-all duration-200 ${
+                    isOpen ? 'border border-border bg-muted shadow-sm' : 'hover:bg-muted'
                   }`}>
                     <div className="flex items-start gap-3 py-3.5 px-4">
-                      <div className="shrink-0 relative z-10 bg-background/80 rounded-full p-0.5">
+                      <div className="shrink-0 relative z-10 bg-background rounded-full p-0.5">
                         <StepIndicator status={step.status} isActive={itemStatus === 'running'} />
                       </div>
                       <div className="grow min-w-0">
@@ -218,24 +215,24 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             {StepIcon && <StepIcon className={`h-4 w-4 shrink-0 ${
-                              step.status === 'success' ? 'text-emerald-400' :
-                              step.status === 'error' ? 'text-rose-400' :
-                              step.status === 'running' && itemStatus === 'running' ? 'text-sky-400 animate-pulse' :
+                              step.status === 'success' ? 'text-emerald-500' :
+                              step.status === 'error' ? 'text-destructive' :
+                              step.status === 'running' && itemStatus === 'running' ? 'text-primary animate-pulse' :
                               'text-muted-foreground'
                             }`} />}
                             <h4 className={`text-xs sm:text-sm font-medium truncate ${
-                              step.status === 'success' ? 'text-emerald-400/90' :
-                              step.status === 'error' ? 'text-rose-400/90' :
-                              step.status === 'running' && itemStatus === 'running' ? 'text-sky-400' :
+                              step.status === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
+                              step.status === 'error' ? 'text-destructive' :
+                              step.status === 'running' && itemStatus === 'running' ? 'text-primary' :
                               'text-foreground/90'
                             }`}>{step.label}</h4>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {step.status === 'success' && <Badge variant="outline" className="text-[9px] border-emerald-500/20 bg-emerald-500/5 text-emerald-400 h-4 px-1.5 rounded-full font-medium">Done</Badge>}
-                            {step.status === 'error' && <Badge variant="outline" className="text-[9px] border-rose-500/20 bg-rose-500/5 text-rose-400 h-4 px-1.5 rounded-full font-medium">Failed</Badge>}
-                            {step.status === 'running' && itemStatus === 'running' && <Badge variant="outline" className="text-[9px] border-sky-500/20 bg-sky-500/5 text-sky-400 h-4 px-1.5 rounded-full font-medium animate-pulse">Active</Badge>}
-                            <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ${isOpen ? 'rotate-90 text-foreground' : ''}`} />
-                          </div>
+                             {step.status === 'success' && <Badge variant="outline" className="text-[9px] border-emerald-500 text-emerald-500 px-1.5 py-0 rounded-md font-medium">Done</Badge>}
+                             {step.status === 'error' && <Badge variant="outline" className="text-[9px] border-destructive text-destructive px-1.5 py-0 rounded-md font-medium">Failed</Badge>}
+                             {step.status === 'running' && itemStatus === 'running' && <Badge variant="outline" className="text-[9px] border-primary text-primary px-1.5 py-0 rounded-md font-medium animate-pulse">Active</Badge>}
+                             <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ${isOpen ? 'rotate-90 text-foreground' : ''}`} />
+                           </div>
                         </button>
 
                         {isOpen && (
@@ -244,17 +241,17 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
                               <div className="space-y-1.5 pl-1">
                                 {step.substeps.map((sub, si) => (
                                   <div key={si} className="flex items-start gap-2 text-[10px] sm:text-xs">
-                                    {sub.status === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />}
-                                    {sub.status === 'error' && <XCircle className="h-3.5 w-3.5 text-rose-400 mt-0.5 shrink-0" />}
-                                    {sub.status === 'info' && <ChevronRight className="h-3.5 w-3.5 text-sky-400/70 mt-0.5 shrink-0" />}
-                                    <span className={sub.status === 'error' ? 'text-rose-300/90 font-medium' : 'text-muted-foreground'}>{sub.text}</span>
+                                    {sub.status === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />}
+                                    {sub.status === 'error' && <XCircle className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />}
+                                    {sub.status === 'info' && <ChevronRight className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />}
+                                    <span className={sub.status === 'error' ? 'text-destructive font-medium' : 'text-muted-foreground'}>{sub.text}</span>
                                   </div>
                                 ))}
                               </div>
                             )}
                             {step.details.length > 0 && step.status === 'error' && (
-                              <div className="rounded-lg bg-rose-500/5 border border-rose-500/10 p-3 max-h-40 overflow-y-auto mt-2 shadow-inner">
-                                <pre className="text-[10px] sm:text-[11px] font-mono text-rose-300/80 whitespace-pre-wrap">{step.details.join('\n')}</pre>
+                              <div className="rounded-lg bg-muted border border-border p-3 max-h-40 overflow-y-auto mt-2">
+                                <pre className="text-[10px] sm:text-[11px] font-mono text-destructive whitespace-pre-wrap">{step.details.join('\n')}</pre>
                               </div>
                             )}
                           </div>
@@ -270,24 +267,24 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
       </div>
 
       {error && (
-        <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 md:p-5 shadow-md relative overflow-hidden">
-          <div className="absolute left-0 top-0 h-full w-1 bg-rose-500" />
+        <div className="rounded-lg border border-border bg-muted p-4 md:p-5 relative overflow-hidden">
+          <div className="absolute left-0 top-0 h-full w-1 bg-destructive" />
           <div className="flex items-center gap-2 mb-1.5">
-            <AlertTriangle className="h-4 w-4 text-rose-400" />
-            <p className="text-xs sm:text-sm text-rose-400 font-semibold">Error Log Details</p>
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <p className="text-xs sm:text-sm text-destructive font-semibold">Error Log Details</p>
           </div>
-          <pre className="text-[10px] sm:text-xs font-mono whitespace-pre-wrap bg-background/40 p-2.5 rounded-lg border border-border/20 max-h-48 overflow-y-auto">{error}</pre>
+          <pre className="text-[10px] sm:text-xs font-mono whitespace-pre-wrap bg-background p-2.5 rounded-lg border border-border max-h-48 overflow-y-auto">{error}</pre>
         </div>
       )}
 
       {output && (
         <div className="flex flex-col items-start">
-          <Button variant="ghost" size="sm" onClick={() => setShowRaw(!showRaw)} className="text-[10px] text-muted-foreground hover:text-foreground h-7 px-2.5 rounded-full tap-shrink bg-muted/20 hover:bg-muted/40 border border-border/30">
+          <Button variant="ghost" size="sm" onClick={() => setShowRaw(!showRaw)} className="text-[10px] text-muted-foreground hover:text-foreground h-7 px-2.5 rounded-full bg-muted hover:bg-secondary border border-border">
             <Terminal className="h-3.5 w-3.5 mr-1 text-sky-400" />
             {showRaw ? 'Hide Raw Build Log' : 'Show Raw Build Log'}
           </Button>
           {showRaw && (
-            <div className="rounded-xl bg-card/60 glass-panel border p-3 sm:p-4 max-h-80 w-full overflow-y-auto mt-2 shadow-xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="rounded-xl bg-card border p-3 sm:p-4 max-h-80 w-full overflow-y-auto mt-2 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
               <pre className="text-[10px] sm:text-xs font-mono text-foreground/80 whitespace-pre-wrap leading-relaxed">{output}</pre>
             </div>
           )}
@@ -363,47 +360,45 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
 
   return (
     <div className="space-y-5 pb-20 sm:pb-8">
-      {/* Header Panel */}
-      <div className="relative overflow-hidden rounded-2xl glass-panel p-5 md:p-6 shadow-xl border-border/40">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-lg border bg-card text-card-foreground p-5 md:p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-sky-400 animate-pulse" />
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground to-muted-foreground bg-clip-text">Build Queue</h1>
+              <Zap className="h-5 w-5 text-primary" />
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Build Queue</h1>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1.5">Manage, prioritize, and execute your build specs autonomously</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {onToggleOutput && (isRunning || queueRunning) && (
-              <Button variant={outputPanelOpen ? 'default' : 'outline'} size="sm" onClick={onToggleOutput} className="text-xs gap-1.5 rounded-full tap-shrink h-9 px-3.5">
+              <Button variant={outputPanelOpen ? 'default' : 'outline'} size="sm" onClick={onToggleOutput} className="text-xs gap-1.5 rounded-full h-9 px-3.5">
                 <Terminal className="h-4 w-4" />
                 Output
                 {(isRunning || queueRunning) && (
                   <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
                   </span>
                 )}
               </Button>
             )}
             {stats.total > 0 && !isRunning && (
-              <Button variant="outline" size="sm" onClick={handleClearAll} className="text-xs gap-1.5 rounded-full tap-shrink h-9 px-3.5 border-border/60 hover:bg-muted/40 text-muted-foreground hover:text-foreground">
+              <Button variant="outline" size="sm" onClick={handleClearAll} className="text-xs gap-1.5 rounded-lg border hover:bg-muted text-muted-foreground hover:text-foreground">
                 <Trash2 className="h-4 w-4" />
                 <span>Clear All ({stats.total})</span>
               </Button>
             )}
             {isRunning && (
-              <Button variant="outline" size="sm" onClick={handleStopAll} className="text-xs gap-1.5 rounded-full tap-shrink h-9 px-3.5 border-rose-500/30 text-rose-400 hover:bg-rose-500/10">
-                <Square className="h-4 w-4 fill-rose-400/20" />
+              <Button variant="outline" size="sm" onClick={handleStopAll} className="text-xs gap-1.5 rounded-lg border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground">
+                <Square className="h-4 w-4" />
                 <span>Stop Execution</span>
               </Button>
             )}
-            <Button onClick={handleStart} disabled={isRunning || stats.pending === 0} size="sm" className="bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white text-xs gap-1.5 rounded-full shadow-lg shadow-sky-500/10 h-9 px-4 tap-shrink">
+            <Button onClick={handleStart} disabled={isRunning || stats.pending === 0} size="sm" className="text-xs gap-1.5 h-9 px-4">
               {isRunning ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /><span>Running Queue...</span></>
               ) : (
-                <><Play className="h-4 w-4 fill-white" /><span>Start Build Queue ({stats.pending})</span></>
+                <><Play className="h-4 w-4 fill-current" /><span>Start Build Queue ({stats.pending})</span></>
               )}
             </Button>
           </div>
@@ -421,16 +416,16 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
             const hasCount = stats[status] > 0;
             return (
               <div key={status} className="snap-center shrink-0 w-[140px] sm:w-auto">
-                <div className={`relative overflow-hidden transition-all duration-300 rounded-2xl border glass-panel tap-shrink min-h-[72px] flex items-center justify-between p-4 md:p-5 ${
-                  hasCount ? cfg.glowClass : 'opacity-40 border-border/30'
+                <div className={`relative overflow-hidden transition-all duration-300 rounded-lg border bg-card text-card-foreground min-h-[72px] flex items-center justify-between p-4 md:p-5 ${
+                  hasCount ? 'border-border' : 'opacity-40 border-border'
                 }`}>
                   <div className="flex flex-col">
                     <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{cfg.label}</span>
                     <span className="text-xl font-bold tracking-tight mt-0.5">{stats[status]}</span>
                   </div>
-                  <div className={`p-2 rounded-xl ${cfg.bg} shrink-0`}>
-                    <Icon className={`h-4.5 w-4.5 ${cfg.color} ${status === 'running' && hasCount ? 'animate-spin' : ''}`} />
-                  </div>
+                  <div className={`p-2 rounded-lg ${cfg.bg} shrink-0`}>
+                     <Icon className={`h-4 w-4 ${cfg.color} ${status === 'running' && hasCount ? 'animate-spin' : ''}`} />
+                   </div>
                 </div>
               </div>
             );
@@ -438,12 +433,12 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
         </div>
       </div>
 
-      <Separator className="bg-border/40" />
+      <Separator className="bg-border" />
 
       {/* Queue items */}
       {items.length === 0 ? (
-        <div className="glass-panel rounded-2xl border border-dashed border-border/60 p-6 sm:p-10 text-center glow-purple">
-          <div className="h-12 w-12 rounded-2xl bg-muted/40 border border-border/30 flex items-center justify-center mx-auto mb-4">
+        <div className="bg-card rounded-lg border border-dashed border-border p-6 sm:p-10 text-center">
+          <div className="h-12 w-12 rounded-lg bg-muted border border-border flex items-center justify-center mx-auto mb-4">
             <Clock className="h-6 w-6 text-muted-foreground/60" />
           </div>
           <h3 className="text-sm font-semibold text-foreground">Build queue is empty</h3>
@@ -457,17 +452,9 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
             const isExpanded = expandedItem === item.id;
 
             return (
-              <div key={item.id} className={`relative overflow-hidden rounded-2xl border glass-panel transition-all duration-300 ${
-                isExpanded ? 'shadow-lg shadow-sky-500/5 border-sky-500/20' : 'hover:bg-muted/10'
+              <div key={item.id} className={`relative overflow-hidden rounded-lg border bg-card text-card-foreground transition-all duration-300 ${
+                isExpanded ? 'ring-1 ring-ring' : 'hover:bg-muted'
               }`}>
-                {/* Thin side glowing accent strip */}
-                <div className={`absolute left-0 top-0 h-full w-[3px] transition-all ${
-                  item.status === 'completed' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' :
-                  item.status === 'failed' ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]' :
-                  item.status === 'running' ? 'bg-sky-500 shadow-[0_0_10px_rgba(14,165,233,0.5)] animate-pulse' :
-                  item.status === 'needs-attention' ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' :
-                  'bg-muted-foreground/30'
-                }`} />
 
                 <div className="p-5 md:p-6 pl-6 md:pl-8">
                   <div className="flex items-center justify-between gap-3">
@@ -475,20 +462,20 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                       className="flex items-center gap-2.5 text-left flex-1 min-w-0 cursor-pointer outline-none select-none"
                       onClick={() => setExpandedItem(isExpanded ? null : item.id)}
                     >
-                      <div className="shrink-0 p-1.5 rounded-lg bg-muted/60 border border-border/20">
+                      <div className="shrink-0 p-1.5 rounded-lg bg-muted border border-border">
                         <Icon className={`h-4 w-4 ${cfg.color} ${item.status === 'running' ? 'animate-spin' : ''}`} />
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-semibold text-xs sm:text-sm text-foreground/90 truncate">{specName(item.spec_file)}</span>
-                          <Badge variant="outline" className={`text-[9px] shrink-0 font-medium px-1.5 h-4.5 rounded-full ${
-                            item.kind === 'FeatureSpec' ? 'border-purple-500/20 bg-purple-500/5 text-purple-400' : 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400'
-                          }`}>{item.kind === 'FeatureSpec' ? 'Feature' : 'App'}</Badge>
-                          {item.engine === 'gemini-cli' && (
-                            <Badge variant="outline" className="text-[9px] border-sky-500/20 bg-sky-500/5 text-sky-400 font-medium px-1.5 h-4.5 rounded-full gap-1 shrink-0">
-                              <Terminal className="h-3 w-3" />Gemini CLI
-                            </Badge>
-                          )}
+                           <Badge variant="outline" className="text-[9px] shrink-0 font-medium px-1.5 rounded-md">
+                             {item.kind === 'FeatureSpec' ? 'Feature' : 'App'}
+                           </Badge>
+                           {item.engine === 'gemini-cli' && (
+                             <Badge variant="outline" className="text-[9px] border-primary text-primary font-medium px-1.5 rounded-md gap-1 shrink-0">
+                               <Terminal className="h-3 w-3" />Gemini CLI
+                             </Badge>
+                           )}
                         </div>
                         <span className="text-[10px] text-muted-foreground mt-0.5 sm:hidden">
                           {formatTime(item.added_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ''}
@@ -497,17 +484,17 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                     </button>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline mr-1 bg-muted/40 px-2 py-0.5 rounded-full border border-border/20">
+                      <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline mr-1 bg-muted px-2 py-0.5 rounded-full border border-border">
                         Added at {formatTime(item.added_at)}
                         {item.duration_ms ? ` · Total: ${formatDuration(item.duration_ms)}` : ''}
                       </span>
                       {item.status === 'failed' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleRetry(item.id)} className="h-8 w-8 rounded-full bg-muted/40 hover:bg-muted/80 tap-shrink border border-border/20">
-                          <RotateCcw className="h-3.5 w-3.5 text-sky-400" />
+                        <Button variant="ghost" size="icon" onClick={() => handleRetry(item.id)} className="h-8 w-8 rounded-md bg-muted border border-border">
+                          <RotateCcw className="h-3.5 w-3.5 text-foreground" />
                         </Button>
                       )}
                       {item.status === 'pending' && !isRunning && (
-                        <Button variant="ghost" size="icon" onClick={() => handleRemove(item.id)} className="h-8 w-8 rounded-full bg-muted/40 hover:bg-rose-500/10 text-muted-foreground hover:text-rose-400 tap-shrink border border-border/20">
+                        <Button variant="ghost" size="icon" onClick={() => handleRemove(item.id)} className="h-8 w-8 rounded-md bg-muted hover:bg-accent text-muted-foreground hover:text-destructive border border-border">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
@@ -516,8 +503,8 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                   </div>
 
                   {isExpanded && (
-                    <div className="mt-4 ml-0 sm:ml-9 border-t border-border/20 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/20 border border-border/20 rounded-xl p-4 text-[10px] sm:text-[11px] text-muted-foreground mb-4">
+                    <div className="mt-4 ml-0 sm:ml-9 border-t border-border pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted border border-border rounded-lg p-4 text-[10px] sm:text-[11px] text-muted-foreground mb-4">
                         <div>
                           <span className="block text-muted-foreground/50 font-medium">Spec File</span>
                           <span className="text-foreground/95 truncate block mt-0.5">{item.spec_file.split('/').pop()}</span>

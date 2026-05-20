@@ -19,6 +19,7 @@ import {
   IconPlus
 } from "@tabler/icons-react";
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { FolderBrowser } from '@/components/folder-browser';
 import { toast } from 'sonner';
@@ -38,6 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface BridgeSummary {
   name: string | null;
@@ -117,7 +119,7 @@ function StepIndicator({ completed }: { completed: boolean }) {
   if (completed) {
     return (
       <IconCircleCheckFilled
-        className="mt-1 size-4 shrink-0 sm:size-4.5 text-primary"
+        className="mt-1 size-4 shrink-0 sm:size-4 text-primary"
         aria-hidden="true"
       />
     );
@@ -298,12 +300,12 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
       icon: <IconFolder className="size-3 sm:size-4" />,
       content: (
         <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-3 sm:mt-4">
-            <div
-               className="cursor-pointer glass-panel rounded-2xl border border-border/40 p-4 sm:p-6 flex flex-col items-center gap-2 text-center hover:border-primary/40 hover:bg-primary/[0.02] active:scale-[0.98] transition-all duration-300 group glow-blue"
+            <Card
+               className="cursor-pointer flex flex-col items-center gap-2 text-center hover:bg-accent hover:text-accent-foreground transition-colors group p-4 sm:p-6"
                onClick={() => setBrowseMode('new')}
              >
-               <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                 <IconFolderPlus className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+               <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-muted group-hover:bg-accent transition-colors">
+                 <IconFolderPlus className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
                </div>
                <div>
                  <p className="text-[10px] sm:text-xs font-semibold">New Project</p>
@@ -311,14 +313,14 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                    Create & initialize
                  </p>
                </div>
-            </div>
+            </Card>
 
-            <div
-               className="cursor-pointer glass-panel rounded-2xl border border-border/40 p-4 sm:p-6 flex flex-col items-center gap-2 text-center hover:border-primary/40 hover:bg-primary/[0.02] active:scale-[0.98] transition-all duration-300 group glow-blue"
+            <Card
+               className="cursor-pointer flex flex-col items-center gap-2 text-center hover:bg-accent hover:text-accent-foreground transition-colors group p-4 sm:p-6"
                onClick={() => setBrowseMode('existing')}
              >
-               <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
-                 <IconFolderOpen className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
+               <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-muted group-hover:bg-accent transition-colors">
+                 <IconFolderOpen className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
                </div>
                <div>
                  <p className="text-[10px] sm:text-xs font-semibold">Existing Project</p>
@@ -326,11 +328,11 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                    Connect local path
                  </p>
                </div>
-            </div>
+            </Card>
         </div>
       ),
       summary: pendingPath ? (
-        <div className="mt-2 flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground font-mono bg-muted/50 p-1.5 sm:p-2 rounded">
+        <div className="mt-2 flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground font-mono bg-secondary border p-1.5 sm:p-2 rounded">
           <IconFolder className="size-2.5 sm:size-3" /> {pendingPath}
         </div>
       ) : null
@@ -343,7 +345,7 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
       content: (
         <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
           {isScanning && (
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-primary bg-primary/10 p-2 rounded-md">
+            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-foreground bg-secondary border p-2 rounded-md">
               <IconLoader2 className="h-3 w-3 animate-spin" />
               Scanning repository for stack configuration...
             </div>
@@ -490,11 +492,11 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
           {loadingProjects ? (
               <div className="space-y-2">
                   {[1, 2].map(i => (
-                      <div key={i} className="h-14 sm:h-16 rounded-xl bg-muted/40 animate-pulse" />
+                      <Card key={i} className="h-14 sm:h-16 rounded-xl bg-secondary animate-pulse border-none" />
                   ))}
               </div>
           ) : projects.length === 0 ? (
-              <div className="glass-panel rounded-2xl border border-dashed border-border/60 bg-background/20 p-6 sm:p-10 flex flex-col items-center text-center gap-3 sm:gap-4 glow-purple">
+              <Card className="border border-dashed p-6 sm:p-10 flex flex-col items-center text-center gap-3 sm:gap-4">
                   <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-muted">
                     <IconFolder className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
                   </div>
@@ -508,15 +510,15 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                       <IconPlus className="h-3.5 w-3.5 mr-2" />
                       Connect First Project
                   </Button>
-              </div>
+              </Card>
           ) : (
               <div className="grid grid-cols-1 gap-2">
                 {projects.map((project) => (
-                  <div
+                  <Card
                     key={project.id}
                     className={cn(
-                      'glass-panel rounded-2xl border border-border/40 p-4 sm:p-5 space-y-3 transition-all duration-300 hover:shadow-md',
-                      project.id === activeId ? 'border-primary/30 bg-primary/[0.02] glow-blue' : 'hover:border-border/60 hover:bg-muted/10'
+                      'p-4 sm:p-5 space-y-3 transition-all duration-300',
+                      project.id === activeId ? 'border-primary bg-accent text-accent-foreground shadow-sm' : 'hover:bg-accent hover:text-accent-foreground'
                     )}
                   >
                       <div className="flex items-center gap-2 sm:gap-3">
@@ -527,10 +529,10 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <p className="text-[10px] sm:text-xs font-semibold truncate">{project.name}</p>
                             {project.id === activeId && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[8px] sm:text-[9px] font-medium text-primary">
+                              <Badge className="gap-1 font-medium text-[8px] sm:text-[9px] px-1.5 py-0 rounded-md">
                                 <IconRadio className="h-1.5 w-1.5 sm:h-2 sm:w-2" />
                                 Active
-                              </span>
+                              </Badge>
                             )}
                           </div>
                           <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate font-mono mt-0.5">
@@ -581,34 +583,34 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                           {project.bridge.stack && (
                             <div className="flex flex-wrap gap-1.5">
                               {project.bridge.stack.framework && (
-                                <span className="inline-flex items-center rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-blue-400 ring-1 ring-inset ring-blue-500/20">
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.framework}
-                                </span>
+                                </Badge>
                               )}
                               {project.bridge.stack.packageManager && (
-                                <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.packageManager}
-                                </span>
+                                </Badge>
                               )}
                               {project.bridge.stack.database && (
-                                <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20">
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.database}
-                                </span>
+                                </Badge>
                               )}
                               {project.bridge.stack.cloud && (
-                                <span className="inline-flex items-center rounded-md bg-purple-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-purple-400 ring-1 ring-inset ring-purple-500/20">
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.cloud}
-                                </span>
+                                </Badge>
                               )}
                               {project.bridge.stack.testing && (
-                                <span className="inline-flex items-center rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20">
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.testing}
-                                </span>
+                                </Badge>
                               )}
                               {project.bridge.stack.linter && (
-                                <span className="inline-flex items-center rounded-md bg-cyan-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-cyan-400 ring-1 ring-inset ring-cyan-500/20">
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.linter}
-                                </span>
+                                </Badge>
                               )}
                             </div>
                           )}
@@ -642,7 +644,7 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                           </div>
                         </div>
                       )}
-                  </div>
+                  </Card>
                 ))}
               </div>
           )}
@@ -651,7 +653,7 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
       {/* Onboarding Modal */}
       <Dialog open={showModal} onOpenChange={(v) => !v && resetOnboarding()}>
         <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden gap-0 w-[95vw] max-h-[90vh]">
-          <DialogHeader className="px-4 sm:px-6 py-3 sm:py-4 border-b flex flex-row items-center justify-between bg-muted/30">
+          <DialogHeader className="px-4 sm:px-6 py-3 sm:py-4 border-b flex flex-row items-center justify-between bg-muted">
             <DialogTitle className="text-xs sm:text-sm font-semibold">Connect New Project</DialogTitle>
             <div className="flex items-center gap-2 sm:gap-3">
               <CircularProgress completed={completedCount} total={totalSteps} />
@@ -675,7 +677,7 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                   key={step.id}
                   className={cn(
                     "group transition-all duration-300",
-                    isOpen && "bg-muted/10",
+                    isOpen && "bg-muted",
                     showBorderTop && "border-t"
                   )}
                 >

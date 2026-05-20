@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -84,14 +85,14 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  layout: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-  auth: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-  api: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-  data: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
-  ui: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
-  integration: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
-  custom: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
-  general: 'bg-muted/50 text-muted-foreground border-muted/30',
+  layout: 'bg-muted text-muted-foreground border-border',
+  auth: 'bg-muted text-muted-foreground border-border',
+  api: 'bg-muted text-muted-foreground border-border',
+  data: 'bg-muted text-muted-foreground border-border',
+  ui: 'bg-muted text-muted-foreground border-border',
+  integration: 'bg-muted text-muted-foreground border-border',
+  custom: 'bg-muted text-muted-foreground border-border',
+  general: 'bg-muted text-muted-foreground border-border',
 };
 
 const EMPTY_FORM = {
@@ -289,9 +290,8 @@ export function SkillsView() {
           </div>
         </div>
 
-        {/* Category tabs — scrollable on mobile */}
         <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-          <TabsList className="bg-muted/50 overflow-x-auto w-full justify-start sm:justify-start scrollbar-hide">
+          <TabsList className="bg-muted overflow-x-auto w-full justify-start sm:justify-start scrollbar-hide">
             {CATEGORIES.map(cat => {
               const Icon = cat.icon;
               const count = cat.id === 'all'
@@ -320,12 +320,12 @@ export function SkillsView() {
             ))}
           </div>
         ) : filteredSkills.length === 0 ? (
-          <div className="glass-panel rounded-2xl border border-dashed border-border/60 p-6 sm:p-10 text-center glow-purple">
-            <Wand2 className="h-10 sm:h-12 w-10 sm:w-12 mx-auto mb-3 sm:mb-4 text-muted-foreground/30" />
-            <p className="text-xs sm:text-sm font-medium text-foreground">
+          <Card className="border-dashed flex flex-col items-center justify-center p-6 sm:p-10 text-center">
+            <Wand2 className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+            <h3 className="font-semibold text-sm">
               {searchQuery || activeCategory !== 'all' ? 'No skills match your filter' : 'No skills yet'}
-            </p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1.5 max-w-xs mx-auto leading-relaxed">
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1.5 max-w-xs mx-auto leading-relaxed">
               {searchQuery || activeCategory !== 'all'
                 ? 'Try adjusting your search or category filter'
                 : 'Click "New Skill" to create your first reusable recipe'}
@@ -336,7 +336,7 @@ export function SkillsView() {
                 Create Your First Skill
               </Button>
             )}
-          </div>
+          </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             {filteredSkills.map(skill => {
@@ -344,16 +344,14 @@ export function SkillsView() {
               const CatIcon = categoryIcon(skill.category);
 
               return (
-                <div
+                <Card
                   key={skill.id}
                   className={cn(
-                    "glass-panel rounded-2xl p-0 transition-all duration-300 border-border/40 flex flex-col justify-between overflow-hidden hover:shadow-md",
-                    skill.enabled
-                      ? 'opacity-100 glow-purple hover:border-purple-500/20'
-                      : 'opacity-65 border-border/50'
+                    "flex flex-col justify-between overflow-hidden transition-all duration-300",
+                    skill.enabled ? 'opacity-100 border-primary/25 shadow-sm' : 'opacity-60'
                   )}
                 >
-                  <div className="p-5 md:p-6 space-y-4 flex-1 flex flex-col justify-between">
+                  <CardContent className="p-5 md:p-6 space-y-4 flex-1 flex flex-col justify-between">
                     <div className="space-y-4">
                       {/* Header row */}
                       <div className="flex items-start justify-between gap-3">
@@ -362,7 +360,7 @@ export function SkillsView() {
                             "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border select-none shadow-sm",
                             CATEGORY_COLORS[skill.category] || CATEGORY_COLORS.general
                           )}>
-                            <CatIcon className="h-4.5 w-4.5" />
+                            <CatIcon className="h-4 w-4" />
                           </div>
                           <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -399,21 +397,21 @@ export function SkillsView() {
                       {skill.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
                           {skill.tags.map(tag => (
-                            <span
+                            <Badge
                               key={tag}
-                              className="inline-flex items-center gap-1 rounded-full bg-muted/60 border border-border/40 px-2 py-0.5 text-[9px] font-bold text-muted-foreground"
+                              variant="secondary"
+                              className="text-[9px] font-bold py-0 px-2 flex items-center gap-1"
                             >
-                              <Tag className="h-2 w-2 text-muted-foreground/80 shrink-0" />
+                              <Tag className="h-2 w-2 text-muted-foreground" />
                               {tag}
-                            </span>
+                            </Badge>
                           ))}
                         </div>
                       )}
 
-                      {/* Trigger pattern */}
                       {skill.trigger && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/10 p-2.5 rounded-xl border border-border/30">
-                          <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary p-2.5 rounded-lg border">
+                          <Zap className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold">{skill.trigger}</code>
                         </div>
                       )}
@@ -429,13 +427,13 @@ export function SkillsView() {
                           {isExpanded ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
                         </button>
                         {isExpanded && (
-                          <div className="rounded-xl bg-muted/20 border border-border/30 p-4 text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="rounded-md bg-muted border p-4 text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed animate-in fade-in slide-in-from-top-2 duration-200">
                             {skill.instructions}
                             {skill.template && (
                               <>
-                                <Separator className="my-3 border-border/40" />
+                                <Separator className="my-3" />
                                 <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">Template</p>
-                                <pre className="bg-background rounded-lg border border-border/40 p-3 overflow-x-auto text-[10px] font-mono leading-relaxed">
+                                <pre className="bg-background rounded-md border p-3 overflow-x-auto text-[10px] font-mono leading-relaxed">
                                   {skill.template}
                                 </pre>
                               </>
@@ -446,7 +444,7 @@ export function SkillsView() {
                     </div>
 
                     <div className="space-y-4 pt-4">
-                      <Separator className="border-border/40" />
+                      <Separator />
 
                       {/* Action buttons */}
                       <div className="flex items-center justify-between">
@@ -459,7 +457,7 @@ export function SkillsView() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-xl hover:bg-muted text-muted-foreground/75 shrink-0"
+                                className="h-8 w-8 shrink-0 text-muted-foreground"
                                 onClick={() => handleCopyInstructions(skill)}
                               >
                                 {copiedId === skill.id ? (
@@ -476,7 +474,7 @@ export function SkillsView() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-xl hover:bg-muted text-muted-foreground/75 shrink-0"
+                                className="h-8 w-8 shrink-0 text-muted-foreground"
                                 onClick={() => openEditDialog(skill)}
                               >
                                 <Pencil className="h-4 w-4" />
@@ -489,7 +487,7 @@ export function SkillsView() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-xl hover:bg-muted text-destructive hover:text-destructive shrink-0"
+                                className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
                                 onClick={() => setDeleteTarget(skill)}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -500,8 +498,8 @@ export function SkillsView() {
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>

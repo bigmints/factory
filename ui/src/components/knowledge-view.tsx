@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-// Card imports removed
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
@@ -113,26 +113,25 @@ export function KnowledgeView() {
         </p>
       </div>
 
-      {/* Stats — 2 cols mobile, 4 cols desktop */}
-      {/* Stats row — 2 cols mobile, 4 cols desktop with premium spacing & larger cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      {/* Stats row — 2 cols mobile, 4 cols desktop with premium spacing */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { icon: BookOpen, glowClass: 'glow-blue hover:border-blue-500/20', value: stats.totalBuilds, label: 'Total Builds', iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-          { icon: CheckCircle2, glowClass: 'glow-emerald hover:border-emerald-500/20', value: stats.successfulBuilds, label: 'Successful', iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-          { icon: XCircle, glowClass: 'glow-red hover:border-red-500/20', value: stats.failedBuilds, label: 'Failed', iconColor: 'text-red-400', bgColor: 'bg-red-500/10' },
-          { icon: Layers, glowClass: 'glow-purple hover:border-purple-500/20', value: stats.uniqueSpecs, label: 'Unique Specs', iconColor: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+          { icon: BookOpen, value: stats.totalBuilds, label: 'Total Builds' },
+          { icon: CheckCircle2, value: stats.successfulBuilds, label: 'Successful' },
+          { icon: XCircle, value: stats.failedBuilds, label: 'Failed' },
+          { icon: Layers, value: stats.uniqueSpecs, label: 'Unique Specs' },
         ].map((stat, i) => (
-          <div key={i} className={cn("glass-panel rounded-2xl p-5 md:p-6 transition-all duration-300 hover:shadow-md tap-shrink", stat.glowClass)}>
-            <div className="flex items-center gap-4">
-              <div className={cn("flex h-11 w-11 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-2xl", stat.bgColor)}>
-                <stat.icon className={cn("h-5 md:h-6 w-5 md:w-6", stat.iconColor)} />
+          <Card key={i}>
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <stat.icon className="h-5 w-5" />
               </div>
               <div className="min-w-0 space-y-0.5">
-                <p className="text-xl md:text-2xl font-black tracking-tight leading-none">{stat.value}</p>
-                <p className="text-[10px] md:text-xs text-muted-foreground font-bold truncate uppercase tracking-wider">{stat.label}</p>
+                <p className="text-xl font-bold tracking-tight leading-none">{stat.value}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground font-semibold uppercase tracking-wider">{stat.label}</p>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
@@ -144,7 +143,7 @@ export function KnowledgeView() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search builds, outputs, notes..."
-          className="w-full h-10 sm:h-11 pl-10 pr-4 rounded-lg border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+          className="w-full h-10 sm:h-11 pl-10 pr-4 rounded-lg border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </form>
 
@@ -152,13 +151,13 @@ export function KnowledgeView() {
 
       {/* Timeline */}
       {entries.length === 0 ? (
-        <div className="glass-panel border border-dashed border-border/60 rounded-2xl p-6 sm:p-10 text-center space-y-3 glow-purple">
-          <BookOpen className="h-10 w-10 text-muted-foreground/45 mx-auto mb-1" />
-          <p className="text-sm font-semibold text-foreground">No build history yet</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-[280px] mx-auto leading-relaxed">
+        <Card className="border-dashed flex flex-col items-center justify-center p-6 sm:p-10 text-center">
+          <BookOpen className="h-8 w-8 text-muted-foreground mb-2" />
+          <h3 className="font-semibold text-sm">No build history yet</h3>
+          <p className="text-xs text-muted-foreground mt-1 max-w-sm">
             Build history will appear here after queue execution.
           </p>
-        </div>
+        </Card>
       ) : (
         <div className="space-y-4">
           {entries.map((entry) => {
@@ -166,12 +165,12 @@ export function KnowledgeView() {
             const filesGenerated = entry.filesGenerated || [];
 
             return (
-              <div
+              <Card
                 key={entry.id}
-                className="glass-panel rounded-2xl p-0 transition-all duration-300 border-border/40 relative overflow-hidden hover:shadow-sm"
+                className="relative overflow-hidden"
               >
                 <div className={`absolute left-0 top-0 h-full w-[3px] ${
-                  entry.status === 'completed' ? 'bg-emerald-500' : 'bg-red-500'
+                  entry.status === 'completed' ? 'bg-green-500' : 'bg-destructive'
                 }`} />
                 <div className="p-4 md:p-5 pl-6 md:pl-8">
                   <button
@@ -179,23 +178,21 @@ export function KnowledgeView() {
                     onClick={() => setExpandedEntry(isExpanded ? null : entry.id)}
                   >
                     {isExpanded ? (
-                      <ChevronDown className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
+                      <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                     ) : (
-                      <ChevronRight className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     )}
                     {entry.status === 'completed' ? (
-                      <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
                     ) : (
-                      <XCircle className="h-4.5 w-4.5 text-red-400 shrink-0" />
+                      <XCircle className="h-4 w-4 text-destructive shrink-0" />
                     )}
                     <span className="font-bold text-xs sm:text-sm text-foreground truncate">{specName(entry.spec_file)}</span>
-                    <Badge variant="outline" className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 border ${
-                      entry.kind === 'FeatureSpec' ? 'bg-purple-500/5 border-purple-500/20 text-purple-400' : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
-                    }`}>
+                    <Badge variant={entry.kind === 'FeatureSpec' ? 'secondary' : 'default'} className="text-[9px] shrink-0">
                       {entry.kind === 'FeatureSpec' ? 'Feature' : 'App'}
                     </Badge>
                     {entry.model && (
-                      <Badge variant="outline" className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-cyan-500/20 bg-cyan-500/5 text-cyan-400 gap-1 shrink-0 hidden sm:flex">
+                      <Badge variant="outline" className="text-[9px] gap-1 shrink-0 hidden sm:flex font-mono">
                         <Cpu className="h-2.5 w-2.5" />
                         {entry.model}{entry.provider ? ` · ${entry.provider}` : ''}
                       </Badge>
@@ -210,27 +207,27 @@ export function KnowledgeView() {
                   </button>
 
                   {isExpanded && (
-                    <div className="mt-4 ml-6 space-y-4 pt-4 border-t border-border/20 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="mt-4 ml-6 space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-2 duration-200">
                       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         {entry.notes && (
-                          <span className="break-all bg-muted/10 px-3 py-2 rounded-xl border border-border/30 w-full sm:w-auto leading-relaxed">
+                          <div className="break-all text-xs bg-muted px-3 py-2 rounded-md border text-muted-foreground w-full sm:w-auto">
                             {entry.notes}
-                          </span>
+                          </div>
                         )}
                         {(entry.tokens_in > 0 || entry.tokens_out > 0) && (
-                          <span className="flex items-center gap-1.5 shrink-0 bg-amber-500/5 border border-amber-500/20 px-3 py-1.5 rounded-xl text-amber-400/90 font-semibold text-[10px]">
-                            <Coins className="h-3.5 w-3.5" />
-                            {entry.tokens_in.toLocaleString()} in · {entry.tokens_out.toLocaleString()} out
-                          </span>
+                          <Badge variant="outline" className="flex items-center gap-1.5 text-[10px]">
+                            <Coins className="h-3 w-3 text-muted-foreground" />
+                            <span>{entry.tokens_in.toLocaleString()} in · {entry.tokens_out.toLocaleString()} out</span>
+                          </Badge>
                         )}
                       </div>
 
                       {filesGenerated.length > 0 && (
                         <div className="space-y-1.5">
-                          <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider text-[10px]">Generated Files</p>
+                          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Generated Files</p>
                           <div className="flex flex-wrap gap-1.5">
                             {filesGenerated.map((f, i) => (
-                              <Badge key={i} variant="outline" className="text-[10px] font-mono font-medium px-2 py-0.5 border border-border/40 bg-muted/20">
+                              <Badge key={i} variant="outline" className="text-[10px] font-mono font-medium">
                                 <FileText className="h-3 w-3 mr-1 text-muted-foreground/80" />
                                 <span className="truncate max-w-[120px] sm:max-w-[200px]">{f}</span>
                               </Badge>
@@ -240,7 +237,7 @@ export function KnowledgeView() {
                       )}
 
                       {entry.summary && (
-                        <div className="rounded-xl bg-muted/10 border border-border/30 p-4 space-y-3">
+                        <div className="rounded-lg bg-muted border p-4 space-y-3">
                           {entry.summary.split('\n').map((line, i) => {
                             const trimmed = line.trim();
                             if (!trimmed) return null;
@@ -252,7 +249,7 @@ export function KnowledgeView() {
                             }
                             if (trimmed.startsWith('> ')) {
                               return (
-                                <div key={i} className="border-l-2 border-primary/40 pl-3 py-1 bg-muted/5 rounded-r-lg">
+                                <div key={i} className="border-l-2 border-primary pl-3 py-1 bg-muted rounded-r-lg">
                                   <p className="text-xs text-primary font-bold">{trimmed.slice(2)}</p>
                                 </div>
                               );
@@ -279,7 +276,7 @@ export function KnowledgeView() {
                     </div>
                   )}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>

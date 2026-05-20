@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from './status-badge';
 import { cn } from '@/lib/utils';
 import {
@@ -94,52 +95,34 @@ export function SpecCard({
   const isSequenced = isFeature && !!(spec.phase || (spec.dependsOn && spec.dependsOn.length > 0));
 
   return (
-    <Card
-      className={cn(
-        "glass-panel rounded-2xl p-0 transition-all duration-300 tap-shrink border-border/40 flex flex-col justify-between overflow-hidden",
-        isFeature
-          ? "glow-purple hover:border-purple-500/20 shadow-sm hover:shadow-md"
-          : "glow-blue hover:border-blue-500/20 shadow-sm hover:shadow-md",
-        expanded && "ring-1 ring-primary/10 shadow-lg"
-      )}
-    >
-      {/* Upper Content Area */}
-      <div className="p-5 md:p-6 space-y-4">
-        {/* Header Block */}
+    <Card className={cn("flex flex-col justify-between overflow-hidden", expanded && "ring-1 ring-ring")}>
+      {/* Header Block */}
+      <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
             <span
-              className={cn(
-                "text-xl shrink-0 p-3 rounded-2xl select-none shadow-sm flex items-center justify-center",
-                isFeature
-                  ? "bg-purple-500/10 border border-purple-500/25 text-purple-400"
-                  : "bg-blue-500/10 border border-blue-500/25 text-blue-400"
-              )}
+              className="text-xl shrink-0 p-2.5 rounded-lg select-none flex items-center justify-center bg-muted border border-border text-foreground"
             >
               {icon}
             </span>
-            <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h3 className="text-sm md:text-base font-bold tracking-tight text-foreground truncate max-w-[200px]">
+                <h3 className="text-sm font-semibold tracking-tight text-foreground truncate">
                   {name}
                 </h3>
-                <span
-                  className={cn(
-                    "text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0",
-                    isFeature
-                      ? "bg-purple-500/5 border-purple-500/20 text-purple-400"
-                      : "bg-blue-500/5 border-blue-500/20 text-blue-400"
-                  )}
+                <Badge
+                  variant={isFeature ? "secondary" : "outline"}
+                  className="text-[9px] font-semibold h-4 px-1.5 rounded-full shrink-0"
                 >
                   {isFeature ? 'Feature' : 'App'}
-                </span>
+                </Badge>
                 {isFeature && spec.phase !== undefined && (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border bg-amber-500/5 border-amber-500/25 text-amber-400 shrink-0">
+                  <Badge variant="outline" className="text-[9px] font-semibold h-4 px-1.5 rounded-full shrink-0">
                     P{spec.phase}
-                  </span>
+                  </Badge>
                 )}
               </div>
-              <p className="text-[10px] md:text-xs text-muted-foreground/80 font-mono truncate">
+              <p className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">
                 {slug}
               </p>
             </div>
@@ -149,51 +132,53 @@ export function SpecCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-xl hover:bg-muted text-muted-foreground/75 shrink-0"
+              className="h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground text-muted-foreground shrink-0"
               onClick={() => setExpanded(!expanded)}
             >
-              {expanded ? <ChevronUp className="h-4.5 w-4.5" /> : <ChevronDown className="h-4.5 w-4.5" />}
+              {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
           </div>
         </div>
+      </CardHeader>
 
-        {/* Collapsible detailed specifications */}
-        {expanded && (
-          <div className="space-y-4 pt-4 border-t border-border/20 animate-in fade-in slide-in-from-top-2 duration-200">
+      {/* Collapsible detailed specifications */}
+      {expanded && (
+        <CardContent>
+          <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-2 duration-200">
             {description && (
-              <p className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-3.5 sm:p-4 rounded-xl border border-border/30">
+              <p className="text-xs text-muted-foreground leading-relaxed bg-muted p-4 rounded-lg border border-border">
                 {String(description)}
               </p>
             )}
 
             {/* Grid of stats */}
-            <div className="grid grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-2 gap-3 text-xs">
               {/* App Spec Info */}
               {!isFeature && (
                 <>
                   {spec.deployment?.port && (
-                    <div className="flex items-center gap-2 text-muted-foreground bg-muted/10 p-3 md:p-3.5 rounded-xl border border-border/30">
-                      <Server className="h-4 w-4 text-blue-400 shrink-0" />
+                    <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
+                      <Server className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="truncate font-medium">Port {spec.deployment.port}</span>
                     </div>
                   )}
                   {spec.deployment?.region && (
-                    <div className="flex items-center gap-2 text-muted-foreground bg-muted/10 p-3 md:p-3.5 rounded-xl border border-border/30">
-                      <Globe className="h-4 w-4 text-blue-400 shrink-0" />
+                    <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
+                      <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="truncate font-medium">{spec.deployment.region}</span>
                     </div>
                   )}
                   {spec.database?.collections && (
-                    <div className="flex items-center gap-2 text-muted-foreground bg-muted/10 p-3 md:p-3.5 rounded-xl border border-border/30">
-                      <Database className="h-4 w-4 text-blue-400 shrink-0" />
+                    <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
+                      <Database className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium">
                         {(spec.database.collections as unknown[]).length} Collections
                       </span>
                     </div>
                   )}
                   {spec.api?.resources && (
-                    <div className="flex items-center gap-2 text-muted-foreground bg-muted/10 p-3 md:p-3.5 rounded-xl border border-border/30">
-                      <Layers className="h-4 w-4 text-blue-400 shrink-0" />
+                    <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
+                      <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium">
                         {(spec.api.resources as unknown[]).length} Resources
                       </span>
@@ -205,14 +190,14 @@ export function SpecCard({
               {/* Feature Spec Info */}
               {isFeature && (
                 <>
-                  <div className="flex items-center gap-2 text-muted-foreground bg-muted/10 p-3 md:p-3.5 rounded-xl border border-border/30">
-                    <FileCode className="h-4 w-4 text-purple-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
+                    <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-medium">
                       {spec.pages?.length || 0} Pages
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-muted-foreground bg-muted/10 p-3 md:p-3.5 rounded-xl border border-border/30">
-                    <Database className="h-4 w-4 text-purple-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
+                    <Database className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-medium truncate">
                       {String(spec.model?.collection || 'No Database')}
                     </span>
@@ -222,39 +207,40 @@ export function SpecCard({
 
               {/* Dependencies row */}
               {isFeature && spec.dependsOn && spec.dependsOn.length > 0 && (
-                <div className="col-span-2 space-y-2 bg-muted/10 p-3.5 sm:p-4 rounded-xl border border-border/30">
-                  <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
-                    <GitBranch className="h-3.5 w-3.5 text-purple-400" />
+                <div className="col-span-2 space-y-2 bg-muted p-4 rounded-lg border border-border">
+                  <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
+                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>Depends On Specs</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {spec.dependsOn.map((dep) => (
-                      <span
+                      <Badge
                         key={dep}
-                        className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-purple-500/5 text-purple-400 border border-purple-500/20"
+                        variant="secondary"
+                        className="text-[10px] font-semibold rounded-md"
                       >
                         {dep}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 </div>
               )}
             </div>
           </div>
-        )}
-      </div>
+        </CardContent>
+      )}
 
       {/* Structured Footer Action Bar */}
-      <div className="px-5 md:px-6 py-3.5 md:py-4 bg-muted/30 border-t border-border/40 flex items-center gap-2.5">
+      <CardFooter className="flex items-center gap-2 mt-auto">
         {onView && (
           <Button
             size="icon"
             variant="outline"
             onClick={() => onView(spec.file, name)}
-            className="h-9 w-9 p-0 rounded-xl border-border/50 shrink-0 flex items-center justify-center hover:bg-muted/80 hover:text-foreground transition-all duration-200"
+            className="h-9 w-9 p-0 rounded-md border border-border shrink-0 flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-all duration-200"
             title="View / Edit Spec"
           >
-            <Eye className="h-4.5 w-4.5 text-muted-foreground" />
+            <Eye className="h-4 w-4 text-muted-foreground" />
           </Button>
         )}
         <Button
@@ -262,14 +248,14 @@ export function SpecCard({
           variant="outline"
           onClick={() => onValidate(spec.file)}
           disabled={isValidating || isBuilding}
-          className="flex-1 min-w-0 h-9 rounded-xl text-xs font-semibold hover:bg-muted/80 hover:text-foreground transition-all duration-200 border-border/50"
+          className="flex-1 min-w-0 h-9 rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-all duration-200 border border-border"
         >
-          <ShieldCheck className="h-3.5 w-3.5 mr-1.5 text-emerald-400 shrink-0" />
+          <ShieldCheck className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
           <span className="truncate">{isValidating ? 'Validating...' : 'Validate'}</span>
         </Button>
 
         {isSequenced && !queueStatus ? (
-          <span className="flex-1 text-[10px] font-semibold text-muted-foreground/80 border border-border/40 px-2 py-2 rounded-xl text-center select-none bg-muted/20 truncate">
+          <span className="flex-1 text-[10px] font-medium text-muted-foreground border border-border px-2 py-2 rounded-md text-center bg-muted truncate">
             Use Build All
           </span>
         ) : (
@@ -277,10 +263,7 @@ export function SpecCard({
             size="sm"
             onClick={() => onBuild(spec.file)}
             disabled={isValidating || isBuilding}
-            className={cn(
-              "flex-1 min-w-0 h-9 rounded-xl text-xs font-bold transition-all duration-200",
-              isFeature ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-blue-600 hover:bg-blue-500 text-white"
-            )}
+            className="flex-1 min-w-0 h-9 rounded-md text-xs font-semibold transition-all duration-200"
           >
             <Play className="h-3.5 w-3.5 mr-1.5 fill-current shrink-0" />
             <span className="truncate">{isBuilding ? 'Building...' : 'Build'}</span>
@@ -293,13 +276,13 @@ export function SpecCard({
             variant="outline"
             onClick={() => onEnqueue(spec.file, isFeature ? 'FeatureSpec' : 'AppSpec', { phase: spec.phase, dependsOn: spec.dependsOn })}
             disabled={isValidating || isBuilding}
-            className="h-9 w-9 p-0 rounded-xl border-border/50 shrink-0 flex items-center justify-center hover:bg-muted/80 hover:text-foreground transition-all duration-200"
+            className="h-9 w-9 p-0 rounded-md border border-border shrink-0 flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-all duration-200"
             title="Add to build queue"
           >
-            <ListPlus className="h-4.5 w-4.5 text-muted-foreground" />
+            <ListPlus className="h-4 w-4 text-muted-foreground" />
           </Button>
         )}
-      </div>
+      </CardFooter>
     </Card>
   );
 }

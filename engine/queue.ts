@@ -6,6 +6,9 @@
 import { getDb } from './db.ts';
 import { writeHeartbeat } from './toon.ts';
 import { log, logError } from './log.ts';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -232,9 +235,9 @@ export function markCompleted(id: string, output: string, durationMs: number): Q
     });
 }
 
-/** Mark an item as failed. */
+/** Mark an item as failed — updates DB and writes failure knowledge to disk. */
 export function markFailed(id: string, error: string, output: string, durationMs: number, category?: 'transient' | 'permanent'): QueueItem | null {
-    return updateItem(id, {
+    const item = updateItem(id, {
         status: 'failed',
         error,
         errorCategory: category,
@@ -242,6 +245,43 @@ export function markFailed(id: string, error: string, output: string, durationMs
         completedAt: timestamp(),
         durationMs,
     });
+
+    // Write failure knowledge so future builds can learn from this error
+    try {
+        const projectRoot = process.env.FACTORY_PROJECT_ROOT || process.cwd();
+        const failuresDir = join(projectRoot, '.factory', 'knowledge', 'failures');
+        if (!existsSync(failuresDir)) mkdirSync(failuresDir, { recursive: true });
+
+        const slug = id.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+        const filename = join(failuresDir, `${slug}-${ts}.md`);
+
+        const content = [
+            `# Build Failure: ${id}`,
+            ``,
+            `**Date:** ${new Date().toISOString()}`,
+            `**Category:** ${category || 'unknown'}`,
+            `**Duration:** ${durationMs}ms`,
+            ``,
+            `## Error`,
+            `\`\`\``,
+            error,
+            `\`\`\``,
+            ``,
+            output ? `## Output\n\`\`\`\n${output.slice(0, 3000)}\n\`\`\`` : '',
+            ``,
+            `## Action`,
+            `- Review the error above before retrying this spec`,
+            `- Run \`factory queue retry ${id}\` once the issue is resolved`,
+        ].filter(l => l !== undefined).join('\n');
+
+        writeFileSync(filename, content);
+        log('→', `Failure knowledge written: .factory/knowledge/failures/${slug}-${ts}.md`);
+    } catch {
+        // Non-fatal — failure recording must never crash the daemon
+    }
+
+    return item;
 }
 
 /** Remove a queue item. */

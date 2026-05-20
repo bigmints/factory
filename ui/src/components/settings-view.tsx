@@ -1,6 +1,4 @@
 'use client';
-
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import {
@@ -141,9 +140,11 @@ export function SettingsView() {
 
   if (loading || !settings) {
     return (
-      <div className="space-y-3 sm:space-y-4">
+      <div className="space-y-4 md:space-y-6">
         {[1, 2, 3].map(i => (
-          <Card key={i}><CardContent className="py-6 sm:py-8"><div className="h-24 bg-muted/30 animate-pulse rounded-lg" /></CardContent></Card>
+          <div key={i} className="glass-panel rounded-2xl border border-border/40 p-5 md:p-6">
+            <div className="h-24 bg-muted/30 animate-pulse rounded-xl" />
+          </div>
         ))}
       </div>
     );
@@ -155,34 +156,30 @@ export function SettingsView() {
     <div className="space-y-4 sm:space-y-6">
       {/* Active model banner */}
       {activeProvider && settings.buildModel ? (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-2">
-                {activeProvider.kind === 'builtin' ? PROVIDER_META[activeProvider.id]?.icon || <Bot className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm font-medium">Active Build Model</p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">
-                  {activeProvider.name} → <span className="font-mono">{settings.buildModel}</span>
-                </p>
-              </div>
+        <div className="glass-panel rounded-2xl border border-primary/20 bg-primary/5 p-4 md:p-5 glow-blue flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-2">
+              {activeProvider.kind === 'builtin' ? PROVIDER_META[activeProvider.id]?.icon || <Bot className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
             </div>
-            <Badge variant="outline" className="gap-1.5 self-start sm:self-auto">
-              <Zap className="h-3 w-3" />Ready
-            </Badge>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border-amber-500/20 bg-amber-500/5">
-          <CardContent className="py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
-            <div className="p-2 rounded-lg bg-background border text-amber-500"><Zap className="h-4 w-4 sm:h-5 sm:w-5" /></div>
             <div>
-              <p className="text-xs sm:text-sm font-medium">No Model Configured</p>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Enable a provider and set it as default.</p>
+              <p className="text-xs sm:text-sm font-semibold">Active Build Model</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">
+                {activeProvider.name} → <span className="font-mono text-primary">{settings.buildModel}</span>
+              </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <Badge variant="outline" className="gap-1.5 self-start sm:self-auto font-semibold bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+            <Zap className="h-3 w-3 fill-current" />Ready
+          </Badge>
+        </div>
+      ) : (
+        <div className="glass-panel rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 md:p-5 flex items-center gap-3 md:gap-4">
+          <div className="p-2 rounded-xl bg-background border border-amber-500/35 text-amber-500 shadow-sm"><Zap className="h-4.5 w-4.5" /></div>
+          <div>
+            <p className="text-xs sm:text-sm font-semibold">No Model Configured</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Enable a provider and set it as default.</p>
+          </div>
+        </div>
       )}
 
       {/* Provider cards */}
@@ -194,151 +191,188 @@ export function SettingsView() {
         const isCustom = provider.kind !== 'builtin';
 
         return (
-          <Card key={provider.id} className={`transition-all ${isActive ? 'ring-2 ring-primary/30' : ''} ${!provider.enabled ? 'opacity-60' : ''}`}>
-            <CardHeader className="pb-3 sm:pb-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  <div className={`p-2 rounded-lg border ${meta?.color} shrink-0`}>{meta?.icon}</div>
-                  <div className="min-w-0">
-                    <CardTitle className="text-sm sm:text-base flex items-center gap-2 flex-wrap">
-                      <span className="truncate">{provider.name}</span>
-                      {isActive && <Badge className="text-[9px] sm:text-[10px] gap-1"><Star className="h-2.5 w-2.5" />Default</Badge>}
-                      {isCustom && <Badge variant="secondary" className="text-[9px] sm:text-[10px]">Custom</Badge>}
-                    </CardTitle>
-                    <CardDescription className="text-[10px] sm:text-xs mt-0.5">{meta?.description || `OpenAI-compatible at ${provider.baseUrl}`}</CardDescription>
+          <div
+            key={provider.id}
+            className={cn(
+              "glass-panel rounded-2xl p-0 transition-all duration-300 border-border/40 overflow-hidden hover:shadow-md",
+              isActive ? "ring-1 ring-primary/20 glow-blue bg-primary/[0.02]" : isCustom ? "glow-purple" : "",
+              !provider.enabled && "opacity-60 border-border/30"
+            )}
+          >
+            {/* Header section with padding */}
+            <div className="p-5 md:p-6 pb-4 sm:pb-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div className={cn(
+                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-sm select-none",
+                    isActive ? "bg-primary/10 border-primary/20" : isCustom ? "bg-purple-500/10 border-purple-500/25" : "bg-muted/40"
+                  )}>
+                    <div className={meta?.color}>{meta?.icon}</div>
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="text-sm md:text-base font-bold tracking-tight text-foreground truncate">
+                        {provider.name}
+                      </h3>
+                      {isActive && <Badge className="text-[9px] font-bold px-2 py-0.5 rounded-full gap-1 bg-primary text-primary-foreground"><Star className="h-2.5 w-2.5 fill-current" />Default</Badge>}
+                      {isCustom && <Badge variant="secondary" className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">Custom</Badge>}
+                    </div>
+                    <p className="text-[10px] md:text-xs text-muted-foreground/95 mt-0.5">{meta?.description || `OpenAI-compatible at ${provider.baseUrl}`}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {isCustom && (
-                    <Button size="icon" variant="ghost" onClick={() => removeProvider(provider.id)} className="h-8 w-8 text-muted-foreground hover:text-red-500">
+                    <Button size="icon" variant="ghost" onClick={() => removeProvider(provider.id)} className="h-8 w-8 rounded-xl text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
-                  <Switch checked={provider.enabled} onCheckedChange={(checked) => updateProvider(provider.id, { enabled: checked })} />
+                  <Switch checked={provider.enabled} onCheckedChange={(checked) => updateProvider(provider.id, { enabled: checked })} className="scale-90" />
                 </div>
               </div>
-            </CardHeader>
+            </div>
 
             {provider.enabled && (
-              <CardContent className="space-y-3 sm:space-y-4 pt-0">
-                <Separator />
+              <div className="px-5 md:px-6 pb-5 md:pb-6 space-y-4 pt-0">
+                <Separator className="border-border/30" />
 
-                {/* API Key */}
-                {(provider.kind === 'builtin' ? (provider.id === 'gemini' || provider.id === 'openai') : true) && (
-                  <div className="space-y-2">
-                    <Label htmlFor={`${provider.id}-key`} className="text-[10px] sm:text-xs font-medium">API Key {isCustom ? '(optional)' : ''}</Label>
-                    <div className="relative">
-                      <Input id={`${provider.id}-key`} type={showKeys[provider.id] ? 'text' : 'password'} placeholder={isCustom ? 'Optional API key...' : (provider.id === 'gemini' ? 'AIza...' : 'sk-...')} value={provider.apiKey || ''} onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })} className="pr-9 sm:pr-10 font-mono text-[10px] sm:text-xs h-9 sm:h-10" />
-                      <button type="button" onClick={() => setShowKeys(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))} className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                        {showKeys[provider.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                      </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* API Key */}
+                  {(provider.kind === 'builtin' ? (provider.id === 'gemini' || provider.id === 'openai') : true) && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`${provider.id}-key`} className="text-[10px] md:text-xs font-semibold text-muted-foreground/90">API Key {isCustom ? '(optional)' : ''}</Label>
+                      <div className="relative">
+                        <Input id={`${provider.id}-key`} type={showKeys[provider.id] ? 'text' : 'password'} placeholder={isCustom ? 'Optional API key...' : (provider.id === 'gemini' ? 'AIza...' : 'sk-...')} value={provider.apiKey || ''} onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })} className="pr-10 font-mono text-xs h-10 rounded-xl" />
+                        <button type="button" onClick={() => setShowKeys(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showKeys[provider.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Base URL */}
-                {(provider.kind !== 'builtin' || provider.id === 'ollama') && (
-                  <div className="space-y-2">
-                    <Label htmlFor={`${provider.id}-url`} className="text-[10px] sm:text-xs font-medium">Base URL</Label>
-                    <Input id={`${provider.id}-url`} placeholder={isCustom ? 'http://100.77.38.96:8080/v1' : 'http://localhost:11434'} value={provider.baseUrl || ''} onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })} className="font-mono text-[10px] sm:text-xs h-9 sm:h-10" />
-                  </div>
-                )}
-
-                {/* Model selector */}
-                <div className="space-y-2">
-                  <Label className="text-[10px] sm:text-xs font-medium">Model</Label>
-                  {provider.models.length > 0 ? (
-                    <Select value={provider.defaultModel || ''} onValueChange={(val) => updateProvider(provider.id, { defaultModel: val })}>
-                      <SelectTrigger className="font-mono text-[10px] sm:text-xs h-9 sm:h-10"><SelectValue placeholder="Select a model" /></SelectTrigger>
-                      <SelectContent>
-                        {provider.models.map(model => <SelectItem key={model.id} value={model.id} className="font-mono text-[10px] sm:text-xs">{model.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-[10px] sm:text-xs text-muted-foreground py-2">No models available — test connection to discover.</p>
                   )}
+
+                  {/* Base URL */}
+                  {(provider.kind !== 'builtin' || provider.id === 'ollama') && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`${provider.id}-url`} className="text-[10px] md:text-xs font-semibold text-muted-foreground/90">Base URL</Label>
+                      <Input id={`${provider.id}-url`} placeholder={isCustom ? 'http://100.77.38.96:8080/v1' : 'http://localhost:11434'} value={provider.baseUrl || ''} onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })} className="font-mono text-xs h-10 rounded-xl" />
+                    </div>
+                  )}
+
+                  {/* Model selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] md:text-xs font-semibold text-muted-foreground/90">Model</Label>
+                    {provider.models.length > 0 ? (
+                      <Select value={provider.defaultModel || ''} onValueChange={(val) => updateProvider(provider.id, { defaultModel: val })}>
+                        <SelectTrigger className="font-mono text-xs h-10 rounded-xl"><SelectValue placeholder="Select a model" /></SelectTrigger>
+                        <SelectContent>
+                          {provider.models.map(model => <SelectItem key={model.id} value={model.id} className="font-mono text-xs">{model.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-xs text-muted-foreground py-2 pl-1">No models available — test connection to discover.</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Connection test result */}
                 {result && (
-                  <div className={`flex items-center gap-2 text-[10px] sm:text-xs p-2 rounded-md border ${result.ok ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600' : 'bg-red-500/5 border-red-500/20 text-red-600'}`}>
-                    {result.ok ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <XCircle className="h-3.5 w-3.5 shrink-0" />}
+                  <div className={cn(
+                    "flex items-center gap-2 text-xs p-3 rounded-xl border leading-relaxed",
+                    result.ok ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-600" : "bg-red-500/5 border-red-500/20 text-red-600"
+                  )}>
+                    {result.ok ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : <XCircle className="h-4 w-4 shrink-0 text-red-500" />}
                     {result.message}
                   </div>
                 )}
 
                 {/* Actions */}
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Button size="sm" variant="outline" onClick={() => testConnection(provider.id)} disabled={isTesting} className="text-[10px] sm:text-xs gap-1.5 h-8 sm:h-9">
-                    {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  <Button size="sm" variant="outline" onClick={() => testConnection(provider.id)} disabled={isTesting} className="text-xs gap-1.5 h-9 rounded-xl font-semibold">
+                    {isTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                     Test & Discover
                   </Button>
                   {provider.defaultModel && !isActive && (
-                    <Button size="sm" variant="outline" onClick={() => setActiveProvider(provider.id, provider.defaultModel!)} className="text-[10px] sm:text-xs gap-1.5 h-8 sm:h-9">
-                      <Star className="h-3 w-3" />Set as Default
+                    <Button size="sm" variant="outline" onClick={() => setActiveProvider(provider.id, provider.defaultModel!)} className="text-xs gap-1.5 h-9 rounded-xl font-semibold">
+                      <Star className="h-3.5 w-3.5" />Set as Default
                     </Button>
                   )}
                 </div>
-              </CardContent>
+              </div>
             )}
-          </Card>
+          </div>
         );
       })}
 
       {/* Add Custom Provider */}
-      <Card className="border-dashed">
-        <CardContent className="py-3 sm:py-4">
-          {!showAddForm ? (
-            <Button variant="ghost" className="w-full flex items-center justify-center gap-2 text-muted-foreground h-10 sm:h-12" onClick={() => setShowAddForm(true)}>
-              <Plus className="h-4 w-4" />Add OpenAI-Compatible Provider
-            </Button>
-          ) : (
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs sm:text-sm font-medium">New Provider</h4>
-                <Button size="sm" variant="ghost" onClick={() => { setShowAddForm(false); setNewName(''); setNewBaseUrl(''); setNewApiKey(''); setDiscoveredModels([]); }} className="h-6 w-6"><XCircle className="h-4 w-4" /></Button>
+      <div className="glass-panel rounded-2xl border border-dashed border-border/60 overflow-hidden hover:border-primary/40 hover:bg-primary/[0.01] transition-all duration-300 p-5 md:p-6">
+        {!showAddForm ? (
+          <Button
+            variant="ghost"
+            className="w-full flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground h-12 md:h-14 hover:bg-muted/35 rounded-xl text-xs sm:text-sm font-semibold transition-all"
+            onClick={() => setShowAddForm(true)}
+          >
+            <Plus className="h-4.5 w-4.5 text-primary" />
+            Add OpenAI-Compatible Provider
+          </Button>
+        ) : (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between pb-1">
+              <h4 className="text-xs sm:text-sm font-bold tracking-tight uppercase text-muted-foreground/80">New Provider</h4>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => { setShowAddForm(false); setNewName(''); setNewBaseUrl(''); setNewApiKey(''); setDiscoveredModels([]); }}
+                className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <XCircle className="h-4.5 w-4.5" />
+              </Button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-name" className="text-[10px] md:text-xs font-semibold text-muted-foreground/90">Provider Name</Label>
+                <Input id="new-name" placeholder="e.g. My AI Proxy" value={newName} onChange={(e) => setNewName(e.target.value)} className="text-xs h-10 rounded-xl" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-name" className="text-[10px] sm:text-xs font-medium">Provider Name</Label>
-                <Input id="new-name" placeholder="e.g. My AI Proxy" value={newName} onChange={(e) => setNewName(e.target.value)} className="text-[10px] sm:text-xs h-9 sm:h-10" />
+              <div className="space-y-1.5">
+                <Label htmlFor="new-url" className="text-[10px] md:text-xs font-semibold text-muted-foreground/90">Base URL</Label>
+                <Input id="new-url" placeholder="http://100.77.38.96:8080/v1" value={newBaseUrl} onChange={(e) => setNewBaseUrl(e.target.value)} className="font-mono text-xs h-10 rounded-xl" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-url" className="text-[10px] sm:text-xs font-medium">Base URL</Label>
-                <Input id="new-url" placeholder="http://100.77.38.96:8080/v1" value={newBaseUrl} onChange={(e) => setNewBaseUrl(e.target.value)} className="font-mono text-[10px] sm:text-xs h-9 sm:h-10" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-key" className="text-[10px] sm:text-xs font-medium">API Key <span className="text-muted-foreground">(optional)</span></Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-key" className="text-[10px] md:text-xs font-semibold text-muted-foreground/90">API Key <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <div className="relative">
-                  <Input id="new-key" type={newShowKey ? 'text' : 'password'} placeholder="Optional — leave blank if not needed" value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} className="pr-9 sm:pr-10 font-mono text-[10px] sm:text-xs h-9 sm:h-10" />
-                  <button type="button" onClick={() => setNewShowKey(!newShowKey)} className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <Input id="new-key" type={newShowKey ? 'text' : 'password'} placeholder="Optional — leave blank if not needed" value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} className="pr-10 font-mono text-xs h-10 rounded-xl" />
+                  <button type="button" onClick={() => setNewShowKey(!newShowKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     {newShowKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5 flex flex-col justify-end">
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={discoverModels} disabled={discovering || !newBaseUrl.trim()} className="text-[10px] sm:text-xs gap-1.5 h-8 sm:h-9">
-                    {discovering ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  <Button size="sm" variant="outline" onClick={discoverModels} disabled={discovering || !newBaseUrl.trim()} className="text-xs gap-1.5 h-10 rounded-xl font-semibold">
+                    {discovering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                     Fetch Models
                   </Button>
                 </div>
-                {discoveredModels.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-1">
-                    <span className="text-[10px] sm:text-xs text-muted-foreground mr-1">Discovered:</span>
-                    {discoveredModels.slice(0, 8).map(m => <Badge key={m.id} variant="outline" className="text-[9px] sm:text-[10px] font-mono">{m.id}</Badge>)}
-                    {discoveredModels.length > 8 && <Badge variant="outline" className="text-[9px] sm:text-[10px]">+{discoveredModels.length - 8} more</Badge>}
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end pt-2">
-                <Button size="sm" onClick={addCustomProvider} disabled={!newName.trim() || !newBaseUrl.trim()} className="text-[10px] sm:text-xs gap-1.5 h-8 sm:h-9">
-                  <Plus className="h-3 w-3" />Add Provider
-                </Button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {discoveredModels.length > 0 && (
+              <div className="space-y-1.5 bg-muted/20 border border-border/30 p-3 rounded-xl">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/75">Discovered Models:</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {discoveredModels.slice(0, 8).map(m => <Badge key={m.id} variant="outline" className="text-[10px] font-mono border-muted-foreground/20">{m.id}</Badge>)}
+                  {discoveredModels.length > 8 && <Badge variant="outline" className="text-[10px]">+{discoveredModels.length - 8} more</Badge>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-border/20">
+              <Button size="sm" onClick={addCustomProvider} disabled={!newName.trim() || !newBaseUrl.trim()} className="text-xs gap-1.5 h-9 rounded-xl font-bold bg-primary hover:bg-primary/95 text-primary-foreground">
+                <Plus className="h-3.5 w-3.5" />Add Provider
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {saving && (
         <div className="flex justify-end sticky bottom-4">

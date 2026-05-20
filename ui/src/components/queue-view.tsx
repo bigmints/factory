@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+// Card imports removed
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -178,7 +178,7 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border glass-panel p-3.5 sm:p-5 shadow-lg relative overflow-hidden">
+      <div className="rounded-xl border glass-panel p-5 md:p-6 shadow-lg relative overflow-hidden">
         {/* Glow accent */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -207,7 +207,7 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
                   <div className={`relative overflow-hidden rounded-xl transition-all duration-200 ${
                     isOpen ? 'border border-border/80 bg-muted/30 shadow-inner' : 'hover:bg-muted/10'
                   }`}>
-                    <div className="flex items-start gap-3 py-3 pl-3 pr-2.5">
+                    <div className="flex items-start gap-3 py-3.5 px-4">
                       <div className="shrink-0 relative z-10 bg-background/80 rounded-full p-0.5">
                         <StepIndicator status={step.status} isActive={itemStatus === 'running'} />
                       </div>
@@ -270,7 +270,7 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
       </div>
 
       {error && (
-        <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3.5 sm:p-4 shadow-md relative overflow-hidden">
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 md:p-5 shadow-md relative overflow-hidden">
           <div className="absolute left-0 top-0 h-full w-1 bg-rose-500" />
           <div className="flex items-center gap-2 mb-1.5">
             <AlertTriangle className="h-4 w-4 text-rose-400" />
@@ -364,7 +364,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
   return (
     <div className="space-y-5 pb-20 sm:pb-8">
       {/* Header Panel */}
-      <div className="relative overflow-hidden rounded-2xl glass-panel p-4.5 sm:p-6 shadow-xl border-border/40">
+      <div className="relative overflow-hidden rounded-2xl glass-panel p-5 md:p-6 shadow-xl border-border/40">
         <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -421,17 +421,17 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
             const hasCount = stats[status] > 0;
             return (
               <div key={status} className="snap-center shrink-0 w-[140px] sm:w-auto">
-                <Card className={`relative overflow-hidden transition-all duration-300 rounded-xl border glass-panel tap-shrink min-h-[72px] flex items-center justify-between p-3.5 ${
+                <div className={`relative overflow-hidden transition-all duration-300 rounded-2xl border glass-panel tap-shrink min-h-[72px] flex items-center justify-between p-4 md:p-5 ${
                   hasCount ? cfg.glowClass : 'opacity-40 border-border/30'
                 }`}>
                   <div className="flex flex-col">
                     <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{cfg.label}</span>
                     <span className="text-xl font-bold tracking-tight mt-0.5">{stats[status]}</span>
                   </div>
-                  <div className={`p-2 rounded-lg ${cfg.bg} shrink-0`}>
+                  <div className={`p-2 rounded-xl ${cfg.bg} shrink-0`}>
                     <Icon className={`h-4.5 w-4.5 ${cfg.color} ${status === 'running' && hasCount ? 'animate-spin' : ''}`} />
                   </div>
-                </Card>
+                </div>
               </div>
             );
           })}
@@ -442,15 +442,13 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
 
       {/* Queue items */}
       {items.length === 0 ? (
-        <Card className="rounded-2xl border-dashed glass-panel shadow-sm p-6">
-          <CardContent className="py-10 text-center">
-            <div className="h-12 w-12 rounded-2xl bg-muted/40 border border-border/30 flex items-center justify-center mx-auto mb-4">
-              <Clock className="h-6 w-6 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-sm font-semibold text-foreground">Build queue is empty</h3>
-            <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1.5">Go to the Specs panel and configure your build specifications to load items here.</p>
-          </CardContent>
-        </Card>
+        <div className="glass-panel rounded-2xl border border-dashed border-border/60 p-6 sm:p-10 text-center glow-purple">
+          <div className="h-12 w-12 rounded-2xl bg-muted/40 border border-border/30 flex items-center justify-center mx-auto mb-4">
+            <Clock className="h-6 w-6 text-muted-foreground/60" />
+          </div>
+          <h3 className="text-sm font-semibold text-foreground">Build queue is empty</h3>
+          <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1.5 leading-relaxed">Go to the Specs panel and configure your build specifications to load items here.</p>
+        </div>
       ) : (
         <div className="space-y-3">
           {items.map((item) => {
@@ -459,8 +457,8 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
             const isExpanded = expandedItem === item.id;
 
             return (
-              <Card key={item.id} className={`relative overflow-hidden rounded-xl border glass-panel transition-all duration-300 ${
-                isExpanded ? 'shadow-lg shadow-sky-500/5 ring-1 ring-sky-500/20' : 'hover:bg-muted/10'
+              <div key={item.id} className={`relative overflow-hidden rounded-2xl border glass-panel transition-all duration-300 ${
+                isExpanded ? 'shadow-lg shadow-sky-500/5 border-sky-500/20' : 'hover:bg-muted/10'
               }`}>
                 {/* Thin side glowing accent strip */}
                 <div className={`absolute left-0 top-0 h-full w-[3px] transition-all ${
@@ -471,7 +469,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                   'bg-muted-foreground/30'
                 }`} />
 
-                <CardContent className="p-3.5 sm:p-4.5 pl-5 sm:pl-6">
+                <div className="p-5 md:p-6 pl-6 md:pl-8">
                   <div className="flex items-center justify-between gap-3">
                     <button
                       className="flex items-center gap-2.5 text-left flex-1 min-w-0 cursor-pointer outline-none select-none"
@@ -519,7 +517,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
 
                   {isExpanded && (
                     <div className="mt-4 ml-0 sm:ml-9 border-t border-border/20 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-muted/20 border border-border/20 rounded-xl p-3 text-[10px] sm:text-[11px] text-muted-foreground mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/20 border border-border/20 rounded-xl p-4 text-[10px] sm:text-[11px] text-muted-foreground mb-4">
                         <div>
                           <span className="block text-muted-foreground/50 font-medium">Spec File</span>
                           <span className="text-foreground/95 truncate block mt-0.5">{item.spec_file.split('/').pop()}</span>
@@ -546,8 +544,8 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                       <ActivityTimeline output={item.output} error={item.error} itemStatus={item.status} />
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             );
           })}
         </div>

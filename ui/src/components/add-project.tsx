@@ -19,7 +19,6 @@ import {
   IconPlus
 } from "@tabler/icons-react";
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { FolderBrowser } from '@/components/folder-browser';
 import { toast } from 'sonner';
@@ -299,39 +298,35 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
       icon: <IconFolder className="size-3 sm:size-4" />,
       content: (
         <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-3 sm:mt-4">
-           <Card
-              className="cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all group"
-              onClick={() => setBrowseMode('new')}
-            >
-              <CardContent className="py-4 sm:py-6 flex flex-col items-center gap-2 text-center">
-                <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                  <IconFolderPlus className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-[10px] sm:text-xs font-semibold">New Project</p>
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
-                    Create & initialize
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <div
+               className="cursor-pointer glass-panel rounded-2xl border border-border/40 p-4 sm:p-6 flex flex-col items-center gap-2 text-center hover:border-primary/40 hover:bg-primary/[0.02] active:scale-[0.98] transition-all duration-300 group glow-blue"
+               onClick={() => setBrowseMode('new')}
+             >
+               <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                 <IconFolderPlus className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+               </div>
+               <div>
+                 <p className="text-[10px] sm:text-xs font-semibold">New Project</p>
+                 <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+                   Create & initialize
+                 </p>
+               </div>
+            </div>
 
-            <Card
-              className="cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all group"
-              onClick={() => setBrowseMode('existing')}
-            >
-              <CardContent className="py-4 sm:py-6 flex flex-col items-center gap-2 text-center">
-                <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
-                  <IconFolderOpen className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-[10px] sm:text-xs font-semibold">Existing Project</p>
-                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
-                    Connect local path
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <div
+               className="cursor-pointer glass-panel rounded-2xl border border-border/40 p-4 sm:p-6 flex flex-col items-center gap-2 text-center hover:border-primary/40 hover:bg-primary/[0.02] active:scale-[0.98] transition-all duration-300 group glow-blue"
+               onClick={() => setBrowseMode('existing')}
+             >
+               <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                 <IconFolderOpen className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
+               </div>
+               <div>
+                 <p className="text-[10px] sm:text-xs font-semibold">Existing Project</p>
+                 <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+                   Connect local path
+                 </p>
+               </div>
+            </div>
         </div>
       ),
       summary: pendingPath ? (
@@ -499,34 +494,31 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                   ))}
               </div>
           ) : projects.length === 0 ? (
-              <Card className="border-dashed bg-muted/20">
-                  <CardContent className="py-8 sm:py-12 flex flex-col items-center text-center gap-3 sm:gap-4">
-                      <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-muted">
-                        <IconFolder className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
-                      </div>
-                      <div className="space-y-1">
-                          <p className="text-xs sm:text-sm font-semibold">No projects connected</p>
-                          <p className="text-[10px] sm:text-xs text-muted-foreground max-w-[200px] sm:max-w-[240px]">
-                              Connect your first repository to start using Factory.
-                          </p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => setShowModal(true)} className="text-xs">
-                          <IconPlus className="h-3.5 w-3.5 mr-2" />
-                          Connect First Project
-                      </Button>
-                  </CardContent>
-              </Card>
+              <div className="glass-panel rounded-2xl border border-dashed border-border/60 bg-background/20 p-6 sm:p-10 flex flex-col items-center text-center gap-3 sm:gap-4 glow-purple">
+                  <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-muted">
+                    <IconFolder className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
+                  </div>
+                  <div className="space-y-1">
+                      <p className="text-xs sm:text-sm font-semibold">No projects connected</p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground max-w-[200px] sm:max-w-[240px]">
+                          Connect your first repository to start using Factory.
+                      </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowModal(true)} className="text-xs">
+                      <IconPlus className="h-3.5 w-3.5 mr-2" />
+                      Connect First Project
+                  </Button>
+              </div>
           ) : (
               <div className="grid grid-cols-1 gap-2">
                 {projects.map((project) => (
-                  <Card
+                  <div
                     key={project.id}
                     className={cn(
-                      'transition-all duration-200 border-none bg-muted/40 hover:bg-muted/60',
-                      project.id === activeId && 'ring-1 ring-primary/30 bg-primary/5'
+                      'glass-panel rounded-2xl border border-border/40 p-4 sm:p-5 space-y-3 transition-all duration-300 hover:shadow-md',
+                      project.id === activeId ? 'border-primary/30 bg-primary/[0.02] glow-blue' : 'hover:border-border/60 hover:bg-muted/10'
                     )}
                   >
-                    <CardContent className="py-2.5 sm:py-3 px-3 sm:px-4 space-y-2 sm:space-y-2.5">
                       <div className="flex items-center gap-2 sm:gap-3">
                         <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-background border">
                           <IconFolder className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
@@ -584,10 +576,10 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
 
                       {/* Bridge Summary */}
                       {project.bridge && (
-                        <div className="pl-8 sm:pl-11 space-y-2">
+                        <div className="pl-9 sm:pl-11 space-y-2">
                           {/* Stack Badges */}
                           {project.bridge.stack && (
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-1.5">
                               {project.bridge.stack.framework && (
                                 <span className="inline-flex items-center rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-blue-400 ring-1 ring-inset ring-blue-500/20">
                                   {project.bridge.stack.framework}
@@ -650,8 +642,7 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
                           </div>
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
+                  </div>
                 ))}
               </div>
           )}

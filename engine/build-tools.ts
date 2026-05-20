@@ -498,7 +498,18 @@ function listDirRecursive(dir: string, prefix = ''): string[] {
     if (!existsSync(dir)) return results;
     const entries = readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.factory') continue;
+        if (
+            entry.name === 'node_modules' ||
+            entry.name === '.git' ||
+            entry.name === '.factory' ||
+            entry.name === '.next' ||
+            entry.name === '.vercel' ||
+            entry.name === 'dist' ||
+            entry.name === 'build' ||
+            entry.name === 'out'
+        ) {
+            continue;
+        }
         const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
         if (entry.isDirectory()) {
             results.push(relPath + '/');

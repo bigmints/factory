@@ -1637,78 +1637,63 @@ ${TOOL_DEFINITIONS.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
 Call mark_complete when the build is verified and complete.`;
 }
 
-    const isApp = 'appName' in spec;
-    const specBlock = isApp ? formatSpec(spec as AppSpec) : formatFeatureSpec(spec as FeatureSpec);
-
-    // TOON context block
-    const toonContext = context.toonSnapshot
-        ? `\n## TOON Context\n\`\`\`toon\n${context.toonSnapshot}\n\`\`\`\n`
-        : '';
-
-    // Skills table
-    const skillsBlock = context.projectSkills && context.projectSkills.length > 0
-        ? `\n## Available Skills\n${context.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
-        : '';
-
-    return `You are an autonomous code generation engine. You have access to tools for reading, writing, and executing commands.
-
-## Rules
-1. Use tools to explore the project, read files, and write code.
-2. Always read a file before modifying it — never guess file contents.
-3. Use run_command for npm install, tsc, lint, test commands.
-4. When done, call mark_complete with a summary. If you cannot proceed, call mark_failed.
-5. Generate production-ready code — no placeholders, no TODOs, no stubs.
-6. Every "import ... from 'package'" must reference a real npm package.
-7. Match the coding style and patterns from the spec and existing code.
-
-## Reason Codes
-- Use log_step(level='info', message='...') to track progress
-- Use log_step(level='warn', message='...') for non-blocking issues
-- Use log_step(level='error', message='...') for blocking issues
-
-${specBlock}
-
-${toonContext}${skillsBlock}
-## Tools
-You have access to these tools:
-${TOOL_DEFINITIONS.map(t => `- ${t.name}: ${t.description}`).join('\n')}
-
-Use tools to explore, write, and validate code. Call mark_complete when done.`;
-}
 
 /**
  * Run a tool-calling LLM session.
- * Max 30 turns. Token guard trims to last 15 msgs at 20+.
- * Replaces runPipeline() and runFeaturePipeline() bodies.
+ * Max 30 turns. Token guard trims context at turn 20. Wall-clock timeout: 20 min.
  */
 export async function runToolSession(
     spec: AppSpec | FeatureSpec,
     context: ProjectContext,
     targetDir: string,
     specFile: string,
+    appContext?: AppIntegrationContext,
 ): Promise<BuildResult> {
     const { provider, model } = requireActiveProvider();
-    const systemPrompt = buildToolSystemPrompt(spec, context);
+    const systemPrompt = buildToolSystemPrompt(spec, context, targetDir, appContext);
+
     const ctx: BuildToolContext = {
         targetDir,
         specFile,
         terminal: false,
+        success: false,
         generatedFiles: new Map(),
         logs: [],
+        contextData: {
+            conventions: context.conventions.length > 0 ? context.conventions.join('\n\n') : undefined,
+            knowledge: context.knowledgeFiles.length > 0
+                ? context.knowledgeFiles.map(k => `### ${k.app} (${k.filename})\n${k.content}`).join('\n\n')
+                : undefined,
+        },
     };
 
     const messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }> = [
         { role: 'system', content: systemPrompt },
+        // Bootstrap: orient the LLM to start immediately without waiting
+        {
+            role: 'user',
+            content: 'Begin by calling read_spec to understand the requirements, then list_dir(recursive=true) to explore the target directory. Write files, validate with run_command, and call mark_complete when done.',
+        },
     ];
 
     const MAX_TURNS = 30;
     const TOKEN_GUARD_AT = 20;
     const KEEP_LAST = 15;
+    const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+    const sessionStart = Date.now();
     let totalTokensIn = 0;
     let totalTokensOut = 0;
 
     for (let turn = 0; turn < MAX_TURNS && !ctx.terminal; turn++) {
-        // Token guard: trim messages at 20+ to keep last 15
+        // Wall-clock session timeout guard
+        if (Date.now() - sessionStart > SESSION_TIMEOUT_MS) {
+            const elapsedMin = Math.round((Date.now() - sessionStart) / 60_000);
+            logError(`Tool session timed out after ${elapsedMin} min`);
+            ctx.logs.push({ level: 'error', message: `Session timed out after ${elapsedMin} min` });
+            break;
+        }
+
+        // Token guard: keep system + last KEEP_LAST messages to avoid context overflow
         if (messages.length >= TOKEN_GUARD_AT) {
             const keep = messages.slice(0, 1).concat(messages.slice(-KEEP_LAST));
             messages.length = 0;
@@ -1717,22 +1702,25 @@ export async function runToolSession(
 
         log('●', `Turn ${turn + 1}/${MAX_TURNS} — calling LLM...`);
 
-        // Call LLM with tool definitions
         const response = await callProviderWithTools(provider, model, messages, TOOL_DEFINITIONS);
         totalTokensIn += response.tokensIn;
         totalTokensOut += response.tokensOut;
 
-        // Process tool calls from response
         const toolCalls = response.toolCalls || [];
+
         if (toolCalls.length === 0) {
-            // No tool calls — treat as final response
+            // LLM returned text with no tool calls — session ended without a terminal call
             messages.push({ role: 'assistant', content: response.text });
+            if (!ctx.terminal) {
+                log('!', 'LLM returned no tool calls — session ended without mark_complete or mark_failed');
+                ctx.logs.push({ level: 'warn', message: 'Session ended without a terminal tool call' });
+            }
             break;
         }
 
         messages.push({ role: 'assistant', content: response.text, tool_calls: toolCalls });
 
-        // Execute each tool call
+        // Execute each tool call sequentially
         for (const tc of toolCalls) {
             const result = await executeTool(tc.function.name, tc.function.arguments, ctx);
             messages.push({
@@ -1741,7 +1729,7 @@ export async function runToolSession(
                 tool_call_id: tc.id,
             });
             if (result.isError) {
-                ctx.logs.push({ level: 'error', message: result.content });
+                ctx.logs.push({ level: 'error', message: `[${tc.function.name}] ${result.content}` });
             } else {
                 ctx.logs.push({ level: 'info', message: result.content });
             }
@@ -1750,13 +1738,25 @@ export async function runToolSession(
         if (ctx.terminal) break;
     }
 
-    // Build result from generated files
-    const files = Array.from(ctx.generatedFiles.entries()).map(([filename, content]) => ({
-        filename,
-        content,
-    }));
+    // Max-turns exhaustion without a terminal call
+    if (!ctx.terminal) {
+        logError(`Tool session exhausted all ${MAX_TURNS} turns without calling mark_complete or mark_failed`);
+        ctx.logs.push({ level: 'error', message: `Exceeded max turns (${MAX_TURNS}) without completing` });
+    }
 
-    const success = ctx.logs.some(l => l.message.toLowerCase().includes('complete'));
+    // Normalize file paths — strip targetDir prefix so filenames are relative
+    const targetPrefix = targetDir.endsWith('/') ? targetDir : targetDir + '/';
+    const files = Array.from(ctx.generatedFiles.entries()).map(([absPath, content]) => {
+        const filename = absPath.startsWith(targetPrefix)
+            ? absPath.slice(targetPrefix.length)
+            : absPath.startsWith(targetDir)
+            ? absPath.slice(targetDir.length)
+            : absPath;
+        return { filename, content };
+    });
+
+    // Use ctx.success — set exclusively by mark_complete, not a heuristic
+    const success = ctx.success;
     const errors = ctx.logs.filter(l => l.level === 'error').map(l => l.message);
 
     return {
@@ -1775,22 +1775,231 @@ export async function runToolSession(
     };
 }
 
+
+
 function isAppSpec(spec: AppSpec | FeatureSpec): spec is AppSpec {
     return 'appName' in spec;
 }
 
+type ToolCallResult = Array<{ id: string; function: { name: string; arguments: Record<string, unknown> } }>;
+type ToolResponse = LLMResponse & { toolCalls?: ToolCallResult };
+type ToolMessages = Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }>;
+
 /**
- * Call the LLM provider with tool definitions for function calling.
+ * Route tool-calling to the correct provider implementation.
+ * Supports: Gemini (native function calling), Ollama (/api/chat), OpenAI-compat (everything else).
  */
 async function callProviderWithTools(
     provider: LLMProvider,
     model: string,
-    messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }>,
+    messages: ToolMessages,
     tools: typeof TOOL_DEFINITIONS,
-): Promise<LLMResponse & { toolCalls?: Array<{ id: string; function: { name: string; arguments: Record<string, unknown> } }> }> {
-    const baseUrl = provider.baseUrl || 'https://api.openai.com/v1';
+): Promise<ToolResponse> {
+    const kind = provider.kind || 'builtin';
 
-    // Build the messages array for the OpenAI-compatible API
+    if (kind === 'builtin') {
+        if (provider.id === 'gemini') {
+            if (!provider.apiKey) throw new Error('Gemini API key not configured');
+            return callGeminiWithTools(provider.apiKey, model, messages, tools);
+        }
+        if (provider.id === 'ollama') {
+            return callOllamaWithTools(provider.baseUrl || 'http://localhost:11434', model, messages, tools);
+        }
+        // 'openai' built-in falls through to OpenAI-compat
+    }
+
+    const baseUrl = provider.baseUrl || 'https://api.openai.com/v1';
+    return callOpenAICompatWithTools(provider.apiKey || '', model, messages, tools, baseUrl);
+}
+
+/** OpenAI-compatible tool-calling with retry on transient errors and guarded JSON.parse */
+async function callOpenAICompatWithTools(
+    apiKey: string,
+    model: string,
+    messages: ToolMessages,
+    tools: typeof TOOL_DEFINITIONS,
+    baseUrl: string,
+): Promise<ToolResponse> {
+    const MAX_RETRIES = 3;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const apiMessages = messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+            ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+        }));
+
+        let res: Response;
+        try {
+            res = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: apiMessages,
+                    tools: tools.map(t => ({
+                        type: 'function',
+                        function: { name: t.name, description: t.description, parameters: t.parameters },
+                    })),
+                    temperature: 0.2,
+                    max_tokens: 16384,
+                }),
+            });
+        } catch (networkErr) {
+            if (attempt < MAX_RETRIES) { await sleep(attempt * 2000); continue; }
+            throw networkErr;
+        }
+
+        // Retry on rate-limit or server errors
+        if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
+            const wait = parseInt(res.headers.get('retry-after') || '0') * 1000 || attempt * 2000;
+            await sleep(wait);
+            continue;
+        }
+
+        if (!res.ok) {
+            const body = await res.text();
+            throw new Error(`Provider error (${res.status}): ${body.slice(0, 300)}`);
+        }
+
+        const data = await res.json();
+        const choice = data.choices?.[0];
+        if (!choice) throw new Error('Provider returned no choices');
+
+        const text = choice.message?.content || '';
+        const toolCalls: ToolCallResult = (choice.message?.tool_calls || []).map((tc: any) => {
+            let parsedArgs: Record<string, unknown> = {};
+            try {
+                const raw = tc.function?.arguments;
+                parsedArgs = typeof raw === 'object' && raw !== null ? raw : JSON.parse(raw || '{}');
+            } catch { parsedArgs = {}; }
+            return {
+                id: tc.id || `tc-${Date.now()}`,
+                function: { name: tc.function?.name || '', arguments: parsedArgs },
+            };
+        });
+
+        return {
+            text,
+            tokensIn: data.usage?.prompt_tokens || 0,
+            tokensOut: data.usage?.completion_tokens || 0,
+            toolCalls,
+        };
+    }
+
+    throw new Error(`Provider: all ${MAX_RETRIES} retry attempts exhausted`);
+}
+
+/** Gemini-native tool-calling — converts OpenAI message format to Gemini contents format */
+async function callGeminiWithTools(
+    apiKey: string,
+    model: string,
+    messages: ToolMessages,
+    tools: typeof TOOL_DEFINITIONS,
+): Promise<ToolResponse> {
+    const toolCallNameMap = new Map<string, string>(); // tool_call_id → function name
+    let systemInstruction: string | undefined;
+    const contents: Array<{ role: 'user' | 'model'; parts: any[] }> = [];
+
+    for (const msg of messages) {
+        if (msg.role === 'system') {
+            systemInstruction = msg.content;
+            continue;
+        }
+        if (msg.role === 'user') {
+            const prev = contents[contents.length - 1];
+            if (prev?.role === 'user' && prev.parts.every((p: any) => p.text !== undefined)) {
+                prev.parts.push({ text: msg.content });
+            } else {
+                contents.push({ role: 'user', parts: [{ text: msg.content }] });
+            }
+            continue;
+        }
+        if (msg.role === 'assistant') {
+            const parts: any[] = [];
+            if (msg.content) parts.push({ text: msg.content });
+            for (const tc of (msg.tool_calls || [])) {
+                toolCallNameMap.set(tc.id, tc.function.name);
+                parts.push({ functionCall: { name: tc.function.name, args: tc.function.arguments } });
+            }
+            if (parts.length > 0) contents.push({ role: 'model', parts });
+            continue;
+        }
+        if (msg.role === 'tool') {
+            const funcName = toolCallNameMap.get(msg.tool_call_id || '') || 'unknown_function';
+            const responsePart = {
+                functionResponse: { name: funcName, response: { content: msg.content } },
+            };
+            const prev = contents[contents.length - 1];
+            if (prev?.role === 'user' && prev.parts.some((p: any) => p.functionResponse)) {
+                prev.parts.push(responsePart);
+            } else {
+                contents.push({ role: 'user', parts: [responsePart] });
+            }
+            continue;
+        }
+    }
+
+    const body: Record<string, unknown> = {
+        contents,
+        tools: [{
+            functionDeclarations: tools.map(t => ({
+                name: t.name,
+                description: t.description,
+                parameters: t.parameters,
+            })),
+        }],
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        generationConfig: { temperature: 0.2, maxOutputTokens: 16384 },
+    };
+    if (systemInstruction) {
+        body.system_instruction = { parts: [{ text: systemInstruction }] };
+    }
+
+    const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    );
+    if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Gemini tool call error (${res.status}): ${txt.slice(0, 300)}`);
+    }
+
+    const data = await res.json();
+    const candidate = data.candidates?.[0];
+    if (!candidate) throw new Error('Gemini returned no candidates');
+
+    const parts: any[] = candidate.content?.parts || [];
+    const text = parts.filter((p: any) => p.text).map((p: any) => p.text as string).join('');
+    const toolCalls: ToolCallResult = parts
+        .filter((p: any) => p.functionCall)
+        .map((p: any, i: number) => ({
+            id: `gemini-${Date.now()}-${i}`,
+            function: {
+                name: p.functionCall.name as string,
+                arguments: (p.functionCall.args || {}) as Record<string, unknown>,
+            },
+        }));
+
+    return {
+        text,
+        tokensIn: data.usageMetadata?.promptTokenCount || 0,
+        tokensOut: data.usageMetadata?.candidatesTokenCount || 0,
+        toolCalls,
+    };
+}
+
+/** Ollama tool-calling via /api/chat endpoint (requires a model that supports tools, e.g. llama3.1) */
+async function callOllamaWithTools(
+    baseUrl: string,
+    model: string,
+    messages: ToolMessages,
+    tools: typeof TOOL_DEFINITIONS,
+): Promise<ToolResponse> {
     const apiMessages = messages.map(m => ({
         role: m.role,
         content: m.content,
@@ -1798,49 +2007,54 @@ async function callProviderWithTools(
         ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
     }));
 
-    const res = await fetch(`${baseUrl}/chat/completions`, {
+    const res = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${provider.apiKey || ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             model,
             messages: apiMessages,
-            tools: tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
-            temperature: 0.2,
-            max_tokens: 16384,
+            tools: tools.map(t => ({
+                type: 'function',
+                function: { name: t.name, description: t.description, parameters: t.parameters },
+            })),
+            stream: false,
+            options: { temperature: 0.2 },
         }),
     });
 
     if (!res.ok) {
         const body = await res.text();
-        throw new Error(`Provider error (${res.status}): ${body.slice(0, 300)}`);
+        throw new Error(`Ollama tool call error (${res.status}): ${body.slice(0, 300)}`);
     }
 
     const data = await res.json();
-    const choice = data.choices?.[0];
-    if (!choice) throw new Error('Provider returned no choices');
-
-    const text = choice.message?.content || '';
-    const toolCalls = choice.message?.tool_calls?.map((tc: any) => ({
-        id: tc.id,
-        function: {
-            name: tc.function.name,
-            arguments: JSON.parse(tc.function.arguments || '{}'),
-        },
-    })) || [];
-
-    const tokensIn = data.usage?.prompt_tokens || 0;
-    const tokensOut = data.usage?.completion_tokens || 0;
+    const message = data.message;
+    const text = message?.content || '';
+    const toolCalls: ToolCallResult = (message?.tool_calls || []).map((tc: any, i: number) => {
+        let parsedArgs: Record<string, unknown> = {};
+        try {
+            const raw = tc.function?.arguments;
+            parsedArgs = typeof raw === 'object' && raw !== null ? raw : JSON.parse(raw || '{}');
+        } catch { parsedArgs = {}; }
+        return {
+            id: tc.id || `ollama-${Date.now()}-${i}`,
+            function: { name: tc.function?.name || '', arguments: parsedArgs },
+        };
+    });
 
     return {
         text,
-        tokensIn,
-        tokensOut,
+        tokensIn: data.prompt_eval_count || 0,
+        tokensOut: data.eval_count || 0,
         toolCalls,
     };
 }
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(r => setTimeout(r, ms));
+}
+
+
 
 function formatFeatureSpec(spec: FeatureSpec): string {
     return `## Feature Specification

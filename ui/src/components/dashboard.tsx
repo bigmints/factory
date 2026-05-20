@@ -90,8 +90,7 @@ export default function Dashboard() {
   const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
   const [queueRunning, setQueueRunning] = useState(false);
   const [buildEngine, setBuildEngine] = useState<'factory' | 'gemini-cli' | 'pi-cli'>('factory');
-  const [geminiCliAvailable, setGeminiCliAvailable] = useState<boolean | null>(null);
-  const [piCliAvailable, setPiCliAvailable] = useState<boolean | null>(null);
+
   const logOffsetRef = useRef(0);
 
   const fetchQueueStatus = useCallback(async () => {
@@ -155,14 +154,7 @@ export default function Dashboard() {
         }
       }
     }
-    fetch('/api/settings/gemini-cli-check')
-      .then(r => r.json())
-      .then(d => setGeminiCliAvailable(d.available))
-      .catch(() => setGeminiCliAvailable(false));
-    fetch('/api/settings/pi-cli-check')
-      .then(r => r.json())
-      .then(d => setPiCliAvailable(d.available))
-      .catch(() => setPiCliAvailable(false));
+
   }, [fetchProjects, fetchSpecs, fetchReports, fetchQueueStatus]);
 
   useEffect(() => {
@@ -606,24 +598,7 @@ export default function Dashboard() {
                 >
                   Factory
                 </button>
-                {geminiCliAvailable && (
-                  <button
-                    className={`px-2.5 h-full flex items-center gap-1 transition-colors shrink-0 ${buildEngine === 'gemini-cli' ? 'bg-blue-600 text-blue-50 font-medium' : 'text-muted-foreground hover:bg-muted'}`}
-                    onClick={() => setBuildEngine('gemini-cli')}
-                  >
-                    <Terminal className="h-3 w-3" />
-                    Gemini
-                  </button>
-                )}
-                {piCliAvailable && (
-                  <button
-                    className={`px-2.5 h-full flex items-center gap-1 transition-colors shrink-0 ${buildEngine === 'pi-cli' ? 'bg-purple-600 text-purple-50 font-medium' : 'text-muted-foreground hover:bg-muted'}`}
-                    onClick={() => setBuildEngine('pi-cli')}
-                  >
-                    <Terminal className="h-3 w-3" />
-                    pi CLI
-                  </button>
-                )}
+
               </div>
               <Button
                 size="sm"

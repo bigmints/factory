@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-19T23:03:09Z"
+  last_seen: "2026-05-20T08:43:54Z"
   host: "BigMac-2"
-  task: "All tasks complete — Factory engine upgrade done"
+  task: "All tasks complete — queue empty, awaiting new direction"
   status: alive

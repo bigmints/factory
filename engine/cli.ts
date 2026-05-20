@@ -518,13 +518,7 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
             return handleWatch(args[3]);
         }
 
-        case 'daemon': {
-            return handleDaemon(args[3]);
-        }
 
-        case 'watch': {
-            return handleWatch(args[3]);
-        }
 
         case 'stats': {
             const stats = getQueueStats();
@@ -1165,7 +1159,7 @@ async function handleDaemon(command?: string): Promise<void> {
                 }
             }
 
-            const child = spawn('npx', ['tsx', 'engine/cli.ts', 'queue', 'daemon'], {
+            const child = spawn('npx', ['tsx', 'engine/daemon.ts'], {
                 detached: true,
                 stdio: 'ignore',
             });
@@ -1215,7 +1209,7 @@ async function handleDaemon(command?: string): Promise<void> {
             } catch {
                 // Ignore if not running
             }
-            const child = spawn('npx', ['tsx', 'engine/cli.ts', 'queue', 'daemon'], {
+            const child = spawn('npx', ['tsx', 'engine/daemon.ts'], {
                 detached: true,
                 stdio: 'ignore',
             });

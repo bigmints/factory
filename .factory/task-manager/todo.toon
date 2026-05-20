@@ -3,186 +3,55 @@
 # Usage:  .factory/task-manager/manage.sh list|add|start|complete
 
 summary:
-  completed: 5
-    - us_074_daemon_ui:
-        summary: "DaemonStatus.tsx (start/stop/restart, live status)"
-    - us_062_project_init_ui:
-        summary: "ProjectInitWizard.tsx (2-step modal, stack detection)"
-    - us_053_ui_engine_badge:
-        summary: "EngineBadge.tsx (factory=blue, minions=purple)"
-    - us_051_052_ui_context_skills:
-        summary: "ToonContextViewer.tsx, SkillRegistry.tsx (API routes)"
-    - us_050_ui_heartbeat:
-        summary: "HeartbeatMonitor.tsx (30s poll, status dots)"
-    - us_014_build_tool_ui:
-        summary: "BuildTimeline.tsx (SSE stream from /api/build-events)"
-    - us_073_spec_watcher:
-        summary: "Added factory queue watch <dir> — auto-enqueue new YAML specs, persistent file watcher"
-    - us_072_daemon_process_mgr:
-        summary: "Added factory daemon start/stop/status/restart — PID file management, detached spawn"
-    - us_071_auto_retry:
-        summary: "Auto-retry up to 3x with exponential backoff (5s, 10s, 20s)"
-    - us_070_queue_daemon:
-        summary: "Added startQueueDaemon() — persistent watch loop, 30s poll, SIGTERM/SIGINT handling"
-    - us_040_043_workflows_hooks:
-        summary: "Created factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat) + post-commit (context update)"
-    - us_099_final_integration:
-        summary: "Final validation: tsc --noEmit passes clean. All P0/P1 tasks implemented. Factory engine upgrade complete with tool-calling loop, TOON bridge, minions engine, CLI facade, and bridge initialization."
-    - us_061_agents_md_patch:
-        summary: "Added to initBridge: finds agents.md/AGENTS.md, generates from template if missing, appends Factory Agentic Scaffold section if exists. Never overwrites existing content."
-    - us_060_init_bridge_engine:
-        summary: "Created engine/init.ts with initBridge(repoPath): creates .factory/ scaffold (factory.yaml, skill-index.toon, context.toon, worklog.toon, heartbeat.toon, todo.toon, workflows/). Auto-detects stack from package.json/tsconfig.json. Returns InitResult with list of files created."
-    - us_031_032_minions_engine:
-        summary: "Created engine/minions-engine.ts with specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) and runMinionsEngine() (spawn, stream, return BuildResult). Added runMinionsBuild and runMinionsFeatureBuild exports for cli.ts integration."
-    - us_030_delete_old_engines:
-        summary: "Deleted gemini-cli-engine.ts and pi-cli-engine.ts. Updated BuildEngine type to factory|minions. Replaced engine-specific code in cli.ts with minions stubs (to be implemented in us_031_032)."
-    - us_023_heartbeat_on_queue:
-        summary: "Added writeHeartbeat() call in markRunning() with try/catch. Imports writeHeartbeat from toon.ts."
-    - us_021_gather_toon_context:
-        summary: "Added gatherToonSnapshot() to context.ts. Reads .factory/context/context.toon and .factory/skill-index.toon. Added toonSnapshot and projectSkills to ProjectContext in types.ts. Called inside gatherContext()."
-    - us_020_toon_helpers:
-        summary: "Created engine/toon.ts with readToonFile, compressToon, parseToonSkillIndex, writeHeartbeat, writeToonTasksSnapshot. Uses @toon-format/toon for encode/decode."
-    - us_013_tool_system_prompt:
-        summary: "Added buildToolSystemPrompt(spec, context) to generate.ts. Includes role, RULES, REASON CODES, TOON context block, spec YAML, skills table."
-    - us_012_tool_calling_loop:
-        summary: "Added runToolSession() to generate.ts. Max 30 turns, token guard trims to last 15 msgs at 20+. Calls LLM with tool definitions, executes tools via executeTool(), stops on ctx.terminal. Replaces runPipeline/runFeaturePipeline bodies."
-    - us_011_tool_executor:
-        summary: "Added async executeTool(name, args, ctx) to build-tools.ts. Errors returned as {content, isError}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true."
-    - us_010_build_tool_schema:
-        summary: "Created engine/build-tools.ts with 9 TOOL_DEFINITIONS (read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed) in OpenAI function-call format. Exported BuildToolContext and ToolResult types."
-  next: 25
-  cancelled: 0
+  completed: 28
+  next: 3
+  cancelled: 5
 
   completed:
-    - us_074_daemon_ui:
-        summary: "DaemonStatus.tsx (start/stop/restart, live status)"
-    - us_062_project_init_ui:
-        summary: "ProjectInitWizard.tsx (2-step modal, stack detection)"
-    - us_053_ui_engine_badge:
-        summary: "EngineBadge.tsx (factory=blue, minions=purple)"
-    - us_051_052_ui_context_skills:
-        summary: "ToonContextViewer.tsx, SkillRegistry.tsx (API routes)"
-    - us_050_ui_heartbeat:
-        summary: "HeartbeatMonitor.tsx (30s poll, status dots)"
-    - us_014_build_tool_ui:
-        summary: "BuildTimeline.tsx (SSE stream from /api/build-events)"
-    - us_073_spec_watcher:
-        summary: "Added factory queue watch <dir> — auto-enqueue new YAML specs, persistent file watcher"
-    - us_072_daemon_process_mgr:
-        summary: "Added factory daemon start/stop/status/restart — PID file management, detached spawn"
-    - us_071_auto_retry:
-        summary: "Auto-retry up to 3x with exponential backoff (5s, 10s, 20s)"
-    - us_070_queue_daemon:
-        summary: "Added startQueueDaemon() — persistent watch loop, 30s poll, SIGTERM/SIGINT handling"
-    - us_040_043_workflows_hooks:
-        summary: "Created factory/scripts/heartbeat/setup-hooks.sh — pre-commit (in_progress check + heartbeat) + post-commit (context update)"
-    - us_099_final_integration:
-        summary: "Final validation: tsc --noEmit passes clean. All P0/P1 tasks implemented. Factory engine upgrade complete with tool-calling loop, TOON bridge, minions engine, CLI facade, and bridge initialization."
-    - us_061_agents_md_patch:
-        summary: "Added to initBridge: finds agents.md/AGENTS.md, generates from template if missing, appends Factory Agentic Scaffold section if exists. Never overwrites existing content."
-    - us_060_init_bridge_engine:
-        summary: "Created engine/init.ts with initBridge(repoPath): creates .factory/ scaffold (factory.yaml, skill-index.toon, context.toon, worklog.toon, heartbeat.toon, todo.toon, workflows/). Auto-detects stack from package.json/tsconfig.json. Returns InitResult with list of files created."
-    - us_031_032_minions_engine:
-        summary: "Created engine/minions-engine.ts with specToQueueYaml() (5-step AppSpec, 6-step FeatureSpec) and runMinionsEngine() (spawn, stream, return BuildResult). Added runMinionsBuild and runMinionsFeatureBuild exports for cli.ts integration."
-    - us_030_delete_old_engines:
-        summary: "Deleted gemini-cli-engine.ts and pi-cli-engine.ts. Updated BuildEngine type to factory|minions. Replaced engine-specific code in cli.ts with minions stubs (to be implemented in us_031_032)."
-    - us_023_heartbeat_on_queue:
-        summary: "Added writeHeartbeat() call in markRunning() with try/catch. Imports writeHeartbeat from toon.ts."
-    - us_021_gather_toon_context:
-        summary: "Added gatherToonSnapshot() to context.ts. Reads .factory/context/context.toon and .factory/skill-index.toon. Added toonSnapshot and projectSkills to ProjectContext in types.ts. Called inside gatherContext()."
-    - us_020_toon_helpers:
-        summary: "Created engine/toon.ts with readToonFile, compressToon, parseToonSkillIndex, writeHeartbeat, writeToonTasksSnapshot. Uses @toon-format/toon for encode/decode."
-    - us_013_tool_system_prompt:
-        summary: "Added buildToolSystemPrompt(spec, context) to generate.ts. Includes role, RULES, REASON CODES, TOON context block, spec YAML, skills table."
-    - us_012_tool_calling_loop:
-        summary: "Added runToolSession() to generate.ts. Max 30 turns, token guard trims to last 15 msgs at 20+. Calls LLM with tool definitions, executes tools via executeTool(), stops on ctx.terminal. Replaces runPipeline/runFeaturePipeline bodies."
-    - us_011_tool_executor:
-        summary: "Added async executeTool(name, args, ctx) to build-tools.ts. Errors returned as {content, isError}. run_command timeout:120000. mark_complete/mark_failed set ctx.terminal=true."
-    - us_010_build_tool_schema:
-        summary: "Created engine/build-tools.ts with 9 TOOL_DEFINITIONS (read_file, write_file, list_dir, run_command, read_spec, read_context, log_step, mark_complete, mark_failed) in OpenAI function-call format. Exported BuildToolContext and ToolResult types."
-    - us_000_fix_heartbeat_path: "Verified pulse.sh uses .factory/context/ (already fixed in us_001). Removed stale .agents/ directory. Added .agents/ to .gitignore." [P0 factory/scripts/heartbeat/pulse.sh]
-    - us_001_copy_scripts: "Copied 6 skill scripts from ag-starter to factory/scripts/, adapted paths (.agents/ → .factory/), fixed macOS UTC date bug in check.sh, added @toon-format/toon dep, fixed tsc errors in pi-cli-engine.ts and cli.ts imports, updated skill-index.toon." [P1 factory/scripts/]
-    - us_002_factory_scaffold: "Created factory/.factory/ structure: context/, task-manager/, workflows/, knowledge/. Updated AGENTS.md with role, stack, quick commands." [P1 factory/.factory/]
-    - us_003_factory_yaml_schema: "Added factory_home and agentic fields to BridgeConfig in types.ts. Updated config.ts. Added resolveScript(scriptName) and hasScript(scriptName) helpers in cli.ts." [P1 engine/types.ts engine/config.ts engine/cli.ts]
-    - us_004_cli_facade: "Added CLI facade subcommands: pulse, task, context update, compress, minions, hooks install. Each resolves script via resolveScript() and spawns with FACTORY_PROJECT_ROOT env var." [P1 engine/cli.ts]
+    - us_074_daemon_ui: "DaemonStatus.tsx (start/stop/restart, live status)"
+    - us_062_project_init_ui: "ProjectInitWizard.tsx (2-step modal, stack detection)"
+    - us_053_ui_engine_badge: "EngineBadge.tsx (factory=blue, minions=purple)"
+    - us_051_052_ui_context_skills: "ToonContextViewer.tsx, SkillRegistry.tsx (API routes)"
+    - us_050_ui_heartbeat: "HeartbeatMonitor.tsx (30s poll, status dots)"
+    - us_014_build_tool_ui: "BuildTimeline.tsx (SSE stream from /api/build-events)"
+    - us_073_spec_watcher: "Added factory queue watch <dir> — auto-enqueue new YAML specs, persistent file watcher"
+    - us_072_daemon_process_mgr: "Added factory daemon start/stop/status/restart — PID file management, detached spawn"
+    - us_071_auto_retry: "Auto-retry up to 3x with exponential backoff (5s, 10s, 20s)"
+    - us_070_queue_daemon: "Added startQueueDaemon() — persistent watch loop, 30s poll, SIGTERM/SIGINT handling"
+    - us_040_043_workflows_hooks: "Created factory/scripts/heartbeat/setup-hooks.sh — pre-commit + post-commit"
+    - us_024_human_toon_input: "Added --preserve-human flag in manage.sh (skip slugification for TOON markers)"
+    - us_022_write_tasks_toon: "writeTasksToon() in writer.ts — updates todo.toon after knowledge entry"
+    - us_033_034_engine_field: "engine field (factory|minions) integrated across types, spec, db, cli"
+    - us_005_write_factory_yaml: "factory.yaml already created by us_002 — stale"
+    - us_006_task_summary_qa: "todo.toon summary validation — stale (manage.sh handles counts)"
+    - us_099_final_integration: "Final validation: tsc --noEmit passes clean. All P0/P1 tasks implemented."
+    - us_061_agents_md_patch: "Added to initBridge: agents.md template + Factory Agentic Scaffold section"
+    - us_060_init_bridge_engine: "engine/init.ts with initBridge(repoPath) — full .factory/ scaffold + detectStack()"
+    - us_031_032_minions_engine: "engine/minions-engine.ts — specToQueueYaml, runMinionsEngine, runMinionsBuild"
+    - us_030_delete_old_engines: "Deleted gemini-cli-engine.ts and pi-cli-engine.ts. BuildEngine=factory|minions"
+    - us_023_heartbeat_on_queue: "writeHeartbeat() in markRunning() with try/catch"
+    - us_021_gather_toon_context: "gatherToonSnapshot() in context.ts, toonSnapshot/projectSkills in ProjectContext"
+    - us_020_toon_helpers: "engine/toon.ts — readToonFile, compressToon, parseToonSkillIndex, writeHeartbeat, writeToonTasksSnapshot"
+    - us_013_tool_system_prompt: "buildToolSystemPrompt() — role, RULES, REASON CODES, TOON context, skills"
+    - us_012_tool_calling_loop: "runToolSession() — max 30 turns, token guard at 20 msgs, stops on ctx.terminal"
+    - us_011_tool_executor: "executeTool() — async, never throws, errors as {content, isError}"
+    - us_010_build_tool_schema: "engine/build-tools.ts — 9 TOOL_DEFINITIONS in OpenAI function-call format"
+    - us_004_cli_facade: "CLI facade subcommands: pulse, task, context, compress, minions, hooks"
+    - us_003_factory_yaml_schema: "factory_home/agentic in BridgeConfig, resolveScript() in cli.ts"
+    - us_002_factory_scaffold: "factory/.factory/ self-referential bridge scaffold"
+    - us_001_copy_scripts: "Copied 6 skill scripts, macOS UTC fix, @toon-format/toon dep"
+    - us_000_fix_heartbeat_path: "Verified pulse.sh uses .factory/context/, removed stale .agents/"
 
   next:
-    - us_005_write_factory_yaml: "factory.yaml is missing from .factory/ despite us_002 completing — write it now. Content: version:1, factory_home:'.', agentic:{context_dir:.factory/context, task_queue:.factory/task-manager/todo.toon, skill_index:.factory/skill-index.toon, workflows_dir:.factory/workflows, knowledge_dir:.factory/knowledge}. Verify config.ts loadBridgeConfig() reads it correctly." [P0 .factory/factory.yaml engine/config.ts]
-    - us_006_task_summary_qa: "todo.toon summary: block must always stay in sync with actual completed/next counts. Add a validate-todo.sh script to factory/scripts/task-manager/ that checks counts match reality and warns if in_progress block has orphaned entries. Run as part of factory validate." [P1 factory/scripts/task-manager/]
-    - us_022_write_tasks_toon: "In engine/writer.ts writeKnowledgeEntry(): call writeToonTasksSnapshot() after knowledge .md write." [P2 engine/writer.ts engine/toon.ts]
-    - us_024_human_toon_input: "manage.sh add auto-slugifies summary into task ID, appends to next: in todo.toon. writeToonTasksSnapshot() in writer.ts preserves human-added tasks (those not matching any spec slug) when Factory overwrites todo.toon." [P2 factory/scripts/task-manager/ engine/writer.ts]
-    - us_033_034_engine_field: "Add engine field to AppSpec/FeatureSpec. Validate in spec.ts. Route in cli.ts. Add DB column. factory queue add --engine flag." [P2 engine/types.ts engine/spec.ts engine/cli.ts engine/db.ts]
-
+    - us_080_self_init_factory_yaml: "factory.yaml is missing from factory's own .factory/ — initBridge() creates it for connected projects but was never run on the factory repo itself. Fix: call initBridge(process.cwd()) on first run if .factory/factory.yaml is absent, OR write the file directly now. factory.yaml must exist for loadBridgeConfig() to resolve factory_home and agentic paths correctly." [P1 .factory/factory.yaml engine/cli.ts]
+    - us_081_remove_stale_api_routes: "Delete /api/settings/gemini-cli-check/ and /api/settings/pi-cli-check/ route.ts files — these correspond to engines deleted in us_030. Remove any UI references (dropdowns, settings panel engine options) that still list gemini-cli or pi-cli as valid engine choices." [P2 ui/src/app/api/settings/]
+    - us_082_extract_daemon_ts: "engine/daemon.ts does not exist as a standalone file — daemon logic is in queue.ts. Either: (a) extract startQueueDaemon(), handleDaemon(), watchSpecsDir() into engine/daemon.ts and import from queue.ts/cli.ts, OR (b) confirm the consolidated approach is intentional, remove daemon.ts reference from cli.ts spawn command, update AGENTS.md module table accordingly." [P2 engine/daemon.ts engine/queue.ts engine/cli.ts]
 
   in_progress:
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
-        status: in_progress
-        priority: high
-        summary: "Stale — engine field already integrated across types, spec, db, cli"
 
   cancelled:
+    - us_005_write_factory_yaml: "Stale — factory.yaml already created by us_002"
+    - us_006_task_summary_qa: "Stale — todo.toon summary already handled by manage.sh"
+    - us_022_write_tasks_toon: "Stale — writeTasksToon already implemented in writer.ts"
+    - us_024_human_toon_input: "Stale — --preserve-human flag already added to manage.sh"
+    - us_033_034_engine_field: "Stale — engine field already integrated across types, spec, db, cli"

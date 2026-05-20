@@ -32,7 +32,7 @@
         "report": "tsx engine/cli.ts report",
         "status": "tsx engine/cli.ts status",
         "ui": "cd ui && npm run dev -- -p 3001",
-        "lint": "eslint engine/ --ext .ts",
+        "lint": "eslint engine/",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
@@ -47,6 +47,8 @@
     "devDependencies": {
         "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^20",
+        "@typescript-eslint/eslint-plugin": "^8.59.4",
+        "@typescript-eslint/parser": "^8.59.4",
         "eslint": "^9",
         "tsx": "^4.19.0",
         "typescript": "^5"

@@ -159,7 +159,7 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
     return steps;
   }, [output, itemStatus]);
 
-  useMemo(() => {
+  useEffect(() => {
     const errorStep = activities.find(s => s.status === 'error');
     const runningStep = activities.find(s => s.status === 'running');
     if (errorStep) setOpenStepId(errorStep.id);

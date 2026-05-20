@@ -10,7 +10,7 @@
  *   ...
  *   data: {"done": true, "success": true, "total": 9, "created": 7}
  */
-import { initBridge } from '@/../engine/init';
+import { initBridge } from '@engine/init';
 
 export const runtime = 'nodejs';
 

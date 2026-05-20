@@ -1,12 +1,13 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   // Allow importing engine modules from parent directory
   serverExternalPackages: ['better-sqlite3'],
   output: 'standalone',
-  // Lock turbopack root to this directory to avoid picking up files from parent dirs
+  // Lock turbopack root to the project root to allow picking up engine files from parent dir
   turbopack: {
-    root: __dirname,
+    root: path.resolve(__dirname, '..'),
   },
   // PWA: enable static file serving from /public
   experimental: {
@@ -15,3 +16,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

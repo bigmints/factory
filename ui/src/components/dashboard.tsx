@@ -27,7 +27,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { FileText, Package, CheckCircle2, AlertCircle, Activity, Puzzle, Server, Globe, Database, Layers, ListPlus, ListOrdered, X, PanelRight, Terminal, FolderOpen, Plug, Settings, Eye, Plus, Loader2 as Spinner, Sparkles, Rocket, GitBranch, Clock, CircleDot, CircleCheck, CircleX, AlertTriangle } from 'lucide-react';
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Spec {
@@ -432,46 +434,70 @@ export default function Dashboard() {
   const renderDashboard = () => (
     <div className="space-y-4 md:space-y-6">
       {activeProject && (
-        <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
-          <CardContent className="flex items-center gap-3 md:gap-4 py-4 md:py-5">
-            <div className="flex h-10 w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-              <FolderOpen className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+        <div className="glass-panel rounded-2xl glow-blue p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="relative flex h-10 w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
+              <FolderOpen className="h-5 w-5 md:h-6 md:w-6 text-blue-400" />
+              <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-base md:text-lg font-semibold truncate">{activeProject.name}</p>
-              <p className="text-xs text-muted-foreground font-mono truncate">{activeProject.path}</p>
+              <p className="text-sm md:text-base font-bold truncate flex items-center gap-1.5">
+                {activeProject.name}
+              </p>
+              <p className="text-[10px] md:text-xs text-muted-foreground font-mono truncate">{activeProject.path}</p>
             </div>
-            <Badge variant="outline" className="shrink-0 text-xs">Active</Badge>
-          </CardContent>
-        </Card>
+          </div>
+          <div className="flex items-center gap-2 mt-2 sm:mt-0 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleBuildAll()}
+              disabled={isBuildingAll}
+              className="tap-shrink text-xs font-semibold h-8 rounded-xl px-3 border-blue-500/30 text-blue-400 hover:bg-blue-500/10 gap-1.5"
+            >
+              {isBuildingAll ? <Spinner className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
+              Build All
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSpecChat(true)}
+              className="tap-shrink text-xs font-semibold h-8 rounded-xl px-3 gap-1.5"
+            >
+              <Sparkles className="h-3 w-3 text-purple-400" />
+              New Spec
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Stats row — 2 cols mobile, 4 cols desktop */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
-          { icon: FileText, color: 'primary', value: specs.length, label: 'App Specs' },
-          { icon: Activity, color: 'orange-500', value: featureSpecs.length, label: 'Features' },
-          { icon: CheckCircle2, color: 'emerald-500', value: specs.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready' },
-          { icon: Package, color: 'blue-500', value: reportStats?.totalBuilds || 0, label: 'Builds' },
+          { icon: FileText, glowClass: 'glow-blue', value: specs.length, label: 'App Specs', iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+          { icon: Activity, glowClass: 'glow-purple', value: featureSpecs.length, label: 'Features', iconColor: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+          { icon: CheckCircle2, glowClass: 'glow-emerald', value: specs.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Specs', iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+          { icon: Package, glowClass: 'glass-panel border-muted-foreground/10', value: reportStats?.totalBuilds || 0, label: 'Total Builds', iconColor: 'text-muted-foreground', bgColor: 'bg-muted/40' },
         ].map((stat, i) => (
-          <Card key={i}>
-            <CardContent className="pt-5 md:pt-6">
-              <div className="flex items-center gap-2 md:gap-3">
-                <div className={`flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-lg bg-${stat.color}/10`}>
-                  <stat.icon className={`h-4 w-4 md:h-5 md:w-5 text-${stat.color}`} />
-                </div>
-                <div>
-                  <p className="text-xl md:text-2xl font-bold">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground">{stat.label}</p>
-                </div>
+          <div key={i} className={cn("glass-panel rounded-2xl p-4 md:p-5 transition-all tap-shrink", stat.glowClass)}>
+            <div className="flex items-center gap-3">
+              <div className={cn("flex h-9 w-9 md:h-11 md:w-11 shrink-0 items-center justify-center rounded-xl", stat.bgColor)}>
+                <stat.icon className={cn("h-4 md:h-5 w-4 md:w-5", stat.iconColor)} />
               </div>
-            </CardContent>
-          </Card>
+              <div className="min-w-0">
+                <p className="text-lg md:text-2xl font-black tracking-tight">{stat.value}</p>
+                <p className="text-[10px] md:text-xs text-muted-foreground font-semibold truncate uppercase tracking-wider">{stat.label}</p>
+              </div>
+            </div>
+          </div>
         ))}
       </div>
 
       {/* Recent specs */}
-      <Card>
+      <Card className="glass-panel border-border/40">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm md:text-base">Spec Queue</CardTitle>
         </CardHeader>
@@ -502,7 +528,7 @@ export default function Dashboard() {
       {(validationResult || buildOutput) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
           {validationResult && (
-            <Card>
+            <Card className="glass-panel border-border/40">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   {validationResult.passed ? (
@@ -1001,7 +1027,12 @@ export default function Dashboard() {
       </aside>
 
       {/* Mobile bottom navigation */}
-      <MobileNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <MobileNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onAddProject={() => setShowAddProject(true)}
+        projectRefreshKey={projectRefreshKey}
+      />
     </div>
   );
 }

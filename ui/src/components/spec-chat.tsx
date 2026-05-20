@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
   Bot,
@@ -123,7 +123,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
 
-  // Mobile: which pane to show
+  // Mobile navigation switcher: 'chat' | 'preview'
   const [mobilePane, setMobilePane] = useState<'chat' | 'preview'>('chat');
 
   useEffect(() => {
@@ -374,253 +374,234 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
 
   const phaseColor = (phase?: number) => {
     switch (phase) {
-      case 1: return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-      case 2: return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
-      case 3: return 'bg-violet-500/10 text-violet-500 border-violet-500/20';
+      case 1: return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+      case 2: return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+      case 3: return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
       default: return 'bg-muted text-muted-foreground border-border';
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="fixed inset-0 z-50 flex flex-col w-screen h-screen max-w-none m-0 rounded-none border-0 p-0 gap-0 overflow-hidden outline-none bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 translate-x-0 translate-y-0 sm:max-w-none top-0 left-0 [&>button]:hidden">
+      <DialogContent className="fixed inset-0 z-50 flex flex-col w-screen h-screen max-w-none m-0 rounded-none border-0 p-0 gap-0 overflow-hidden outline-none bg-background translate-x-0 translate-y-0 sm:max-w-none top-0 left-0 [&>button]:hidden">
+        
         {/* Top Header */}
-        <DialogHeader className="border-b px-3 sm:px-4 md:px-6 py-3 sm:py-4 mb-0 flex-row items-center justify-between space-y-0 h-12 sm:h-14 md:h-16 shrink-0 bg-card/50 backdrop-blur-md sticky top-0 z-10">
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            <div className="inline-flex shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-primary/10 p-2 sm:p-2.5">
-              <Zap className="size-4 sm:size-5 text-primary" aria-hidden={true} />
+        <DialogHeader className="border-b border-border/40 px-4 py-3 flex-row items-center justify-between space-y-0 h-14 sm:h-16 shrink-0 bg-card/60 backdrop-blur-xl sticky top-0 z-50 shadow-xs">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="inline-flex shrink-0 items-center justify-center rounded-xl bg-sky-500/10 p-2 shadow-xs glow-blue">
+              <Sparkles className="size-4.5 text-sky-400 animate-pulse" />
             </div>
             <div className="space-y-0.5 min-w-0">
-              <DialogTitle className="text-sm sm:text-base font-semibold tracking-tight truncate">
-                Spec Generator
+              <DialogTitle className="text-sm sm:text-base font-bold tracking-tight truncate text-foreground">
+                Spec Architecture Studio
               </DialogTitle>
               <p className="text-[10px] sm:text-xs text-muted-foreground font-medium truncate">
                 {isExistingApp
-                  ? `Adding features to ${existingAppName}`
-                  : 'AI-powered spec decomposition'}
+                  ? `Expanding framework components for ${existingAppName}`
+                  : 'AI Spec Decomposition & Orchestration Engine'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {hasSpecs && !streaming && (
               <>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 sm:h-8 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold gap-1 border-primary/20 hover:bg-primary/5 hover:border-primary/40 transition-all"
+                  className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-full tap-shrink border-border/50 hover:bg-muted/40"
                   onClick={handleCopy}
                 >
-                  {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy YAML'}</span>
+                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
                 </Button>
                 {!allSaved && (
                   <Button
                     size="sm"
-                    className="h-7 sm:h-8 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold gap-1 shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-full tap-shrink bg-sky-500 hover:bg-sky-600 active:scale-95 shadow-md shadow-sky-500/10 text-white"
                     onClick={handleSaveAll}
                     disabled={savingAll}
                   >
-                    {savingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <SaveAll className="h-3 w-3" />}
+                    {savingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SaveAll className="h-3.5 w-3.5" />}
                     <span className="hidden sm:inline">Save All ({allSpecs.length - savedSpecs.size})</span>
-                    <span className="sm:hidden">Save</span>
+                    <span className="sm:hidden">Save ({allSpecs.length - savedSpecs.size})</span>
                   </Button>
                 )}
                 {allSaved && (
-                  <Badge variant="outline" className="h-7 sm:h-8 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold gap-1 border-emerald-500/30 text-emerald-500">
-                    <Check className="h-3 w-3" />
-                    <span className="hidden sm:inline">All Saved</span>
+                  <Badge variant="outline" className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 border-emerald-500/20 bg-emerald-500/5 text-emerald-400 rounded-full">
+                    <Check className="h-3.5 w-3.5" />
+                    <span>All Saved</span>
                   </Badge>
                 )}
               </>
             )}
-            <Separator orientation="vertical" className="h-5 sm:h-6 mx-1 sm:mx-2" />
+            <Separator orientation="vertical" className="h-6 mx-1 hidden sm:block bg-border/40" />
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
+              className="h-8 w-8 rounded-full hover:bg-rose-500/10 hover:text-rose-400 transition-colors tap-shrink border border-border/10"
               onClick={() => onOpenChange(false)}
             >
-              <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </DialogHeader>
 
-        {/* Mobile pane switcher */}
+        {/* Mobile Tab Segment Switcher */}
         {hasSpecs && (
-          <div className="lg:hidden flex border-b bg-muted/30 px-2 sm:px-3 py-1.5 shrink-0">
-            <button
-              className={cn(
-                "flex-1 text-xs font-medium py-2 rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5",
-                mobilePane === 'chat' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
-              )}
-              onClick={() => setMobilePane('chat')}
-            >
-              <Bot className="h-3.5 w-3.5" />
-              Chat
-            </button>
-            <button
-              className={cn(
-                "flex-1 text-xs font-medium py-2 rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5",
-                mobilePane === 'preview' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
-              )}
-              onClick={() => setMobilePane('preview')}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Specs ({allSpecs.length})
-            </button>
+          <div className="lg:hidden flex bg-muted/40 px-3 py-2 border-b border-border/30 shrink-0">
+            <div className="w-full rounded-xl bg-muted/70 p-1 flex items-center border border-border/30 shadow-inner">
+              <button
+                className={cn(
+                  "flex-1 text-xs font-bold py-1.5 rounded-lg transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
+                  mobilePane === 'chat' ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setMobilePane('chat')}
+              >
+                <Bot className="h-3.5 w-3.5 text-sky-400" />
+                Chat Workspace
+              </button>
+              <button
+                className={cn(
+                  "flex-1 text-xs font-bold py-1.5 rounded-lg transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
+                  mobilePane === 'preview' ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setMobilePane('preview')}
+              >
+                <FileText className="h-3.5 w-3.5 text-emerald-400" />
+                Specs Output ({allSpecs.length})
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Main Split Content */}
+        {/* Main Split Panel Content */}
         <div className="flex flex-1 overflow-hidden relative">
 
-          {/* Left Pane: Chat Interface */}
+          {/* Left Panel: Chat Interface */}
           <div className={cn(
-            "flex flex-col border-r bg-card/30 backdrop-blur-sm",
-            // Mobile: show/hide based on pane
-            mobilePane === 'chat' || !hasSpecs ? "flex w-full lg:w-[35%] lg:min-w-[380px] lg:max-w-[500px]" : "hidden lg:flex",
-            // Desktop: always show with fixed width
-            "lg:w-[35%] lg:min-w-[380px] lg:max-w-[500px]"
+            "flex flex-col border-r border-border/40 bg-card/20 backdrop-blur-md relative",
+            mobilePane === 'chat' || !hasSpecs ? "flex w-full lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]" : "hidden lg:flex lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]"
           )}>
-            {/* Existing app badge */}
+            
+            {/* Context Banners */}
             {isExistingApp && isEmpty && (
-              <div className="mx-3 sm:mx-4 md:mx-6 mt-3 sm:mt-4 px-3 py-2 rounded-xl bg-amber-500/5 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] sm:text-xs font-medium flex items-center gap-2">
-                <Layers className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
-                <span className="truncate">Existing app: <strong>{existingAppName}</strong> — feature specs only</span>
+              <div className="mx-4 mt-4 px-3 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-amber-400 text-[10px] sm:text-xs font-medium flex items-center gap-2 shadow-inner">
+                <Layers className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" />
+                <span className="truncate">Active Project Context: <strong className="text-foreground">{existingAppName}</strong></span>
               </div>
             )}
 
-            {/* Repo scan status */}
             {isEmpty && (
               <div className={cn(
-    "mx-3 sm:mx-4 md:mx-6 mt-2 sm:mt-3 px-3 py-2 rounded-xl border text-[10px] sm:text-xs font-medium flex items-center gap-2",
-    scanning && "border-blue-500/20 bg-blue-500/5",
-    repoContext && !scanning && "border-emerald-500/20 bg-emerald-500/5",
-    scanError && !repoContext && !scanning && "border-red-500/20 bg-red-500/5",
-)} >
+                "mx-4 mt-3 px-3 py-2.5 rounded-xl border text-[10px] sm:text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors",
+                scanning ? "border-sky-500/20 bg-sky-500/5 text-sky-400" :
+                repoContext ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400" :
+                scanError ? "border-rose-500/20 bg-rose-500/5 text-rose-400" : ""
+              )}>
                 {scanning ? (
-                  <><ScanSearch className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-500 animate-pulse shrink-0" /> <span className="text-blue-600 dark:text-blue-400">Scanning...</span></>
+                  <><ScanSearch className="h-4 w-4 text-sky-400 animate-pulse shrink-0" /> <span>Analyzing codebase structure...</span></>
                 ) : repoContext ? (
-                  <><ScanSearch className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500 shrink-0" />
-                    <span className="text-emerald-600 dark:text-emerald-400 truncate">
-                      {repoContext.stack?.framework} · {Object.keys(repoContext.dependencies || {}).length} deps
+                  <><ScanSearch className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span className="truncate text-foreground/90 font-medium">
+                      Codebase Base: {repoContext.stack?.framework || 'Next.js'} ({Object.keys(repoContext.dependencies || {}).length} packages detected)
                     </span>
                   </>
                 ) : scanError ? (
-                  <><ScanSearch className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-red-500 shrink-0" /> <span className="text-red-600 dark:text-red-400 truncate">Scan failed</span></>
+                  <><ScanSearch className="h-4 w-4 text-rose-400 shrink-0" /> <span>Codebase lookup unavailable</span></>
                 ) : null}
               </div>
             )}
 
-            {/* Messages Scroll Area */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8 scrollbar-thin">
+            {/* Message Thread */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 sm:py-6 space-y-5 scrollbar-thin">
               {isEmpty ? (
-                <div className="flex flex-col items-center justify-center h-full text-center gap-4 sm:gap-6 py-6 sm:py-10">
-                  <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl sm:rounded-3xl bg-primary shadow-2xl shadow-primary/20 ring-4 ring-primary/5 transition-transform hover:scale-110">
-                    <Bot className="h-8 w-8 sm:h-10 sm:w-10 text-primary-foreground" />
+                <div className="flex flex-col items-center justify-center h-full text-center gap-5 sm:gap-6 py-10 max-w-sm mx-auto">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-sky-500/20 blur-2xl rounded-full animate-pulse" />
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-2xl transition-transform duration-300 hover:scale-105">
+                      <Bot className="h-8 w-8" />
+                    </div>
                   </div>
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <h3 className="text-base sm:text-lg font-bold tracking-tight">
-                      {repoContext ? 'Project Context Loaded' : scanning ? 'Scanning...' : 'What shall we build?'}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-[240px] sm:max-w-[280px]">
+                  <div className="space-y-2">
+                    <h3 className="text-sm sm:text-base font-bold text-foreground">Describe your project goal</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
                       {repoContext
-                        ? 'Describe the feature or app you want and I\'ll generate specs aligned with your codebase.'
-                        : 'Describe your app and I\'ll break it down into modular, buildable specs.'}
+                        ? "State the page, system, or features you\'d like to construct. The engine will decompose the requirement into a production-grade plan."
+                        : "Describe the application idea and stack preferences. I'll translate it into modular, clean spec models."}
                     </p>
                   </div>
 
-                  {/* Scan Summary */}
+                  {/* Environment Details list */}
                   {repoContext && (
-                    <div className="w-full pt-3 sm:pt-4 space-y-1.5 sm:space-y-2 max-w-sm">
-                      <div className={cn(
-                        "flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-[10px] sm:text-sm border",
-                        repoContext.agentInstructions
-                          ? "border-emerald-500/20 bg-emerald-500/5"
-                          : "border-amber-500/20 bg-amber-500/5"
-                      )}>
-                        <FileCode className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0", repoContext.agentInstructions ? "text-emerald-500" : "text-amber-500")} />
-                        <span className="font-medium truncate">
-                          {repoContext.agentInstructions
-                            ? '✓ agents.md loaded'
-                            : '⚠️ No agents.md'}
-                        </span>
-                      </div>
-
-                      {repoContext.stack && (
-                        <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-[10px] sm:text-sm border border-border/50 bg-muted/30">
-                          <Blocks className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-blue-500" />
-                          <span className="text-muted-foreground truncate">
-                            <strong className="text-foreground">{repoContext.stack.framework}</strong>
-                            {repoContext.stack.language && ` · ${repoContext.stack.language}`}
-                          </span>
+                    <div className="w-full pt-4 space-y-2">
+                      {repoContext.agentInstructions && (
+                        <div className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-[11px] sm:text-xs border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-left">
+                          <FileCode className="h-4 w-4 shrink-0" />
+                          <span className="font-semibold truncate">Loaded agent rules context (AGENTS.md)</span>
                         </div>
                       )}
-
-                      <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-[10px] sm:text-sm border border-border/50 bg-muted/30">
-                        <Package className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-purple-500" />
-                        <span className="text-muted-foreground">
-                          <strong className="text-foreground">{Object.keys(repoContext.dependencies || {}).length}</strong> deps
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 sm:gap-3 rounded-lg sm:rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-[10px] sm:text-sm border border-border/50 bg-muted/30">
-                        <FolderTree className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-cyan-500" />
-                        <span className="text-muted-foreground">
-                          <strong className="text-foreground">{repoContext.fileTree?.length || 0}</strong> files scanned
-                        </span>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-left text-[10px] sm:text-xs">
+                        <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-border/30 bg-muted/20">
+                          <Blocks className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                          <span className="text-muted-foreground truncate">{repoContext.stack?.framework || 'Next.js 15'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 rounded-xl px-3 py-2 border border-border/30 bg-muted/20">
+                          <FolderTree className="h-3.5 w-3.5 shrink-0 text-purple-400" />
+                          <span className="text-muted-foreground truncate">{repoContext.fileTree?.length || 0} files</span>
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="space-y-4 sm:space-y-6 md:space-y-8">
+                <div className="space-y-6">
                   {messages.map((msg, i) => (
                     <div
                       key={i}
                       className={cn(
-                        "flex gap-2 sm:gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                        "flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300",
                         msg.role === 'assistant' ? "flex-row" : "flex-row-reverse"
                       )}
                     >
                       <Avatar className={cn(
-                        "h-6 w-6 sm:h-8 sm:w-8 shrink-0 mt-0.5 border ring-2 ring-offset-2 ring-transparent",
-                        msg.role === 'assistant' ? "ring-primary/10" : "ring-muted"
+                        "h-7 w-7 shrink-0 mt-0.5 border",
+                        msg.role === 'assistant' ? "border-sky-500/20 shadow-xs" : "border-border/60 shadow-xs"
                       )}>
                         <AvatarFallback
                           className={cn(
-                            'text-[8px] sm:text-[10px] font-bold',
+                            'text-[9px] font-bold',
                             msg.role === 'assistant'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted text-muted-foreground'
+                              ? 'bg-sky-500 text-white'
+                              : 'bg-zinc-800 text-zinc-100'
                           )}
                         >
-                          {msg.role === 'assistant' ? 'AI' : 'YOU'}
+                          {msg.role === 'assistant' ? 'AI' : 'US'}
                         </AvatarFallback>
                       </Avatar>
                       <div className={cn(
-                        "flex-1 flex flex-col min-w-0 group",
+                        "flex-1 flex flex-col min-w-0",
                         msg.role === 'user' ? "items-end text-right" : "items-start text-left"
                       )}>
-                        <span className="text-[8px] sm:text-[10px] font-bold text-muted-foreground/60 mb-1 sm:mb-2 uppercase tracking-widest px-1">
-                          {msg.role === 'assistant' ? 'Architect Engine' : 'You'}
+                        <span className="text-[8px] sm:text-[9px] font-bold text-muted-foreground/60 mb-1 uppercase tracking-widest px-1">
+                          {msg.role === 'assistant' ? 'Architect Engine' : 'Requestor'}
                         </span>
                         <div className={cn(
-                          "max-w-[90%] sm:max-w-[95%] text-[11px] sm:text-xs md:text-sm rounded-xl sm:rounded-2xl p-2.5 sm:p-3 md:p-4 leading-relaxed",
+                          "max-w-[92%] text-xs sm:text-sm rounded-2xl p-3 sm:p-4 leading-relaxed",
                           msg.role === 'assistant'
-                            ? "bg-card border border-border/50 text-foreground shadow-sm"
-                            : "bg-primary text-primary-foreground shadow-md shadow-primary/10"
+                            ? "bg-card border border-border/40 text-foreground/90 shadow-sm glass-panel"
+                            : "bg-sky-500 text-white shadow-md shadow-sky-500/10 font-medium"
                         )}>
                           {msg.role === 'assistant'
-                            ? <div className="prose prose-sm dark:prose-invert max-w-none">{renderAssistantContent(msg.content, allSpecs.length)}</div>
+                            ? <div className="prose prose-sm dark:prose-invert max-w-none">{renderAssistantContent(msg.content)}</div>
                             : <p className="whitespace-pre-wrap">{msg.content}</p>
                           }
                           {streaming && i === messages.length - 1 && msg.role === 'assistant' && (
-                            <div className="flex gap-1 mt-2 sm:mt-3 h-3 sm:h-4 items-center">
-                              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce delay-0" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce delay-150" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce delay-300" />
+                            <div className="flex gap-1 mt-3 h-4 items-center">
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce delay-0" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce delay-150" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce delay-300" />
                             </div>
                           )}
                         </div>
@@ -631,40 +612,40 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
               )}
             </div>
 
-            {/* Input */}
-            <div className="p-3 sm:p-4 md:p-6 shrink-0 bg-transparent relative z-30">
-              <div className="relative flex flex-col rounded-2xl sm:rounded-3xl bg-card/80 backdrop-blur-xl border border-border/50 shadow-2xl ring-4 ring-primary/5 overflow-hidden transition-all focus-within:ring-primary/10 focus-within:border-primary/30">
+            {/* Input Bar */}
+            <div className="p-3 sm:p-4 shrink-0 bg-transparent border-t border-border/30 backdrop-blur-sm relative z-30">
+              <div className="relative flex flex-col rounded-2xl bg-card border border-border/50 shadow-xl overflow-hidden focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500/30 transition-all duration-200">
                 <Textarea
                   ref={inputRef}
                   value={input}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  placeholder={isExistingApp ? "Describe features to add..." : "Describe the app to build..."}
-                  className="w-full border-0 p-3 sm:p-4 min-h-[50px] sm:min-h-[60px] max-h-[120px] sm:max-h-[160px] outline-none text-[11px] sm:text-sm leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent pr-10 sm:pr-14"
+                  placeholder={isExistingApp ? "Tweak or define feature specs..." : "e.g., build a sleek feedback widget..."}
+                  className="w-full border-0 p-3.5 pr-12 min-h-[50px] max-h-[140px] outline-none text-xs sm:text-sm leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
                   rows={1}
                   disabled={streaming}
                 />
-                <div className="flex items-center justify-between p-2 sm:p-3 pt-0">
-                  <div className="flex items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
-                    <Terminal className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                    <span className="text-[8px] sm:text-[10px] font-medium tracking-tight">DECOMPOSITION ENGINE v2.0</span>
+                <div className="flex items-center justify-between px-3.5 pb-2.5">
+                  <div className="flex items-center gap-1 opacity-45 hover:opacity-100 transition-opacity">
+                    <Terminal className="h-3 w-3 text-sky-400" />
+                    <span className="text-[9px] font-semibold font-mono tracking-tight text-muted-foreground uppercase">v2.1 active</span>
                   </div>
-                  <div className="absolute right-2 sm:right-3 bottom-2 sm:bottom-3">
+                  <div className="absolute right-2.5 bottom-2.5">
                     <Button
                       size="icon"
                       className={cn(
-                        'rounded-xl sm:rounded-2xl h-7 w-7 sm:h-9 sm:w-9 p-0 shadow-lg transition-all',
+                        'rounded-xl h-8 w-8 p-0 transition-all duration-200 tap-shrink',
                         input.trim()
-                          ? 'bg-primary text-primary-foreground hover:scale-105 active:scale-95'
+                          ? 'bg-sky-500 hover:bg-sky-600 text-white hover:scale-105 active:scale-95 shadow-lg shadow-sky-500/10'
                           : 'bg-muted text-muted-foreground'
                       )}
                       disabled={!input.trim() || streaming}
                       onClick={() => handleSend()}
                     >
                       {streaming ? (
-                        <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <ArrowUp className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <ArrowUp className="h-3.5 w-3.5 text-white" />
                       )}
                     </Button>
                   </div>
@@ -673,98 +654,94 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
             </div>
           </div>
 
-          {/* Right Pane: Spec Preview */}
+          {/* Right Panel: Spec Preview */}
           <div className={cn(
-            "flex flex-1 flex-col bg-card text-foreground relative overflow-hidden group/preview",
-            // Mobile: show/hide based on pane
-            hasSpecs && mobilePane === 'preview' ? "flex w-full" : hasSpecs ? "hidden lg:flex" : "hidden lg:flex",
-            // When no specs, hide on mobile but show on desktop
-            !hasSpecs && "hidden lg:flex"
+            "flex flex-1 flex-col bg-card text-foreground relative overflow-hidden",
+            hasSpecs && mobilePane === 'preview' ? "flex w-full" : hasSpecs ? "hidden lg:flex lg:flex-1" : "hidden lg:flex lg:flex-1"
           )}>
-            {/* Tab Bar */}
-            <div className="border-b border-border bg-muted/50 shrink-0">
-              <div className="flex items-center h-10 sm:h-12 px-2 sm:px-4 justify-between">
-                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 mr-2 sm:mr-4">
+            
+            {/* Horizontal Swipeable Specs Tabs */}
+            <div className="border-b border-border/40 bg-muted/20 shrink-0">
+              <div className="flex items-center h-12 px-3 justify-between">
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 mr-4 pb-1.5 pt-1.5 select-none snap-x snap-mandatory">
                   {allSpecs.length > 0 ? (
                     allSpecs.map((spec, idx) => (
                       <button
                         key={spec.filename}
                         onClick={() => setActiveTab(idx)}
                         className={cn(
-                          'flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 min-h-[33px]',
+                          'flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-all shrink-0 min-h-[34px] snap-center tap-shrink',
                           idx === activeTab
-                            ? 'bg-muted/50 text-foreground'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                            ? 'bg-card border border-border/50 text-foreground shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-card/40'
                         )}
                       >
                         {spec.kind === 'app' ? (
-                          <Package className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-blue-400" />
+                          <Package className="h-3 w-3 text-sky-400" />
                         ) : (
-                          <Layers className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-400" />
+                          <Layers className="h-3 w-3 text-purple-400" />
                         )}
-                        <span className="max-w-[80px] sm:max-w-[120px] truncate">{spec.name}</span>
+                        <span className="max-w-[90px] sm:max-w-[130px] truncate">{spec.name}</span>
                         {spec.phase && (
-                          <span className={cn('text-[8px] sm:text-[9px] px-1 py-0.5 rounded-full border font-bold', phaseColor(spec.phase))}>
+                          <span className={cn('text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full border font-bold', phaseColor(spec.phase))}>
                             P{spec.phase}
                           </span>
                         )}
                         {savedSpecs.has(spec.filename) && (
-                          <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-400" />
+                          <Check className="h-3 w-3 text-emerald-400 shrink-0" />
                         )}
                       </button>
                     ))
                   ) : (
-                    <div className="flex items-center gap-1.5 sm:gap-2 text-muted-foreground">
-                      <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400/30" />
-                      <span className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase">
-                        {streaming ? 'generating...' : 'awaiting specs'}
+                    <div className="flex items-center gap-1.5 text-muted-foreground/60">
+                      <FileText className="h-3.5 w-3.5 text-sky-400/30" />
+                      <span className="text-[10px] font-bold tracking-widest uppercase font-mono">
+                        {streaming ? 'generating spec blueprints...' : 'awaiting spec instructions'}
                       </span>
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {allSpecs.length > 0 && (
-                    <div className="hidden sm:flex items-center gap-2 text-[9px] sm:text-[10px] text-muted-foreground">
-                      <span className="bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-bold">
-                        {allSpecs.filter(s => s.kind === 'app').length} app
+                    <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-semibold">
+                      <span className="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded-full border border-sky-500/10">
+                        {allSpecs.filter(s => s.kind === 'app').length} App
                       </span>
-                      <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-bold">
-                        {allSpecs.filter(s => s.kind === 'feature').length} features
+                      <span className="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/10">
+                        {allSpecs.filter(s => s.kind === 'feature').length} Features
                       </span>
-                    </div>
-                  )}
-                  {streaming && (
-                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] sm:text-[9px] font-bold tracking-tighter animate-pulse">
-                      LIVE
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Preview Content */}
-            <div className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.03),transparent)]">
+            {/* Spec YAML View */}
+            <div className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.02),transparent)]">
               {activeSpec ? (
-                <div className="p-4 sm:p-6 md:p-10 font-mono text-[10px] sm:text-xs md:text-sm leading-relaxed selection:bg-emerald-500/30">
-                  <div className="flex items-center justify-between mb-3 sm:mb-6 pb-2 sm:pb-4 border-b border-border">
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="p-4 sm:p-6 md:p-8 font-mono text-[10px] sm:text-xs md:text-sm leading-relaxed relative">
+                  {/* Glow accent */}
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+
+                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/40 relative z-10">
+                    <div className="flex items-center gap-2 min-w-0">
                       {activeSpec.kind === 'app' ? (
-                        <div className="p-1.5 sm:p-2 rounded-lg bg-blue-500/10 shrink-0">
-                          <Package className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
+                        <div className="p-2 rounded-xl bg-sky-500/10 glow-blue shrink-0">
+                          <Package className="h-4 w-4 text-sky-400" />
                         </div>
                       ) : (
-                        <div className="p-1.5 sm:p-2 rounded-lg bg-emerald-500/10 shrink-0">
-                          <Layers className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" />
+                        <div className="p-2 rounded-xl bg-purple-500/10 glow-purple shrink-0">
+                          <Layers className="h-4 w-4 text-purple-400" />
                         </div>
                       )}
                       <div className="min-w-0">
                         <h3 className="text-foreground text-xs sm:text-sm font-bold truncate">{activeSpec.name}</h3>
-                        <p className="text-muted-foreground text-[8px] sm:text-[10px] font-mono truncate">{activeSpec.filename}</p>
+                        <p className="text-muted-foreground text-[8px] sm:text-[10px] font-semibold truncate mt-0.5">{activeSpec.filename}</p>
                       </div>
                       {activeSpec.phase && (
-                        <span className={cn('text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border font-bold ml-1 sm:ml-2 shrink-0', phaseColor(activeSpec.phase))}>
-                          P{activeSpec.phase}
+                        <span className={cn('text-[8px] sm:text-[9px] px-2 py-0.5 rounded-full border font-bold ml-2 shrink-0', phaseColor(activeSpec.phase))}>
+                          Phase {activeSpec.phase}
                         </span>
                       )}
                     </div>
@@ -772,50 +749,53 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-6 sm:h-7 md:h-8 px-2 sm:px-3 text-[9px] sm:text-[10px] font-bold gap-1 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50"
+                        className="h-8 px-3 text-[10px] sm:text-xs font-bold gap-1.5 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50 rounded-full tap-shrink"
                         onClick={() => handleSaveSpec(activeSpec)}
                         disabled={saving || streaming}
                       >
-                        {saving ? <Loader2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 animate-spin" /> : <Save className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
-                        <span className="hidden sm:inline">Save</span>
+                        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5 text-emerald-400" />}
+                        <span>Save Spec</span>
                       </Button>
                     ) : (
-                      <span className="text-emerald-400 text-[9px] sm:text-[10px] font-bold flex items-center gap-1 shrink-0">
-                        <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> Saved
+                      <span className="text-emerald-400 text-[10px] sm:text-xs font-bold flex items-center gap-1 bg-emerald-500/5 px-2.5 py-1 rounded-full border border-emerald-500/20 shrink-0">
+                        <Check className="h-3.5 w-3.5" /> Saved Blueprint
                       </span>
                     )}
                   </div>
-                  <pre className="relative z-10 whitespace-pre-wrap">
-                    <code className="text-emerald-300/90">{activeSpec.yaml}</code>
-                  </pre>
+                  
+                  <div className="rounded-2xl border border-border/30 bg-card/65 glass-panel p-4 shadow-lg relative overflow-hidden">
+                    <pre className="relative z-10 whitespace-pre-wrap overflow-x-auto leading-relaxed">
+                      <code className="text-emerald-400/90">{activeSpec.yaml}</code>
+                    </pre>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center gap-4 sm:gap-6 p-4 sm:p-6 md:p-10">
+                <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-6">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full scale-150 animate-pulse" />
-                    <div className="relative flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-2xl sm:rounded-[2.5rem] bg-muted border border-border shadow-2xl">
-                      <Terminal className="h-8 w-8 sm:h-10 sm:w-10 text-emerald-400/20" />
+                    <div className="absolute inset-0 bg-sky-500/10 blur-3xl rounded-full scale-150 animate-pulse" />
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-muted border border-border/30 shadow-inner">
+                      <FileCode className="h-7 w-7 text-muted-foreground/35" />
                     </div>
                   </div>
-                  <div className="space-y-1.5 sm:space-y-2 relative">
-                    <h4 className="text-foreground text-sm sm:text-base font-bold tracking-tight">Awaiting Architecture</h4>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground leading-relaxed max-w-[280px] sm:max-w-[320px]">
-                      Your specs will appear here as tabs — one app spec and multiple feature specs, organized by phase.
+                  <div className="space-y-1">
+                    <h4 className="text-foreground text-sm font-bold tracking-tight">Architect blueprint viewer</h4>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground max-w-xs leading-relaxed">
+                      YAML spec documents will compile inside this preview panel in real-time as the Architect designs.
                     </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Footer Bar */}
-            <div className="h-8 sm:h-10 border-t border-border bg-muted/80 shrink-0 px-3 sm:px-4 md:px-6 flex items-center justify-between text-[8px] sm:text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
-               <div className="flex items-center gap-2 sm:gap-4">
-                  <span>UTF-8</span>
-                  <span className="hidden sm:inline">{allSpecs.length > 0 ? `${allSpecs.length} specs` : 'YAML Validated'}</span>
+            {/* Footer Bar info */}
+            <div className="h-9 border-t border-border/40 bg-muted/30 shrink-0 px-4 flex items-center justify-between text-[9px] font-bold font-mono text-muted-foreground/60 uppercase tracking-wider">
+               <div className="flex items-center gap-4">
+                  <span>SPEC ENGINE MODE</span>
+                  <span className="hidden sm:inline">{allSpecs.length > 0 ? `${allSpecs.length} specs compiled` : 'Standby'}</span>
                </div>
-               <div className="flex items-center gap-2 sm:gap-4">
+               <div className="flex items-center gap-4">
                   <span className="hidden sm:inline">Lines: {activeSpec?.yaml.split('\n').length || 0}</span>
-                  <span>LF</span>
+                  <span>YAML 1.2</span>
                </div>
             </div>
           </div>
@@ -825,7 +805,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
   );
 }
 
-function renderAssistantContent(content: string, specCount: number) {
+function renderAssistantContent(content: string) {
   const specBlockPattern = /=== (?:APP_SPEC|FEATURE_SPEC):\s*\S+\s*===[\s\S]*?=== END_SPEC ===/g;
   const yamlBlockPattern = /```yaml[\s\S]*?(?:```|$)/g;
   let cleaned = content.replace(specBlockPattern, '___SPEC_BLOCK___');
@@ -835,23 +815,23 @@ function renderAssistantContent(content: string, specCount: number) {
   return parts.map((part, i) => {
     const elements: React.ReactNode[] = [];
     if (part.trim()) {
-      elements.push(<p key={`text-${i}`} className="mb-2 sm:mb-4 last:mb-0">{part.trim()}</p>);
+      elements.push(<p key={`text-${i}`} className="mb-3 last:mb-0 text-foreground/80">{part.trim()}</p>);
     }
     if (i < parts.length - 1) {
       elements.push(
         <div
           key={`spec-${i}`}
-          className="my-2 sm:my-4 px-3 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl bg-emerald-500/5 border border-emerald-500/10 text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-2 sm:gap-3 group transition-all hover:bg-emerald-500/10"
+          className="my-3 px-3.5 py-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 text-[10px] sm:text-[11px] text-emerald-400 flex items-center gap-3 transition-all hover:bg-emerald-500/10 relative overflow-hidden glow-emerald shadow-xs"
         >
-          <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg sm:rounded-xl bg-emerald-500/10 shrink-0">
-             <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
+             <FileText className="h-4 w-4 text-emerald-400" />
           </div>
-          <div className="flex flex-col gap-0.5">
-             <span className="font-bold tracking-tight uppercase tracking-widest text-[8px] sm:text-[9px]">Spec Generated</span>
-             <span className="font-medium opacity-80 text-[9px] sm:text-[10px]">View in preview →</span>
+          <div className="flex flex-col text-left gap-0.5">
+             <span className="font-extrabold uppercase tracking-widest text-[8px] sm:text-[9px] text-emerald-400/80">Spec Blueprint Compiled</span>
+             <span className="font-semibold opacity-75 text-[9px] sm:text-[10px] text-muted-foreground">Select panel view to inspect YAML spec</span>
           </div>
-          <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
-             <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+          <div className="ml-auto bg-emerald-500/15 p-1 rounded-lg">
+             <Check className="h-3.5 w-3.5 text-emerald-400" />
           </div>
         </div>
       );

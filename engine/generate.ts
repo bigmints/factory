@@ -48,7 +48,7 @@ export async function runPipeline(
 
 /**
  * Run the pipeline for a feature spec.
- * Gather integration context → Tool-calling session
+ * Gathers AppIntegrationContext from the target app and passes it into the tool session.
  */
 export async function runFeaturePipeline(
     spec: FeatureSpec,
@@ -57,7 +57,8 @@ export async function runFeaturePipeline(
     specFile: string,
 ): Promise<BuildResult> {
     log('●', `Starting tool-calling build session for feature: ${spec.feature.name}`);
-    return runToolSession(spec, context, targetDir, specFile);
+    const appContext = gatherAppContext(context.repoPath, context.bridge, spec.target.app);
+    return runToolSession(spec, context, targetDir, specFile, appContext);
 }
 
 // ─── Plan ────────────────────────────────────────────────
@@ -1559,12 +1560,83 @@ import { readToonFile, parseToonSkillIndex } from './toon.ts';
 
 /**
  * Build the system prompt for the tool-calling LLM session.
- * Includes role, rules, reason codes, TOON context block, spec YAML, skills table.
+ * Includes target dir, workflow, rules, TOON context, skills, and app integration context.
  */
 export function buildToolSystemPrompt(
     spec: AppSpec | FeatureSpec,
     context: ProjectContext,
+    targetDir: string,
+    appContext?: AppIntegrationContext,
 ): string {
+    const isApp = 'appName' in spec;
+    const specBlock = isApp ? formatSpec(spec as AppSpec) : formatFeatureSpec(spec as FeatureSpec);
+
+    const toonContext = context.toonSnapshot
+        ? `\n## Project Context (TOON)\n\`\`\`toon\n${context.toonSnapshot}\n\`\`\`\n`
+        : '';
+
+    const skillsBlock = context.projectSkills && context.projectSkills.length > 0
+        ? `\n## Project Skills\n${context.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
+        : '';
+
+    let appContextBlock = '';
+    if (appContext) {
+        const parts: string[] = [];
+        if (appContext.packageJson) {
+            const deps = Object.keys({
+                ...appContext.packageJson.dependencies,
+                ...appContext.packageJson.devDependencies,
+            });
+            if (deps.length > 0) {
+                parts.push(`### Existing Dependencies (do NOT add to package.json)\n${deps.map(d => `- ${d}`).join('\n')}`);
+            }
+            if (appContext.packageJson.scripts) {
+                parts.push(`### NPM Scripts\n${Object.entries(appContext.packageJson.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`);
+            }
+        }
+        if (appContext.tsconfigRaw) {
+            parts.push(`### tsconfig.json (use the SAME options)\n\`\`\`json\n${appContext.tsconfigRaw}\n\`\`\``);
+        }
+        if (appContext.fileTree.length > 0) {
+            const shown = appContext.fileTree.slice(0, 80);
+            const more = appContext.fileTree.length > 80 ? `\n... and ${appContext.fileTree.length - 80} more` : '';
+            parts.push(`### Existing Files (do NOT recreate)\n\`\`\`\n${shown.join('\n')}${more}\n\`\`\``);
+        }
+        if (parts.length > 0) {
+            appContextBlock = `\n## Existing App Integration Context\n${parts.join('\n\n')}\n`;
+        }
+    }
+
+    return `You are an autonomous code generation engine with access to tools for reading, writing, and executing commands.
+
+## Target Directory
+${targetDir}
+
+## Recommended Workflow
+1. Call read_spec to fully understand the build requirements.
+2. Call list_dir(recursive=true) to explore what already exists.
+3. Read key files with read_context(type='package_json') and read_context(type='tsconfig').
+4. Write files using write_file. Use patch_file for targeted edits to existing files.
+5. Call run_command to install deps (e.g. npm install) and type-check (npx tsc --noEmit).
+6. Fix any errors using patch_file or write_file, then re-run checks.
+7. When all checks pass, call mark_complete with a clear summary.
+8. If you cannot proceed after exhausting all fixes, call mark_failed with the reason.
+
+## Rules
+1. Always call read_file before modifying — never assume a file's current contents.
+2. Generate production-ready code — no placeholders, no TODOs, no stubs.
+3. Every import from a package must exist in package.json.
+4. Match the coding style and patterns from the spec and existing code.
+5. Use log_step(info/warn/error) to track progress.
+6. Only call mark_failed after genuinely exhausting all remediation options.
+${specBlock}
+${toonContext}${skillsBlock}${appContextBlock}
+## Available Tools
+${TOOL_DEFINITIONS.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
+
+Call mark_complete when the build is verified and complete.`;
+}
+
     const isApp = 'appName' in spec;
     const specBlock = isApp ? formatSpec(spec as AppSpec) : formatFeatureSpec(spec as FeatureSpec);
 

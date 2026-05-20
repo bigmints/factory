@@ -34,272 +34,37 @@ export interface LLMResponse {
 /**
  * Run the full autonomous build pipeline for an app spec.
  *
- * Gather context → Plan → Build → Test → Iterate → Return files
+ * Gather context → Tool-calling session
  */
 export async function runPipeline(
     spec: AppSpec,
     context: ProjectContext,
+    targetDir: string,
+    specFile: string,
 ): Promise<BuildResult> {
-    const { provider, model } = requireActiveProvider();
-    const slug = specSlug(spec);
-    const pipelineStart = Date.now();
-    let totalTokensIn = 0;
-    let totalTokensOut = 0;
-
-    log('●', `Using ${provider.name} → ${model}`);
-
-    // Step 0: Classify the task
-    const profile = classifyTask(spec);
-
-    // Step 0.5: Resolve relevant skills
-    seedDefaultSkills();
-    const matchedSkills = resolveSkillsForBuild(spec, context);
-    const skillsBlock = formatSkillsForPrompt(matchedSkills);
-    if (matchedSkills.length > 0) {
-        log('✓', `Matched ${matchedSkills.length} skill(s): ${matchedSkills.map(s => s.skill.name).join(', ')}`);
-    }
-
-    // Step 1: Plan (skip for static/config tasks)
-    let plan: BuildPlan;
-    if (profile.needsPlan) {
-        logStep(1, 5, 'Planning build...');
-        const planResult = await planBuild(spec, context, provider, model);
-        plan = planResult.plan;
-        totalTokensIn += planResult.tokensIn;
-        totalTokensOut += planResult.tokensOut;
-        log('✓', `Plan: ${plan.files.length} files, ${plan.decisions.length} decisions`);
-        // Log planned files
-        for (const f of plan.files) {
-            log('→', `  ${f}`);
-        }
-        // Log architecture decisions
-        for (const d of plan.decisions.slice(0, 5)) {
-            log('→', `  Decision: ${d}`);
-        }
-    } else {
-        logStep(1, 5, 'Skipping plan (not needed for this task type)');
-        plan = {
-            files: [],
-            architecture: `${profile.type} — no planning needed`,
-            decisions: [`Task type: ${profile.type}`],
-        };
-        log('✓', `Task type: ${profile.type} — plan skipped`);
-    }
-
-    logStep(2, 5, 'Generating code...');
-    log('→', `Sending prompt to ${provider.name} (${model})...`);
-    let buildResult = await executeBuild(spec, context, plan, provider, model, skillsBlock);
-    let files = buildResult.files;
-    totalTokensIn += buildResult.tokensIn;
-    totalTokensOut += buildResult.tokensOut;
-    log('✓', `Generated ${files.length} files`);
-
-    // Log generated file groups
-    const filesByDir = groupFilesByDirectory(files);
-    for (const [dir, count] of Object.entries(filesByDir)) {
-        log('→', `  ${dir}/ — ${count} file(s)`);
-    }
-
-    // Step 3+4: Test → Iterate loop (gated by profile)
-    let iteration = 0;
-    let errors: string[] = [];
-
-    if (profile.maxIterations === 0) {
-        logStep(3, 5, 'Skipping validation (not needed for this task type)');
-        log('✓', `Task type: ${profile.type} — no toolchain validation`);
-    } else {
-        while (iteration < profile.maxIterations) {
-            // Elapsed-time guard: bail before the API route times out
-            const elapsed = Date.now() - pipelineStart;
-            if (elapsed > PIPELINE_TIMEOUT_MS) {
-                logError(`Pipeline timeout (${Math.round(elapsed / 1000)}s elapsed). Returning best effort.`);
-                break;
-            }
-
-            logStep(3 + Math.min(iteration, 1), 5, iteration === 0 ? 'Testing build...' : `Iterating (attempt ${iteration + 1}/${profile.maxIterations})...`);
-            errors = await testBuild(files, spec.stack, profile);
-
-            if (errors.length === 0) {
-                log('✓', 'All tests passed!');
-                break;
-            }
-
-            log('!', `${errors.length} error(s) found`);
-            for (const err of errors.slice(0, 5)) {
-                log('  ', `  ${err}`);
-            }
-
-            if (iteration + 1 >= profile.maxIterations) {
-                logError(`Max iterations (${profile.maxIterations}) reached. Returning best effort.`);
-                break;
-            }
-
-            iteration++;
-            log('●', `Feeding errors back to LLM...`);
-            const iterResult = await iterateBuild(spec, context, plan, files, errors, provider, model);
-            files = iterResult.files;
-            totalTokensIn += iterResult.tokensIn;
-            totalTokensOut += iterResult.tokensOut;
-            log('✓', `Regenerated ${files.length} files`);
-        }
-    }
-
-    // Final quality report
-    logStep(5, 5, 'Quality report');
-    if (errors.length === 0) {
-        log('✓', '✅ PASSED: deps ✓ | types ✓ | lint ✓');
-    } else {
-        logError(`❌ FAILED: ${errors.length} error(s) remaining after ${iteration + 1} iteration(s)`);
-        for (const err of errors) {
-            log('✗', `  ${err}`);
-        }
-    }
-
-    return {
-        success: errors.length === 0,
-        files,
-        plan,
-        iterations: iteration + 1,
-        errors: errors.length > 0 ? errors : undefined,
-        tokenUsage: { promptTokens: totalTokensIn, completionTokens: totalTokensOut },
-        model,
-        provider: provider.id,
-    };
+    log('●', `Starting tool-calling build session for app: ${spec.appName}`);
+    return runToolSession(spec, context, targetDir, specFile);
 }
 
 /**
  * Run the pipeline for a feature spec.
- * Full test → iterate loop — same rigour as app builds.
+ * Gather integration context → Tool-calling session
  */
 export async function runFeaturePipeline(
     spec: FeatureSpec,
     context: ProjectContext,
+    targetDir: string,
+    specFile: string,
 ): Promise<BuildResult> {
-    const { provider, model } = requireActiveProvider();
-    const pipelineStart = Date.now();
-    const profile = classifyFeatureTask();
-    let totalTokensIn = 0;
-    let totalTokensOut = 0;
-
-    log('●', `Feature build: ${spec.feature.name} → ${spec.target.app}`);
-
-    // Step 0: Gather integration context from existing app
-    logStep(0, 5, 'Gathering app integration context...');
-    const appContext = gatherAppContext(
-        context.repoPath,
-        context.bridge,
-        spec.target.app,
-    );
-
-    // Step 1: Generate code (with app context + queue context)
-    logStep(1, 5, 'Generating feature code...');
-    log('→', `Sending prompt to ${provider.name} (${model})...`);
-
-    // Resolve relevant skills for the feature build
-    seedDefaultSkills();
-    const matchedSkills = resolveSkillsForBuild(
-        { appName: spec.feature.name, description: '', stack: { framework: context.stack?.framework || '' } } as any,
-        context,
-    );
-    const skillsBlock = formatSkillsForPrompt(matchedSkills);
-    if (matchedSkills.length > 0) {
-        log('✓', `Matched ${matchedSkills.length} skill(s): ${matchedSkills.map(s => s.skill.name).join(', ')}`);
-    }
-
-    const queueContext = loadQueueContext(context.repoPath);
-    const prompt = buildFeaturePrompt(spec, context, appContext, queueContext, skillsBlock);
-    const raw = await callProvider(provider, model, prompt);
-    let files = parseGeneratedFiles(raw.text);
-    totalTokensIn += raw.tokensIn;
-    totalTokensOut += raw.tokensOut;
-
-    if (files.length === 0) {
-        throw new Error('LLM response did not contain any parseable files.');
-    }
-
-    log('✓', `Generated ${files.length} files`);
-    const filesByDir = groupFilesByDirectory(files);
-    for (const [dir, count] of Object.entries(filesByDir)) {
-        log('→', `  ${dir}/ — ${count} file(s)`);
-    }
-
-    // Step 2+3: Test → Iterate loop (strict — keep going until clean)
-    // Derive stack from actual app, fall back to bridge or defaults
-    const syntheticStack: import('./types.ts').StackConfig = appContext.stack || {
-        framework: context.bridge.stack?.framework || 'next.js',
-        packageManager: context.bridge.stack?.packageManager || 'npm',
-        language: 'typescript',
-        linter: context.bridge.stack?.linter || 'eslint',
-    };
-
-    let iteration = 0;
-    let errors: string[] = [];
-
-    while (iteration < profile.maxIterations) {
-        const elapsed = Date.now() - pipelineStart;
-        if (elapsed > PIPELINE_TIMEOUT_MS) {
-            logError(`Pipeline timeout (${Math.round(elapsed / 1000)}s elapsed). Returning current state.`);
-            break;
-        }
-
-        logStep(2 + Math.min(iteration, 1), 4, iteration === 0 ? 'Testing feature build...' : `Iterating (attempt ${iteration + 1}/${profile.maxIterations})...`);
-        errors = await testBuild(files, syntheticStack, profile);
-
-        if (errors.length === 0) {
-            log('✓', 'All checks passed!');
-            break;
-        }
-
-        log('!', `${errors.length} error(s) found`);
-        for (const err of errors.slice(0, 5)) {
-            log('  ', `  ${err}`);
-        }
-
-        if (iteration + 1 >= profile.maxIterations) {
-            logError(`Max iterations (${profile.maxIterations}) reached with ${errors.length} error(s) remaining.`);
-            break;
-        }
-
-        iteration++;
-        log('●', `Feeding errors back to LLM...`);
-        const iterResult = await iterateFeatureBuild(spec, context, appContext, files, errors, provider, model);
-        files = iterResult.files;
-        totalTokensIn += iterResult.tokensIn;
-        totalTokensOut += iterResult.tokensOut;
-        log('✓', `Regenerated ${files.length} files`);
-    }
-
-    // Final quality report
-    logStep(4, 4, 'Quality report');
-    if (errors.length === 0) {
-        log('✓', '✅ PASSED: deps ✓ | types ✓ | lint ✓');
-    } else {
-        logError(`❌ FAILED: ${errors.length} error(s) remaining after ${iteration + 1} iteration(s)`);
-        for (const err of errors) {
-            log('✗', `  ${err}`);
-        }
-    }
-
-    return {
-        success: errors.length === 0,
-        files,
-        plan: {
-            files: files.map(f => f.filename),
-            architecture: `Feature: ${spec.feature.name}`,
-            decisions: [],
-        },
-        iterations: iteration + 1,
-        errors: errors.length > 0 ? errors : undefined,
-        tokenUsage: { promptTokens: totalTokensIn, completionTokens: totalTokensOut },
-        model,
-        provider: provider.id,
-    };
+    log('●', `Starting tool-calling build session for feature: ${spec.feature.name}`);
+    return runToolSession(spec, context, targetDir, specFile);
 }
 
 // ─── Plan ────────────────────────────────────────────────
 
 /**
  * Ask the LLM to create a build plan before generating code.
+ * @deprecated Use tool-calling session instead.
  */
 async function planBuild(
     spec: AppSpec,
@@ -352,6 +117,7 @@ Output ONLY the JSON. No markdown, no explanation.`;
 
 /**
  * Generate code files from spec + plan + context.
+ * @deprecated Use tool-calling session instead.
  */
 async function executeBuild(
     spec: AppSpec,
@@ -536,6 +302,7 @@ Output ONLY the files. No explanations.`;
 /**
  * Execute modular build — generate each module as a separate LLM call,
  * building context from previously generated modules.
+ * @deprecated Use tool-calling session instead.
  */
 async function executeModularBuild(
     spec: AppSpec,
@@ -615,6 +382,7 @@ import type { StackConfig } from './types.ts';
 /**
  * Runtime smoke test: start the dev server, wait for port, GET main page, check 200.
  * Returns an error string if something fails, or null if everything is OK.
+ * @deprecated Use tool-calling session instead.
  */
 async function runtimeSmokeTest(tmpDir: string, stack: StackConfig): Promise<string | null> {
     const port = 3099; // Use a fixed high port for smoke tests
@@ -732,6 +500,7 @@ function packageInstallCommand(pm: string | undefined): string {
  * Phase 2: Write to temp dir, npm install, tsc, lint, test
  *
  * Returns a list of error messages. Empty = all good.
+ * @deprecated Use tool-calling session instead.
  */
 async function testBuild(files: GeneratedFile[], stack: StackConfig, profile: TaskProfile): Promise<string[]> {
     const errors: string[] = [];
@@ -1139,6 +908,7 @@ function identifyRelatedFiles(brokenFiles: Set<string>, allFiles: GeneratedFile[
 /**
  * Feed errors back to the LLM — TARGETED: only send broken files + related context.
  * Merges fixed files back into the full set.
+ * @deprecated Use tool-calling session instead.
  */
 async function iterateBuild(
     spec: AppSpec,
@@ -1224,6 +994,7 @@ Output ONLY the files. No explanations.`;
 
 /**
  * Feed errors back to the LLM for a feature build — TARGETED iteration.
+ * @deprecated Use tool-calling session instead.
  */
 async function iterateFeatureBuild(
     spec: FeatureSpec,

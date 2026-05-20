@@ -440,21 +440,29 @@ async function runBuild(item: QueueItem): Promise<boolean> {
         const { loadBridgeConfig } = await import('./config.ts');
         const { writeFiles, setupProject, writeKnowledgeEntry, writeAppAgentsMd } = await import('./writer.ts');
         const { resolve } = await import('node:path');
+        const { specSlug } = await import('./types.ts');
 
         const bridge = loadBridgeConfig(process.cwd());
         const context = gatherContext(process.cwd(), bridge);
 
         let result;
+        let targetDir: string;
         if (item.kind === 'FeatureSpec') {
             const spec = loadFeatureSpec(item.specFile);
-            result = await runFeaturePipeline(spec, context);
+            targetDir = bridge.apps_dir
+                ? resolve(process.cwd(), bridge.apps_dir, spec.target.app)
+                : resolve(process.cwd(), spec.target.app);
+            result = await runFeaturePipeline(spec, context, targetDir, item.specFile);
         } else {
             const spec = loadSpec(item.specFile);
-            result = await runPipeline(spec, context);
+            const slug = specSlug(spec);
+            targetDir = bridge.apps_dir
+                ? resolve(process.cwd(), bridge.apps_dir, slug)
+                : resolve(process.cwd(), slug);
+            result = await runPipeline(spec, context, targetDir, item.specFile);
         }
 
         // Write files
-        const targetDir = resolve(process.cwd(), item.specFile.replace('.yaml', ''));
         writeFiles(targetDir, result.files);
         setupProject(targetDir, bridge.stack?.packageManager);
 

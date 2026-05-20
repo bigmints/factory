@@ -132,19 +132,20 @@ async function handleBuild(specPath?: string): Promise<void> {
     const effectiveEngine = engineFlag || spec.engine || 'factory';
     const useMinions = effectiveEngine === 'minions';
 
+    const slug = specSlug(spec);
+    const targetDir = bridge.apps_dir
+        ? resolve(project.path, bridge.apps_dir, slug)
+        : resolve(project.path, slug);
+
     let result;
     if (useMinions) {
         logStep(3, 7, 'Generating with minions engine...');
         result = await runMinionsBuild(spec, context);
     } else {
-        result = await runPipeline(spec, context);
+        result = await runPipeline(spec, context, targetDir, specPath!);
     }
 
     // Step 6: Write files
-    const slug = specSlug(spec);
-    const targetDir = bridge.apps_dir
-        ? resolve(project.path, bridge.apps_dir, slug)
-        : resolve(project.path, slug);
     logStep(6, 7, 'Writing files to repo...');
     writeFiles(targetDir, result.files);
     setupProject(targetDir, spec.stack.packageManager);
@@ -399,7 +400,7 @@ async function handleFeature(subcommand?: string, specPath?: string): Promise<vo
                 log('→', 'Using minions engine for feature...');
                 result = await runMinionsFeatureBuild(spec, context, targetDir);
             } else {
-                result = await runFeaturePipeline(spec, context);
+                result = await runFeaturePipeline(spec, context, targetDir, specPath);
                 writeFiles(targetDir, result.files);
                 setupProject(targetDir, bridge.stack?.packageManager);
             }
@@ -674,11 +675,10 @@ async function handleQueueStart(): Promise<void> {
                     const targetDir = bridge.apps_dir
                         ? resolve(project.path, bridge.apps_dir, spec.target.app)
                         : resolve(project.path, spec.target.app);
-
                     const result = await withRetry(
                         () => (current.engine === 'minions')
                             ? runMinionsFeatureBuild(spec, context, targetDir)
-                            : runFeaturePipeline(spec, context),
+                            : runFeaturePipeline(spec, context, targetDir, current.specFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'Feature Pipeline' }
                     );
 
@@ -804,7 +804,7 @@ async function handleQueueStart(): Promise<void> {
                     const result = await withRetry(
                         () => (current.engine === 'minions')
                             ? runMinionsBuild(spec, context)
-                            : runPipeline(spec, context),
+                            : runPipeline(spec, context, targetDir, current.specFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'App Pipeline' }
                     );
 

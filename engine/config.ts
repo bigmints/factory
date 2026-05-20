@@ -12,7 +12,8 @@ import type {
     FactorySettings, LLMProvider,
     BridgeConfig,
 } from './types.ts';
-import { log } from './log.ts';
+import { log, logError } from './log.ts';
+import { initBridge } from './init.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -88,11 +89,15 @@ export function addProject(repoPath: string, stack?: ProjectStack): Project {
     config.activeProject = id;
     saveProjects(config);
 
-    // Ensure .factory directory exists in target repo
-    ensureFactoryDir(absPath);
+    // Run full bridge initialization in the target repo
+    try {
+        initBridge(absPath);
+    } catch (e) {
+        logError(`Bridge init failed: ${e}`);
+    }
 
     log('✓', `Added project: ${name} (${absPath})`);
-    log('→', `Set as active project`);
+    log('→', 'Set as active project');
 
     return project;
 }
@@ -165,37 +170,3 @@ export function hasBridge(repoPath: string): boolean {
     return existsSync(join(repoPath, '.factory', 'factory.yaml'));
 }
 
-/** Ensure .factory/specs/apps and .factory/specs/features directories exist */
-function ensureFactoryDir(repoPath: string): void {
-    const factoryDir = join(repoPath, '.factory');
-    const dirs = [
-        factoryDir,
-        join(factoryDir, 'specs', 'apps'),
-        join(factoryDir, 'specs', 'features'),
-    ];
-    for (const dir of dirs) {
-        if (!existsSync(dir)) {
-            mkdirSync(dir, { recursive: true });
-        }
-    }
-
-    // Create a minimal factory.yaml if it doesn't exist
-    const yamlPath = join(factoryDir, 'factory.yaml');
-    if (!existsSync(yamlPath)) {
-        const config: BridgeConfig = {
-            version: 1,
-            name: basename(repoPath),
-            description: '',
-            factory_home: '.',
-            agentic: {
-                context_dir: '.factory/context',
-                task_queue: '.factory/task-manager/todo.toon',
-                skill_index: '.factory/skill-index.toon',
-                workflows_dir: '.factory/workflows',
-                knowledge_dir: '.factory/knowledge',
-            },
-        };
-        writeFileSync(yamlPath, toYaml(config));
-        log('→', `Created .factory/factory.yaml`);
-    }
-}

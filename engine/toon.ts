@@ -1,13 +1,16 @@
 /**
- * TOON Helpers — read, write, compress TOON files for the agentic bridge.
+ * TOON Helpers — read, write, compress context files for the agentic bridge.
  *
- * TOON (Token-Oriented Object Notation) is a compact format for project state.
- * Uses @toon-format/toon for encode/decode.
+ * Storage: context files are stored as YAML (.yaml), human-editable and git-trackable.
+ * TOON encoding (encode/decode) is used for reading/writing the internal TOON format
+ * when legacy .toon files are present.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { hostname as osHostname } from 'node:os';
 import { encode, decode } from '@toon-format/toon';
+import { stringify as toYaml } from 'yaml';
 
 // ─── Read ────────────────────────────────────────────────
 
@@ -91,21 +94,19 @@ export function parseToonSkillIndex(path: string): Array<{ name: string; path: s
  * @param task - Current task description
  */
 export function writeHeartbeat(projectRoot: string, task: string): void {
-    const heartbeatFile = join(projectRoot, '.factory/context/heartbeat.toon');
-    const timestamp = new Date().toISOString();
-    const hostname = typeof require !== 'undefined'
-        ? (() => { try { return require('node:os').hostname(); } catch { return 'unknown'; } })()
-        : 'unknown';
+    // Write to .yaml — YAML is the canonical storage format
+    const heartbeatFile = join(projectRoot, '.factory/context/heartbeat.yaml');
+    mkdirSync(dirname(heartbeatFile), { recursive: true });
 
     const data = {
         heartbeat: {
-            last_seen: timestamp,
-            host: hostname,
+            last_seen: new Date().toISOString(),
+            host: osHostname(),
             task,
             status: 'alive',
         },
     };
-    writeToFile(heartbeatFile, data);
+    writeFileSync(heartbeatFile, toYaml(data));
 }
 
 // ─── Tasks Snapshot ─────────────────────────────────────
@@ -118,14 +119,12 @@ export function writeToonTasksSnapshot(
     projectRoot: string,
     tasks: Array<{ id: string; status: string; summary: string }>,
 ): void {
-    const tasksFile = join(projectRoot, '.factory/context/tasks.toon');
+    // Write to .yaml — YAML is the canonical storage format
+    const tasksFile = join(projectRoot, '.factory/context/tasks.yaml');
+    mkdirSync(dirname(tasksFile), { recursive: true });
     const data = {
-        tasks: tasks.map(t => ({
-            id: t.id,
-            status: t.status,
-            summary: t.summary,
-        })),
+        tasks: tasks.map(t => ({ id: t.id, status: t.status, summary: t.summary })),
         updated: new Date().toISOString(),
     };
-    writeToFile(tasksFile, data);
+    writeFileSync(tasksFile, toYaml(data));
 }

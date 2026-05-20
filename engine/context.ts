@@ -6,6 +6,8 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { parse as parseYaml } from 'yaml';
+import { encode } from '@toon-format/toon';
 import type { BridgeConfig, ProjectContext, KnowledgeFile, ProjectStack, AppIntegrationContext, StackConfig } from './types.ts';
 import { log } from './log.ts';
 
@@ -276,23 +278,52 @@ function extractAppName(filePath: string): string {
 // ─── TOON Context Bridge ─────────────────────────────────
 
 /**
- * Gather TOON snapshot from .factory/context/context.toon and skill-index.toon.
- * Returns { toonSnapshot, projectSkills } for injection into build prompts.
+ * Gather context from .factory/ YAML files and encode to TOON at prompt-injection time.
+ *
+ * Architecture: data is STORED as YAML (human-editable, git-trackable).
+ * TOON encoding happens HERE, just before injecting into the LLM system prompt —
+ * the same role gzip plays in HTTP: store raw, compress on transmission.
  */
 export function gatherToonSnapshot(repoPath: string): { toonSnapshot?: string; projectSkills?: Array<{ name: string; path: string; description: string }> } {
-    const contextFile = join(repoPath, '.factory/context/context.toon');
-    const skillIndexFile = join(repoPath, '.factory/skill-index.toon');
+    // Prefer .yaml — fall back to .toon for backward compat with existing projects
+    const contextYaml = join(repoPath, '.factory/context/context.yaml');
+    const contextToon = join(repoPath, '.factory/context/context.toon');
+    const skillIndexYaml = join(repoPath, '.factory/skill-index.yaml');
+    const skillIndexToon = join(repoPath, '.factory/skill-index.toon');
 
-    const toonSnapshot = existsSync(contextFile) ? readFileSync(contextFile, 'utf-8') : undefined;
+    let toonSnapshot: string | undefined;
     let projectSkills: Array<{ name: string; path: string; description: string }> | undefined;
 
-    if (existsSync(skillIndexFile)) {
+    // Read context — encode YAML → TOON for token-efficient LLM injection
+    const contextFile = existsSync(contextYaml) ? contextYaml
+        : existsSync(contextToon) ? contextToon : null;
+    if (contextFile) {
         try {
-            const data = JSON.parse(readFileSync(skillIndexFile, 'utf-8'));
-            projectSkills = data.skills?.map((s: any) => ({ name: s.name, path: s.path, description: s.description })) || undefined;
-        } catch {
-            // Ignore parse errors
-        }
+            const raw = readFileSync(contextFile, 'utf-8');
+            if (contextFile.endsWith('.yaml')) {
+                const data = parseYaml(raw) as Record<string, unknown>;
+                toonSnapshot = encode(data);
+            } else {
+                toonSnapshot = raw; // legacy: already TOON or raw
+            }
+        } catch { /* ignore */ }
+    }
+
+    // Read skill-index
+    const skillFile = existsSync(skillIndexYaml) ? skillIndexYaml
+        : existsSync(skillIndexToon) ? skillIndexToon : null;
+    if (skillFile) {
+        try {
+            const raw = readFileSync(skillFile, 'utf-8');
+            const data = skillFile.endsWith('.yaml')
+                ? parseYaml(raw) as Record<string, unknown>
+                : JSON.parse(raw);
+            projectSkills = (data as any).skills?.map((s: any) => ({
+                name: s.name || '',
+                path: s.path || '',
+                description: s.description || '',
+            })) || undefined;
+        } catch { /* ignore */ }
     }
 
     return { toonSnapshot, projectSkills };

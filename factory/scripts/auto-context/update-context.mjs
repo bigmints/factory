@@ -3,7 +3,7 @@ import path from 'path';
 import { encode, decode } from '@toon-format/toon';
 
 const PROJECT_ROOT = process.env.FACTORY_PROJECT_ROOT || process.cwd();
-const WORKLOG_PATH = path.join(PROJECT_ROOT, '.factory/context/worklog.toon');
+const WORKLOG_PATH = path.join(PROJECT_ROOT, '.factory/context/worklog.yaml');
 
 let data = { entries: [] };
 
@@ -15,7 +15,7 @@ if (fs.existsSync(WORKLOG_PATH)) {
       // Ensure entries is an array
       if (!data.entries) data.entries = [];
     } catch (e) {
-      console.error('Failed to parse existing worklog.toon:', e.message);
+      console.error('Failed to parse existing worklog.yaml:', e.message);
     }
   }
 }
@@ -54,4 +54,4 @@ data.entries.push(entry);
 fs.mkdirSync(path.dirname(WORKLOG_PATH), { recursive: true });
 fs.writeFileSync(WORKLOG_PATH, encode(data));
 
-console.log('Worklog updated in TOON format at .factory/context/worklog.toon');
+console.log('Worklog updated in TOON format at .factory/context/worklog.yaml');

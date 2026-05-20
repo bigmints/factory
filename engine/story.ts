@@ -1,37 +1,37 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve, join, basename, dirname } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { AppSpec, FeatureSpec, SpecStatus, BuildMeta, ValidationResult } from './types.ts';
-import { specSlug, specPort } from './types.ts';
+import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult } from './types.ts';
+import { storySlug, storyPort } from './types.ts';
 import { log } from './log.ts';
 import { execSync } from 'node:child_process';
 
 // ─── Load ────────────────────────────────────────────────
 
-/** Load an app spec from a YAML file */
-export function loadSpec(specPath: string): AppSpec {
-    const absPath = resolve(specPath);
+/** Load an app story from a YAML file */
+export function loadStory(storyPath: string): AppStory {
+    const absPath = resolve(storyPath);
     if (!existsSync(absPath)) {
-        throw new Error(`Spec file not found: ${absPath}`);
+        throw new Error(`Story file not found: ${absPath}`);
     }
     const raw = readFileSync(absPath, 'utf-8');
-    return parseYaml(raw) as AppSpec;
+    return parseYaml(raw) as AppStory;
 }
 
-/** Load a feature spec from a YAML file */
-export function loadFeatureSpec(specPath: string): FeatureSpec {
-    const absPath = resolve(specPath);
+/** Load a feature story from a YAML file */
+export function loadFeatureStory(storyPath: string): FeatureStory {
+    const absPath = resolve(storyPath);
     if (!existsSync(absPath)) {
-        throw new Error(`Feature spec not found: ${absPath}`);
+        throw new Error(`Feature story not found: ${absPath}`);
     }
     const raw = readFileSync(absPath, 'utf-8');
-    return parseYaml(raw) as FeatureSpec;
+    return parseYaml(raw) as FeatureStory;
 }
 
-/** List all spec files in a repo's .factory/specs/ directory */
-export function listSpecs(repoPath: string): { apps: string[]; features: string[] } {
-    const appsDir = join(repoPath, '.factory', 'specs', 'apps');
-    const featuresDir = join(repoPath, '.factory', 'specs', 'features');
+/** List all story files in a repo's .factory/stories/ directory */
+export function listStories(repoPath: string): { apps: string[]; features: string[] } {
+    const appsDir = join(repoPath, '.factory', 'stories', 'apps');
+    const featuresDir = join(repoPath, '.factory', 'stories', 'features');
 
     const apps = existsSync(appsDir)
         ? readdirSync(appsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))
@@ -46,40 +46,40 @@ export function listSpecs(repoPath: string): { apps: string[]; features: string[
 
 // ─── Validate ────────────────────────────────────────────
 
-/** Validate an app spec */
-export function validateSpec(spec: AppSpec): ValidationResult {
+/** Validate an app story */
+export function validateStory(story: AppStory): ValidationResult {
     const errors: string[] = [];
 
     // Required: appName
-    if (!spec.appName || spec.appName.trim().length === 0) {
+    if (!story.appName || story.appName.trim().length === 0) {
         errors.push('appName is required');
     }
 
     // Required: description
-    if (!spec.description || spec.description.trim().length === 0) {
+    if (!story.description || story.description.trim().length === 0) {
         errors.push('description is required');
     }
 
     // Slug must be valid
-    const slug = specSlug(spec);
+    const slug = storySlug(story);
     if (slug && !/^[a-z][a-z0-9-]*$/.test(slug)) {
         errors.push(`Invalid slug "${slug}" — must be lowercase alphanumeric with hyphens`);
     }
 
     // Required: stack.framework
-    if (!spec.stack?.framework) {
+    if (!story.stack?.framework) {
         errors.push('stack.framework is required');
     }
 
     // Port range (if specified)
-    const port = specPort(spec);
-    if (spec.deployment?.port && (port < 1024 || port > 65535)) {
+    const port = storyPort(story);
+    if (story.deployment?.port && (port < 1024 || port > 65535)) {
         errors.push(`Port ${port} is out of range (1024–65535)`);
     }
 
     // Data tables: each must have a name and at least one field
-    if (spec.data?.tables) {
-        for (const table of spec.data.tables) {
+    if (story.data?.tables) {
+        for (const table of story.data.tables) {
             if (!table.name) {
                 errors.push('Each data table must have a name');
             }
@@ -90,59 +90,59 @@ export function validateSpec(spec: AppSpec): ValidationResult {
     }
 
     // Auth: if provider is set, check it's a known value
-    if (spec.auth?.provider) {
+    if (story.auth?.provider) {
         const known = ['firebase', 'nextauth', 'supabase', 'clerk', 'none'];
-        if (!known.includes(spec.auth.provider)) {
-            errors.push(`Unknown auth provider "${spec.auth.provider}". Known: ${known.join(', ')}`);
+        if (!known.includes(story.auth.provider)) {
+            errors.push(`Unknown auth provider "${story.auth.provider}". Known: ${known.join(', ')}`);
         }
     }
 
     // Engine: if specified, must be 'factory' or 'worker'
-    if (spec.engine && !['factory', 'worker'].includes(spec.engine)) {
-        errors.push(`Unknown engine "${spec.engine}". Known: factory, worker`);
+    if (story.engine && !['factory', 'worker'].includes(story.engine)) {
+        errors.push(`Unknown engine "${story.engine}". Known: factory, worker`);
     }
 
     return { passed: errors.length === 0, errors };
 }
 
-/** Validate a feature spec */
-export function validateFeatureSpec(spec: FeatureSpec): ValidationResult {
+/** Validate a feature story */
+export function validateFeatureStory(story: FeatureStory): ValidationResult {
     const errors: string[] = [];
 
-    if (!spec.feature?.name) {
+    if (!story.feature?.name) {
         errors.push('feature.name is required');
     }
-    if (!spec.feature?.slug) {
+    if (!story.feature?.slug) {
         errors.push('feature.slug is required');
     }
-    if (!spec.target?.app) {
+    if (!story.target?.app) {
         errors.push('target.app is required');
     }
 
     // Validate phase
-    if (spec.phase !== undefined && (typeof spec.phase !== 'number' || spec.phase < 1 || spec.phase > 10)) {
+    if (story.phase !== undefined && (typeof story.phase !== 'number' || story.phase < 1 || story.phase > 10)) {
         errors.push('phase must be a number between 1 and 10');
     }
 
     // Validate dependsOn
-    if (spec.dependsOn) {
-        if (!Array.isArray(spec.dependsOn)) {
-            errors.push('dependsOn must be an array of spec slugs');
+    if (story.dependsOn) {
+        if (!Array.isArray(story.dependsOn)) {
+            errors.push('dependsOn must be an array of story slugs');
         } else {
-            for (const dep of spec.dependsOn) {
+            for (const dep of story.dependsOn) {
                 if (typeof dep !== 'string' || !/^[a-z][a-z0-9-]*$/.test(dep)) {
                     errors.push(`Invalid dependency slug "${dep}" — must be lowercase alphanumeric with hyphens`);
                 }
-                if (dep === spec.feature?.slug) {
-                    errors.push(`Spec cannot depend on itself ("${dep}")`);
+                if (dep === story.feature?.slug) {
+                    errors.push(`Story cannot depend on itself ("${dep}")`);
                 }
             }
         }
     }
 
     // Engine: if specified, must be 'factory' or 'worker'
-    if (spec.engine && !['factory', 'worker'].includes(spec.engine)) {
-        errors.push(`Unknown engine "${spec.engine}". Known: factory, worker`);
+    if (story.engine && !['factory', 'worker'].includes(story.engine)) {
+        errors.push(`Unknown engine "${story.engine}". Known: factory, worker`);
     }
 
     return { passed: errors.length === 0, errors };
@@ -151,38 +151,38 @@ export function validateFeatureSpec(spec: FeatureSpec): ValidationResult {
 // ─── Status Update ───────────────────────────────────────
 
 /**
- * Update a spec YAML file's status field in-place.
+ * Update a story YAML file's status field in-place.
  * Preserves all other content — only changes the `status:` line.
  */
-export function updateSpecStatus(specPath: string, status: SpecStatus): void {
-    const absPath = resolve(specPath);
+export function updateStoryStatus(storyPath: string, status: StoryStatus): void {
+    const absPath = resolve(storyPath);
     if (!existsSync(absPath)) return;
 
     const raw = readFileSync(absPath, 'utf-8');
-    const spec = parseYaml(raw);
-    spec.status = status;
-    writeFileSync(absPath, stringifyYaml(spec, { lineWidth: 120 }));
+    const story = parseYaml(raw);
+    story.status = status;
+    writeFileSync(absPath, stringifyYaml(story, { lineWidth: 120 }));
 }
 
 // ─── Build Metadata Writeback ────────────────────────────
 
 /**
- * Write build results back into the spec YAML.
+ * Write build results back into the story YAML.
  * Records: lastBuiltAt, buildCount, outputDir, commitHash, filesGenerated, iterations, taskType.
  */
-export function updateSpecBuildMeta(
-    specPath: string,
+export function updateStoryBuildMeta(
+    storyPath: string,
     meta: Omit<BuildMeta, 'buildCount' | 'lastBuiltAt'>,
     repoPath?: string,
 ): void {
-    const absPath = resolve(specPath);
+    const absPath = resolve(storyPath);
     if (!existsSync(absPath)) return;
 
     const raw = readFileSync(absPath, 'utf-8');
-    const spec = parseYaml(raw);
+    const story = parseYaml(raw);
 
     // Increment build count
-    const prevCount = spec.build?.buildCount ?? 0;
+    const prevCount = story.build?.buildCount ?? 0;
 
     // Try to get the latest commit hash
     let commitHash = meta.commitHash;
@@ -197,7 +197,7 @@ export function updateSpecBuildMeta(
         }
     }
 
-    spec.build = {
+    story.build = {
         lastBuiltAt: new Date().toISOString(),
         buildCount: prevCount + 1,
         outputDir: meta.outputDir,
@@ -207,29 +207,29 @@ export function updateSpecBuildMeta(
         taskType: meta.taskType,
     };
 
-    writeFileSync(absPath, stringifyYaml(spec, { lineWidth: 120 }));
-    log('✓', `Build metadata written to spec (build #${spec.build.buildCount})`);
+    writeFileSync(absPath, stringifyYaml(story, { lineWidth: 120 }));
+    log('✓', `Build metadata written to story (build #${story.build.buildCount})`);
 }
 
-// ─── Archive Spec ────────────────────────────────────────
+// ─── Archive Story ────────────────────────────────────────
 
 /**
- * Move a completed spec from specs/apps/ to specs/done/.
+ * Move a completed story from stories/apps/ to stories/done/.
  * Creates the done/ directory if it doesn't exist.
- * Returns the new path, or null if the spec couldn't be moved.
+ * Returns the new path, or null if the story couldn't be moved.
  */
-export function archiveSpec(specPath: string): string | null {
-    const absPath = resolve(specPath);
+export function archiveStory(storyPath: string): string | null {
+    const absPath = resolve(storyPath);
     if (!existsSync(absPath)) return null;
 
-    const specsDir = dirname(absPath);
-    const parentDir = dirname(specsDir); // .factory/specs
+    const storiesDir = dirname(absPath);
+    const parentDir = dirname(storiesDir); // .factory/stories
     const doneDir = join(parentDir, 'done');
 
-    // Only archive if the spec is in an apps/ or features/ folder
-    const folderName = basename(specsDir);
+    // Only archive if the story is in an apps/ or features/ folder
+    const folderName = basename(storiesDir);
     if (folderName !== 'apps' && folderName !== 'features') {
-        log('!', `Spec not in apps/ or features/ — skipping archive`);
+        log('!', `Story not in apps/ or features/ — skipping archive`);
         return null;
     }
 
@@ -252,12 +252,11 @@ export function archiveSpec(specPath: string): string | null {
 
     try {
         renameSync(absPath, finalDest);
-        log('✓', `Archived spec → ${finalDest}`);
+        log('✓', `Archived story → ${finalDest}`);
         return finalDest;
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        log('!', `Failed to archive spec: ${msg}`);
+        log('!', `Failed to archive story: ${msg}`);
         return null;
     }
 }
-

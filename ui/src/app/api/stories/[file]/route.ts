@@ -1,18 +1,18 @@
 import { homedir } from 'node:os';
 /**
- * GET  /api/specs/[file] — Read raw YAML content of a spec file
- * PUT  /api/specs/[file] — Write updated YAML content back to the spec file
+ * GET  /api/stories/[file] — Read raw YAML content of a story file
+ * PUT  /api/stories/[file] — Write updated YAML content back to the story file
  */
 import { NextResponse } from 'next/server';
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
 /**
- * Resolve the specs base directory — active project or factory fallback.
+ * Resolve the stories base directory — active project.
  */
-function getSpecsBase(): string {
+function getStoriesBase(): string {
   try {
     const projectsPath = join(FACTORY_ROOT, 'projects.json');
     if (existsSync(projectsPath)) {
@@ -22,7 +22,7 @@ function getSpecsBase(): string {
           (p: any) => p.id === config.activeProject
         );
         if (project) {
-          return join(project.path, '.factory', 'specs');
+          return join(project.path, '.factory', 'stories');
         }
       }
     }
@@ -30,8 +30,9 @@ function getSpecsBase(): string {
   return '';
 }
 
-function resolveSpecPath(file: string): string | null {
-  const base = getSpecsBase();
+function resolveStoryPath(file: string): string | null {
+  const base = getStoriesBase();
+  if (!base) return null;
 
   // Direct match in apps/
   const appsPath = join(base, 'apps', file);
@@ -51,20 +52,20 @@ export async function GET(
 ) {
   try {
     const { file } = await params;
-    const specPath = resolveSpecPath(decodeURIComponent(file));
+    const storyPath = resolveStoryPath(decodeURIComponent(file));
 
-    if (!specPath) {
+    if (!storyPath) {
       return NextResponse.json(
-        { error: `Spec not found: ${file}` },
+        { error: `Story not found: ${file}` },
         { status: 404 }
       );
     }
 
-    const content = readFileSync(specPath, 'utf-8');
-    return NextResponse.json({ file, content, path: specPath });
+    const content = readFileSync(storyPath, 'utf-8');
+    return NextResponse.json({ file, content, path: storyPath });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || 'Failed to read spec' },
+      { error: err.message || 'Failed to read story' },
       { status: 500 }
     );
   }
@@ -86,11 +87,11 @@ export async function PUT(
       );
     }
 
-    const specPath = resolveSpecPath(decodeURIComponent(file));
+    const storyPath = resolveStoryPath(decodeURIComponent(file));
 
-    if (!specPath) {
+    if (!storyPath) {
       return NextResponse.json(
-        { error: `Spec not found: ${file}` },
+        { error: `Story not found: ${file}` },
         { status: 404 }
       );
     }
@@ -106,11 +107,11 @@ export async function PUT(
       );
     }
 
-    writeFileSync(specPath, content, 'utf-8');
-    return NextResponse.json({ success: true, file, path: specPath });
+    writeFileSync(storyPath, content, 'utf-8');
+    return NextResponse.json({ success: true, file, path: storyPath });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || 'Failed to save spec' },
+      { error: err.message || 'Failed to save story' },
       { status: 500 }
     );
   }

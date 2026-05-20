@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 /**
- * POST /api/autofix — Use the LLM to fix a broken YAML spec
- * Body: { specFile: "features/foo.yaml", error: "YAML parse error..." }
+ * POST /api/autofix — Use the LLM to fix a broken YAML story
+ * Body: { storyFile: "features/foo.yaml", error: "YAML parse error..." }
  *
  * Returns { fixed: boolean, error?: string }
  */
@@ -9,11 +9,10 @@ import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
-import { execSync } from 'node:child_process';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
-function resolveSpecFile(specFile: string): string {
+function resolveStoryFile(storyFile: string): string {
   try {
     const projectsPath = join(FACTORY_ROOT, 'projects.json');
     if (existsSync(projectsPath)) {
@@ -23,22 +22,22 @@ function resolveSpecFile(specFile: string): string {
           (p: any) => p.id === config.activeProject
         );
         if (project) {
-          const isFeature = specFile.startsWith('features/');
+          const isFeature = storyFile.startsWith('features/');
           const subdir = isFeature ? 'features' : 'apps';
-          const cleanFile = isFeature ? specFile.replace(/^features\//, '') : specFile;
-          const projectPath = join(project.path, '.factory', 'specs', subdir, cleanFile);
+          const cleanFile = isFeature ? storyFile.replace(/^features\//, '') : storyFile;
+          const projectPath = join(project.path, '.factory', 'stories', subdir, cleanFile);
           if (existsSync(projectPath)) return projectPath;
         }
       }
     }
   } catch {}
 
-  const factoryPath = join(FACTORY_ROOT, 'specs', specFile);
+  const factoryPath = join(FACTORY_ROOT, 'stories', storyFile);
   if (existsSync(factoryPath)) return factoryPath;
 
-  if (specFile.startsWith('/') && existsSync(specFile)) return specFile;
+  if (storyFile.startsWith('/') && existsSync(storyFile)) return storyFile;
 
-  throw new Error(`Spec file not found: ${specFile}`);
+  throw new Error(`Story file not found: ${storyFile}`);
 }
 
 /**
@@ -70,7 +69,7 @@ function loadLLMSettings(): { provider: string; model: string; apiKey?: string; 
 }
 
 /**
- * Call the LLM to fix a broken YAML spec.
+ * Call the LLM to fix a broken YAML story.
  * Supports gemini, openai, ollama, and openai-compat providers.
  */
 async function callLLMForFix(prompt: string, settings: NonNullable<ReturnType<typeof loadLLMSettings>>): Promise<string> {
@@ -136,14 +135,17 @@ async function callLLMForFix(prompt: string, settings: NonNullable<ReturnType<ty
 
 export async function POST(request: Request) {
   try {
-    const { specFile, error } = await request.json();
-    if (!specFile) {
-      return NextResponse.json({ error: 'specFile is required' }, { status: 400 });
+    const body = await request.json();
+    const storyFile = body.storyFile || body.specFile;
+    const { error } = body;
+    
+    if (!storyFile) {
+      return NextResponse.json({ error: 'storyFile is required' }, { status: 400 });
     }
 
-    const specPath = resolveSpecFile(specFile);
+    const storyPath = resolveStoryFile(storyFile);
     const errorMsg = error || 'Unknown YAML error';
-    const rawYaml = readFileSync(specPath, 'utf-8');
+    const rawYaml = readFileSync(storyPath, 'utf-8');
 
     const llmSettings = loadLLMSettings();
     if (!llmSettings) {
@@ -153,9 +155,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const prompt = `You are a YAML spec fixer for an autonomous code factory.
+    const prompt = `You are a YAML story fixer for an autonomous code factory.
 
-The following YAML spec file failed to parse. Fix the YAML so it parses correctly.
+The following YAML story file failed to parse. Fix the YAML so it parses correctly.
 Keep ALL the original content and meaning — only fix syntax issues like:
 - Unquoted strings containing special YAML characters ({ } [ ] : , # & * ? | - < > = ! % @ \`)
 - Incorrect indentation
@@ -201,7 +203,7 @@ Return the fixed YAML now:`;
     }
 
     // Write the fixed YAML back
-    writeFileSync(specPath, fixedYaml + '\n', 'utf-8');
+    writeFileSync(storyPath, fixedYaml + '\n', 'utf-8');
 
     return NextResponse.json({ fixed: true });
   } catch (err) {

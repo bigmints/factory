@@ -20,15 +20,15 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
-import { loadSpec, loadFeatureSpec, listSpecs, validateSpec, validateFeatureSpec, updateSpecStatus, updateSpecBuildMeta, archiveSpec } from './spec.ts';
+import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from './story.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherContext } from './context.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
 import { runWorkerBuild, runWorkerFeatureBuild } from './worker-engine.ts';
 import { writeFiles, setupProject, gitCommit, gitPush, writeKnowledgeEntry, writeAppAgentsMd, buildDebrief } from './writer.ts';
-import { autoFixSpec } from './autofix.ts';
+import { autoFixStory } from './autofix.ts';
 import { log, logHeader, logStep, logError } from './log.ts';
-import { specSlug, specPort, type ProjectStack } from './types.ts';
+import { storySlug, storyPort, type ProjectStack } from './types.ts';
 import {
     enqueue, dequeue, listQueue, getQueueStats,
     markRunning, markCompleted, markFailed,
@@ -105,24 +105,24 @@ async function main(): Promise<void> {
 
 // ─── Build ───────────────────────────────────────────────
 
-async function handleBuild(specPath?: string): Promise<void> {
+async function handleBuild(storyPath?: string): Promise<void> {
     requireTarget('build');
-    const spec = loadSpec(specPath!);
+    const story = loadStory(storyPath!);
     const project = getActiveProject();
 
-    logHeader(`Build: ${spec.appName}`);
+    logHeader(`Build: ${story.appName}`);
 
     // Step 1: Validate
-    logStep(1, 7, 'Validating spec...');
-    const validation = validateSpec(spec);
+    logStep(1, 7, 'Validating story...');
+    const validation = validateStory(story);
     if (!validation.passed) {
-        logError('Spec validation failed:');
+        logError('Story validation failed:');
         for (const err of validation.errors) {
             log('  ', `  ✗ ${err}`);
         }
         process.exit(1);
     }
-    log('✓', 'Spec is valid');
+    log('✓', 'Story is valid');
 
     // Step 2: Gather context
     logStep(2, 7, 'Gathering context...');
@@ -131,10 +131,10 @@ async function handleBuild(specPath?: string): Promise<void> {
 
     // Steps 3-5: Plan → Build → Test → Iterate (or minions engine)
     const engineFlag = parseFlags(args.slice(2)).engine as string | undefined;
-    const effectiveEngine = engineFlag || spec.engine || 'factory';
+    const effectiveEngine = engineFlag || story.engine || 'factory';
     const useWorker = effectiveEngine === 'worker';
 
-    const slug = specSlug(spec);
+    const slug = storySlug(story);
     const targetDir = bridge.apps_dir
         ? resolve(project.path, bridge.apps_dir, slug)
         : resolve(project.path, slug);
@@ -142,41 +142,41 @@ async function handleBuild(specPath?: string): Promise<void> {
     let result;
     if (useWorker) {
         logStep(3, 7, 'Generating with worker engine...');
-        result = await runWorkerBuild(spec, context);
+        result = await runWorkerBuild(story, context);
     } else {
-        result = await runPipeline(spec, context, targetDir, specPath!);
+        result = await runPipeline(story, context, targetDir, storyPath!);
     }
 
     // Step 6: Write files
     logStep(6, 7, 'Writing files to repo...');
     writeFiles(targetDir, result.files);
-    setupProject(targetDir, spec.stack.packageManager);
+    setupProject(targetDir, story.stack.packageManager);
 
     // Knowledge feedback + AGENTS.md
-    writeKnowledgeEntry(project.path, spec.appName, result, spec.stack, specPath!);
-    writeAppAgentsMd(targetDir, spec.appName, spec.stack, result.files);
+    writeKnowledgeEntry(project.path, story.appName, result, story.stack, storyPath!);
+    writeAppAgentsMd(targetDir, story.appName, story.stack, result.files);
 
     // Step 7: Git commit + push
     logStep(7, 7, 'Committing and pushing...');
-    gitCommit(project.path, `factory: generate ${spec.appName}`);
+    gitCommit(project.path, `factory: generate ${story.appName}`);
     gitPush(project.path);
 
-    // Step 8: Write build metadata back into spec + archive
-    updateSpecBuildMeta(specPath!, {
+    // Step 8: Write build metadata back into story + archive
+    updateStoryBuildMeta(storyPath!, {
         outputDir: targetDir,
         filesGenerated: result.files.length,
         iterations: result.iterations,
         taskType: result.plan.decisions[0] || 'unknown',
     }, project.path);
     if (result.success) {
-        archiveSpec(specPath!);
+        archiveStory(storyPath!);
     }
 
     // Summary
     console.log('');
     console.log('═'.repeat(50));
     log('✓', `Build ${result.success ? 'COMPLETE' : 'DONE (with warnings)'}`);
-    log('→', `App: ${spec.appName} (${slug})`);
+    log('→', `App: ${story.appName} (${slug})`);
     log('→', `Files: ${result.files.length}`);
     log('→', `Iterations: ${result.iterations}`);
     log('→', `Output: ${targetDir}`);
@@ -190,13 +190,13 @@ async function handleBuild(specPath?: string): Promise<void> {
 
 // ─── Validate ────────────────────────────────────────────
 
-function handleValidate(specPath?: string): void {
+function handleValidate(storyPath?: string): void {
     requireTarget('validate');
-    const spec = loadSpec(specPath!);
+    const story = loadStory(storyPath!);
 
-    logHeader(`Validate: ${spec.appName}`);
+    logHeader(`Validate: ${story.appName}`);
 
-    const result = validateSpec(spec);
+    const result = validateStory(story);
     if (result.passed) {
         log('✓', 'All checks passed!');
     } else {
@@ -219,36 +219,36 @@ function handleStatus(): void {
         log('→', `Active project: ${project.name} (${project.path})`);
         console.log('');
 
-        const specs = listSpecs(project.path);
+        const stories = listStories(project.path);
 
-        if (specs.apps.length === 0 && specs.features.length === 0) {
-            log('!', 'No specs found. Add YAML files to .factory/specs/apps/ or .factory/specs/features/');
+        if (stories.apps.length === 0 && stories.features.length === 0) {
+            log('!', 'No stories found. Add YAML files to .factory/stories/apps/ or .factory/stories/features/');
             return;
         }
 
-        if (specs.apps.length > 0) {
-            console.log('App Specs:');
-            for (const file of specs.apps) {
+        if (stories.apps.length > 0) {
+            console.log('App Stories:');
+            for (const file of stories.apps) {
                 try {
-                    const spec = loadSpec(resolve(project.path, '.factory', 'specs', 'apps', file));
-                    const slug = specSlug(spec);
-                    const port = specPort(spec);
-                    const status = spec.status || 'draft';
+                    const story = loadStory(resolve(project.path, '.factory', 'stories', 'apps', file));
+                    const slug = storySlug(story);
+                    const port = storyPort(story);
+                    const status = story.status || 'draft';
                     const icon = status === 'done' ? '✅' : status === 'in-progress' ? '🔄' : '📝';
-                    log('  ', `  ${icon} ${slug} — ${spec.appName} (port ${port}) [${status}]`);
+                    log('  ', `  ${icon} ${slug} — ${story.appName} (port ${port}) [${status}]`);
                 } catch {
                     log('  ', `  ❌ ${file} — failed to parse`);
                 }
             }
         }
 
-        if (specs.features.length > 0) {
+        if (stories.features.length > 0) {
             console.log('');
-            console.log('Feature Specs:');
-            for (const file of specs.features) {
+            console.log('Feature Stories:');
+            for (const file of stories.features) {
                 try {
-                    const spec = loadFeatureSpec(resolve(project.path, '.factory', 'specs', 'features', file));
-                    log('  ', `  📋 ${spec.feature.slug} — ${spec.feature.name} → ${spec.target.app}`);
+                    const story = loadFeatureStory(resolve(project.path, '.factory', 'stories', 'features', file));
+                    log('  ', `  📋 ${story.feature.slug} — ${story.feature.name} → ${story.target.app}`);
                 } catch {
                     log('  ', `  ❌ ${file} — failed to parse`);
                 }
@@ -357,21 +357,21 @@ function handleProject(subcommand?: string, arg?: string): void {
 
 // ─── Feature ─────────────────────────────────────────────
 
-async function handleFeature(subcommand?: string, specPath?: string): Promise<void> {
+async function handleFeature(subcommand?: string, storyPath?: string): Promise<void> {
     if (!subcommand) {
-        console.error('Usage: factory feature <build|validate> <spec.yaml>');
+        console.error('Usage: factory feature <build|validate> <story.yaml>');
         process.exit(1);
     }
 
     switch (subcommand) {
         case 'validate': {
-            if (!specPath) { console.error('Usage: factory feature validate <spec.yaml>'); process.exit(1); }
-            const spec = loadFeatureSpec(specPath);
+            if (!storyPath) { console.error('Usage: factory feature validate <story.yaml>'); process.exit(1); }
+            const story = loadFeatureStory(storyPath);
 
-            logHeader(`Validate Feature: ${spec.feature.name}`);
-            const result = validateFeatureSpec(spec);
+            logHeader(`Validate Feature: ${story.feature.name}`);
+            const result = validateFeatureStory(story);
             if (result.passed) {
-                log('✓', 'Feature spec is valid');
+                log('✓', 'Feature story is valid');
             } else {
                 for (const err of result.errors) log('✗', err);
             }
@@ -379,46 +379,46 @@ async function handleFeature(subcommand?: string, specPath?: string): Promise<vo
             break;
         }
         case 'build': {
-            if (!specPath) { console.error('Usage: factory feature build <spec.yaml>'); process.exit(1); }
-            const spec = loadFeatureSpec(specPath);
+            if (!storyPath) { console.error('Usage: factory feature build <story.yaml>'); process.exit(1); }
+            const story = loadFeatureStory(storyPath);
             const project = getActiveProject();
 
-            logHeader(`Feature Build: ${spec.feature.name}`);
+            logHeader(`Feature Build: ${story.feature.name}`);
 
             const bridge = loadBridgeConfig(project.path);
             const context = gatherContext(project.path, bridge);
 
             // Check for --engine flag
             const featureFlags = parseFlags(args.slice(3));
-            const effectiveFeatureEngine = featureFlags.engine || spec.engine || 'factory';
+            const effectiveFeatureEngine = featureFlags.engine || story.engine || 'factory';
             const useWorkerFeature = effectiveFeatureEngine === 'worker';
 
             const targetDir = bridge.apps_dir
-                ? resolve(project.path, bridge.apps_dir, spec.target.app)
-                : resolve(project.path, spec.target.app);
+                ? resolve(project.path, bridge.apps_dir, story.target.app)
+                : resolve(project.path, story.target.app);
 
             let result;
             if (useWorkerFeature) {
                 log('→', 'Using worker engine for feature...');
-                result = await runWorkerFeatureBuild(spec, context, targetDir);
+                result = await runWorkerFeatureBuild(story, context, targetDir);
             } else {
-                result = await runFeaturePipeline(spec, context, targetDir, specPath);
+                result = await runFeaturePipeline(story, context, targetDir, storyPath);
                 writeFiles(targetDir, result.files);
                 setupProject(targetDir, bridge.stack?.packageManager);
             }
 
-            // Knowledge feedback + AGENTS.md (per-feature naming)
             const featureStack = bridge.stack || { framework: 'unknown', packageManager: 'npm' };
-            const featureKbName = `${spec.target.app}--${spec.feature.slug}`;
-            writeKnowledgeEntry(project.path, featureKbName, result, featureStack, specPath);
-            writeAppAgentsMd(targetDir, spec.feature.name, featureStack, result.files);
+            const featureKbName = `${story.target.app}--${story.feature.slug}`;
 
-            // Archive completed spec + update status
-            updateSpecStatus(specPath, 'done');
-            archiveSpec(specPath);
+            writeKnowledgeEntry(project.path, featureKbName, result, featureStack, storyPath);
+            writeAppAgentsMd(targetDir, story.feature.name, featureStack, result.files);
+
+            // Archive completed story + update status
+            updateStoryStatus(storyPath, 'done');
+            archiveStory(storyPath);
 
             // Git commit + push
-            gitCommit(project.path, `factory: add feature ${spec.feature.name} to ${spec.target.app}`);
+            gitCommit(project.path, `factory: add feature ${story.feature.name} to ${story.target.app}`);
             gitPush(project.path);
 
             log('✓', `Feature built: ${result.files.length} files`);
@@ -458,7 +458,7 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
                     const depsMetTag = item.dependsOn.length > 0 && item.status === 'pending'
                         ? (areDependenciesMet(item.dependsOn) ? ' ✅deps met' : ' ⏳deps pending')
                         : '';
-                    log('  ', `${icon} [${item.id}] ${item.specFile} (${item.kind})${phaseTag} — ${item.status}${depsMetTag}`);
+                    log('  ', `${icon} [${item.id}] ${item.storyFile} (${item.kind})${phaseTag} — ${item.status}${depsMetTag}`);
                     if (depsTag) {
                         log('  ', `    ${depsTag}`);
                     }
@@ -475,40 +475,40 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
         }
 
         case 'add': {
-            if (!arg) { console.error('Usage: factory queue add <spec.yaml>'); process.exit(1); }
-            const specPath = resolve(arg);
-            if (!existsSync(specPath)) {
-                logError(`Spec file not found: ${specPath}`);
+            if (!arg) { console.error('Usage: factory queue add <story.yaml>'); process.exit(1); }
+            const storyPath = resolve(arg);
+            if (!existsSync(storyPath)) {
+                logError(`Story file not found: ${storyPath}`);
                 process.exit(1);
             }
 
             // Detect kind and parse phase/dependsOn/engine
-            let kind: 'AppSpec' | 'FeatureSpec' = 'AppSpec';
+            let kind: 'AppStory' | 'FeatureStory' = 'AppStory';
             let phase: number | undefined;
             let dependsOn: string[] | undefined;
-            let specEngine: 'factory' | 'worker' | undefined;
+            let storyEngine: 'factory' | 'worker' | undefined;
             try {
-                const fSpec = loadFeatureSpec(specPath);
-                kind = 'FeatureSpec';
-                phase = fSpec.phase;
-                dependsOn = fSpec.dependsOn;
-                specEngine = fSpec.engine;
+                const fStory = loadFeatureStory(storyPath);
+                kind = 'FeatureStory';
+                phase = fStory.phase;
+                dependsOn = fStory.dependsOn;
+                storyEngine = fStory.engine;
             } catch {
                 try {
-                    const aSpec = loadSpec(specPath);
-                    specEngine = aSpec.engine;
-                } catch { /* assume AppSpec */ }
+                    const aStory = loadStory(storyPath);
+                    storyEngine = aStory.engine;
+                } catch { /* assume AppStory */ }
             }
 
             // Detect engine flag from CLI args
             const queueFlags = parseFlags(args.slice(3));
-            const engine = (queueFlags.engine || specEngine || 'factory') === 'worker' ? 'worker' as const : 'factory' as const;
+            const engine = (queueFlags.engine || storyEngine || 'factory') === 'worker' ? 'worker' as const : 'factory' as const;
 
-            const item = enqueue(specPath, kind, { phase, dependsOn, engine });
+            const item = enqueue(storyPath, kind, { phase, dependsOn, engine });
             const phaseInfo = phase ? ` [phase ${phase}]` : '';
             const depsInfo = dependsOn && dependsOn.length > 0 ? ` (depends on: ${dependsOn.join(', ')})` : '';
             const engineInfo = engine !== 'factory' ? ` [engine: ${engine}]` : '';
-            log('✓', `Queued: ${item.specFile} (${item.kind})${phaseInfo}${depsInfo}${engineInfo} → ${item.id}`);
+            log('✓', `Queued: ${item.storyFile} (${item.kind})${phaseInfo}${depsInfo}${engineInfo} → ${item.id}`);
             break;
         }
 
@@ -523,8 +523,6 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
         case 'watch': {
             return handleWatch(args[3]);
         }
-
-
 
         case 'stats': {
             const stats = getQueueStats();
@@ -551,7 +549,7 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
             if (!arg) { console.error('Usage: factory queue retry <id>'); process.exit(1); }
             const item = retryItem(arg);
             if (item) {
-                log('✓', `Reset to pending: ${item.specFile}`);
+                log('✓', `Reset to pending: ${item.storyFile}`);
             } else {
                 logError(`Item not found: ${arg}`);
             }
@@ -614,46 +612,46 @@ async function handleQueueStart(): Promise<void> {
 
             console.log('');
             const current = item; // capture for TS narrowing
-            logHeader(`[${processed}] Processing: ${current.specFile}`);
+            logHeader(`[${processed}] Processing: ${current.storyFile}`);
             markRunning(current.id);
 
-            // Set spec status to in-progress
-            updateSpecStatus(current.specFile, 'in-progress');
+            // Set story status to in-progress
+            updateStoryStatus(current.storyFile, 'in-progress');
 
             try {
-                if (current.kind === 'FeatureSpec') {
+                if (current.kind === 'FeatureStory') {
                     // Feature build — validate YAML first, auto-fix if broken
-                    let spec;
+                    let story;
                     try {
-                        spec = loadFeatureSpec(current.specFile);
+                        story = loadFeatureStory(current.storyFile);
                     } catch (parseErr) {
                         const errMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-                        log('⚠', `YAML parse error in ${current.specFile}: ${errMsg}`);
+                        log('⚠', `YAML parse error in ${current.storyFile}: ${errMsg}`);
 
                         // Try LLM auto-fix
-                        const specAbsPath = resolve(current.specFile);
+                        const storyAbsPath = resolve(current.storyFile);
                         const fixResult = await withRetry(
-                            () => autoFixSpec(specAbsPath, errMsg),
+                            () => autoFixStory(storyAbsPath, errMsg),
                             { maxAttempts: 3, delayMs: 2000, name: 'Auto-fix' }
                         );
 
                         if (fixResult.fixed) {
-                            // Retry loading the fixed spec
+                            // Retry loading the fixed story
                             try {
-                                spec = loadFeatureSpec(current.specFile);
-                                log('✓', `Spec auto-fixed and reloaded: ${current.specFile}`);
+                                story = loadFeatureStory(current.storyFile);
+                                log('✓', `Story auto-fixed and reloaded: ${current.storyFile}`);
                             } catch (retryErr) {
                                 const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
                                 const durationMs = Date.now() - startTime;
                                 markFailed(current.id, `YAML still broken after auto-fix: ${retryMsg}`, '', durationMs);
-                                logBuild(current.specFile, 'FeatureSpec', 'failed', `# Build Debrief\n\n> YAML Parse Error (auto-fix failed)\n\n## Error\n\n${retryMsg}`, [], durationMs, {
+                                logBuild(current.storyFile, 'FeatureStory', 'failed', `# Build Debrief\n\n> YAML Parse Error (auto-fix failed)\n\n## Error\n\n${retryMsg}`, [], durationMs, {
                                     errorSource: 'engine',
                                     tokensIn: fixResult.tokensIn,
                                     tokensOut: fixResult.tokensOut,
                                     engine: current.engine,
                                     errorCategory: categorizeError(retryMsg),
                                     });
-                                updateSpecStatus(current.specFile, 'review');
+                                updateStoryStatus(current.storyFile, 'review');
                                 failed++;
                                 item = dequeue();
                                 continue;
@@ -661,26 +659,26 @@ async function handleQueueStart(): Promise<void> {
                         } else {
                             const durationMs = Date.now() - startTime;
                             markFailed(current.id, `YAML parse error (auto-fix exhausted): ${errMsg}`, '', durationMs);
-                            logBuild(current.specFile, 'FeatureSpec', 'failed', `# Build Debrief\n\n> YAML Parse Error\n\nAuto-fix was attempted but failed.\n\n## Original Error\n\n${errMsg}`, [], durationMs, {
+                            logBuild(current.storyFile, 'FeatureStory', 'failed', `# Build Debrief\n\n> YAML Parse Error\n\nAuto-fix was attempted but failed.\n\n## Original Error\n\n${errMsg}`, [], durationMs, {
                                 errorSource: 'engine',
                                 tokensIn: fixResult.tokensIn,
                                 tokensOut: fixResult.tokensOut,
                                 engine: current.engine,
                                 errorCategory: categorizeError(parseErr),
                                 });
-                            updateSpecStatus(current.specFile, 'review');
+                            updateStoryStatus(current.storyFile, 'review');
                             failed++;
                             item = dequeue();
                             continue;
                         }
                     }
                     const targetDir = bridge.apps_dir
-                        ? resolve(project.path, bridge.apps_dir, spec.target.app)
-                        : resolve(project.path, spec.target.app);
+                        ? resolve(project.path, bridge.apps_dir, story.target.app)
+                        : resolve(project.path, story.target.app);
                     const result = await withRetry(
                         () => (current.engine === 'worker')
-                            ? runWorkerFeatureBuild(spec, context, targetDir)
-                            : runFeaturePipeline(spec, context, targetDir, current.specFile),
+                            ? runWorkerFeatureBuild(story, context, targetDir)
+                            : runFeaturePipeline(story, context, targetDir, current.storyFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'Feature Pipeline' }
                     );
 
@@ -691,25 +689,25 @@ async function handleQueueStart(): Promise<void> {
 
                     // Knowledge feedback + AGENTS.md
                     const featureStack = bridge.stack || { framework: 'unknown', packageManager: 'npm' };
-                    const featureKbName = `${spec.target.app}--${spec.feature.slug}`;
-                    writeKnowledgeEntry(project.path, featureKbName, result, featureStack, current.specFile);
-                    writeAppAgentsMd(targetDir, spec.feature.name, featureStack, result.files);
+                    const featureKbName = `${story.target.app}--${story.feature.slug}`;
+                    writeKnowledgeEntry(project.path, featureKbName, result, featureStack, current.storyFile);
+                    writeAppAgentsMd(targetDir, story.feature.name, featureStack, result.files);
 
                     const durationMs = Date.now() - startTime;
-                    const featureSummary = buildDebrief(spec.feature.name, result, featureStack, current.specFile, durationMs);
+                    const featureSummary = buildDebrief(story.feature.name, result, featureStack, current.storyFile, durationMs);
 
                     if (result.success) {
                         markCompleted(current.id, `${result.files.length} files generated`, durationMs);
-                        logBuild(current.specFile, 'FeatureSpec', 'completed', featureSummary, result.files.map(f => f.filename), durationMs, {
+                        logBuild(current.storyFile, 'FeatureStory', 'completed', featureSummary, result.files.map(f => f.filename), durationMs, {
                             model: result.model,
                             provider: result.provider,
                             engine: current.engine,
                             tokensIn: result.tokenUsage?.promptTokens,
                             tokensOut: result.tokenUsage?.completionTokens,
                         });
-                        updateSpecStatus(current.specFile, 'done');
-                        archiveSpec(current.specFile);
-                        gitCommit(project.path, `factory: add feature ${spec.feature.name} to ${spec.target.app}`);
+                        updateStoryStatus(current.storyFile, 'done');
+                        archiveStory(current.storyFile);
+                        gitCommit(project.path, `factory: add feature ${story.feature.name} to ${story.target.app}`);
                         succeeded++;
                     } else {
                         markFailed(
@@ -718,7 +716,7 @@ async function handleQueueStart(): Promise<void> {
                             `${result.files.length} files generated with errors`,
                             durationMs
                         );
-                        logBuild(current.specFile, 'FeatureSpec', 'failed', featureSummary, result.files.map(f => f.filename), durationMs, {
+                        logBuild(current.storyFile, 'FeatureStory', 'failed', featureSummary, result.files.map(f => f.filename), durationMs, {
                             model: result.model,
                             provider: result.provider,
                             engine: current.engine,
@@ -726,54 +724,54 @@ async function handleQueueStart(): Promise<void> {
                             tokensOut: result.tokenUsage?.completionTokens,
                             errorSource: 'engine',
                         });
-                        updateSpecStatus(current.specFile, 'review');
+                        updateStoryStatus(current.storyFile, 'review');
                         failed++;
                     }
                 } else {
                     // App build — full pipeline
-                    const spec = loadSpec(current.specFile);
-                    const validation = validateSpec(spec);
+                    const story = loadStory(current.storyFile);
+                    const validation = validateStory(story);
 
                     if (!validation.passed) {
-                        // Try LLM auto-fix on the spec
-                        log('⚠', `AppSpec validation failed: ${validation.errors.join(', ')}`);
-                        const specAbsPath = resolve(current.specFile);
+                        // Try LLM auto-fix on the story
+                        log('⚠', `AppStory validation failed: ${validation.errors.join(', ')}`);
+                        const storyAbsPath = resolve(current.storyFile);
                         const fixResult = await withRetry(
-                            () => autoFixSpec(specAbsPath, `Validation errors: ${validation.errors.join('; ')}`),
+                            () => autoFixStory(storyAbsPath, `Validation errors: ${validation.errors.join('; ')}`),
                             { maxAttempts: 3, delayMs: 2000, name: 'Auto-fix' }
                         );
 
                         if (fixResult.fixed) {
-                            // Retry validation with fixed spec
+                            // Retry validation with fixed story
                             try {
-                                const fixedSpec = loadSpec(current.specFile);
-                                const reValidation = validateSpec(fixedSpec);
+                                const fixedStory = loadStory(current.storyFile);
+                                const reValidation = validateStory(fixedStory);
                                 if (reValidation.passed) {
-                                    log('✓', `AppSpec auto-fixed and re-validated: ${current.specFile}`);
-                                    // Replace spec variable and continue with the pipeline
-                                    Object.assign(spec, fixedSpec);
+                                    log('✓', `AppStory auto-fixed and re-validated: ${current.storyFile}`);
+                                    // Replace story variable and continue with the pipeline
+                                    Object.assign(story, fixedStory);
                                 } else {
                                     const durationMs = Date.now() - startTime;
                                     markFailed(current.id, `Validation still fails after auto-fix: ${reValidation.errors.join(', ')}`, '', durationMs);
-                                    logBuild(current.specFile, 'AppSpec', 'failed', `# Build Debrief\n\n> Validation failed (auto-fix didn't resolve)\n\n## Issues\n\n${reValidation.errors.map(e => `- ${e}`).join('\n')}`, [], durationMs, {
+                                    logBuild(current.storyFile, 'AppStory', 'failed', `# Build Debrief\n\n> Validation failed (auto-fix didn't resolve)\n\n## Issues\n\n${reValidation.errors.map(e => `- ${e}`).join('\n')}`, [], durationMs, {
                                         errorSource: 'engine',
                                         tokensIn: fixResult.tokensIn,
                                         tokensOut: fixResult.tokensOut,
                                         engine: current.engine,
                                         errorCategory: categorizeError(reValidation.errors),
                                         });
-                                    updateSpecStatus(current.specFile, 'review');
+                                    updateStoryStatus(current.storyFile, 'review');
                                     failed++;
                                     item = dequeue();
                                     continue;
                                 }
                             } catch {
                                 const durationMs = Date.now() - startTime;
-                                markFailed(current.id, `Auto-fix broke the spec further`, '', durationMs);
-                                logBuild(current.specFile, 'AppSpec', 'failed', `# Build Debrief\n\n> Auto-fix produced invalid YAML`, [], durationMs, {
+                                markFailed(current.id, `Auto-fix broke the story further`, '', durationMs);
+                                logBuild(current.storyFile, 'AppStory', 'failed', `# Build Debrief\n\n> Auto-fix produced invalid YAML`, [], durationMs, {
                                     errorSource: 'engine',
                                 });
-                                updateSpecStatus(current.specFile, 'review');
+                                updateStoryStatus(current.storyFile, 'review');
                                 failed++;
                                 item = dequeue();
                                 continue;
@@ -781,14 +779,14 @@ async function handleQueueStart(): Promise<void> {
                         } else {
                             const durationMs = Date.now() - startTime;
                             markFailed(current.id, `Validation failed (auto-fix exhausted): ${validation.errors.join(', ')}`, '', durationMs);
-                            logBuild(current.specFile, 'AppSpec', 'failed', `# Build Debrief\n\n> Validation failed\n\nAuto-fix was attempted but failed.\n\n## Issues\n\n${validation.errors.map(e => `- ${e}`).join('\n')}`, [], durationMs, {
+                            logBuild(current.storyFile, 'AppStory', 'failed', `# Build Debrief\n\n> Validation failed\n\nAuto-fix was attempted but failed.\n\n## Issues\n\n${validation.errors.map(e => `- ${e}`).join('\n')}`, [], durationMs, {
                                 errorSource: 'engine',
                                 tokensIn: fixResult.tokensIn,
                                 tokensOut: fixResult.tokensOut,
                                 engine: current.engine,
                                 errorCategory: categorizeError(validation.errors),
                                 });
-                            updateSpecStatus(current.specFile, 'review');
+                            updateStoryStatus(current.storyFile, 'review');
                             failed++;
                             item = dequeue();
                             continue;
@@ -796,54 +794,54 @@ async function handleQueueStart(): Promise<void> {
                     }
 
                     // Mark as validating
-                    updateSpecStatus(current.specFile, 'validation');
+                    updateStoryStatus(current.storyFile, 'validation');
 
-                    const slug = specSlug(spec);
+                    const slug = storySlug(story);
                     const targetDir = bridge.apps_dir
                         ? resolve(project.path, bridge.apps_dir, slug)
                         : resolve(project.path, slug);
 
                     const result = await withRetry(
                         () => (current.engine === 'worker')
-                            ? runWorkerBuild(spec, context)
-                            : runPipeline(spec, context, targetDir, current.specFile),
+                            ? runWorkerBuild(story, context)
+                            : runPipeline(story, context, targetDir, current.storyFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'App Pipeline' }
                     );
 
                     if (current.engine !== 'worker') {
                         writeFiles(targetDir, result.files);
-                        setupProject(targetDir, spec.stack.packageManager);
+                        setupProject(targetDir, story.stack.packageManager);
                     }
 
                     // Knowledge feedback + AGENTS.md
-                    writeKnowledgeEntry(project.path, spec.appName, result, spec.stack, current.specFile);
-                    writeAppAgentsMd(targetDir, spec.appName, spec.stack, result.files);
+                    writeKnowledgeEntry(project.path, story.appName, result, story.stack, current.storyFile);
+                    writeAppAgentsMd(targetDir, story.appName, story.stack, result.files);
 
                     const durationMs = Date.now() - startTime;
                     const fileNames = result.files.map(f => f.filename);
 
-                    const appSummary = buildDebrief(spec.appName, result, spec.stack, current.specFile, durationMs);
+                    const appSummary = buildDebrief(story.appName, result, story.stack, current.storyFile, durationMs);
 
                     if (result.success) {
                         markCompleted(current.id, `${result.files.length} files, ${result.iterations} iteration(s)`, durationMs);
-                        logBuild(current.specFile, 'AppSpec', 'completed', appSummary, fileNames, durationMs, {
+                        logBuild(current.storyFile, 'AppStory', 'completed', appSummary, fileNames, durationMs, {
                             model: result.model,
                             provider: result.provider,
                             engine: current.engine,
                             tokensIn: result.tokenUsage?.promptTokens,
                             tokensOut: result.tokenUsage?.completionTokens,
                         });
-                        updateSpecStatus(current.specFile, 'done');
-                        gitCommit(project.path, `factory: generate ${spec.appName}`);
+                        updateStoryStatus(current.storyFile, 'done');
+                        gitCommit(project.path, `factory: generate ${story.appName}`);
 
-                        // Write build metadata + archive spec
-                        updateSpecBuildMeta(current.specFile, {
+                        // Write build metadata + archive story
+                        updateStoryBuildMeta(current.storyFile, {
                             outputDir: targetDir,
                             filesGenerated: result.files.length,
                             iterations: result.iterations,
                             taskType: result.plan.decisions[0] || 'unknown',
                         }, project.path);
-                        archiveSpec(current.specFile);
+                        archiveStory(current.storyFile);
                         succeeded++;
                     } else {
                         markFailed(
@@ -852,7 +850,7 @@ async function handleQueueStart(): Promise<void> {
                             `${result.files.length} files generated with errors`,
                             durationMs
                         );
-                        logBuild(current.specFile, 'AppSpec', 'failed', appSummary, fileNames, durationMs, {
+                        logBuild(current.storyFile, 'AppStory', 'failed', appSummary, fileNames, durationMs, {
                             model: result.model,
                             provider: result.provider,
                             engine: current.engine,
@@ -860,7 +858,7 @@ async function handleQueueStart(): Promise<void> {
                             tokensOut: result.tokenUsage?.completionTokens,
                             errorSource: 'engine',
                         });
-                        updateSpecStatus(current.specFile, 'review');
+                        updateStoryStatus(current.storyFile, 'review');
                         failed++;
                     }
                 }
@@ -869,12 +867,12 @@ async function handleQueueStart(): Promise<void> {
                 const durationMs = Date.now() - startTime;
                 const category = categorizeError(error);
                 markFailed(current.id, msg, '', durationMs, category);
-                logBuild(current.specFile, current.kind, 'failed', `# Build Debrief\n\n> Build failed\n\n## Error\n\n${msg}`, [], durationMs, {
+                logBuild(current.storyFile, current.kind, 'failed', `# Build Debrief\n\n> Build failed\n\n## Error\n\n${msg}`, [], durationMs, {
                     errorSource: msg.includes('API error') || msg.includes('returned empty') ? 'llm' : 'engine',
                     engine: current.engine,
                     errorCategory: category,
                 });
-                updateSpecStatus(current.specFile, 'review');
+                updateStoryStatus(current.storyFile, 'review');
                 logError(`Failed: ${msg}`);
                 failed++;
             }
@@ -883,16 +881,16 @@ async function handleQueueStart(): Promise<void> {
             item = dequeue();
         }
 
-        // Check for specs blocked by dependencies
+        // Check for stories blocked by dependencies
         const remainingStats = getQueueStats();
         if (remainingStats.pending > 0) {
             console.log('');
-            log('!', `${remainingStats.pending} spec(s) still pending — blocked by unmet dependencies:`);
+            log('!', `${remainingStats.pending} story/stories still pending — blocked by unmet dependencies:`);
             const allItems = listQueue();
             for (const blocked of allItems.filter(i => i.status === 'pending')) {
                 const unmetDeps = blocked.dependsOn.filter(dep => !areDependenciesMet([dep]));
                 if (unmetDeps.length > 0) {
-                    log('  ', `  ⏳ ${blocked.specFile} — waiting for: ${unmetDeps.join(', ')}`);
+                    log('  ', `  ⏳ ${blocked.storyFile} — waiting for: ${unmetDeps.join(', ')}`);
                 }
             }
         }
@@ -922,7 +920,7 @@ async function handleQueueStart(): Promise<void> {
 
 function requireTarget(cmd: string): void {
     if (!target) {
-        console.error(`Usage: factory ${cmd} <spec.yaml>`);
+        console.error(`Usage: factory ${cmd} <story.yaml>`);
         process.exit(1);
     }
 }
@@ -942,10 +940,10 @@ function printUsage(): void {
 Usage: factory <command> [options]
 
 Commands:
-  build <spec.yaml> [--engine worker]   Full pipeline (or worker engine)
-  validate <spec.yaml>       Validate a spec
-  repl [<spec.yaml>] [--auto] Start the beautiful interactive CLI terminal UI (REPL)
-  status                     Show spec statuses
+  build <story.yaml> [--engine worker]   Full pipeline (or worker engine)
+  validate <story.yaml>       Validate a story
+  repl [<story.yaml>] [--auto] Start the beautiful interactive CLI terminal UI (REPL)
+  status                     Show story statuses
   sync <repo-path>           Sync .factory from repo
   init-bridge <repo-path>    Init .factory bridge in repo
 
@@ -958,11 +956,11 @@ Commands:
   project switch <id>        Switch active project
   project remove <id>        Disconnect a repo
 
-  feature build <spec.yaml> [--engine worker]  Build a feature
-  feature validate <spec.yaml>  Validate a feature spec
+  feature build <story.yaml> [--engine worker]  Build a feature
+  feature validate <story.yaml>  Validate a feature story
 
   queue list                    List all queue items
-  queue add <spec.yaml> [--engine worker]  Add to queue
+  queue add <story.yaml> [--engine worker]  Add to queue
   queue start                   Process all pending items autonomously
   queue stats                   Show queue statistics
   queue clear                   Clear completed items
@@ -1277,10 +1275,10 @@ function installGitHooks(projectRoot: string): void {
     log('→', 'post-commit: heartbeat + worklog auto-updated on every commit');
 }
 
-async function handleRepl(specPath?: string): Promise<void> {
+async function handleRepl(storyPath?: string): Promise<void> {
     const isAuto = args.includes('--auto') || args.includes('-a');
     const { runRepl } = await import('./repl.ts');
-    await runRepl(specPath, { auto: isAuto });
+    await runRepl(storyPath, { auto: isAuto });
     process.exit(0);
 }
 
@@ -1446,10 +1444,10 @@ async function handleDaemon(command?: string): Promise<void> {
     }
 }
 
-// ─── Spec Watcher ─────────────────────────────────────────
+// ─── Story Watcher ─────────────────────────────────────────
 
 /**
- * Handle spec watch command — watches specs directory for new YAML files.
+ * Handle story watch command — watches stories directory for new YAML files.
  */
 async function handleWatch(watchDir?: string): Promise<void> {
     if (!watchDir) {
@@ -1467,25 +1465,34 @@ async function handleWatch(watchDir?: string): Promise<void> {
         process.exit(1);
     }
 
-    log('●', `Watching specs directory: ${resolvedDir}`);
+    log('●', `Watching stories directory: ${resolvedDir}`);
 
     const watcher = watch(resolvedDir, { persistent: true }, (eventType, filename) => {
         if (!filename || !filename.endsWith('.yaml')) return;
         if (eventType === 'rename' || eventType === 'change') {
-            const specPath = join(resolvedDir, filename);
-            log('→', `New spec detected: ${filename}`);
+            log('→', `New story detected: ${filename}`);
             // Auto-add to queue
             try {
-                const { enqueue } = require('./queue.ts');
-                enqueue(specPath, 'AppSpec');
-                log('✓', `Enqueued: ${filename}`);
+                const storyPath = join(resolvedDir, filename);
+                let kind: 'AppStory' | 'FeatureStory' = 'AppStory';
+                try {
+                    const loaded = loadStory(storyPath);
+                    if (loaded && loaded.appName) kind = 'AppStory';
+                } catch {
+                    try {
+                        const loaded = loadFeatureStory(storyPath);
+                        if (loaded && loaded.feature) kind = 'FeatureStory';
+                    } catch {}
+                }
+                enqueue(storyPath, kind);
+                log('✓', `Enqueued ${kind}: ${filename}`);
             } catch (error) {
                 logError(`Failed to enqueue: ${error}`);
             }
         }
     });
 
-    log('✓', `Spec watcher started (press Ctrl+C to stop)`);
+    log('✓', `Story watcher started (press Ctrl+C to stop)`);
 
     process.on('SIGTERM', () => {
         watcher.close();

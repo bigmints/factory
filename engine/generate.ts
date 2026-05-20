@@ -8,13 +8,13 @@
  */
 
 import type {
-    AppSpec, FeatureSpec, ProjectContext,
+    AppStory, FeatureStory, ProjectContext,
     GeneratedFile, BuildPlan, BuildResult,
     LLMProvider, TaskProfile, AppIntegrationContext,
 } from './types.ts';
 import type { QueueBuildContext } from './context.ts';
 import { classifyTask, classifyFeatureTask } from './task-classifier.ts';
-import { specSlug, specPort } from './types.ts';
+import { storySlug, storyPort } from './types.ts';
 import { loadSettings, getActiveProvider } from './config.ts';
 import { gatherAppContext, loadQueueContext } from './context.ts';
 import { log, logStep, logError } from './log.ts';
@@ -32,33 +32,33 @@ export interface LLMResponse {
 // ─── Main Pipeline ───────────────────────────────────────
 
 /**
- * Run the full autonomous build pipeline for an app spec.
+ * Run the full autonomous build pipeline for an app story.
  *
  * Gather context → Tool-calling session
  */
 export async function runPipeline(
-    spec: AppSpec,
+    story: AppStory,
     context: ProjectContext,
     targetDir: string,
-    specFile: string,
+    storyFile: string,
 ): Promise<BuildResult> {
-    log('●', `Starting tool-calling build session for app: ${spec.appName}`);
-    return runToolSession(spec, context, targetDir, specFile);
+    log('●', `Starting tool-calling build session for app: ${story.appName}`);
+    return runToolSession(story, context, targetDir, storyFile);
 }
 
 /**
- * Run the pipeline for a feature spec.
+ * Run the pipeline for a feature story.
  * Gathers AppIntegrationContext from the target app and passes it into the tool session.
  */
 export async function runFeaturePipeline(
-    spec: FeatureSpec,
+    story: FeatureStory,
     context: ProjectContext,
     targetDir: string,
-    specFile: string,
+    storyFile: string,
 ): Promise<BuildResult> {
-    log('●', `Starting tool-calling build session for feature: ${spec.feature.name}`);
-    const appContext = gatherAppContext(context.repoPath, context.bridge, spec.target.app);
-    return runToolSession(spec, context, targetDir, specFile, appContext);
+    log('●', `Starting tool-calling build session for feature: ${story.feature.name}`);
+    const appContext = gatherAppContext(context.repoPath, context.bridge, story.target.app);
+    return runToolSession(story, context, targetDir, storyFile, appContext);
 }
 
 // ─── Plan ────────────────────────────────────────────────
@@ -68,19 +68,19 @@ export async function runFeaturePipeline(
  * @deprecated Use tool-calling session instead.
  */
 async function planBuild(
-    spec: AppSpec,
+    story: AppStory,
     context: ProjectContext,
     provider: LLMProvider,
     model: string,
 ): Promise<{ plan: BuildPlan; tokensIn: number; tokensOut: number }> {
     const contextBlock = formatContext(context);
-    const specBlock = formatSpec(spec);
+    const storyBlock = formatStory(story);
 
     const prompt = `You are a senior architect planning a new application build.
 
-Given the following spec and project context, create a build plan.
+Given the following story and project context, create a build plan.
 
-${specBlock}
+${storyBlock}
 
 ${contextBlock}
 
@@ -105,8 +105,8 @@ Output ONLY the JSON. No markdown, no explanation.`;
         return {
             plan: {
                 files: ['package.json', 'tsconfig.json', 'src/app/layout.tsx', 'src/app/page.tsx'],
-                architecture: `${spec.stack.framework} app with ${spec.stack.database || 'local state'}`,
-                decisions: ['Using spec defaults'],
+                architecture: `${story.stack.framework} app with ${story.stack.database || 'local state'}`,
+                decisions: ['Using story defaults'],
             },
             tokensIn: raw.tokensIn,
             tokensOut: raw.tokensOut,
@@ -117,11 +117,11 @@ Output ONLY the JSON. No markdown, no explanation.`;
 // ─── Build ───────────────────────────────────────────────
 
 /**
- * Generate code files from spec + plan + context.
+ * Generate code files from story + plan + context.
  * @deprecated Use tool-calling session instead.
  */
 async function executeBuild(
-    spec: AppSpec,
+    story: AppStory,
     context: ProjectContext,
     plan: BuildPlan,
     provider: LLMProvider,
@@ -132,11 +132,11 @@ async function executeBuild(
     const MODULE_THRESHOLD = 15;
     if (plan.files.length > MODULE_THRESHOLD) {
         log('●', `Large app detected (${plan.files.length} files > ${MODULE_THRESHOLD}). Using module-by-module generation.`);
-        return executeModularBuild(spec, context, plan, provider, model);
+        return executeModularBuild(story, context, plan, provider, model);
     }
 
     // Standard single-shot generation for smaller apps
-    const prompt = buildAppPrompt(spec, context, plan, skillsBlock);
+    const prompt = buildAppPrompt(story, context, plan, skillsBlock);
 
     log('→', `Prompt: ${prompt.length.toLocaleString()} chars`);
     log('→', `Calling ${provider.name}...`);
@@ -149,7 +149,7 @@ async function executeBuild(
     if (files.length === 0) {
         throw new Error(
             'LLM response contained no parseable files.\n' +
-            'Try a different model or check the spec.'
+            'Try a different model or check the story.'
         );
     }
 
@@ -240,11 +240,11 @@ function moduleDecomposition(plan: BuildPlan): BuildModule[] {
  */
 function buildModulePrompt(
     module: BuildModule,
-    spec: AppSpec,
+    story: AppStory,
     context: ProjectContext,
     previousModules: { name: string; files: GeneratedFile[] }[],
 ): string {
-    const specBlock = formatSpec(spec);
+    const storyBlock = formatStory(story);
     const contextBlock = formatContext(context);
 
     // Show interfaces/exports from previous modules so this module can import from them
@@ -280,14 +280,14 @@ ${module.description}
 ### Files to generate in this module:
 ${module.files.map(f => `- ${f}`).join('\n')}
 
-${specBlock}
+${storyBlock}
 ${contextBlock}
 ${prevContext}
 
 ## Rules
 1. Generate ONLY the files listed above for this module. Do NOT generate files from other modules.
 2. Every "import ... from 'package'" MUST reference a real npm package.
-3. Match the coding style and patterns from the spec and any previous modules.
+3. Match the coding style and patterns from the story and any previous modules.
 4. For package versions in package.json, use "*" — the engine resolves to latest.
 5. When using ESM with moduleResolution "NodeNext", include .js extensions in relative imports.
 
@@ -306,7 +306,7 @@ Output ONLY the files. No explanations.`;
  * @deprecated Use tool-calling session instead.
  */
 async function executeModularBuild(
-    spec: AppSpec,
+    story: AppStory,
     context: ProjectContext,
     plan: BuildPlan,
     provider: LLMProvider,
@@ -324,7 +324,7 @@ async function executeModularBuild(
         const mod = modules[i];
         log('→', `[${i + 1}/${modules.length}] Generating ${mod.name} module (${mod.files.length} files)...`);
 
-        const prompt = buildModulePrompt(mod, spec, context, completedModules);
+        const prompt = buildModulePrompt(mod, story, context, completedModules);
         log('→', `  Prompt: ${prompt.length.toLocaleString()} chars`);
 
         const raw = await callProvider(provider, model, prompt);
@@ -351,7 +351,7 @@ async function executeModularBuild(
     if (allFiles.length === 0) {
         throw new Error(
             'Modular build produced no files across all modules.\n' +
-            'Try a different model or check the spec.'
+            'Try a different model or check the story.'
         );
     }
 
@@ -912,7 +912,7 @@ function identifyRelatedFiles(brokenFiles: Set<string>, allFiles: GeneratedFile[
  * @deprecated Use tool-calling session instead.
  */
 async function iterateBuild(
-    spec: AppSpec,
+    story: AppStory,
     context: ProjectContext,
     plan: BuildPlan,
     previousFiles: GeneratedFile[],
@@ -946,10 +946,10 @@ async function iterateBuild(
 
     const prompt = `You previously generated code for an application. There were errors that need fixing.
 
-## Original Spec
-- App: ${spec.appName}
-- Framework: ${spec.stack.framework}
-- Database: ${spec.stack.database || 'local state'}
+## Original Story
+- App: ${story.appName}
+- Framework: ${story.stack.framework}
+- Database: ${story.stack.database || 'local state'}
 
 ## ${isTargeted ? 'Broken Files (fix these)' : 'Files Generated'}
 ${brokenContents}
@@ -998,7 +998,7 @@ Output ONLY the files. No explanations.`;
  * @deprecated Use tool-calling session instead.
  */
 async function iterateFeatureBuild(
-    spec: FeatureSpec,
+    story: FeatureStory,
     context: ProjectContext,
     appContext: AppIntegrationContext,
     previousFiles: GeneratedFile[],
@@ -1035,9 +1035,9 @@ async function iterateFeatureBuild(
     const prompt = `You previously generated code for a feature. There were errors that need fixing.
 
 ## Feature
-- Name: ${spec.feature.name}
-- Slug: ${spec.feature.slug}
-- Target App: ${spec.target.app}
+- Name: ${story.feature.name}
+- Slug: ${story.feature.slug}
+- Target App: ${story.target.app}
 
 ## Existing App Dependencies (already installed)
 ${existingDeps}
@@ -1093,15 +1093,15 @@ Output ONLY the files. No explanations.`;
 
 // ─── Prompt Builders ─────────────────────────────────────
 
-function buildAppPrompt(spec: AppSpec, context: ProjectContext, plan: BuildPlan, skillsBlock?: string): string {
-    const specBlock = formatSpec(spec);
+function buildAppPrompt(story: AppStory, context: ProjectContext, plan: BuildPlan, skillsBlock?: string): string {
+    const storyBlock = formatStory(story);
     const contextBlock = formatContext(context);
     const planBlock = `## Build Plan\n- Architecture: ${plan.architecture}\n- Files to generate: ${plan.files.join(', ')}\n- Decisions: ${plan.decisions.join('; ')}`;
     const skillsSection = skillsBlock ? `\n${skillsBlock}\n` : '';
 
-    return `You are a senior full-stack developer. Generate a complete, production-ready application based on the following specification, plan, and project context.
+    return `You are a senior full-stack developer. Generate a complete, production-ready application based on the following story, plan, and project context.
 
-${specBlock}
+${storyBlock}
 
 ${planBlock}
 
@@ -1137,10 +1137,10 @@ Output EVERY file with this exact delimiter format:
 Do NOT include any explanatory text outside of the file delimiters. Output ONLY the files.`;
 }
 
-function buildFeaturePrompt(spec: FeatureSpec, context: ProjectContext, appContext?: AppIntegrationContext, queueContext?: QueueBuildContext[], skillsBlock?: string): string {
+function buildFeaturePrompt(story: FeatureStory, context: ProjectContext, appContext?: AppIntegrationContext, queueContext?: QueueBuildContext[], skillsBlock?: string): string {
     const contextBlock = formatContext(context);
-    const depsBlock = spec.dependencies?.length
-        ? `\n## Required Packages\nThese packages MUST be in package.json dependencies:\n${spec.dependencies.map(d => `- ${d}`).join('\n')}\n\nDo not add version numbers — use "*" and the engine will resolve to latest.`
+    const depsBlock = story.dependencies?.length
+        ? `\n## Required Packages\nThese packages MUST be in package.json dependencies:\n${story.dependencies.map(d => `- ${d}`).join('\n')}\n\nDo not add version numbers — use "*" and the engine will resolve to latest.`
         : '';
 
     // Integration context from existing app
@@ -1183,31 +1183,31 @@ function buildFeaturePrompt(spec: FeatureSpec, context: ProjectContext, appConte
     return `You are a senior full-stack developer. Generate a new feature for an existing application.
 
 ## Feature
-- Name: ${spec.feature.name}
-- Slug: ${spec.feature.slug}
-- Target App: ${spec.target.app}
+- Name: ${story.feature.name}
+- Slug: ${story.feature.slug}
+- Target App: ${story.target.app}
 ${depsBlock}
 ${integrationBlock}
 
 ${queueContext && queueContext.length > 0 ? `## Previously Completed Builds (CRITICAL — wire up with these)
 
-The following specs have already been built successfully in this queue run.
+The following stories have already been built successfully in this queue run.
 Your feature MUST integrate with these — import from their files, use their types, and follow their patterns.
 
-${queueContext.map(c => `### ${c.specFile} (${c.kind})
+${queueContext.map(c => `### ${c.storyFile} (${c.kind})
 Generated files:
 ${c.generatedFiles.map(f => `- ${f}`).join('\n')}`).join('\n\n')}
 
 IMPORTANT: These files already exist in the app. Import from them where needed. Do NOT recreate types or utilities they already export.
 ` : ''}
 
-${spec.model ? `## Data Model
-- Collection: ${spec.model.collection}
+${story.model ? `## Data Model
+- Collection: ${story.model.collection}
 - Fields:
-${spec.model.fields.map(f => `  - ${f.name}: ${f.type}${f.required ? ' (required)' : ''}`).join('\n')}` : ''}
+${story.model.fields.map(f => `  - ${f.name}: ${f.type}${f.required ? ' (required)' : ''}`).join('\n')}` : ''}
 
-${spec.pages ? `## Pages
-${spec.pages.map(p => `- ${p.title} (${p.type}) at /${p.slug}`).join('\n')}` : ''}
+${story.pages ? `## Pages
+${story.pages.map(p => `- ${p.title} (${p.type}) at /${p.slug}`).join('\n')}` : ''}
 
 ${contextBlock}
 ${skillsBlock ? `\n${skillsBlock}\n` : ''}
@@ -1227,10 +1227,10 @@ ${skillsBlock ? `\n${skillsBlock}\n` : ''}
 Output ONLY the files. No explanations.`;
 }
 
-function formatSpec(spec: AppSpec): string {
-    const slug = specSlug(spec);
-    const port = specPort(spec);
-    const tables = spec.data?.tables || [];
+function formatStory(story: AppStory): string {
+    const slug = storySlug(story);
+    const port = storyPort(story);
+    const tables = story.data?.tables || [];
 
     const tableDefs = tables.map(t => {
         const fields = Object.entries(t.fields)
@@ -1239,35 +1239,35 @@ function formatSpec(spec: AppSpec): string {
         return `    - ${t.name}\n${fields}`;
     }).join('\n');
 
-    const layoutInfo = spec.layout
-        ? `- Sidebar: ${spec.layout.sidebar ? 'yes' : 'no'}\n- Topbar: ${spec.layout.topbar ? 'yes' : 'no'}`
+    const layoutInfo = story.layout
+        ? `- Sidebar: ${story.layout.sidebar ? 'yes' : 'no'}\n- Topbar: ${story.layout.topbar ? 'yes' : 'no'}`
         : '- Include a navigation sidebar';
 
-    const authInfo = spec.auth
-        ? `- Auth provider: ${spec.auth.provider}\n- Methods: ${Object.entries(spec.auth.methods || {}).filter(([, v]) => v).map(([k]) => k).join(', ') || 'email'}`
+    const authInfo = story.auth
+        ? `- Auth provider: ${story.auth.provider}\n- Methods: ${Object.entries(story.auth.methods || {}).filter(([, v]) => v).map(([k]) => k).join(', ') || 'email'}`
         : '- No auth required';
 
-    const depsInfo = spec.dependencies?.length
-        ? `### Required Packages\n${spec.dependencies.map(d => `- ${d}`).join('\n')}\n\nThese packages MUST be included in package.json. Do not add version numbers — use "*" and the engine will resolve to latest.`
+    const depsInfo = story.dependencies?.length
+        ? `### Required Packages\n${story.dependencies.map(d => `- ${d}`).join('\n')}\n\nThese packages MUST be included in package.json. Do not add version numbers — use "*" and the engine will resolve to latest.`
         : '';
 
-    return `## Application Specification
+    return `## Application Story
 
-- **Name**: ${spec.appName}
+- **Name**: ${story.appName}
 - **Slug**: ${slug}
-- **Description**: ${spec.description}
+- **Description**: ${story.description}
 - **Port**: ${port}
 
 ### Stack
-- Framework: ${spec.stack.framework}
-- Package Manager: ${spec.stack.packageManager || 'npm'}
-- Language: ${spec.stack.language || 'typescript'}
-- Database: ${spec.stack.database || 'none'}
-- Cloud: ${spec.stack.cloud || 'none'}
+- Framework: ${story.stack.framework}
+- Package Manager: ${story.stack.packageManager || 'npm'}
+- Language: ${story.stack.language || 'typescript'}
+- Database: ${story.stack.database || 'none'}
+- Cloud: ${story.stack.cloud || 'none'}
 
 ### Frontend
-- UI: ${spec.frontend?.ui || 'tailwind'}
-- Theme: ${spec.frontend?.theme || 'light'}
+- UI: ${story.frontend?.ui || 'tailwind'}
+- Theme: ${story.frontend?.theme || 'light'}
 
 ### Layout
 ${layoutInfo}
@@ -1563,13 +1563,13 @@ import { readToonFile, parseToonSkillIndex } from './toon.ts';
  * Includes target dir, workflow, rules, TOON context, skills, and app integration context.
  */
 export function buildToolSystemPrompt(
-    spec: AppSpec | FeatureSpec,
+    story: AppStory | FeatureStory,
     context: ProjectContext,
     targetDir: string,
     appContext?: AppIntegrationContext,
 ): string {
-    const isApp = 'appName' in spec;
-    const specBlock = isApp ? formatSpec(spec as AppSpec) : formatFeatureSpec(spec as FeatureSpec);
+    const isApp = 'appName' in story;
+    const storyBlock = isApp ? formatStory(story as AppStory) : formatFeatureStory(story as FeatureStory);
 
     const toonContext = context.toonSnapshot
         ? `\n## Project Context (TOON)\n\`\`\`toon\n${context.toonSnapshot}\n\`\`\`\n`
@@ -1613,7 +1613,7 @@ export function buildToolSystemPrompt(
 ${targetDir}
 
 ## Recommended Workflow
-1. Call read_spec to fully understand the build requirements.
+1. Call read_story to fully understand the build requirements.
 2. Call list_dir(recursive=true) to explore what already exists.
 3. Read key files with read_context(type='package_json') and read_context(type='tsconfig').
 4. Write files using write_file. Use patch_file for targeted edits to existing files.
@@ -1626,10 +1626,10 @@ ${targetDir}
 1. Always call read_file before modifying — never assume a file's current contents.
 2. Generate production-ready code — no placeholders, no TODOs, no stubs.
 3. Every import from a package must exist in package.json.
-4. Match the coding style and patterns from the spec and existing code.
+4. Match the coding style and patterns from the story and existing code.
 5. Use log_step(info/warn/error) to track progress.
 6. Only call mark_failed after genuinely exhausting all remediation options.
-${specBlock}
+${storyBlock}
 ${toonContext}${skillsBlock}${appContextBlock}
 ## Available Tools
 ${TOOL_DEFINITIONS.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
@@ -1643,18 +1643,18 @@ Call mark_complete when the build is verified and complete.`;
  * Max 30 turns. Token guard trims context at turn 20. Wall-clock timeout: 20 min.
  */
 export async function runToolSession(
-    spec: AppSpec | FeatureSpec,
+    story: AppStory | FeatureStory,
     context: ProjectContext,
     targetDir: string,
-    specFile: string,
+    storyFile: string,
     appContext?: AppIntegrationContext,
 ): Promise<BuildResult> {
     const { provider, model } = requireActiveProvider();
-    const systemPrompt = buildToolSystemPrompt(spec, context, targetDir, appContext);
+    const systemPrompt = buildToolSystemPrompt(story, context, targetDir, appContext);
 
     const ctx: BuildToolContext = {
         targetDir,
-        specFile,
+        storyFile,
         terminal: false,
         success: false,
         generatedFiles: new Map(),
@@ -1672,7 +1672,7 @@ export async function runToolSession(
         // Bootstrap: orient the LLM to start immediately without waiting
         {
             role: 'user',
-            content: 'Begin by calling read_spec to understand the requirements, then list_dir(recursive=true) to explore the target directory. Write files, validate with run_command, and call mark_complete when done.',
+            content: 'Begin by calling read_story to understand the requirements, then list_dir(recursive=true) to explore the target directory. Write files, validate with run_command, and call mark_complete when done.',
         },
     ];
 
@@ -1764,7 +1764,7 @@ export async function runToolSession(
         files,
         plan: {
             files: files.map(f => f.filename),
-            architecture: isAppSpec(spec) ? spec.appName : (spec as FeatureSpec).feature.name,
+            architecture: isAppStory(story) ? story.appName : (story as FeatureStory).feature.name,
             decisions: ['engine:tool-calling'],
         },
         iterations: 1,
@@ -1777,8 +1777,8 @@ export async function runToolSession(
 
 
 
-function isAppSpec(spec: AppSpec | FeatureSpec): spec is AppSpec {
-    return 'appName' in spec;
+function isAppStory(story: AppStory | FeatureStory): story is AppStory {
+    return 'appName' in story;
 }
 
 export type ToolCallResult = Array<{ id: string; function: { name: string; arguments: Record<string, unknown> } }>;
@@ -2056,13 +2056,13 @@ function sleep(ms: number): Promise<void> {
 
 
 
-function formatFeatureSpec(spec: FeatureSpec): string {
-    return `## Feature Specification
+function formatFeatureStory(story: FeatureStory): string {
+    return `## Feature Story
 
-- **Name**: ${spec.feature.name}
-- **Slug**: ${spec.feature.slug}
-- **Target App**: ${spec.target.app}
-- **Phase**: ${spec.phase || 'unspecified'}
-${spec.dependsOn?.length ? `- **Depends on**: ${spec.dependsOn.join(', ')}` : ''}
-${spec.dependencies?.length ? `\n### Required Packages\n${spec.dependencies.map(d => `- ${d}`).join('\n')}` : ''}`;
+- **Name**: ${story.feature.name}
+- **Slug**: ${story.feature.slug}
+- **Target App**: ${story.target.app}
+- **Phase**: ${story.phase || 'unspecified'}
+${story.dependsOn?.length ? `- **Depends on**: ${story.dependsOn.join(', ')}` : ''}
+${story.dependencies?.length ? `\n### Required Packages\n${story.dependencies.map(d => `- ${d}`).join('\n')}` : ''}`;
 }

@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { Sidebar, MobileNav } from '@/components/sidebar';
 import { AddProject } from '@/components/add-project';
-import { SpecCard } from '@/components/spec-card';
-import { SpecEditor } from '@/components/spec-editor';
-import { SpecChat } from '@/components/spec-chat';
+import { StoryCard } from '@/components/story-card';
+import { StoryEditor } from '@/components/story-editor';
+import { StoryChat } from '@/components/story-chat';
 import { BuildLog } from '@/components/build-log';
 import { ReportViewer } from '@/components/report-viewer';
 import { QueueView } from '@/components/queue-view';
@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils';
 import { FileText, Package, CheckCircle2, AlertCircle, Activity, Puzzle, Globe, ListOrdered, X, Terminal, FolderOpen, Plug, Plus, Loader2 as Spinner, Sparkles, Rocket } from 'lucide-react';
 
 
-interface Spec {
+interface Story {
   file: string;
   valid: boolean;
   status: string;
@@ -40,9 +40,9 @@ interface Spec {
   features?: Record<string, any>;
 }
 
-interface FeatureSpecItem {
+interface FeatureStoryItem {
   file: string;
-  kind: 'FeatureSpec';
+  kind: 'FeatureStory';
   valid: boolean;
   status: string;
   feature: Record<string, any>;
@@ -59,13 +59,13 @@ interface ValidationCheck {
   message: string;
 }
 
-const VALID_TABS = ['dashboard', 'queue', 'specs', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
+const VALID_TABS = ['dashboard', 'queue', 'stories', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showAddProject, setShowAddProject] = useState(false);
-  const [specs, setSpecs] = useState<Spec[]>([]);
-  const [featureSpecs, setFeatureSpecs] = useState<FeatureSpecItem[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [featureStories, setFeatureStories] = useState<FeatureStoryItem[]>([]);
   const [reportEntries, setReportEntries] = useState<any[]>([]);
   const [reportStats, setReportStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -83,8 +83,8 @@ export default function Dashboard() {
   const [activeProject, setActiveProject] = useState<{ id: string; name: string; path: string } | null>(null);
   const [projectCount, setProjectCount] = useState(0);
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
-  const [editingSpec, setEditingSpec] = useState<{ file: string; name: string } | null>(null);
-  const [showSpecChat, setShowSpecChat] = useState(false);
+  const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
+  const [showStoryChat, setShowStoryChat] = useState(false);
   const [isBuildingAll, setIsBuildingAll] = useState(false);
   const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
   const [queueRunning, setQueueRunning] = useState(false);
@@ -98,7 +98,10 @@ export default function Dashboard() {
       const data = await res.json();
       const map: Record<string, { status: string; id: string }> = {};
       for (const item of (data.items || [])) {
-        map[item.spec_file] = { status: item.status, id: item.id };
+        const file = item.story_file || item.spec_file;
+        if (file) {
+          map[file] = { status: item.status, id: item.id };
+        }
       }
       setQueueStatusMap(map);
       const running = (data.items || []).some((i: any) => i.status === 'running');
@@ -106,14 +109,14 @@ export default function Dashboard() {
     } catch {}
   }, []);
 
-  const fetchSpecs = useCallback(async () => {
+  const fetchStories = useCallback(async () => {
     try {
-      const res = await fetch('/api/specs');
+      const res = await fetch('/api/stories');
       const data = await res.json();
-      setSpecs(data.specs || []);
-      setFeatureSpecs(data.featureSpecs || []);
+      setStories(data.stories || []);
+      setFeatureStories(data.featureStories || []);
     } catch {
-      console.error('Failed to fetch specs');
+      console.error('Failed to fetch stories');
     }
   }, []);
 
@@ -142,7 +145,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchProjects(), fetchSpecs(), fetchReports(), fetchQueueStatus()]).finally(() => setLoading(false));
+    Promise.all([fetchProjects(), fetchStories(), fetchReports(), fetchQueueStatus()]).finally(() => setLoading(false));
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '');
       if (VALID_TABS.includes(hash)) {
@@ -154,7 +157,7 @@ export default function Dashboard() {
       }
     }
 
-  }, [fetchProjects, fetchSpecs, fetchReports, fetchQueueStatus]);
+  }, [fetchProjects, fetchStories, fetchReports, fetchQueueStatus]);
 
   useEffect(() => {
     const tab = showAddProject ? 'projects' : activeTab;
@@ -193,7 +196,7 @@ export default function Dashboard() {
       const res = await fetch('/api/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ specFile: file }),
+        body: JSON.stringify({ storyFile: file, specFile: file }),
       });
       const data = await res.json();
       setValidationResult({ passed: data.passed, checks: data.checks || [] });
@@ -214,13 +217,13 @@ export default function Dashboard() {
   const handleBuild = async (file: string) => {
     setActiveAction({ type: 'build', file });
     setValidationResult(null);
-    setBuildOutput('Enqueuing spec...\n');
+    setBuildOutput('Enqueuing story...\n');
     setOutputPanelOpen(true);
     try {
       const enqueueRes = await fetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ specFile: file, kind: 'AppSpec', engine: buildEngine }),
+        body: JSON.stringify({ storyFile: file, specFile: file, kind: 'AppStory', engine: buildEngine }),
       });
       const enqueueData = await enqueueRes.json();
       if (!enqueueRes.ok) {
@@ -228,8 +231,8 @@ export default function Dashboard() {
         toast.error('Failed to enqueue', { description: enqueueData.error });
         return;
       }
-      setBuildOutput('Spec queued. Starting build queue...\n');
-      toast.success('Spec queued', { description: file });
+      setBuildOutput('Story queued. Starting build queue...\n');
+      toast.success('Story queued', { description: file });
       const startRes = await fetch('/api/queue/start', { method: 'POST' });
       const startData = await startRes.json();
       if (!startRes.ok) {
@@ -238,10 +241,10 @@ export default function Dashboard() {
         return;
       }
       const output = startData.results
-        ?.map((r: any) => `[${r.status.toUpperCase()}] ${r.specFile}\n${r.output || r.error || ''}`)
+        ?.map((r: any) => `[${r.status.toUpperCase()}] ${r.storyFile || r.specFile}\n${r.output || r.error || ''}`)
         .join('\n\n') || 'Queue processed';
       setBuildOutput(output);
-      await fetchSpecs();
+      await fetchStories();
       if (startData.completed > 0) {
         await fetchReports();
         toast.success(`Build completed (${startData.completed} succeeded, ${startData.failed} failed)`);
@@ -267,7 +270,7 @@ export default function Dashboard() {
         const enqueueRes = await fetch('/api/queue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ specFile: file, kind: 'FeatureSpec', engine: buildEngine }),
+          body: JSON.stringify({ storyFile: file, specFile: file, kind: 'FeatureStory', engine: buildEngine }),
         });
         const enqueueData = await enqueueRes.json();
         if (!enqueueRes.ok) {
@@ -285,10 +288,10 @@ export default function Dashboard() {
           return;
         }
         const output = startData.results
-          ?.map((r: any) => `[${r.status.toUpperCase()}] ${r.specFile}\n${r.output || r.error || ''}`)
+          ?.map((r: any) => `[${r.status.toUpperCase()}] ${r.storyFile || r.specFile}\n${r.output || r.error || ''}`)
           .join('\n\n') || 'Queue processed';
         setBuildOutput(output);
-        await fetchSpecs();
+        await fetchStories();
         if (startData.completed > 0) {
           await fetchReports();
           toast.success('Feature build completed');
@@ -299,7 +302,7 @@ export default function Dashboard() {
         const res = await fetch('/api/feature-build', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ specFile: file, action: 'validate' }),
+          body: JSON.stringify({ storyFile: file, specFile: file, action: 'validate' }),
         });
         const data = await res.json();
         setBuildOutput(data.output || data.error || 'Unknown result');
@@ -317,17 +320,17 @@ export default function Dashboard() {
     }
   };
 
-  const handleEnqueue = async (specFile: string, kind: string, opts?: { phase?: number; dependsOn?: string[] }) => {
+  const handleEnqueue = async (storyFile: string, kind: string, opts?: { phase?: number; dependsOn?: string[] }) => {
     try {
       const res = await fetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ specFile, kind, phase: opts?.phase, dependsOn: opts?.dependsOn, engine: buildEngine }),
+        body: JSON.stringify({ storyFile, specFile: storyFile, kind, phase: opts?.phase, dependsOn: opts?.dependsOn, engine: buildEngine }),
       });
       const data = await res.json();
       if (res.ok) {
-        setBuildOutput(`✓ Added "${specFile}" to build queue`);
-        toast.success('Added to queue', { description: specFile });
+        setBuildOutput(`✓ Added "${storyFile}" to build queue`);
+        toast.success('Added to queue', { description: storyFile });
         fetchQueueStatus();
         setActiveTab('queue');
       } else {
@@ -335,8 +338,8 @@ export default function Dashboard() {
         toast.error('Failed to enqueue', { description: data.error });
       }
     } catch {
-      setBuildOutput('Failed to enqueue spec');
-      toast.error('Failed to enqueue spec');
+      setBuildOutput('Failed to enqueue story');
+      toast.error('Failed to enqueue story');
     }
   };
 
@@ -346,17 +349,17 @@ export default function Dashboard() {
     let skipped = 0;
     let errors = 0;
     try {
-      for (const spec of specs) {
+      for (const story of stories) {
         try {
           const valRes = await fetch('/api/validate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ specFile: spec.file, quick: true }),
+            body: JSON.stringify({ storyFile: story.file, specFile: story.file, quick: true }),
           });
           const valData = await valRes.json();
           if (!valRes.ok || !valData.passed) {
             skipped++;
-            toast.warning(`Skipped: ${spec.metadata?.name || spec.file}`, {
+            toast.warning(`Skipped: ${story.metadata?.name || story.file}`, {
               description: `YAML issue: ${valData.errors?.[0] || valData.checks?.find((c: any) => !c.passed)?.message || 'Validation failed'}`,
             });
             continue;
@@ -364,22 +367,22 @@ export default function Dashboard() {
           const res = await fetch('/api/queue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ specFile: spec.file, kind: 'AppSpec', phase: 0, dependsOn: [], buildAll: true, engine: buildEngine }),
+            body: JSON.stringify({ storyFile: story.file, specFile: story.file, kind: 'AppStory', phase: 0, dependsOn: [], buildAll: true, engine: buildEngine }),
           });
           if (res.ok) enqueued++;
           else {
             const data = await res.json();
-            if (res.status !== 409) { errors++; toast.error(`Failed: ${spec.file}`, { description: data.error }); }
+            if (res.status !== 409) { errors++; toast.error(`Failed: ${story.file}`, { description: data.error }); }
           }
         } catch { errors++; }
       }
-      const sortedFeatures = [...featureSpecs].sort((a, b) => (a.phase ?? 0) - (b.phase ?? 0));
+      const sortedFeatures = [...featureStories].sort((a, b) => (a.phase ?? 0) - (b.phase ?? 0));
       for (const fs of sortedFeatures) {
         try {
           const valRes = await fetch('/api/validate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ specFile: fs.file, quick: true }),
+            body: JSON.stringify({ storyFile: fs.file, specFile: fs.file, quick: true }),
           });
           const valData = await valRes.json();
           if (!valRes.ok || !valData.passed) {
@@ -393,8 +396,9 @@ export default function Dashboard() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              storyFile: fs.file,
               specFile: fs.file,
-              kind: 'FeatureSpec',
+              kind: 'FeatureStory',
               phase: fs.phase ?? 0,
               dependsOn: fs.dependsOn ?? [],
               buildAll: true,
@@ -412,15 +416,15 @@ export default function Dashboard() {
       if (errors > 0) parts.push(`${errors} errors`);
       if (skipped > 0) parts.push(`${skipped} skipped`);
       if (enqueued > 0) {
-        toast.success(`Queued ${enqueued} spec${enqueued !== 1 ? 's' : ''}`, {
+        toast.success(`Queued ${enqueued} story${enqueued !== 1 ? 'ies' : ''}`, {
           description: parts.length > 0 ? parts.join(', ') : 'Switch to Queue tab to start processing',
         });
         setActiveTab('queue');
         fetchQueueStatus();
       } else if (errors > 0 || skipped > 0) {
-        toast.error(`No specs queued`, { description: parts.join(', ') });
+        toast.error(`No stories queued`, { description: parts.join(', ') });
       } else {
-        toast.info('All specs are already in the queue');
+        toast.info('All stories are already in the queue');
         setActiveTab('queue');
       }
     } catch { toast.error('Build All failed'); }
@@ -462,11 +466,11 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowSpecChat(true)}
+                onClick={() => setShowStoryChat(true)}
                 className="text-xs font-semibold h-8 px-3 gap-1.5"
               >
                 <Sparkles className="h-3 w-3 text-purple-500" />
-                New Spec
+                New Story
               </Button>
             </div>
           </CardContent>
@@ -476,9 +480,9 @@ export default function Dashboard() {
       {/* Stats row — 2 cols mobile, 4 cols desktop with premium spacing & larger cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { icon: FileText, value: specs.length, label: 'App Specs', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
-          { icon: Activity, value: featureSpecs.length, label: 'Features', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
-          { icon: CheckCircle2, value: specs.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Specs', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
+          { icon: FileText, value: stories.length, label: 'App Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
+          { icon: Activity, value: featureStories.length, label: 'Features', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
+          { icon: CheckCircle2, value: stories.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
           { icon: Package, value: reportStats?.totalBuilds || 0, label: 'Total Builds', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
         ].map((stat, i) => (
           <Card key={i}>
@@ -497,76 +501,76 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* App Specifications Section */}
+      {/* App Stories Section */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="space-y-1">
             <h2 className="text-base md:text-lg font-bold tracking-tight flex items-center gap-2">
               <Globe className="h-4 w-4 text-muted-foreground" />
-              App Specifications
+              App Stories
             </h2>
             <p className="text-xs text-muted-foreground">
-              Core application specs queued for direct compilation and validation.
+              Core application stories queued for direct compilation and validation.
             </p>
           </div>
-          {specs.length > 0 && (
+          {stories.length > 0 && (
             <Badge variant="secondary" className="text-[10px] md:text-xs font-semibold w-fit shrink-0">
-              {specs.length} Apps Active
+              {stories.length} Apps Active
             </Badge>
           )}
         </div>
 
-        {specs.length === 0 ? (
+        {stories.length === 0 ? (
           <Card className="border-dashed py-8 md:py-12 text-center flex flex-col items-center justify-center">
             <p className="text-sm text-muted-foreground">
-              No app specifications found. Create one using the &apos;New Spec&apos; button.
+              No app stories found. Create one using the &apos;New Story&apos; button.
             </p>
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-            {specs.map((spec) => (
-              <SpecCard
-                key={spec.file}
-                spec={spec}
+            {stories.map((story) => (
+              <StoryCard
+                key={story.file}
+                story={story}
                 onValidate={handleValidate}
                 onBuild={handleBuild}
                 onEnqueue={handleEnqueue}
-                onView={(file, name) => setEditingSpec({ file, name })}
-                isValidating={activeAction?.type === 'validate' && activeAction?.file === spec.file}
-                isBuilding={activeAction?.type === 'build' && activeAction?.file === spec.file}
+                onView={(file, name) => setEditingStory({ file, name })}
+                isValidating={activeAction?.type === 'validate' && activeAction?.file === story.file}
+                isBuilding={activeAction?.type === 'build' && activeAction?.file === story.file}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* Feature Specifications Section */}
-      {featureSpecs.length > 0 && (
+      {/* Feature Stories Section */}
+      {featureStories.length > 0 && (
         <div className="space-y-4 mt-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="space-y-1">
               <h2 className="text-base md:text-lg font-bold tracking-tight flex items-center gap-2">
                 <Puzzle className="h-4 w-4 text-muted-foreground" />
-                Feature Specifications
+                Feature Stories
               </h2>
               <p className="text-xs text-muted-foreground">
                 Sequenced features, UI pages, and model logic flows.
               </p>
             </div>
             <Badge variant="secondary" className="text-[10px] md:text-xs font-semibold w-fit shrink-0">
-              {featureSpecs.length} Features Active
+              {featureStories.length} Features Active
             </Badge>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-            {featureSpecs.map((fs) => (
-              <SpecCard
+            {featureStories.map((fs) => (
+              <StoryCard
                 key={fs.file}
-                spec={{ ...fs, kind: 'FeatureSpec' }}
+                story={{ ...fs, kind: 'FeatureStory' }}
                 onValidate={(file) => handleFeatureAction(file, 'validate')}
                 onBuild={(file) => handleFeatureAction(file, 'build')}
                 onEnqueue={handleEnqueue}
-                onView={(file, name) => setEditingSpec({ file, name })}
+                onView={(file, name) => setEditingStory({ file, name })}
                 isValidating={activeAction?.type === 'feature-validate' && activeAction?.file === fs.file}
                 isBuilding={activeAction?.type === 'feature-build' && activeAction?.file === fs.file}
               />
@@ -636,15 +640,15 @@ export default function Dashboard() {
     </div>
   );
 
-  // ─── Render: Specs ──────────────────────────────────────
-  const renderSpecs = () => {
-    if (editingSpec) {
+  // ─── Render: Stories ────────────────────────────────────
+  const renderStories = () => {
+    if (editingStory) {
       return (
-        <SpecEditor
-          specFile={editingSpec.file}
-          specName={editingSpec.name}
-          onClose={() => setEditingSpec(null)}
-          onSaved={() => fetchSpecs()}
+        <StoryEditor
+          storyFile={editingStory.file}
+          storyName={editingStory.name}
+          onClose={() => setEditingStory(null)}
+          onSaved={() => fetchStories()}
         />
       );
     }
@@ -656,11 +660,11 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center gap-4 text-xs md:text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-              <span className="font-bold text-foreground">{specs.length}</span> App Specs
+              <span className="font-bold text-foreground">{stories.length}</span> App Stories
             </span>
             <span className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
-              <span className="font-bold text-foreground">{featureSpecs.length}</span> Feature Specs
+              <span className="font-bold text-foreground">{featureStories.length}</span> Feature Stories
             </span>
           </div>
 
@@ -679,7 +683,7 @@ export default function Dashboard() {
               size="sm"
               variant="outline"
               onClick={handleBuildAll}
-              disabled={isBuildingAll || (specs.length === 0 && featureSpecs.length === 0)}
+              disabled={isBuildingAll || (stories.length === 0 && featureStories.length === 0)}
               className="h-9 text-xs gap-1.5 rounded-lg border hover:bg-muted font-semibold"
             >
               {isBuildingAll ? <Spinner className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
@@ -688,16 +692,16 @@ export default function Dashboard() {
             
             <Button
               size="sm"
-              onClick={() => setShowSpecChat(true)}
+              onClick={() => setShowStoryChat(true)}
               className="h-9 text-xs gap-1.5 rounded-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>New Spec</span>
+              <span>New Story</span>
             </Button>
           </div>
         </div>
 
-        <SpecChat open={showSpecChat} onOpenChange={setShowSpecChat} onSpecSaved={() => fetchSpecs()} />
+        <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={() => fetchStories()} />
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
@@ -705,23 +709,23 @@ export default function Dashboard() {
               <Skeleton key={i} className="h-[180px] rounded-lg" />
             ))}
           </div>
-        ) : specs.length === 0 && featureSpecs.length === 0 ? (
+        ) : stories.length === 0 && featureStories.length === 0 ? (
           <Card className="border-dashed p-6 sm:p-10 text-center flex flex-col items-center justify-center">
             <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-            <p className="text-sm font-semibold text-foreground">No specs found</p>
+            <p className="text-sm font-semibold text-foreground">No stories found</p>
             <p className="text-xs text-muted-foreground mt-1.5 max-w-xs mx-auto leading-relaxed">
-              Add YAML files to specs/apps/ or specs/features/ to get started
+              Add YAML files to stories/apps/ or stories/features/ to get started
             </p>
           </Card>
         ) : (
           <div className="space-y-8 md:space-y-10">
-            {/* App Specs Section */}
-            {specs.length > 0 && (
+            {/* App Stories Section */}
+            {stories.length > 0 && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <h3 className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
                     <Globe className="h-4 w-4 text-muted-foreground" />
-                    App Specifications
+                    App Stories
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Core backend structure, schemas, and cloud resources.
@@ -729,29 +733,29 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-                  {specs.map((spec) => (
-                    <SpecCard
-                      key={spec.file}
-                      spec={spec}
+                  {stories.map((story) => (
+                    <StoryCard
+                      key={story.file}
+                      story={story}
                       onValidate={handleValidate}
                       onBuild={handleBuild}
                       onEnqueue={handleEnqueue}
-                      onView={(file, name) => setEditingSpec({ file, name })}
-                      isValidating={activeAction?.type === 'validate' && activeAction?.file === spec.file}
-                      isBuilding={activeAction?.type === 'build' && activeAction?.file === spec.file}
+                      onView={(file, name) => setEditingStory({ file, name })}
+                      isValidating={activeAction?.type === 'validate' && activeAction?.file === story.file}
+                      isBuilding={activeAction?.type === 'build' && activeAction?.file === story.file}
                     />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Feature Specs Section */}
-            {featureSpecs.length > 0 && (
+            {/* Feature Stories Section */}
+            {featureStories.length > 0 && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <h3 className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
                     <Puzzle className="h-4 w-4 text-muted-foreground" />
-                    Feature Specifications
+                    Feature Stories
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Sequenced features, UI pages, logic flows, and user experiences.
@@ -759,14 +763,14 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-                  {featureSpecs.map((fs) => (
-                    <SpecCard
+                  {featureStories.map((fs) => (
+                    <StoryCard
                       key={fs.file}
-                      spec={{ ...fs, kind: 'FeatureSpec' }}
+                      story={{ ...fs, kind: 'FeatureStory' }}
                       onValidate={(file) => handleFeatureAction(file, 'validate')}
                       onBuild={(file) => handleFeatureAction(file, 'build')}
                       onEnqueue={handleEnqueue}
-                      onView={(file, name) => setEditingSpec({ file, name })}
+                      onView={(file, name) => setEditingStory({ file, name })}
                       isValidating={activeAction?.type === 'feature-validate' && activeAction?.file === fs.file}
                       isBuilding={activeAction?.type === 'feature-build' && activeAction?.file === fs.file}
                     />
@@ -795,7 +799,7 @@ export default function Dashboard() {
   );
 
   const hasOutput = !!(validationResult || buildOutput || queueRunning);
-  const showOutputButton = ((activeTab === 'specs' || activeTab === 'queue') && hasOutput && !outputPanelOpen);
+  const showOutputButton = ((activeTab === 'stories' || activeTab === 'queue') && hasOutput && !outputPanelOpen);
 
   // ─── Main Layout ─────────────────────────────────────────
   return (
@@ -823,19 +827,19 @@ export default function Dashboard() {
               setHasProjects(true);
               setProjectRefreshKey((k) => k + 1);
               fetchProjects();
-              fetchSpecs();
+              fetchStories();
               fetchReports();
             }} />
           </div>
         ) : (
           <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto">
             {/* Page header */}
-            {['dashboard', 'specs', 'skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
+            {['dashboard', 'stories', 'skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
               <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                 <div>
                   <h1 className="text-xl md:text-2xl font-bold tracking-tight">
                     {activeTab === 'dashboard' && 'Dashboard'}
-                    {activeTab === 'specs' && 'Specs'}
+                    {activeTab === 'stories' && 'Stories'}
                     {activeTab === 'skills' && 'Skills'}
                     {activeTab === 'reports' && 'Reports'}
                     {activeTab === 'integrations' && 'Integrations'}
@@ -843,7 +847,7 @@ export default function Dashboard() {
                   </h1>
                   <p className="text-xs md:text-sm text-muted-foreground mt-1">
                     {activeTab === 'dashboard' && 'Overview for the active project'}
-                    {activeTab === 'specs' && 'Manage your app specifications'}
+                    {activeTab === 'stories' && 'Manage your app stories'}
                     {activeTab === 'skills' && 'Reusable recipes the engine auto-matches to builds'}
                     {activeTab === 'reports' && 'View generated build reports'}
                     {activeTab === 'integrations' && 'Connect external services and tools'}
@@ -878,7 +882,7 @@ export default function Dashboard() {
                 queueRunning={queueRunning}
               />
             )}
-            {activeTab === 'specs' && renderSpecs()}
+            {activeTab === 'stories' && renderStories()}
             {activeTab === 'skills' && <SkillsView />}
             {activeTab === 'reports' && renderReports()}
             {activeTab === 'knowledge' && <KnowledgeView />}

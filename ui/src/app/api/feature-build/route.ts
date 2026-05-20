@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 /**
- * POST /api/feature-build — Build a feature from a feature spec
- * Body: { specFile: "features/filename.yaml" }
+ * POST /api/feature-build — Build a feature from a feature story
+ * Body: { storyFile: "features/filename.yaml" }
  */
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
@@ -13,10 +13,10 @@ const FACTORY_ROOT = resolve(homedir(), '.factory');
 const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
 
 /**
- * Resolve a feature spec filename to its absolute path.
+ * Resolve a feature story filename to its absolute path.
  */
-function resolveFeatureSpecPath(specFile: string): string | null {
-  const cleanFile = specFile.replace(/^features\//, '');
+function resolveFeatureStoryPath(storyFile: string): string | null {
+  const cleanFile = storyFile.replace(/^features\//, '');
 
   const projectsPath = join(FACTORY_ROOT, 'projects.json');
   if (existsSync(projectsPath)) {
@@ -27,8 +27,8 @@ function resolveFeatureSpecPath(specFile: string): string | null {
 
       if (project?.path) {
         const candidates = [
-          join(project.path, '.factory', 'specs', 'features', cleanFile),
-          join(project.path, '.factory', 'specs', specFile),
+          join(project.path, '.factory', 'stories', 'features', cleanFile),
+          join(project.path, '.factory', 'stories', storyFile),
         ];
         for (const candidate of candidates) {
           if (existsSync(candidate)) return candidate;
@@ -38,7 +38,7 @@ function resolveFeatureSpecPath(specFile: string): string | null {
   }
 
   // Fallback: factory root
-  const fallback = join(FACTORY_ROOT, 'specs', specFile);
+  const fallback = join(FACTORY_ROOT, 'stories', storyFile);
   if (existsSync(fallback)) return fallback;
 
   return null;
@@ -46,15 +46,18 @@ function resolveFeatureSpecPath(specFile: string): string | null {
 
 export async function POST(request: Request) {
   try {
-    const { specFile, action = 'build' } = await request.json();
-    if (!specFile) {
-      return NextResponse.json({ error: 'specFile is required' }, { status: 400 });
+    const body = await request.json();
+    const storyFile = body.storyFile || body.specFile;
+    const { action = 'build' } = body;
+
+    if (!storyFile) {
+      return NextResponse.json({ error: 'storyFile is required' }, { status: 400 });
     }
 
-    const specPath = resolveFeatureSpecPath(specFile);
-    if (!specPath) {
+    const storyPath = resolveFeatureStoryPath(storyFile);
+    if (!storyPath) {
       return NextResponse.json(
-        { success: false, error: `Feature spec not found: ${specFile}` },
+        { success: false, error: `Feature story not found: ${storyFile}` },
         { status: 404 }
       );
     }
@@ -68,7 +71,7 @@ export async function POST(request: Request) {
     };
 
     const result = stripAnsi(execSync(
-      `factory feature ${cmd} "${specPath}" 2>&1`,
+      `factory feature ${cmd} "${storyPath}" 2>&1`,
       execOptions
     ));
 

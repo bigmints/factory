@@ -42,7 +42,7 @@ interface Message {
   content: string;
 }
 
-interface ParsedSpec {
+interface ParsedStory {
   kind: 'app' | 'feature';
   filename: string;
   yaml: string;
@@ -52,23 +52,25 @@ interface ParsedSpec {
   saved?: boolean;
 }
 
-interface SpecChatProps {
+interface StoryChatProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSpecSaved: () => void;
+  onStorySaved: () => void;
 }
 
-function extractAllSpecs(content: string): ParsedSpec[] {
-  const specs: ParsedSpec[] = [];
-  const appPattern = /=== APP_SPEC:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_SPEC ===/g;
+function extractAllStories(content: string): ParsedStory[] {
+  const stories: ParsedStory[] = [];
+  
+  // Try new format first (STORY)
+  const appPatternNew = /=== APP_STORY:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_STORY ===/g;
   let match;
-  while ((match = appPattern.exec(content)) !== null) {
+  while ((match = appPatternNew.exec(content)) !== null) {
     const yaml = match[2].trim();
     const name = extractNameFromYaml(yaml) || match[1].replace('.yaml', '');
-    specs.push({ kind: 'app', filename: match[1], yaml, name });
+    stories.push({ kind: 'app', filename: match[1], yaml, name });
   }
-  const featurePattern = /=== FEATURE_SPEC:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_SPEC ===/g;
-  while ((match = featurePattern.exec(content)) !== null) {
+  const featurePatternNew = /=== FEATURE_STORY:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_STORY ===/g;
+  while ((match = featurePatternNew.exec(content)) !== null) {
     const yaml = match[2].trim();
     const name = extractNameFromYaml(yaml) || match[1].replace('.yaml', '');
     const phaseMatch = yaml.match(/^phase:\s*(\d+)/m);
@@ -79,17 +81,43 @@ function extractAllSpecs(content: string): ParsedSpec[] {
       const raw = depsMatch[1].trim();
       dependsOn = raw.length > 0 ? raw.split(',').map(s => s.trim().replace(/["']/g, '')).filter(Boolean) : [];
     }
-    specs.push({ kind: 'feature', filename: match[1], yaml, name, phase, dependsOn });
+    stories.push({ kind: 'feature', filename: match[1], yaml, name, phase, dependsOn });
   }
-  if (specs.length === 0) {
+
+  // Fallback to old format (SPEC) to support backward compatibility
+  if (stories.length === 0) {
+    const appPatternOld = /=== APP_SPEC:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_SPEC ===/g;
+    while ((match = appPatternOld.exec(content)) !== null) {
+      const yaml = match[2].trim();
+      const name = extractNameFromYaml(yaml) || match[1].replace('.yaml', '');
+      stories.push({ kind: 'app', filename: match[1], yaml, name });
+    }
+    const featurePatternOld = /=== FEATURE_SPEC:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_SPEC ===/g;
+    while ((match = featurePatternOld.exec(content)) !== null) {
+      const yaml = match[2].trim();
+      const name = extractNameFromYaml(yaml) || match[1].replace('.yaml', '');
+      const phaseMatch = yaml.match(/^phase:\s*(\d+)/m);
+      const phase = phaseMatch ? parseInt(phaseMatch[1]) : undefined;
+      const depsMatch = yaml.match(/^dependsOn:\s*\[([^\]]*)]$/m);
+      let dependsOn: string[] | undefined;
+      if (depsMatch) {
+        const raw = depsMatch[1].trim();
+        dependsOn = raw.length > 0 ? raw.split(',').map(s => s.trim().replace(/["']/g, '')).filter(Boolean) : [];
+      }
+      stories.push({ kind: 'feature', filename: match[1], yaml, name, phase, dependsOn });
+    }
+  }
+
+  // Final fallback to generic yaml blocks
+  if (stories.length === 0) {
     const yamlMatch = content.match(/```yaml\n([\s\S]*?)```/);
     if (yamlMatch) {
       const yaml = yamlMatch[1].trim();
       const name = extractNameFromYaml(yaml) || 'Untitled App';
-      specs.push({ kind: 'app', filename: slugify(name) + '.yaml', yaml, name });
+      stories.push({ kind: 'app', filename: slugify(name) + '.yaml', yaml, name });
     }
   }
-  return specs;
+  return stories;
 }
 
 function extractNameFromYaml(yaml: string): string | null {
@@ -104,7 +132,7 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
+export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -112,7 +140,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
   const [savingAll, setSavingAll] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
-  const [savedSpecs, setSavedSpecs] = useState<Set<string>>(new Set());
+  const [savedStories, setSavedStories] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -128,12 +156,13 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
 
   useEffect(() => {
     if (open) {
-      fetch('/api/specs')
+      fetch('/api/stories')
         .then((r) => r.json())
         .then((data) => {
-          if (data.specs && data.specs.length > 0) {
+          const loadedStories = data.stories || data.specs || [];
+          if (loadedStories.length > 0) {
             setIsExistingApp(true);
-            const firstApp = data.specs[0];
+            const firstApp = loadedStories[0];
             const name = firstApp.metadata?.name || firstApp.metadata?.slug || firstApp.file?.replace('.yaml', '') || 'app';
             setExistingAppName(name);
           } else {
@@ -191,7 +220,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
     setInput('');
     setStreaming(true);
     setActiveTab(0);
-    setSavedSpecs(new Set());
+    setSavedStories(new Set());
 
     if (inputRef.current) inputRef.current.style.height = 'auto';
 
@@ -263,42 +292,42 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
     }
   };
 
-  const allSpecs: ParsedSpec[] = (() => {
+  const allStories: ParsedStory[] = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant') {
-        const specs = extractAllSpecs(messages[i].content);
-        if (specs.length > 0) return specs;
+        const stories = extractAllStories(messages[i].content);
+        if (stories.length > 0) return stories;
       }
     }
     return [];
   })();
 
-  const activeSpec = allSpecs[activeTab] || null;
-  const hasSpecs = allSpecs.length > 0;
-  const allSaved = allSpecs.length > 0 && allSpecs.every((s) => savedSpecs.has(s.filename));
+  const activeStory = allStories[activeTab] || null;
+  const hasStories = allStories.length > 0;
+  const allSaved = allStories.length > 0 && allStories.every((s) => savedStories.has(s.filename));
 
-  const handleSaveSpec = async (spec: ParsedSpec) => {
+  const handleSaveStory = async (story: ParsedStory) => {
     setSaving(true);
     try {
-      const res = await fetch('/api/specs', {
+      const res = await fetch('/api/stories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: spec.name,
-          content: spec.yaml,
-          kind: spec.kind === 'feature' ? 'feature' : 'app',
+          name: story.name,
+          content: story.yaml,
+          kind: story.kind === 'feature' ? 'feature' : 'app',
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(`Saved ${spec.kind === 'feature' ? 'feature' : 'app'} spec`, { description: data.file });
-        setSavedSpecs((prev) => new Set(prev).add(spec.filename));
-        onSpecSaved();
+        toast.success(`Saved ${story.kind === 'feature' ? 'feature' : 'app'} story`, { description: data.file });
+        setSavedStories((prev) => new Set(prev).add(story.filename));
+        onStorySaved();
       } else {
         toast.error('Save failed', { description: data.error });
       }
     } catch {
-      toast.error('Failed to save spec');
+      toast.error('Failed to save story');
     } finally {
       setSaving(false);
     }
@@ -309,45 +338,45 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
     let successCount = 0;
     let failCount = 0;
 
-    const sortedSpecs = [...allSpecs].sort((a, b) => {
+    const sortedStories = [...allStories].sort((a, b) => {
       const phaseA = a.kind === 'app' ? 0 : (a.phase ?? 99);
       const phaseB = b.kind === 'app' ? 0 : (b.phase ?? 99);
       return phaseA - phaseB;
     });
 
-    for (const spec of sortedSpecs) {
-      if (savedSpecs.has(spec.filename)) continue;
+    for (const story of sortedStories) {
+      if (savedStories.has(story.filename)) continue;
       try {
-        const res = await fetch('/api/specs', {
+        const res = await fetch('/api/stories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name: spec.name,
-            content: spec.yaml,
-            kind: spec.kind === 'feature' ? 'feature' : 'app',
+            name: story.name,
+            content: story.yaml,
+            kind: story.kind === 'feature' ? 'feature' : 'app',
           }),
         });
         const data = await res.json();
         if (res.ok) {
           successCount++;
-          setSavedSpecs((prev) => new Set(prev).add(spec.filename));
-          if (spec.kind === 'feature' && data.file) {
+          setSavedStories((prev) => new Set(prev).add(story.filename));
+          if (story.kind === 'feature' && data.file) {
             try {
               await fetch('/api/queue', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  specFile: data.file,
-                  kind: 'FeatureSpec',
-                  phase: spec.phase ?? 0,
-                  dependsOn: spec.dependsOn ?? [],
+                  storyFile: data.file,
+                  kind: 'FeatureStory',
+                  phase: story.phase ?? 0,
+                  dependsOn: story.dependsOn ?? [],
                 }),
               });
             } catch { /* non-critical */ }
           }
         } else {
           failCount++;
-          toast.error(`Failed: ${spec.filename}`, { description: data.error });
+          toast.error(`Failed: ${story.filename}`, { description: data.error });
         }
       } catch {
         failCount++;
@@ -355,17 +384,17 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
     }
 
     if (successCount > 0) {
-      toast.success(`Saved ${successCount} spec${successCount > 1 ? 's' : ''}`, {
+      toast.success(`Saved ${successCount} stor${successCount > 1 ? 'ies' : 'y'}`, {
         description: failCount > 0 ? `${failCount} failed` : 'Auto-enqueued for build',
       });
-      onSpecSaved();
+      onStorySaved();
     }
     setSavingAll(false);
   };
 
   const handleCopy = async () => {
-    if (!activeSpec) return;
-    await navigator.clipboard.writeText(activeSpec.yaml);
+    if (!activeStory) return;
+    await navigator.clipboard.writeText(activeStory.yaml);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -393,18 +422,18 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
             </div>
             <div className="space-y-0.5 min-w-0">
               <DialogTitle className="text-sm sm:text-base font-bold tracking-tight truncate text-foreground">
-                Spec Architecture Studio
+                Story Architecture Studio
               </DialogTitle>
               <p className="text-[10px] sm:text-xs text-muted-foreground font-medium truncate">
                 {isExistingApp
                   ? `Expanding framework components for ${existingAppName}`
-                  : 'AI Spec Decomposition & Orchestration Engine'}
+                  : 'AI Story Decomposition & Orchestration Engine'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {hasSpecs && !streaming && (
+            {hasStories && !streaming && (
               <>
                 <Button
                   variant="outline"
@@ -423,8 +452,8 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                     disabled={savingAll}
                   >
                     {savingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SaveAll className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">Save All ({allSpecs.length - savedSpecs.size})</span>
-                    <span className="sm:hidden">Save ({allSpecs.length - savedSpecs.size})</span>
+                    <span className="hidden sm:inline">Save All ({allStories.length - savedStories.size})</span>
+                    <span className="sm:hidden">Save ({allStories.length - savedStories.size})</span>
                   </Button>
                 )}
                 {allSaved && (
@@ -448,7 +477,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
         </DialogHeader>
 
         {/* Mobile Tab Segment Switcher */}
-        {hasSpecs && (
+        {hasStories && (
           <div className="lg:hidden flex bg-muted px-3 py-2 border-b border-border shrink-0">
             <div className="w-full rounded-lg bg-muted p-1 flex items-center border border-border">
               <button
@@ -469,7 +498,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                 onClick={() => setMobilePane('preview')}
               >
                 <FileText className="h-3.5 w-3.5" />
-                Specs Output ({allSpecs.length})
+                Stories Output ({allStories.length})
               </button>
             </div>
           </div>
@@ -481,7 +510,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
           {/* Left Panel: Chat Interface */}
           <div className={cn(
             "flex flex-col border-r border-border bg-card relative",
-            mobilePane === 'chat' || !hasSpecs ? "flex w-full lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]" : "hidden lg:flex lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]"
+            mobilePane === 'chat' || !hasStories ? "flex w-full lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]" : "hidden lg:flex lg:w-[35%] lg:min-w-[390px] lg:max-w-[480px]"
           )}>
             
             {/* Context Banners */}
@@ -527,7 +556,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       {repoContext
                         ? "State the page, system, or features you'd like to construct. The engine will decompose the requirement into a production-grade plan."
-                        : "Describe the application idea and stack preferences. I'll translate it into modular, clean spec models."}
+                        : "Describe the application idea and stack preferences. I'll translate it into modular, clean story models."}
                     </p>
                   </div>
 
@@ -618,7 +647,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                   value={input}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  placeholder={isExistingApp ? "Tweak or define feature specs..." : "e.g., build a sleek feedback widget..."}
+                  placeholder={isExistingApp ? "Tweak or define feature stories..." : "e.g., build a sleek feedback widget..."}
                   className="w-full border-0 p-3.5 pr-12 min-h-[50px] max-h-[140px] outline-hidden text-xs sm:text-sm leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
                   rows={1}
                   disabled={streaming}
@@ -652,20 +681,20 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
             </div>
           </div>
 
-          {/* Right Panel: Spec Preview */}
+          {/* Right Panel: Story Preview */}
           <div className={cn(
             "flex flex-1 flex-col bg-card text-foreground relative overflow-hidden",
-            hasSpecs && mobilePane === 'preview' ? "flex w-full" : hasSpecs ? "hidden lg:flex lg:flex-1" : "hidden lg:flex lg:flex-1"
+            hasStories && mobilePane === 'preview' ? "flex w-full" : hasStories ? "hidden lg:flex lg:flex-1" : "hidden lg:flex lg:flex-1"
           )}>
             
-            {/* Horizontal Swipeable Specs Tabs */}
+            {/* Horizontal Swipeable Stories Tabs */}
             <div className="border-b border-border bg-muted shrink-0">
               <div className="flex items-center h-12 px-3 justify-between">
                 <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 mr-4 pb-1.5 pt-1.5 select-none snap-x snap-mandatory">
-                  {allSpecs.length > 0 ? (
-                    allSpecs.map((spec, idx) => (
+                  {allStories.length > 0 ? (
+                    allStories.map((story, idx) => (
                       <button
-                        key={spec.filename}
+                        key={story.filename}
                         onClick={() => setActiveTab(idx)}
                         className={cn(
                           'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-all shrink-0 min-h-[34px] snap-center tap-shrink',
@@ -674,18 +703,18 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                             : 'text-muted-foreground hover:text-foreground hover:bg-accent hover:text-accent-foreground'
                         )}
                       >
-                        {spec.kind === 'app' ? (
+                        {story.kind === 'app' ? (
                           <Package className="h-3 w-3 text-muted-foreground" />
                         ) : (
                           <Layers className="h-3 w-3 text-muted-foreground" />
                         )}
-                        <span className="max-w-[90px] sm:max-w-[130px] truncate">{spec.name}</span>
-                        {spec.phase && (
-                          <span className={cn('text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-md border font-bold', phaseColor(spec.phase))}>
-                            P{spec.phase}
+                        <span className="max-w-[90px] sm:max-w-[130px] truncate">{story.name}</span>
+                        {story.phase && (
+                          <span className={cn('text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-md border font-bold', phaseColor(story.phase))}>
+                            P{story.phase}
                           </span>
                         )}
-                        {savedSpecs.has(spec.filename) && (
+                        {savedStories.has(story.filename) && (
                           <Check className="h-3 w-3 text-green-500 shrink-0" />
                         )}
                       </button>
@@ -694,20 +723,20 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                     <div className="flex items-center gap-1.5 text-muted-foreground/60">
                       <FileText className="h-3.5 w-3.5 text-muted-foreground/40" />
                       <span className="text-[10px] font-bold tracking-widest uppercase font-mono">
-                        {streaming ? 'generating spec blueprints...' : 'awaiting spec instructions'}
+                        {streaming ? 'generating story blueprints...' : 'awaiting story instructions'}
                       </span>
                     </div>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {allSpecs.length > 0 && (
+                  {allStories.length > 0 && (
                     <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-semibold">
                       <Badge variant="secondary" className="rounded-md">
-                        {allSpecs.filter(s => s.kind === 'app').length} App
+                        {allStories.filter(s => s.kind === 'app').length} App
                       </Badge>
                       <Badge variant="secondary" className="rounded-md">
-                        {allSpecs.filter(s => s.kind === 'feature').length} Features
+                        {allStories.filter(s => s.kind === 'feature').length} Features
                       </Badge>
                     </div>
                   )}
@@ -715,14 +744,14 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
               </div>
             </div>
 
-            {/* Spec YAML View */}
+            {/* Story YAML View */}
             <div className="flex-1 overflow-auto bg-card">
-              {activeSpec ? (
+              {activeStory ? (
                 <div className="p-4 sm:p-6 md:p-8 font-mono text-[10px] sm:text-xs md:text-sm leading-relaxed relative">
 
                   <div className="flex items-center justify-between mb-4 pb-3 border-b border-border relative z-10">
                     <div className="flex items-center gap-2 min-w-0">
-                      {activeSpec.kind === 'app' ? (
+                      {activeStory.kind === 'app' ? (
                         <div className="p-2 rounded-lg bg-muted border border-border shrink-0">
                           <Package className="h-4 w-4 text-foreground" />
                         </div>
@@ -732,25 +761,25 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                         </div>
                       )}
                       <div className="min-w-0">
-                        <h3 className="text-foreground text-xs sm:text-sm font-bold truncate">{activeSpec.name}</h3>
-                        <p className="text-muted-foreground text-[8px] sm:text-[10px] font-semibold truncate mt-0.5">{activeSpec.filename}</p>
+                        <h3 className="text-foreground text-xs sm:text-sm font-bold truncate">{activeStory.name}</h3>
+                        <p className="text-muted-foreground text-[8px] sm:text-[10px] font-semibold truncate mt-0.5">{activeStory.filename}</p>
                       </div>
-                      {activeSpec.phase && (
-                        <span className={cn('text-[8px] sm:text-[9px] px-2 py-0.5 rounded-md border font-bold ml-2 shrink-0', phaseColor(activeSpec.phase))}>
-                          Phase {activeSpec.phase}
+                      {activeStory.phase && (
+                        <span className={cn('text-[8px] sm:text-[9px] px-2 py-0.5 rounded-md border font-bold ml-2 shrink-0', phaseColor(activeStory.phase))}>
+                          Phase {activeStory.phase}
                         </span>
                       )}
                     </div>
-                    {!savedSpecs.has(activeSpec.filename) ? (
+                    {!savedStories.has(activeStory.filename) ? (
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-8 px-3 text-[10px] sm:text-xs font-bold gap-1.5 rounded-md tap-shrink"
-                        onClick={() => handleSaveSpec(activeSpec)}
+                        onClick={() => handleSaveStory(activeStory)}
                         disabled={saving || streaming}
                       >
                         {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                        <span>Save Spec</span>
+                        <span>Save Story</span>
                       </Button>
                     ) : (
                       <span className="text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-bold flex items-center gap-1 bg-muted px-2.5 py-1 rounded-md border border-emerald-500 shrink-0">
@@ -761,7 +790,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                   
                   <div className="rounded-lg border border-border bg-card p-4 shadow-sm relative overflow-hidden">
                     <pre className="relative z-10 whitespace-pre-wrap overflow-x-auto leading-relaxed">
-                      <code className="text-foreground/80">{activeSpec.yaml}</code>
+                      <code className="text-foreground/80">{activeStory.yaml}</code>
                     </pre>
                   </div>
                 </div>
@@ -775,7 +804,7 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
                   <div className="space-y-1">
                     <h4 className="text-foreground text-sm font-bold tracking-tight">Architect blueprint viewer</h4>
                     <p className="text-[10px] sm:text-xs text-muted-foreground max-w-xs leading-relaxed">
-                      YAML spec documents will compile inside this preview panel in real-time as the Architect designs.
+                      YAML story documents will compile inside this preview panel in real-time as the Architect designs.
                     </p>
                   </div>
                 </div>
@@ -785,11 +814,11 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
             {/* Footer Bar info */}
             <div className="h-9 border-t border-border bg-muted shrink-0 px-4 flex items-center justify-between text-[9px] font-bold font-mono text-muted-foreground/60 uppercase tracking-wider">
                <div className="flex items-center gap-4">
-                  <span>SPEC ENGINE MODE</span>
-                  <span className="hidden sm:inline">{allSpecs.length > 0 ? `${allSpecs.length} specs compiled` : 'Standby'}</span>
+                  <span>STORY ENGINE MODE</span>
+                  <span className="hidden sm:inline">{allStories.length > 0 ? `${allStories.length} stories compiled` : 'Standby'}</span>
                </div>
                <div className="flex items-center gap-4">
-                  <span className="hidden sm:inline">Lines: {activeSpec?.yaml.split('\n').length || 0}</span>
+                  <span className="hidden sm:inline">Lines: {activeStory?.yaml.split('\n').length || 0}</span>
                   <span>YAML 1.2</span>
                </div>
             </div>
@@ -801,11 +830,11 @@ export function SpecChat({ open, onOpenChange, onSpecSaved }: SpecChatProps) {
 }
 
 function renderAssistantContent(content: string) {
-  const specBlockPattern = /=== (?:APP_SPEC|FEATURE_SPEC):\s*\S+\s*===[\s\S]*?=== END_SPEC ===/g;
+  const storyBlockPattern = /=== (?:APP_STORY|FEATURE_STORY|APP_SPEC|FEATURE_SPEC):\s*\S+\s*===[\s\S]*?=== END_(?:STORY|SPEC) ===/g;
   const yamlBlockPattern = /```yaml[\s\S]*?(?:```|$)/g;
-  let cleaned = content.replace(specBlockPattern, '___SPEC_BLOCK___');
-  cleaned = cleaned.replace(yamlBlockPattern, '___SPEC_BLOCK___');
-  const parts = cleaned.split('___SPEC_BLOCK___');
+  let cleaned = content.replace(storyBlockPattern, '___STORY_BLOCK___');
+  cleaned = cleaned.replace(yamlBlockPattern, '___STORY_BLOCK___');
+  const parts = cleaned.split('___STORY_BLOCK___');
 
   return parts.map((part, i) => {
     const elements: React.ReactNode[] = [];
@@ -815,15 +844,15 @@ function renderAssistantContent(content: string) {
     if (i < parts.length - 1) {
       elements.push(
         <div
-          key={`spec-${i}`}
+          key={`story-${i}`}
           className="my-3 px-3.5 py-3 rounded-lg bg-muted border border-border text-[10px] sm:text-[11px] text-foreground flex items-center gap-3 transition-all hover:bg-accent relative overflow-hidden"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border shrink-0">
              <FileText className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex flex-col text-left gap-0.5">
-             <span className="font-extrabold uppercase tracking-widest text-[8px] sm:text-[9px] text-foreground">Spec Blueprint Compiled</span>
-             <span className="font-semibold opacity-75 text-[9px] sm:text-[10px] text-muted-foreground">Select panel view to inspect YAML spec</span>
+             <span className="font-extrabold uppercase tracking-widest text-[8px] sm:text-[9px] text-foreground">Story Blueprint Compiled</span>
+             <span className="font-semibold opacity-75 text-[9px] sm:text-[10px] text-muted-foreground">Select panel view to inspect YAML story</span>
           </div>
           <div className="ml-auto bg-background border border-border p-1 rounded-lg">
              <Check className="h-3.5 w-3.5 text-green-500" />

@@ -304,8 +304,8 @@ export function initBridge(repoPath: string): InitResult {
     const dirs = [
         factoryDir,
         join(factoryDir, 'context'),
-        join(factoryDir, 'specs', 'apps'),
-        join(factoryDir, 'specs', 'features'),
+        join(factoryDir, 'stories', 'apps'),
+        join(factoryDir, 'stories', 'features'),
         join(factoryDir, 'knowledge', 'builds'),
         join(factoryDir, 'knowledge', 'failures'),
         join(factoryDir, 'task-manager'),

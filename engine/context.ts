@@ -101,7 +101,7 @@ export function gatherAppContext(repoPath: string, bridge: BridgeConfig, appSlug
 
 /** Completed build info from the queue — used for context accumulation */
 export interface QueueBuildContext {
-    specFile: string;
+    storyFile: string;
     kind: string;
     targetApp: string;
     generatedFiles: string[];

@@ -10,11 +10,11 @@ import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { getActiveProject, loadBridgeConfig } from './config.ts';
 import { gatherContext, gatherAppContext } from './context.ts';
-import { loadSpec, loadFeatureSpec, listSpecs } from './spec.ts';
+import { loadStory, loadFeatureStory, listStories } from './story.ts';
 import { log, logError } from './log.ts';
 import { TOOL_DEFINITIONS, executeTool, type BuildToolContext } from './build-tools.ts';
 import { buildToolSystemPrompt, callProviderWithTools, requireActiveProvider, type ToolMessages } from './generate.ts';
-import { specSlug, type AppSpec, type FeatureSpec } from './types.ts';
+import { storySlug, type AppStory, type FeatureStory } from './types.ts';
 
 // ─── ANSI Terminal Styles ────────────────────────────────
 
@@ -56,58 +56,58 @@ ${C.brightCyan}${C.bold}███████╗ █████╗  ███�
 
 // ─── Entry Point ─────────────────────────────────────────
 
-export async function runRepl(specPath?: string, options: { auto?: boolean } = {}): Promise<void> {
+export async function runRepl(storyPath?: string, options: { auto?: boolean } = {}): Promise<void> {
     console.log(BANNER);
 
     const project = getActiveProject();
     const bridge = loadBridgeConfig(project.path);
     const context = gatherContext(project.path, bridge);
 
-    let activeSpec: AppSpec | FeatureSpec | undefined;
-    let actualSpecPath = specPath;
+    let activeStory: AppStory | FeatureStory | undefined;
+    let actualStoryPath = storyPath;
 
-    // Load or select build spec
-    if (actualSpecPath) {
-        activeSpec = loadSpecOrFeature(resolve(actualSpecPath));
+    // Load or select build story
+    if (actualStoryPath) {
+        activeStory = loadStoryOrFeature(resolve(actualStoryPath));
     } else {
-        const specs = listSpecs(project.path);
-        const specOptions: Array<{ name: string; file: string; type: 'app' | 'feature' }> = [];
+        const stories = listStories(project.path);
+        const storyOptions: Array<{ name: string; file: string; type: 'app' | 'feature' }> = [];
 
-        for (const file of specs.apps) {
-            specOptions.push({
+        for (const file of stories.apps) {
+            storyOptions.push({
                 name: file.replace(/\.yaml$/, ''),
-                file: resolve(project.path, '.factory', 'specs', 'apps', file),
+                file: resolve(project.path, '.factory', 'stories', 'apps', file),
                 type: 'app',
             });
         }
-        for (const file of specs.features) {
-            specOptions.push({
+        for (const file of stories.features) {
+            storyOptions.push({
                 name: file.replace(/\.yaml$/, ''),
-                file: resolve(project.path, '.factory', 'specs', 'features', file),
+                file: resolve(project.path, '.factory', 'stories', 'features', file),
                 type: 'feature',
             });
         }
 
-        if (specOptions.length === 0) {
-            log('!', 'No specs found in this project repo. Working in project root context.');
+        if (storyOptions.length === 0) {
+            log('!', 'No stories found in this project repo. Working in project root context.');
         } else {
-            console.log(`${C.bold}🏭 Available Build Specs:${C.reset}`);
-            specOptions.forEach((opt, idx) => {
+            console.log(`${C.bold}🏭 Available Build Stories:${C.reset}`);
+            storyOptions.forEach((opt, idx) => {
                 const typeLabel = opt.type === 'app' ? `${C.brightGreen}[App]` : `${C.brightBlue}[Feature]`;
                 console.log(`  [${idx + 1}] ${typeLabel}${C.reset} ${opt.name}`);
             });
-            console.log(`  [${specOptions.length + 1}] ${C.dim}Blank Slate (work directly in project root)${C.reset}`);
+            console.log(`  [${storyOptions.length + 1}] ${C.dim}Blank Slate (work directly in project root)${C.reset}`);
             console.log('');
 
             const rlSelect = readline.createInterface({ input, output });
-            const selection = await rlSelect.question(`${C.bold}Select a build spec [1-${specOptions.length + 1}]: ${C.reset}`);
+            const selection = await rlSelect.question(`${C.bold}Select a build story [1-${storyOptions.length + 1}]: ${C.reset}`);
             rlSelect.close();
 
             const idx = parseInt(selection.trim(), 10) - 1;
-            if (idx >= 0 && idx < specOptions.length) {
-                const opt = specOptions[idx];
-                actualSpecPath = opt.file;
-                activeSpec = loadSpecOrFeature(opt.file);
+            if (idx >= 0 && idx < storyOptions.length) {
+                const opt = storyOptions[idx];
+                actualStoryPath = opt.file;
+                activeStory = loadStoryOrFeature(opt.file);
             }
         }
     }
@@ -115,8 +115,8 @@ export async function runRepl(specPath?: string, options: { auto?: boolean } = {
     // Set up target directory
     let targetDir = project.path;
     let slug = 'root';
-    if (activeSpec) {
-        slug = 'appName' in activeSpec ? specSlug(activeSpec as AppSpec) : activeSpec.feature.slug;
+    if (activeStory) {
+        slug = 'appName' in activeStory ? storySlug(activeStory as AppStory) : activeStory.feature.slug;
         targetDir = bridge.apps_dir
             ? resolve(project.path, bridge.apps_dir, slug)
             : resolve(project.path, slug);
@@ -124,15 +124,15 @@ export async function runRepl(specPath?: string, options: { auto?: boolean } = {
 
     // Gather existing app integration context if this is a feature build
     let appContext;
-    if (activeSpec && !('appName' in activeSpec)) {
-        appContext = gatherAppContext(project.path, bridge, (activeSpec as FeatureSpec).target.app);
+    if (activeStory && !('appName' in activeStory)) {
+        appContext = gatherAppContext(project.path, bridge, (activeStory as FeatureStory).target.app);
     }
 
     // ─── Initialize Tool Context ────────────────────────────
 
     const ctx: BuildToolContext = {
         targetDir,
-        specFile: actualSpecPath || '',
+        storyFile: actualStoryPath || '',
         terminal: false,
         success: false,
         generatedFiles: new Map(),
@@ -150,11 +150,11 @@ export async function runRepl(specPath?: string, options: { auto?: boolean } = {
     console.log(`│ ${C.bold}SESSION PANEL${C.reset}${' '.repeat(47)}│`);
     console.log(`│ • ${C.bold}Active Project:${C.reset} ${project.name}${' '.repeat(Math.max(0, 42 - project.name.length))}│`);
     console.log(`│ • ${C.bold}Target Dir:${C.reset} ${targetDir.replace(project.path, '.')}${' '.repeat(Math.max(0, 46 - targetDir.replace(project.path, '.').length))}│`);
-    if (activeSpec) {
-        const specName = 'appName' in activeSpec ? (activeSpec as AppSpec).appName : (activeSpec as FeatureSpec).feature.name;
-        console.log(`│ • ${C.bold}Build Spec:${C.reset} ${specName}${' '.repeat(Math.max(0, 46 - specName.length))}│`);
+    if (activeStory) {
+        const storyName = 'appName' in activeStory ? (activeStory as AppStory).appName : (activeStory as FeatureStory).feature.name;
+        console.log(`│ • ${C.bold}Build Story:${C.reset} ${storyName}${' '.repeat(Math.max(0, 45 - storyName.length))}│`);
     } else {
-        console.log(`│ • ${C.bold}Build Spec:${C.reset} ${C.dim}None (Blank Slate)${C.reset}${' '.repeat(28)}│`);
+        console.log(`│ • ${C.bold}Build Story:${C.reset} ${C.dim}None (Blank Slate)${C.reset}${' '.repeat(27)}│`);
     }
     try {
         const { provider, model } = requireActiveProvider();
@@ -171,8 +171,8 @@ export async function runRepl(specPath?: string, options: { auto?: boolean } = {
     const rl = readline.createInterface({ input, output });
 
     // Prepopulate tool message history
-    const systemPrompt = activeSpec
-        ? buildToolSystemPrompt(activeSpec, context, targetDir, appContext)
+    const systemPrompt = activeStory
+        ? buildToolSystemPrompt(activeStory, context, targetDir, appContext)
         : `You are an autonomous code generation engine with access to tools in the directory: ${targetDir}. Always complete with mark_complete.`;
 
     const messages: ToolMessages = [
@@ -254,7 +254,7 @@ ${C.bold}🛠️ FACTORY BUILD ENGINE TOOLS (GROUPED):${C.reset}
     ${C.brightCyan}/run_command${C.reset} <command>           Run shell command in target directory
 
   ℹ️ ${C.brightYellow}${C.bold}CONTEXT & METADATA${C.reset}
-    ${C.brightCyan}/read_spec${C.reset}                    Display the currently active spec YAML
+    ${C.brightCyan}/read_story${C.reset}                   Display the currently active story YAML
     ${C.brightCyan}/read_context${C.reset} <type>            Read project package.json, tsconfig, file_tree, conventions, knowledge
     ${C.brightCyan}/log_step${C.reset} <message>               Record progress to the build logs
 
@@ -267,7 +267,7 @@ ${C.bold}🛠️ FACTORY BUILD ENGINE TOOLS (GROUPED):${C.reset}
 function printStatus(ctx: BuildToolContext): void {
     console.log(`\n${C.bold}📊 Session Status Profile:${C.reset}`);
     console.log(` • ${C.bold}Target Directory:${C.reset} ${ctx.targetDir}`);
-    console.log(` • ${C.bold}Active Spec File:${C.reset} ${ctx.specFile || '(none)'}`);
+    console.log(` • ${C.bold}Active Story File:${C.reset} ${ctx.storyFile || '(none)'}`);
     console.log(` • ${C.bold}Completed Successfully:${C.reset} ${ctx.success ? `${C.brightGreen}Yes` : `${C.brightRed}No`}${C.reset}`);
     console.log(` • ${C.bold}Terminal Triggered:${C.reset} ${ctx.terminal ? `${C.brightRed}Yes` : `${C.brightGreen}No`}${C.reset}`);
 
@@ -348,7 +348,7 @@ async function handleManualToolCall(
                 resolvedArgs.command = argStr || (await rl.question(`${C.bold}Command to run: ${C.reset}`));
                 break;
             }
-            case 'read_spec': {
+            case 'read_story': {
                 break;
             }
             case 'read_context': {
@@ -498,12 +498,12 @@ async function handleAgentChatTurn(
 
 // ─── Helpers ─────────────────────────────────────────────
 
-function loadSpecOrFeature(filePath: string): AppSpec | FeatureSpec {
+function loadStoryOrFeature(filePath: string): AppStory | FeatureStory {
     const content = readFileSync(filePath, 'utf-8');
     if (content.includes('appName:')) {
-        return loadSpec(filePath);
+        return loadStory(filePath);
     }
-    return loadFeatureSpec(filePath);
+    return loadFeatureStory(filePath);
 }
 
 function parseCommandArgs(input: string): { cmd: string; argStr: string; argsList: string[] } {

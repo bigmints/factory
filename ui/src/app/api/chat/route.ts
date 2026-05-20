@@ -1,9 +1,9 @@
 import { homedir } from 'node:os';
 /**
- * POST /api/chat — Streaming LLM chat for spec generation
+ * POST /api/chat — Streaming LLM chat for story generation
  *
  * Reads the active provider + API key from settings.json,
- * sends a system prompt instructing the LLM to generate Factory-compatible YAML,
+ * sends a system prompt instructing the LLM to generate Factory-compatible YAML stories,
  * and returns a streaming response.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -38,15 +38,15 @@ function getActiveBridgeConfig(): { stack?: Record<string, string> } | null {
 }
 
 const SYSTEM_PROMPT_NEW_APP = `You are an expert software architect for Factory.
-Your task is to DECOMPOSE user requirements into modular, buildable specs.
+Your task is to DECOMPOSE user requirements into modular, buildable stories.
 
 When the user describes an application, you MUST output:
-1. ONE app spec (the core project definition with data model)
-2. MULTIPLE feature specs (each a focused, independently buildable module)
+1. ONE app story (the core project definition with data model)
+2. MULTIPLE feature stories (each a focused, independently buildable module)
 
 Use this EXACT output format with delimiters:
 
-=== APP_SPEC: app-name.yaml ===
+=== APP_STORY: app-name.yaml ===
 \`\`\`yaml
 appName: "App Name"
 description: "Brief description of the overall application"
@@ -75,9 +75,9 @@ deployment:
 
 status: draft
 \`\`\`
-=== END_SPEC ===
+=== END_STORY ===
 
-=== FEATURE_SPEC: feature-slug.yaml ===
+=== FEATURE_STORY: feature-slug.yaml ===
 \`\`\`yaml
 feature:
   name: "Feature Name"
@@ -111,21 +111,21 @@ config:
 
 status: draft
 \`\`\`
-=== END_SPEC ===
+=== END_STORY ===
 
 RULES:
 - Break down the app into SMALL, FOCUSED features. Each feature should be independently buildable.
 - Assign phases logically: Phase 1 = core/foundational, Phase 2 = extended capabilities, Phase 3 = polish/optional.
-- Each feature spec must include: description, modules (with file paths), behavior rules, and config.
+- Each feature story must include: description, modules (with file paths), behavior rules, and config.
 - Use meaningful names and slugs (kebab-case for slugs).
-- The app spec contains the data model (tables) and stack config. Features reference the app via target.app.
-- Include 3-8 feature specs depending on complexity. Don't make features too large.
-- After all spec blocks, write a brief summary explaining the decomposition rationale and phase strategy.
+- The app story contains the data model (tables) and stack config. Features reference the app via target.app.
+- Include 3-8 feature stories depending on complexity. Don't make features too large.
+- After all story blocks, write a brief summary explaining the decomposition rationale and phase strategy.
 - Data types for fields: string, number, boolean, array.
 - Set deployment port between 3050-3099.
-- IMPORTANT: Use \`dependsOn\` to list the slugs of other feature specs that MUST be built BEFORE this one. If a feature has no dependencies, use an empty array \`[]\`. The engine enforces this ordering — a spec will NOT build until all its dependencies are completed.
+- IMPORTANT: Use \`dependsOn\` to list the slugs of other feature stories that MUST be built BEFORE this one. If a feature has no dependencies, use an empty array \`[]\`. The engine enforces this ordering — a story will NOT build until all its dependencies are completed.
 - Example: A "dashboard" feature (phase 2) that needs auth and data-models would have: \`dependsOn: [auth-system, data-models]\`
-- CRITICAL — PACKAGE DECLARATIONS: Every app spec and feature spec MUST include a \`dependencies\` array listing ALL npm packages that the generated code will need. Think carefully about what imports the code will use. For example:
+- CRITICAL — PACKAGE DECLARATIONS: Every app story and feature story MUST include a \`dependencies\` array listing ALL npm packages that the generated code will need. Think carefully about what imports the code will use. For example:
   - If the feature uses a database ORM, include \`drizzle-orm\`, \`better-sqlite3\`, etc.
   - If it sends emails, include \`nodemailer\`, \`@types/nodemailer\`
   - If it uses web scraping, include \`puppeteer\`
@@ -137,13 +137,13 @@ RULES:
 Be thorough, creative, and production-ready.`;
 
 const SYSTEM_PROMPT_EXISTING_APP = `You are an expert software architect for Factory.
-The user has an EXISTING application. Your task is to DECOMPOSE their new requirements into modular FEATURE SPECS that integrate with the existing app.
+The user has an EXISTING application. Your task is to DECOMPOSE their new requirements into modular FEATURE STORIES that integrate with the existing app.
 
-Do NOT generate an app spec — one already exists. Only generate feature specs.
+Do NOT generate an app story — one already exists. Only generate feature stories.
 
 Use this EXACT output format with delimiters:
 
-=== FEATURE_SPEC: feature-slug.yaml ===
+=== FEATURE_STORY: feature-slug.yaml ===
 \`\`\`yaml
 feature:
   name: "Feature Name"
@@ -177,19 +177,19 @@ config:
 
 status: draft
 \`\`\`
-=== END_SPEC ===
+=== END_STORY ===
 
 RULES:
 - Break down requirements into SMALL, FOCUSED features. Each feature should be independently buildable.
 - Assign phases logically: Phase 1 = core/foundational, Phase 2 = extended capabilities, Phase 3 = polish/optional.
-- Each feature spec must include: description, modules (with file paths), behavior rules, and config.
+- Each feature story must include: description, modules (with file paths), behavior rules, and config.
 - Use meaningful names and slugs (kebab-case for slugs).
-- Reference the existing app name in target.app for every feature spec.
-- Include 2-8 feature specs depending on complexity
-- After all spec blocks, write a brief summary explaining the decomposition rationale and phase strategy.
-- IMPORTANT: Use \`dependsOn\` to list the slugs of other feature specs that MUST be built BEFORE this one. If a feature has no dependencies, use an empty array \`[]\`. The engine enforces this ordering — a spec will NOT build until all its dependencies are completed.
+- Reference the existing app name in target.app for every feature story.
+- Include 2-8 feature stories depending on complexity
+- After all story blocks, write a brief summary explaining the decomposition rationale and phase strategy.
+- IMPORTANT: Use \`dependsOn\` to list the slugs of other feature stories that MUST be built BEFORE this one. If a feature has no dependencies, use an empty array \`[]\`. The engine enforces this ordering — a story will NOT build until all its dependencies are completed.
 - Example: A "dashboard" feature (phase 2) that needs auth would have: \`dependsOn: [auth-system]\`
-- CRITICAL — PACKAGE DECLARATIONS: Every feature spec MUST include a \`dependencies\` array listing ALL npm packages that the generated code will need. Think carefully about what imports the code will use:
+- CRITICAL — PACKAGE DECLARATIONS: Every feature story MUST include a \`dependencies\` array listing ALL npm packages that the generated code will need. Think carefully about what imports the code will use:
   - If the feature sends emails, include \`nodemailer\`, \`@types/nodemailer\`
   - If it uses web scraping, include \`puppeteer\`
   - If it uses environment variables, include \`dotenv\`
@@ -211,7 +211,7 @@ function formatRepoContext(ctx: any): string {
     lines.push(ctx.agentInstructions);
     lines.push(`=== END PROJECT INSTRUCTIONS ===`);
   } else {
-    lines.push(`\n⚠️ WARNING: No agents.md found in the project. Generated specs may not align with project conventions.`);
+    lines.push(`\n⚠️ WARNING: No agents.md found in the project. Generated stories may not align with project conventions.`);
   }
 
   // Stack
@@ -269,23 +269,24 @@ function formatRepoContext(ctx: any): string {
     lines.push(displayTree.join('\n'));
   }
 
-  // Existing specs — full YAML content so the LLM sees exactly what's defined
-  if (ctx.existingSpecs) {
-    if (ctx.existingSpecs.apps?.length > 0) {
-      lines.push(`\n=== EXISTING APP SPECS (${ctx.existingSpecs.apps.length}) ===`);
-      for (const spec of ctx.existingSpecs.apps) {
-        lines.push(`\n--- ${spec.name} ---`);
-        if (spec.yaml) lines.push(spec.yaml);
+  // Existing stories — full YAML content so the LLM sees exactly what's defined
+  if (ctx.existingStories || ctx.existingSpecs) {
+    const activeStories = ctx.existingStories || ctx.existingSpecs;
+    if (activeStories.apps?.length > 0) {
+      lines.push(`\n=== EXISTING APP STORIES (${activeStories.apps.length}) ===`);
+      for (const story of activeStories.apps) {
+        lines.push(`\n--- ${story.name} ---`);
+        if (story.yaml) lines.push(story.yaml);
       }
-      lines.push(`=== END EXISTING APP SPECS ===`);
+      lines.push(`=== END EXISTING APP STORIES ===`);
     }
-    if (ctx.existingSpecs.features?.length > 0) {
-      lines.push(`\n=== EXISTING FEATURE SPECS (${ctx.existingSpecs.features.length}) ===`);
-      for (const spec of ctx.existingSpecs.features) {
-        lines.push(`\n--- ${spec.name} ---`);
-        if (spec.yaml) lines.push(spec.yaml);
+    if (activeStories.features?.length > 0) {
+      lines.push(`\n=== EXISTING FEATURE STORIES (${activeStories.features.length}) ===`);
+      for (const story of activeStories.features) {
+        lines.push(`\n--- ${story.name} ---`);
+        if (story.yaml) lines.push(story.yaml);
       }
-      lines.push(`=== END EXISTING FEATURE SPECS ===`);
+      lines.push(`=== END EXISTING FEATURE STORIES ===`);
     }
   }
 
@@ -310,14 +311,13 @@ function formatRepoContext(ctx: any): string {
 - Do NOT include packages already listed in dependencies or devDependencies above — they are already installed.
 - Use the SAME framework, package manager, and language as detected above.
 - Align new file paths with the EXISTING file structure shown above.
-- Do NOT duplicate functionality covered by existing feature specs listed above.
+- Do NOT duplicate functionality covered by existing feature stories listed above.
 - If agents.md specifies conventions (naming, structure, shared packages), follow them strictly.
 - If the database is not Firestore, do not mention Firestore-specific IDs.
 - Tailor module paths (src/path/to/module.ts) to match the existing project's directory conventions.
 - YAML QUOTING: Always quote @-scoped package names in dependency lists (e.g. \`- "@types/node"\` not \`- @types/node\`). The @ character is reserved in YAML.`);
 
   return lines.join('\n');
-
 }
 
 function getSettings() {
@@ -332,7 +332,8 @@ function getSettings() {
 
 export async function POST(request: Request) {
   try {
-    const { messages, isExistingApp, existingAppName, repoContext } = await request.json();
+    const body = await request.json();
+    const { messages, isExistingApp, existingAppName, repoContext } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'messages required' }), {
@@ -442,7 +443,6 @@ async function streamOllama(
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-          // Ollama returns newline-delimited JSON
           const lines = chunk.split('\n').filter(Boolean);
           for (const line of lines) {
             try {
@@ -460,7 +460,7 @@ async function streamOllama(
                 );
               }
             } catch {
-              // Skip unparseable lines
+              // Skip
             }
           }
         }
@@ -571,7 +571,6 @@ async function streamGemini(
   model: string,
   messages: any[]
 ) {
-  // Convert messages to Gemini format
   const systemInstruction = messages.find((m: any) => m.role === 'system');
   const chatMessages = messages
     .filter((m: any) => m.role !== 'system')

@@ -1,35 +1,35 @@
 /**
- * Auto-fix broken YAML specs using the configured LLM.
- * When the factory encounters a spec that fails to parse,
+ * Auto-fix broken YAML stories using the configured LLM.
+ * When the factory encounters a story that fails to parse,
  * this module sends the broken YAML + error to the LLM
  * and writes the corrected version back.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml } from 'yaml';
 import { requireActiveProvider, callProvider } from './generate.ts';
 
 const log = (icon: string, msg: string) => console.log(`  ${icon} ${msg}`);
 
 /**
- * Attempt to fix a broken YAML spec file using the LLM.
+ * Attempt to fix a broken YAML story file using the LLM.
  * Returns { fixed: true, tokensIn, tokensOut } if successful, { fixed: false } otherwise.
  * The file is overwritten in-place with the corrected YAML.
  */
-export async function autoFixSpec(
-    specPath: string,
+export async function autoFixStory(
+    storyPath: string,
     error: string,
 ): Promise<{ fixed: boolean; tokensIn?: number; tokensOut?: number }> {
     const MAX_ATTEMPTS = 2;
 
     let rawYaml: string;
     try {
-        rawYaml = readFileSync(specPath, 'utf-8');
+        rawYaml = readFileSync(storyPath, 'utf-8');
     } catch {
         return { fixed: false };
     }
 
-    log('🔧', `Auto-fixing spec: ${specPath.split('/').pop()}`);
+    log('🔧', `Auto-fixing story: ${storyPath.split('/').pop()}`);
     log('→', `Error: ${error.slice(0, 120)}`);
 
     let totalTokensIn = 0;
@@ -39,9 +39,9 @@ export async function autoFixSpec(
         try {
             const { provider, model } = requireActiveProvider();
 
-            const prompt = `You are a YAML spec fixer for an autonomous code factory.
+            const prompt = `You are a YAML story fixer for an autonomous code factory.
 
-The following YAML spec file failed to parse. Fix the YAML so it parses correctly.
+The following YAML story file failed to parse. Fix the YAML so it parses correctly.
 Keep ALL the original content and meaning — only fix syntax issues like:
 - Unquoted strings containing special YAML characters ({ } [ ] : , # & * ? | - < > = ! % @ \`)
 - Incorrect indentation
@@ -88,13 +88,13 @@ Return the fixed YAML now:`;
                 log('✗', `Attempt ${attempt}: Fixed YAML missing required fields (feature.name or target.app)`);
                 continue;
             }
-            if (!isFeature && !parsed.metadata?.name) {
-                log('✗', `Attempt ${attempt}: Fixed YAML missing metadata.name`);
+            if (!isFeature && !parsed.appName) {
+                log('✗', `Attempt ${attempt}: Fixed YAML missing appName`);
                 continue;
             }
 
             // Write the fixed YAML back
-            writeFileSync(specPath, fixedYaml + '\n', 'utf-8');
+            writeFileSync(storyPath, fixedYaml + '\n', 'utf-8');
             log('✓', `Auto-fixed successfully on attempt ${attempt}`);
             log('→', `Tokens: ${totalTokensIn} in / ${totalTokensOut} out`);
             return { fixed: true, tokensIn: totalTokensIn, tokensOut: totalTokensOut };

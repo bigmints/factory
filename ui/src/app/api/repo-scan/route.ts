@@ -108,39 +108,42 @@ function detectStack(deps: Record<string, string>, devDeps: Record<string, strin
   };
 }
 
-/** List existing specs in .factory/specs/ — returns name + full YAML content */
-function listExistingSpecs(projectPath: string): { apps: { name: string; yaml: string }[]; features: { name: string; yaml: string }[] } {
+/** List existing stories in .factory/stories/ or .factory/specs/ — returns name + full YAML content */
+function listExistingStories(projectPath: string): { apps: { name: string; yaml: string }[]; features: { name: string; yaml: string }[] } {
   const result = { apps: [] as { name: string; yaml: string }[], features: [] as { name: string; yaml: string }[] };
 
-  const specsDir = join(projectPath, '.factory', 'specs');
-  if (!existsSync(specsDir)) return result;
+  let storiesDir = join(projectPath, '.factory', 'stories');
+  if (!existsSync(storiesDir)) {
+    storiesDir = join(projectPath, '.factory', 'specs');
+  }
+  if (!existsSync(storiesDir)) return result;
 
-  // App specs
-  const appsDir = join(specsDir, 'apps');
+  // App stories
+  const appsDir = join(storiesDir, 'apps');
   if (existsSync(appsDir)) {
     result.apps = readdirSync(appsDir)
       .filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))
       .map(f => {
         try {
           const yaml = readFileSync(join(appsDir, f), 'utf-8');
-          const spec = parseYaml(yaml);
-          return { name: spec?.appName || f.replace(/\.ya?ml$/, ''), yaml };
+          const story = parseYaml(yaml);
+          return { name: story?.appName || story?.metadata?.name || f.replace(/\.ya?ml$/, ''), yaml };
         } catch {
           return { name: f.replace(/\.ya?ml$/, ''), yaml: '' };
         }
       });
   }
 
-  // Feature specs
-  const featuresDir = join(specsDir, 'features');
+  // Feature stories
+  const featuresDir = join(storiesDir, 'features');
   if (existsSync(featuresDir)) {
     result.features = readdirSync(featuresDir)
       .filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))
       .map(f => {
         try {
           const yaml = readFileSync(join(featuresDir, f), 'utf-8');
-          const spec = parseYaml(yaml);
-          return { name: spec?.feature?.name || f.replace(/\.ya?ml$/, ''), yaml };
+          const story = parseYaml(yaml);
+          return { name: story?.feature?.name || story?.metadata?.name || f.replace(/\.ya?ml$/, ''), yaml };
         } catch {
           return { name: f.replace(/\.ya?ml$/, ''), yaml: '' };
         }
@@ -309,8 +312,9 @@ export async function GET() {
     // Walk file tree (max 200)
     const fileTree = walkDir(projectPath, projectPath, 200);
 
-    // List existing specs (with full content)
-    const existingSpecs = listExistingSpecs(projectPath);
+    // List existing stories (with full content)
+    const existingStories = listExistingStories(projectPath);
+    const existingSpecs = existingStories;
 
     // Read agents.md (mandatory project instructions)
     const agentInstructions = readAgentInstructions(projectPath);
@@ -323,7 +327,7 @@ export async function GET() {
     }
     const { conventions, knowledgeFiles } = readConventionsAndKnowledge(projectPath, bridge);
 
-    const result: RepoScanResult = {
+    const result: any = {
       projectName: project.name,
       projectPath,
       stack,
@@ -332,6 +336,7 @@ export async function GET() {
       scripts,
       tsconfig,
       fileTree,
+      existingStories,
       existingSpecs,
       agentInstructions,
       conventions,

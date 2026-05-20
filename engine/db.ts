@@ -5,6 +5,7 @@
 
 import Database from 'better-sqlite3';
 import { PATHS } from './config.ts';
+import { log } from './log.ts';
 
 let _db: Database.Database | null = null;
 
@@ -21,12 +22,38 @@ export function getDb(): Database.Database {
 
 /** Initialize all tables if they don't exist. */
 function initSchema(db: Database.Database): void {
+    // ── Migrations: Rename spec_file to story_file if present ──
+    try {
+        const qCols = db.prepare(`PRAGMA table_info(queue_items)`).all() as { name: string }[];
+        const qColNames = new Set(qCols.map(c => c.name));
+        if (qColNames.has('spec_file') && !qColNames.has('story_file')) {
+            db.exec(`ALTER TABLE queue_items RENAME COLUMN spec_file TO story_file`);
+            log('✓', 'Migrated SQLite queue_items: renamed spec_file to story_file');
+        }
+    } catch (e: any) {
+        // Table may not exist yet, ignore
+    }
+
+    try {
+        const bCols = db.prepare(`PRAGMA table_info(builds)`).all() as { name: string }[];
+        const bColNames = new Set(bCols.map(c => c.name));
+        if (bColNames.has('spec_file') && !bColNames.has('story_file')) {
+            db.exec(`ALTER TABLE builds RENAME COLUMN spec_file TO story_file`);
+            log('✓', 'Migrated SQLite builds: renamed spec_file to story_file');
+            
+            // Recreate virtual FTS table to use story_file
+            db.exec(`DROP TABLE IF EXISTS builds_fts`);
+        }
+    } catch (e: any) {
+        // Table may not exist yet, ignore
+    }
+
     db.exec(`
         -- Queue items
         CREATE TABLE IF NOT EXISTS queue_items (
             id TEXT PRIMARY KEY,
-            spec_file TEXT NOT NULL,
-            kind TEXT NOT NULL CHECK(kind IN ('AppSpec', 'FeatureSpec')),
+            story_file TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('AppStory', 'FeatureStory')),
             status TEXT NOT NULL DEFAULT 'pending'
                 CHECK(status IN ('pending', 'running', 'completed', 'failed', 'needs-attention')),
             priority INTEGER NOT NULL DEFAULT 0,
@@ -41,7 +68,7 @@ function initSchema(db: Database.Database): void {
         -- Build history / knowledge
         CREATE TABLE IF NOT EXISTS builds (
             id TEXT PRIMARY KEY,
-            spec_file TEXT NOT NULL,
+            story_file TEXT NOT NULL,
             kind TEXT NOT NULL,
             timestamp TEXT NOT NULL,
             duration_ms INTEGER,
@@ -54,7 +81,7 @@ function initSchema(db: Database.Database): void {
 
         -- Full-text search index for knowledge
         CREATE VIRTUAL TABLE IF NOT EXISTS builds_fts USING fts5(
-            spec_file,
+            story_file,
             output,
             notes,
             files_generated,
@@ -76,6 +103,16 @@ function initSchema(db: Database.Database): void {
     insert.run('is_running', 'false');
     insert.run('last_run_at', '');
     insert.run('last_heartbeat_at', '');
+
+    // Migrate values from AppSpec/FeatureSpec to AppStory/FeatureStory
+    try {
+        db.prepare("UPDATE queue_items SET kind = 'AppStory' WHERE kind = 'AppSpec'").run();
+        db.prepare("UPDATE queue_items SET kind = 'FeatureStory' WHERE kind = 'FeatureSpec'").run();
+        db.prepare("UPDATE builds SET kind = 'AppStory' WHERE kind = 'AppSpec'").run();
+        db.prepare("UPDATE builds SET kind = 'FeatureStory' WHERE kind = 'FeatureSpec'").run();
+    } catch {
+        // ignore
+    }
 
     // ── Migrations: add new columns if missing ──
     const cols = db.prepare(`PRAGMA table_info(builds)`).all() as { name: string }[];
@@ -121,7 +158,7 @@ function initSchema(db: Database.Database): void {
 
 /** Log a build result to the knowledge base as a structured debrief. */
 export function logBuild(
-    specFile: string,
+    storyFile: string,
     kind: string,
     status: string,
     summary: string,
@@ -145,11 +182,11 @@ export function logBuild(
         : `Built ${filesGenerated.length} file(s) in ${(durationMs / 1000).toFixed(1)}s`;
 
     db.prepare(`
-        INSERT INTO builds (id, spec_file, kind, timestamp, duration_ms, status, files_generated, output, notes, model, provider, engine, tokens_in, tokens_out, error_source, error_category)
+        INSERT INTO builds (id, story_file, kind, timestamp, duration_ms, status, files_generated, output, notes, model, provider, engine, tokens_in, tokens_out, error_source, error_category)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         id,
-        specFile,
+        storyFile,
         kind,
         new Date().toISOString(),
         durationMs,

@@ -22,9 +22,9 @@ import {
   FileCode,
 } from 'lucide-react';
 
-interface SpecData {
+interface StoryData {
   file: string;
-  kind?: 'AppSpec' | 'FeatureSpec';
+  kind?: 'AppStory' | 'FeatureStory' | 'AppSpec' | 'FeatureSpec';
   valid: boolean;
   status: string;
   metadata?: {
@@ -47,7 +47,7 @@ interface SpecData {
   api?: {
     resources?: Array<{ name: string }>;
   };
-  // For feature specs
+  // For feature stories
   feature?: {
     name?: string;
     description?: string;
@@ -63,8 +63,8 @@ interface SpecData {
   dependsOn?: string[];
 }
 
-interface SpecCardProps {
-  spec: SpecData;
+interface StoryCardProps {
+  story: StoryData;
   onValidate: (file: string) => void;
   onBuild: (file: string) => void;
   onEnqueue?: (file: string, kind: string, extra?: any) => void;
@@ -74,8 +74,8 @@ interface SpecCardProps {
   queueStatus?: string;
 }
 
-export function SpecCard({
-  spec,
+export function StoryCard({
+  story,
   onValidate,
   onBuild,
   onEnqueue,
@@ -83,16 +83,16 @@ export function SpecCard({
   isValidating,
   isBuilding,
   queueStatus,
-}: SpecCardProps) {
+}: StoryCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  // Auto-detect if this is a feature spec
-  const isFeature = spec.kind === 'FeatureSpec' || !!spec.feature;
-  const name = isFeature ? (spec.feature?.name || spec.file) : (spec.metadata?.name || spec.file);
-  const slug = isFeature ? `→ ${spec.target?.app || 'app'}` : `@factory/${spec.metadata?.slug || 'app'}`;
-  const icon = isFeature ? (spec.metadata?.icon || '🧩') : (spec.metadata?.icon || '📦');
-  const description = isFeature ? spec.feature?.description : spec.metadata?.description;
-  const isSequenced = isFeature && !!(spec.phase || (spec.dependsOn && spec.dependsOn.length > 0));
+  // Auto-detect if this is a feature story / spec
+  const isFeature = story.kind === 'FeatureStory' || story.kind === 'FeatureSpec' || !!story.feature;
+  const name = isFeature ? (story.feature?.name || story.file) : (story.metadata?.name || story.file);
+  const slug = isFeature ? `→ ${story.target?.app || 'app'}` : `@factory/${story.metadata?.slug || 'app'}`;
+  const icon = isFeature ? (story.metadata?.icon || '🧩') : (story.metadata?.icon || '📦');
+  const description = isFeature ? story.feature?.description : story.metadata?.description;
+  const isSequenced = isFeature && !!(story.phase || (story.dependsOn && story.dependsOn.length > 0));
 
   return (
     <Card className={cn("flex flex-col justify-between overflow-hidden", expanded && "ring-1 ring-ring")}>
@@ -116,9 +116,9 @@ export function SpecCard({
                 >
                   {isFeature ? 'Feature' : 'App'}
                 </Badge>
-                {isFeature && spec.phase !== undefined && (
+                {isFeature && story.phase !== undefined && (
                   <Badge variant="outline" className="text-[9px] font-semibold h-4 px-1.5 rounded-full shrink-0">
-                    P{spec.phase}
+                    P{story.phase}
                   </Badge>
                 )}
               </div>
@@ -128,7 +128,7 @@ export function SpecCard({
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <StatusBadge status={spec.status} />
+            <StatusBadge status={story.status} />
             <Button
               variant="ghost"
               size="icon"
@@ -141,7 +141,7 @@ export function SpecCard({
         </div>
       </CardHeader>
 
-      {/* Collapsible detailed specifications */}
+      {/* Collapsible detailed story specs */}
       {expanded && (
         <CardContent>
           <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-2 duration-200">
@@ -153,67 +153,67 @@ export function SpecCard({
 
             {/* Grid of stats */}
             <div className="grid grid-cols-2 gap-3 text-xs">
-              {/* App Spec Info */}
+              {/* App Story Info */}
               {!isFeature && (
                 <>
-                  {spec.deployment?.port && (
+                  {story.deployment?.port && (
                     <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
                       <Server className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="truncate font-medium">Port {spec.deployment.port}</span>
+                      <span className="truncate font-medium">Port {story.deployment.port}</span>
                     </div>
                   )}
-                  {spec.deployment?.region && (
+                  {story.deployment?.region && (
                     <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
                       <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="truncate font-medium">{spec.deployment.region}</span>
+                      <span className="truncate font-medium">{story.deployment.region}</span>
                     </div>
                   )}
-                  {spec.database?.collections && (
+                  {story.database?.collections && (
                     <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
                       <Database className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium">
-                        {(spec.database.collections as unknown[]).length} Collections
+                        {(story.database.collections as unknown[]).length} Collections
                       </span>
                     </div>
                   )}
-                  {spec.api?.resources && (
+                  {story.api?.resources && (
                     <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
                       <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium">
-                        {(spec.api.resources as unknown[]).length} Resources
+                        {(story.api.resources as unknown[]).length} Resources
                       </span>
                     </div>
                   )}
                 </>
               )}
 
-              {/* Feature Spec Info */}
+              {/* Feature Story Info */}
               {isFeature && (
                 <>
                   <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
                     <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-medium">
-                      {spec.pages?.length || 0} Pages
+                      {story.pages?.length || 0} Pages
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground bg-muted p-3 rounded-lg border border-border">
                     <Database className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-medium truncate">
-                      {String(spec.model?.collection || 'No Database')}
+                      {String(story.model?.collection || 'No Database')}
                     </span>
                   </div>
                 </>
               )}
 
               {/* Dependencies row */}
-              {isFeature && spec.dependsOn && spec.dependsOn.length > 0 && (
+              {isFeature && story.dependsOn && story.dependsOn.length > 0 && (
                 <div className="col-span-2 space-y-2 bg-muted p-4 rounded-lg border border-border">
                   <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
                     <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>Depends On Specs</span>
+                    <span>Depends On Stories</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {spec.dependsOn.map((dep) => (
+                    {story.dependsOn.map((dep) => (
                       <Badge
                         key={dep}
                         variant="secondary"
@@ -236,9 +236,9 @@ export function SpecCard({
           <Button
             size="icon"
             variant="outline"
-            onClick={() => onView(spec.file, name)}
+            onClick={() => onView(story.file, name)}
             className="h-9 w-9 p-0 rounded-md border border-border shrink-0 flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-all duration-200"
-            title="View / Edit Spec"
+            title="View / Edit Story"
           >
             <Eye className="h-4 w-4 text-muted-foreground" />
           </Button>
@@ -246,7 +246,7 @@ export function SpecCard({
         <Button
           size="sm"
           variant="outline"
-          onClick={() => onValidate(spec.file)}
+          onClick={() => onValidate(story.file)}
           disabled={isValidating || isBuilding}
           className="flex-1 min-w-0 h-9 rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-all duration-200 border border-border"
         >
@@ -261,7 +261,7 @@ export function SpecCard({
         ) : (
           <Button
             size="sm"
-            onClick={() => onBuild(spec.file)}
+            onClick={() => onBuild(story.file)}
             disabled={isValidating || isBuilding}
             className="flex-1 min-w-0 h-9 rounded-md text-xs font-semibold transition-all duration-200"
           >
@@ -274,7 +274,7 @@ export function SpecCard({
           <Button
             size="icon"
             variant="outline"
-            onClick={() => onEnqueue(spec.file, isFeature ? 'FeatureSpec' : 'AppSpec', { phase: spec.phase, dependsOn: spec.dependsOn })}
+            onClick={() => onEnqueue(story.file, isFeature ? 'FeatureStory' : 'AppStory', { phase: story.phase, dependsOn: story.dependsOn })}
             disabled={isValidating || isBuilding}
             className="h-9 w-9 p-0 rounded-md border border-border shrink-0 flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-all duration-200"
             title="Add to build queue"

@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 /**
- * POST /api/build — Run full build pipeline for a spec
- * Body: { specFile: "filename.yaml" }
+ * POST /api/build — Run full build pipeline for a story
+ * Body: { storyFile: "filename.yaml" }
  */
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
@@ -11,11 +11,11 @@ import { execSync } from 'node:child_process';
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
 /**
- * Resolve a spec filename to its absolute path.
- * Searches the active project's .factory/specs/apps/ and .factory/specs/features/.
- * Falls back to the factory root specs/ for backward compat.
+ * Resolve a story filename to its absolute path.
+ * Searches the active project's .factory/stories/apps/ and .factory/stories/features/.
+ * Falls back to the factory root stories/ for backward compat.
  */
-function resolveSpecPath(specFile: string): string | null {
+function resolveStoryPath(storyFile: string): string | null {
   // Read active project from projects.json
   const projectsPath = join(FACTORY_ROOT, 'projects.json');
   if (existsSync(projectsPath)) {
@@ -25,11 +25,11 @@ function resolveSpecPath(specFile: string): string | null {
       const project = config.projects?.find((p: { id: string }) => p.id === activeId);
 
       if (project?.path) {
-        // Check apps/ first, then features/, then root specs/
+        // Check apps/ first, then features/, then root stories/
         const candidates = [
-          join(project.path, '.factory', 'specs', 'apps', specFile),
-          join(project.path, '.factory', 'specs', 'features', specFile),
-          join(project.path, '.factory', 'specs', specFile),
+          join(project.path, '.factory', 'stories', 'apps', storyFile),
+          join(project.path, '.factory', 'stories', 'features', storyFile),
+          join(project.path, '.factory', 'stories', storyFile),
         ];
         for (const candidate of candidates) {
           if (existsSync(candidate)) return candidate;
@@ -38,8 +38,8 @@ function resolveSpecPath(specFile: string): string | null {
     } catch { /* fall through */ }
   }
 
-  // Fallback: look in factory root specs/
-  const fallback = join(FACTORY_ROOT, 'specs', specFile);
+  // Fallback: look in factory root stories/
+  const fallback = join(FACTORY_ROOT, 'stories', storyFile);
   if (existsSync(fallback)) return fallback;
 
   return null;
@@ -47,15 +47,16 @@ function resolveSpecPath(specFile: string): string | null {
 
 export async function POST(request: Request) {
   try {
-    const { specFile } = await request.json();
-    if (!specFile) {
-      return NextResponse.json({ error: 'specFile is required' }, { status: 400 });
+    const body = await request.json();
+    const storyFile = body.storyFile || body.specFile;
+    if (!storyFile) {
+      return NextResponse.json({ error: 'storyFile is required' }, { status: 400 });
     }
 
-    const specPath = resolveSpecPath(specFile);
-    if (!specPath) {
+    const storyPath = resolveStoryPath(storyFile);
+    if (!storyPath) {
       return NextResponse.json(
-        { success: false, error: `Spec file not found: ${specFile}` },
+        { success: false, error: `Story file not found: ${storyFile}` },
         { status: 404 }
       );
     }
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
     };
 
     const result = stripAnsi(execSync(
-      `factory build "${specPath}" 2>&1`,
+      `factory build "${storyPath}" 2>&1`,
       execOptions
     ));
 

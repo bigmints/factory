@@ -23,8 +23,8 @@ function getDb() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS queue_items (
       id TEXT PRIMARY KEY,
-      spec_file TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK(kind IN ('AppSpec', 'FeatureSpec')),
+      story_file TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('AppStory', 'FeatureStory')),
       status TEXT NOT NULL DEFAULT 'pending'
         CHECK(status IN ('pending', 'running', 'completed', 'failed', 'needs-attention', 'blocked')),
       priority INTEGER NOT NULL DEFAULT 0,
@@ -62,38 +62,11 @@ function getDb() {
     db.exec(`ALTER TABLE queue_items ADD COLUMN engine TEXT DEFAULT 'factory'`);
   }
 
-  // Migration: update CHECK constraint to include 'blocked' status
-  // SQLite can't ALTER CHECK constraints — recreate the table if needed
-  try {
-    // Quick test: try inserting and rolling back a blocked row
-    db.exec(`BEGIN; INSERT INTO queue_items (id, spec_file, kind, status, added_at) VALUES ('__test_blocked__', '__test__', 'AppSpec', 'blocked', ''); DELETE FROM queue_items WHERE id = '__test_blocked__'; COMMIT;`);
-  } catch {
-    // CHECK constraint rejected 'blocked' — need to recreate table
-    db.exec(`
-      ALTER TABLE queue_items RENAME TO queue_items_old;
-      CREATE TABLE queue_items (
-        id TEXT PRIMARY KEY,
-        spec_file TEXT NOT NULL,
-        kind TEXT NOT NULL CHECK(kind IN ('AppSpec', 'FeatureSpec')),
-        status TEXT NOT NULL DEFAULT 'pending'
-          CHECK(status IN ('pending', 'running', 'completed', 'failed', 'needs-attention', 'blocked')),
-        priority INTEGER NOT NULL DEFAULT 0,
-        added_at TEXT NOT NULL,
-        started_at TEXT,
-        completed_at TEXT,
-        output TEXT DEFAULT '',
-        error TEXT,
-        duration_ms INTEGER,
-        phase INTEGER DEFAULT 0,
-        depends_on TEXT DEFAULT '[]',
-        target_app TEXT DEFAULT ''
-      );
-      INSERT INTO queue_items SELECT
-        id, spec_file, kind, status, priority, added_at, started_at, completed_at, output, error, duration_ms,
-        COALESCE(phase, 0), COALESCE(depends_on, '[]'), COALESCE(target_app, '')
-      FROM queue_items_old;
-      DROP TABLE queue_items_old;
-    `);
+  // Migration: rename spec_file to story_file if present
+  if (qColNames.has('spec_file') && !qColNames.has('story_file')) {
+    try {
+      db.exec(`ALTER TABLE queue_items RENAME COLUMN spec_file TO story_file`);
+    } catch {}
   }
 
   return db;
@@ -119,14 +92,14 @@ function getActiveProjectPath(): string | null {
 }
 
 /**
- * Check if the app spec for the given target slug is already in the build queue.
- * Feature specs can only be enqueued after their parent app spec is queued.
+ * Check if the app story for the given target slug is already in the build queue.
+ * Feature stories can only be enqueued after their parent app story is queued.
  */
-function isAppSpecQueued(targetApp: string, db: ReturnType<typeof getDb>): boolean {
+function isAppStoryQueued(targetApp: string, db: ReturnType<typeof getDb>): boolean {
   const projectPath = getActiveProjectPath();
   if (!projectPath) return false;
 
-  const appsDir = join(projectPath, '.factory', 'specs', 'apps');
+  const appsDir = join(projectPath, '.factory', 'stories', 'apps');
   if (!existsSync(appsDir)) return false;
 
   const appFiles = readdirSync(appsDir).filter(
@@ -139,9 +112,9 @@ function isAppSpecQueued(targetApp: string, db: ReturnType<typeof getDb>): boole
       const parsed = parseYaml(raw);
       const slug = parsed.metadata?.slug || file.replace(/\.ya?ml$/, '');
       if (slug === targetApp) {
-        // Check if this app spec file is already in the queue
+        // Check if this app story file is already in the queue
         const queued = db.prepare(
-          `SELECT id FROM queue_items WHERE spec_file = ? AND status IN ('pending', 'running', 'completed')`
+          `SELECT id FROM queue_items WHERE story_file = ? AND status IN ('pending', 'running', 'completed')`
         ).get(file);
         return !!queued;
       }
@@ -197,40 +170,43 @@ export async function GET() {
   }
 }
 
-/** POST — enqueue a new spec */
+/** POST — enqueue a new story */
 export async function POST(request: Request) {
   try {
-    const { specFile, kind, phase, dependsOn, buildAll, engine } = await request.json();
+    const body = await request.json();
+    const storyFile = body.storyFile || body.specFile;
+    const kind = body.kind === 'AppSpec' ? 'AppStory' : body.kind === 'FeatureSpec' ? 'FeatureStory' : body.kind;
+    const { phase, dependsOn, buildAll, engine } = body;
 
-    if (!specFile || !kind) {
-      return NextResponse.json({ error: 'specFile and kind are required' }, { status: 400 });
+    if (!storyFile || !kind) {
+      return NextResponse.json({ error: 'storyFile and kind are required' }, { status: 400 });
     }
 
     const db = getDb();
 
-    // For FeatureSpecs, validate that the target app is already in the queue
+    // For FeatureStories, validate that the target app is already in the queue
     // Skip this check during Build All — ordering is handled by the caller
-    if (kind === 'FeatureSpec' && !buildAll) {
+    if (kind === 'FeatureStory' && !buildAll) {
       const projectPath = getActiveProjectPath();
       if (projectPath) {
         try {
-          const specPath = join(projectPath, '.factory', 'specs', specFile);
-          if (existsSync(specPath)) {
-            const raw = readFileSync(specPath, 'utf-8');
+          const storyPath = join(projectPath, '.factory', 'stories', storyFile);
+          if (existsSync(storyPath)) {
+            const raw = readFileSync(storyPath, 'utf-8');
             const parsed = parseYaml(raw);
             const targetApp = parsed.target?.app;
-            if (targetApp && !isAppSpecQueued(targetApp, db)) {
+            if (targetApp && !isAppStoryQueued(targetApp, db)) {
               db.close();
               return NextResponse.json(
-                { error: `App "${targetApp}" must be in the queue first. Queue the app spec before adding features.` },
+                { error: `App "${targetApp}" must be in the queue first. Queue the app story before adding features.` },
                 { status: 400 }
               );
             }
 
-            // Validate all dependsOn specs are already in the queue
-            const specDeps: string[] = parsed.dependsOn ?? dependsOn ?? [];
-            if (specDeps.length > 0) {
-              const featuresDir = join(projectPath, '.factory', 'specs', 'features');
+            // Validate all dependsOn stories are already in the queue
+            const storyDeps: string[] = parsed.dependsOn ?? dependsOn ?? [];
+            if (storyDeps.length > 0) {
+              const featuresDir = join(projectPath, '.factory', 'stories', 'features');
               const featureFiles = existsSync(featuresDir)
                 ? readdirSync(featuresDir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
                 : [];
@@ -247,11 +223,11 @@ export async function POST(request: Request) {
               }
 
               const missingDeps: string[] = [];
-              for (const dep of specDeps) {
+              for (const dep of storyDeps) {
                 const depFile = slugToFile[dep];
                 if (depFile) {
                   const depQueued = db.prepare(
-                    `SELECT id FROM queue_items WHERE spec_file = ? AND status IN ('pending', 'running', 'completed')`
+                    `SELECT id FROM queue_items WHERE story_file = ? AND status IN ('pending', 'running', 'completed')`
                   ).get(depFile);
                   if (!depQueued) missingDeps.push(dep);
                 }
@@ -272,12 +248,12 @@ export async function POST(request: Request) {
 
     // Check if already in queue
     const existing = db.prepare(
-      `SELECT id FROM queue_items WHERE spec_file = ? AND status IN ('pending', 'running')`
-    ).get(specFile);
+      `SELECT id FROM queue_items WHERE story_file = ? AND status IN ('pending', 'running')`
+    ).get(storyFile);
 
     if (existing) {
       db.close();
-      return NextResponse.json({ error: 'Spec is already in the queue' }, { status: 409 });
+      return NextResponse.json({ error: 'Story is already in the queue' }, { status: 409 });
     }
 
     const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -285,15 +261,15 @@ export async function POST(request: Request) {
     const phaseVal = phase ?? 0;
     const dependsOnVal = JSON.stringify(dependsOn ?? []);
 
-    // Extract target_app for FeatureSpecs so the queue processor can do implicit dependency checks
+    // Extract target_app for FeatureStories so the queue processor can do implicit dependency checks
     let targetApp = '';
-    if (kind === 'FeatureSpec') {
+    if (kind === 'FeatureStory') {
       const projectPath = getActiveProjectPath();
       if (projectPath) {
         try {
-          const specPath = join(projectPath, '.factory', 'specs', specFile);
-          if (existsSync(specPath)) {
-            const raw = readFileSync(specPath, 'utf-8');
+          const storyPath = join(projectPath, '.factory', 'stories', storyFile);
+          if (existsSync(storyPath)) {
+            const raw = readFileSync(storyPath, 'utf-8');
             const parsed = parseYaml(raw);
             targetApp = parsed.target?.app || '';
           }
@@ -304,9 +280,9 @@ export async function POST(request: Request) {
     const engineVal = engine || 'factory';
 
     db.prepare(`
-      INSERT INTO queue_items (id, spec_file, kind, status, priority, phase, depends_on, target_app, engine, added_at)
+      INSERT INTO queue_items (id, story_file, kind, status, priority, phase, depends_on, target_app, engine, added_at)
       VALUES (?, ?, ?, 'pending', 0, ?, ?, ?, ?, ?)
-    `).run(id, specFile, kind, phaseVal, dependsOnVal, targetApp, engineVal, now);
+    `).run(id, storyFile, kind, phaseVal, dependsOnVal, targetApp, engineVal, now);
 
     const item = db.prepare('SELECT * FROM queue_items WHERE id = ?').get(id);
     db.close();

@@ -30,7 +30,8 @@ interface ErrorBreakdown {
 
 interface BuildEntry {
   id: string;
-  spec_file: string;
+  spec_file?: string;
+  story_file?: string;
   kind: string;
   timestamp: string;
   duration_ms: number | null;
@@ -47,7 +48,8 @@ interface ReportStats {
   totalBuilds: number;
   successfulBuilds: number;
   failedBuilds: number;
-  uniqueSpecs: number;
+  uniqueStories?: number;
+  uniqueSpecs?: number;
   totalTokensIn: number;
   totalTokensOut: number;
   avgDurationMs: number;
@@ -81,7 +83,7 @@ function formatDate(iso: string): string {
   });
 }
 
-function specName(path: string): string {
+function storyName(path: string): string {
   return path.split('/').pop()?.replace('.yaml', '') || path;
 }
 
@@ -99,7 +101,7 @@ export function ReportViewer({ entries, stats }: ReportViewerProps) {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { icon: Activity, value: stats.totalBuilds, label: 'Total Builds', sub: `${stats.uniqueSpecs} unique specs` },
+          { icon: Activity, value: stats.totalBuilds, label: 'Total Builds', sub: `${stats.uniqueStories ?? stats.uniqueSpecs ?? 0} unique stories` },
           { icon: CheckCircle2, value: `${successRate}%`, label: 'Success Rate', sub: `${stats.successfulBuilds} passed · ${stats.failedBuilds} failed` },
           { icon: Zap, value: formatTokens(totalTokens), label: 'Tokens Used', sub: `${formatTokens(stats.totalTokensIn)} in · ${formatTokens(stats.totalTokensOut)} out` },
           { icon: Clock, value: stats.avgDurationMs > 0 ? formatDuration(stats.avgDurationMs) : '—', label: 'Avg Duration', sub: 'per build run' },
@@ -235,7 +237,7 @@ export function ReportViewer({ entries, stats }: ReportViewerProps) {
             <div className="space-y-2.5">
               {/* Header — hidden on mobile, shown on tablet+ */}
               <div className="hidden sm:grid sm:grid-cols-[1fr_90px_110px_90px_90px_70px] gap-3 px-3 py-2 text-[10px] text-muted-foreground uppercase tracking-wider font-bold border-b">
-                <span>Spec</span>
+                <span>Story</span>
                 <span>Status</span>
                 <span>Model</span>
                 <span>Tokens</span>
@@ -250,7 +252,7 @@ export function ReportViewer({ entries, stats }: ReportViewerProps) {
                   {/* Mobile: stacked layout */}
                   <div className="sm:hidden space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold truncate text-foreground">{specName(entry.spec_file)}</span>
+                      <span className="text-xs font-bold truncate text-foreground">{storyName(entry.story_file || entry.spec_file || '')}</span>
                       <span className="text-[10px] text-muted-foreground font-medium shrink-0">{formatDate(entry.timestamp)}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -271,14 +273,14 @@ export function ReportViewer({ entries, stats }: ReportViewerProps) {
                         </Badge>
                       )}
                       <Badge variant="secondary" className="text-[9px]">
-                        {entry.kind === 'FeatureSpec' ? 'feat' : 'app'}
+                        {entry.kind === 'FeatureSpec' || entry.kind === 'FeatureStory' ? 'feat' : 'app'}
                       </Badge>
                     </div>
                   </div>
                   {/* Desktop: grid layout */}
                   <div className="hidden sm:grid sm:grid-cols-[1fr_90px_110px_90px_90px_70px] gap-3 items-center">
                     <div className="truncate">
-                      <span className="text-xs font-bold text-foreground">{specName(entry.spec_file)}</span>
+                      <span className="text-xs font-bold text-foreground">{storyName(entry.story_file || entry.spec_file || '')}</span>
                       <span className="text-[10px] text-muted-foreground font-medium ml-2">{formatDate(entry.timestamp)}</span>
                     </div>
                     <div>
@@ -306,7 +308,7 @@ export function ReportViewer({ entries, stats }: ReportViewerProps) {
                       {entry.duration_ms ? formatDuration(entry.duration_ms) : '—'}
                     </span>
                     <Badge variant="secondary" className="text-[9px]">
-                      {entry.kind === 'FeatureSpec' ? 'feat' : 'app'}
+                      {entry.kind === 'FeatureSpec' || entry.kind === 'FeatureStory' ? 'feat' : 'app'}
                     </Badge>
                   </div>
                 </div>

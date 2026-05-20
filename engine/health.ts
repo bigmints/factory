@@ -30,7 +30,7 @@ export function performStateAudit(): void {
     }
 
     // 2. Find zombie tasks ('running' but runner isn't active)
-    const runningTasks = db.prepare(`SELECT id, spec_file FROM queue_items WHERE status = 'running'`).all() as { id: string, spec_file: string }[];
+    const runningTasks = db.prepare(`SELECT id, story_file FROM queue_items WHERE status = 'running'`).all() as { id: string, story_file: string }[];
     
     if (runningTasks.length > 0) {
         log('🔧', `Found ${runningTasks.length} interrupted task(s) — resetting to pending`);
@@ -40,7 +40,7 @@ export function performStateAudit(): void {
                 startedAt: null, 
                 error: 'Interrupted by process exit' 
             });
-            log('↻', `  Reset: ${task.spec_file}`);
+            log('↻', `  Reset: ${task.story_file}`);
         }
     }
 }

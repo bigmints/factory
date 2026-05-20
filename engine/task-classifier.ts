@@ -1,18 +1,18 @@
 /**
- * Task Classifier — analyzes a spec and determines which pipeline stages to run.
+ * Task Classifier — analyzes a story and determines which pipeline stages to run.
  *
  * Instead of running the full plan → build → install → tsc → lint → test cycle
- * for every spec, the classifier determines the minimum set of stages needed.
+ * for every story, the classifier determines the minimum set of stages needed.
  */
 
-import type { AppSpec, TaskProfile } from './types.ts';
+import type { AppStory, TaskProfile } from './types.ts';
 import { log } from './log.ts';
 
 /** Static/vanilla frameworks that don't need npm install */
 const STATIC_FRAMEWORKS = new Set(['html', 'vanilla', 'static', 'none', '']);
 
 /**
- * Classify an app spec into a task profile that controls which pipeline stages run.
+ * Classify an app story into a task profile that controls which pipeline stages run.
  *
  * Task types:
  *   full-app  — framework + (testing or database/auth) → all stages
@@ -21,16 +21,16 @@ const STATIC_FRAMEWORKS = new Set(['html', 'vanilla', 'static', 'none', '']);
  *   static    — no framework (HTML/CSS/JS)               → no toolchain
  *   config    — no pages, no data, no auth               → just write files
  */
-export function classifyTask(spec: AppSpec): TaskProfile {
-    const fw = spec.stack.framework?.toLowerCase() ?? '';
+export function classifyTask(story: AppStory): TaskProfile {
+    const fw = story.stack.framework?.toLowerCase() ?? '';
     const hasFramework = fw.length > 0 && !STATIC_FRAMEWORKS.has(fw);
-    const hasTesting = !!spec.stack.testing && spec.stack.testing.toLowerCase() !== 'none';
-    const hasLinter = !!spec.stack.linter && spec.stack.linter.toLowerCase() !== 'none';
-    const hasDatabase = !!spec.stack.database && spec.stack.database.toLowerCase() !== 'none';
-    const hasAuth = !!spec.auth?.provider;
-    const hasPages = !!(spec.pages?.dashboard?.length || spec.pages?.crud?.length || spec.pages?.custom?.length);
-    const hasData = !!(spec.data?.tables?.length);
-    const isTypeScript = (spec.stack.language?.toLowerCase() ?? 'typescript') !== 'javascript';
+    const hasTesting = !!story.stack.testing && story.stack.testing.toLowerCase() !== 'none';
+    const hasLinter = !!story.stack.linter && story.stack.linter.toLowerCase() !== 'none';
+    const hasDatabase = !!story.stack.database && story.stack.database.toLowerCase() !== 'none';
+    const hasAuth = !!story.auth?.provider;
+    const hasPages = !!(story.pages?.dashboard?.length || story.pages?.crud?.length || story.pages?.custom?.length);
+    const hasData = !!(story.data?.tables?.length);
+    const isTypeScript = (story.stack.language?.toLowerCase() ?? 'typescript') !== 'javascript';
 
     let profile: TaskProfile;
 
@@ -116,7 +116,7 @@ export function classifyTask(spec: AppSpec): TaskProfile {
 export function classifyFeatureTask(): TaskProfile {
     const profile: TaskProfile = {
         type: 'full-app',
-        needsPlan: false,          // Feature specs already have enough detail
+        needsPlan: false,          // Feature stories already have enough detail
         needsInstall: true,
         needsTypeCheck: true,
         needsLint: true,

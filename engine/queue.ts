@@ -1,14 +1,13 @@
 /**
  * Queue manager — enqueue, dequeue, update, list build items.
- * The factory processes specs from this queue while you sleep.
+ * The factory processes stories from this queue while you sleep.
  */
 
 import { getDb } from './db.ts';
 import { writeHeartbeat } from './toon.ts';
 import { log, logError } from './log.ts';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -16,8 +15,8 @@ export type BuildEngine = 'factory' | 'worker';
 
 export interface QueueItem {
     id: string;
-    specFile: string;
-    kind: 'AppSpec' | 'FeatureSpec';
+    storyFile: string;
+    kind: 'AppStory' | 'FeatureStory';
     status: 'pending' | 'running' | 'completed' | 'failed' | 'needs-attention';
     priority: number;
     phase: number;
@@ -34,7 +33,7 @@ export interface QueueItem {
 
 interface QueueRow {
     id: string;
-    spec_file: string;
+    story_file: string;
     kind: string;
     status: string;
     priority: number;
@@ -57,7 +56,7 @@ function mapRow(row: QueueRow): QueueItem {
     try { dependsOn = JSON.parse(row.depends_on || '[]'); } catch { /* empty */ }
     return {
         id: row.id,
-        specFile: row.spec_file,
+        storyFile: row.story_file,
         kind: row.kind as QueueItem['kind'],
         status: row.status as QueueItem['status'],
         priority: row.priority,
@@ -84,10 +83,10 @@ export function timestamp(): string {
 
 // ─── Core Operations ─────────────────────────────────────
 
-/** Add a spec to the build queue. */
+/** Add a story to the build queue. */
 export function enqueue(
-    specFile: string,
-    kind: 'AppSpec' | 'FeatureSpec',
+    storyFile: string,
+    kind: 'AppStory' | 'FeatureStory',
     opts?: { phase?: number; dependsOn?: string[]; engine?: BuildEngine },
 ): QueueItem {
     const db = getDb();
@@ -99,17 +98,17 @@ export function enqueue(
 
     // Check for duplicates
     const existing = db.prepare(
-        `SELECT id FROM queue_items WHERE spec_file = ? AND status IN ('pending', 'running')`
-    ).get(specFile) as QueueRow | undefined;
+        `SELECT id FROM queue_items WHERE story_file = ? AND status IN ('pending', 'running')`
+    ).get(storyFile) as QueueRow | undefined;
 
     if (existing) {
-        throw new Error(`Spec "${specFile}" is already in the queue`);
+        throw new Error(`Story "${storyFile}" is already in the queue`);
     }
 
     db.prepare(`
-        INSERT INTO queue_items (id, spec_file, kind, status, priority, phase, depends_on, engine, added_at)
+        INSERT INTO queue_items (id, story_file, kind, status, priority, phase, depends_on, engine, added_at)
         VALUES (?, ?, ?, 'pending', 0, ?, ?, ?, ?)
-    `).run(id, specFile, kind, phase, dependsOn, engine, now);
+    `).run(id, storyFile, kind, phase, dependsOn, engine, now);
 
     return getItem(id)!;
 }
@@ -117,7 +116,7 @@ export function enqueue(
 /**
  * Get the next pending item whose dependencies are all met.
  * Order: phase ASC, priority DESC, added_at ASC.
- * Skips items whose dependsOn specs are not all 'completed'.
+ * Skips items whose dependsOn stories are not all 'completed'.
  */
 export function dequeue(): QueueItem | null {
     const db = getDb();
@@ -147,10 +146,10 @@ export function areDependenciesMet(dependsOn: string[]): boolean {
 
     const db = getDb();
     for (const depSlug of dependsOn) {
-        // Match by spec_file containing the slug (e.g., "auth-system.yaml" matches slug "auth-system")
+        // Match by story_file containing the slug (e.g., "auth-system.yaml" matches slug "auth-system")
         const completed = db.prepare(`
             SELECT id FROM queue_items
-            WHERE spec_file LIKE ? AND status = 'completed'
+            WHERE story_file LIKE ? AND status = 'completed'
             LIMIT 1
         `).get(`%${depSlug}%`) as QueueRow | undefined;
 
@@ -271,7 +270,7 @@ export function markFailed(id: string, error: string, output: string, durationMs
             output ? `## Output\n\`\`\`\n${output.slice(0, 3000)}\n\`\`\`` : '',
             ``,
             `## Action`,
-            `- Review the error above before retrying this spec`,
+            `- Review the error above before retrying this story`,
             `- Run \`factory queue retry ${id}\` once the issue is resolved`,
         ].filter(l => l !== undefined).join('\n');
 
@@ -435,31 +434,31 @@ export async function startQueueDaemon(): Promise<void> {
 async function runBuild(item: QueueItem): Promise<boolean> {
     try {
         const { runPipeline, runFeaturePipeline } = await import('./generate.ts');
-        const { loadSpec, loadFeatureSpec } = await import('./spec.ts');
+        const { loadStory, loadFeatureStory } = await import('./story.ts');
         const { gatherContext } = await import('./context.ts');
         const { loadBridgeConfig } = await import('./config.ts');
         const { writeFiles, setupProject, writeKnowledgeEntry, writeAppAgentsMd } = await import('./writer.ts');
         const { resolve } = await import('node:path');
-        const { specSlug } = await import('./types.ts');
+        const { storySlug } = await import('./types.ts');
 
         const bridge = loadBridgeConfig(process.cwd());
         const context = gatherContext(process.cwd(), bridge);
 
         let result;
         let targetDir: string;
-        if (item.kind === 'FeatureSpec') {
-            const spec = loadFeatureSpec(item.specFile);
+        if (item.kind === 'FeatureStory') {
+            const story = loadFeatureStory(item.storyFile);
             targetDir = bridge.apps_dir
-                ? resolve(process.cwd(), bridge.apps_dir, spec.target.app)
-                : resolve(process.cwd(), spec.target.app);
-            result = await runFeaturePipeline(spec, context, targetDir, item.specFile);
+                ? resolve(process.cwd(), bridge.apps_dir, story.target.app)
+                : resolve(process.cwd(), story.target.app);
+            result = await runFeaturePipeline(story, context, targetDir, item.storyFile);
         } else {
-            const spec = loadSpec(item.specFile);
-            const slug = specSlug(spec);
+            const story = loadStory(item.storyFile);
+            const slug = storySlug(story);
             targetDir = bridge.apps_dir
                 ? resolve(process.cwd(), bridge.apps_dir, slug)
                 : resolve(process.cwd(), slug);
-            result = await runPipeline(spec, context, targetDir, item.specFile);
+            result = await runPipeline(story, context, targetDir, item.storyFile);
         }
 
         // Write files
@@ -467,10 +466,10 @@ async function runBuild(item: QueueItem): Promise<boolean> {
         setupProject(targetDir, bridge.stack?.packageManager);
 
         // Knowledge feedback
-        const spec = item.kind === 'FeatureSpec' ? loadFeatureSpec(item.specFile) : loadSpec(item.specFile);
-        const appName = 'appName' in spec ? spec.appName : spec.feature.name;
-        writeKnowledgeEntry(process.cwd(), appName, result, (spec as any).stack || {}, item.specFile);
-        writeAppAgentsMd(targetDir, appName, (spec as any).stack || {}, result.files);
+        const story = item.kind === 'FeatureStory' ? loadFeatureStory(item.storyFile) : loadStory(item.storyFile);
+        const appName = 'appName' in story ? story.appName : story.feature.name;
+        writeKnowledgeEntry(process.cwd(), appName, result, (story as any).stack || {}, item.storyFile);
+        writeAppAgentsMd(targetDir, appName, (story as any).stack || {}, result.files);
 
         return result.success;
     } catch (error) {

@@ -24,8 +24,8 @@ const MAX_SEARCH_RESULTS = 50;
 export interface BuildToolContext {
     /** Path to the target app directory */
     targetDir: string;
-    /** Path to the spec YAML file */
-    specFile: string;
+    /** Path to the story YAML file */
+    storyFile: string;
     /** Whether a terminal tool (mark_complete/mark_failed) was called */
     terminal: boolean;
     /** True if mark_complete was called; false if mark_failed or no terminal call */
@@ -137,8 +137,8 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'read_spec',
-        description: 'Read the current build spec YAML file. Returns its content.',
+        name: 'read_story',
+        description: 'Read the current build story YAML file. Returns its content.',
         parameters: {
             type: 'object',
             properties: {},
@@ -215,7 +215,7 @@ export async function executeTool(
             case 'list_dir':      return execListDir(args, ctx);
             case 'search_files':  return execSearchFiles(args, ctx);
             case 'run_command':   return execRunCommand(args, ctx);
-            case 'read_spec':     return execReadSpec(args, ctx);
+            case 'read_story':    return execReadStory(args, ctx);
             case 'read_context':  return execReadContext(args, ctx);
             case 'log_step':      return execLogStep(args, ctx);
             case 'mark_complete': return execMarkComplete(args, ctx);
@@ -417,11 +417,11 @@ async function execRunCommand(args: Record<string, unknown>, ctx: BuildToolConte
     });
 }
 
-function execReadSpec(_args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
-    if (!ctx.specFile || !existsSync(ctx.specFile)) {
-        return { content: 'No spec file configured for this session', isError: true };
+function execReadStory(_args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+    if (!ctx.storyFile || !existsSync(ctx.storyFile)) {
+        return { content: 'No story file configured for this session', isError: true };
     }
-    return { content: readFileSync(ctx.specFile, 'utf-8') };
+    return { content: readFileSync(ctx.storyFile, 'utf-8') };
 }
 
 function execReadContext(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {

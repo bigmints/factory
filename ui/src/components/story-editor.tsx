@@ -26,9 +26,9 @@ import {
   Code2,
 } from 'lucide-react';
 
-interface SpecEditorProps {
-  specFile: string;
-  specName: string;
+interface StoryEditorProps {
+  storyFile: string;
+  storyName: string;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -115,7 +115,7 @@ const updateYamlField = (yaml: string, field: string, value: any): string => {
   return updated;
 };
 
-export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorProps) {
+export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEditorProps) {
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -125,18 +125,18 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
   const [editorTab, setEditorTab] = useState<'form' | 'code'>('form');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { loadSpec(); }, [specFile]);
+  useEffect(() => { loadStory(); }, [storyFile]);
 
-  const loadSpec = async () => {
+  const loadStory = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/specs/${encodeURIComponent(specFile)}`);
+      const res = await fetch(`/api/stories/${encodeURIComponent(storyFile)}`);
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Failed to load spec'); return; }
+      if (!res.ok) { setError(data.error || 'Failed to load story'); return; }
       setContent(data.content);
       setOriginalContent(data.content);
-    } catch (err: any) { setError(err.message || 'Failed to load spec'); }
+    } catch (err: any) { setError(err.message || 'Failed to load story'); }
     finally { setLoading(false); }
   };
 
@@ -145,7 +145,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
     setError('');
     setSaveSuccess(false);
     try {
-      const res = await fetch(`/api/specs/${encodeURIComponent(specFile)}`, {
+      const res = await fetch(`/api/stories/${encodeURIComponent(storyFile)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
@@ -155,7 +155,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
       setOriginalContent(content);
       setSaveSuccess(true);
       onSaved();
-      toast.success('Spec saved', { description: specFile });
+      toast.success('Story saved', { description: storyFile });
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err: any) {
       setError(err.message || 'Save failed');
@@ -168,12 +168,12 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
   const handleReset = () => {
     setContent(originalContent);
     setError('');
-    toast.info('Spec restored to original state');
+    toast.info('Story restored to original state');
   };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content);
-    toast.success('Spec copied to clipboard');
+    toast.success('Story copied to clipboard');
   };
 
   const parsedFields = useMemo(() => parseYamlFields(content), [content]);
@@ -228,9 +228,9 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                 ) : (
                   <Cpu className="h-4 w-4 text-muted-foreground shrink-0" />
                 )}
-                <h2 className="text-sm sm:text-base font-bold truncate text-foreground">{specName}</h2>
+                <h2 className="text-sm sm:text-base font-bold truncate text-foreground">{storyName}</h2>
               </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground font-mono truncate mt-0.5">{specFile}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-mono truncate mt-0.5">{storyFile}</p>
             </div>
             {isDirty && (
               <Badge variant="outline" className="text-[9px] font-semibold px-2 h-5 rounded-full shrink-0">
@@ -285,7 +285,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                 className="h-9 rounded-md px-4 text-xs gap-1.5 font-semibold shrink-0"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saveSuccess ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                {saving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Spec'}
+                {saving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Story'}
               </Button>
             </div>
           </div>
@@ -311,7 +311,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
           <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2.5">
             <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
               {editorTab === 'form' ? <Wrench className="h-3.5 w-3.5 text-muted-foreground" /> : <Code2 className="h-3.5 w-3.5 text-muted-foreground" />}
-              {editorTab === 'form' ? 'Interactive Form Builder' : 'Raw Specification YAML'}
+              {editorTab === 'form' ? 'Interactive Form Builder' : 'Raw Story YAML'}
             </div>
             <span className="text-[10px] sm:text-[11px] font-mono text-muted-foreground/60">{lineCount} lines</span>
           </div>
@@ -360,7 +360,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                         value={parsedFields.description}
                         onChange={(e) => updateField('description', e.target.value)}
                         className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all min-h-[80px] resize-none"
-                        placeholder="Detail what this specification builds..."
+                        placeholder="Detail what this story builds..."
                       />
                     </div>
                   </div>
@@ -398,7 +398,7 @@ export function SpecEditor({ specFile, specName, onClose, onSaved }: SpecEditorP
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Target Connected App Slug</label>
                         <div className="w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-xs sm:text-sm text-muted-foreground">
-                          {parsedFields.targetApp || 'Default Active Spec'}
+                          {parsedFields.targetApp || 'Default Active Story'}
                         </div>
                       </div>
                     )}

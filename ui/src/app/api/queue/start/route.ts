@@ -28,11 +28,11 @@ function stripAnsi(str: string): string {
 }
 
 /**
- * Resolve a spec filename to its absolute path by checking the active project.
+ * Resolve a story/spec filename to its absolute path by checking the active project.
  */
-function resolveSpecPath(specFile: string, kind: string): string {
+function resolveStoryPath(storyFile: string, kind: string): string {
   // If already absolute, use as-is
-  if (specFile.startsWith('/') && existsSync(specFile)) return specFile;
+  if (storyFile.startsWith('/') && existsSync(storyFile)) return storyFile;
 
   const projectsPath = join(FACTORY_ROOT, 'projects.json');
   if (existsSync(projectsPath)) {
@@ -42,16 +42,21 @@ function resolveSpecPath(specFile: string, kind: string): string {
       const project = config.projects?.find((p: { id: string }) => p.id === activeId);
 
       if (project?.path) {
-        const cleanFile = specFile.replace(/^(apps|features)\//, '');
-        const candidates = kind === 'FeatureSpec'
+        const cleanFile = storyFile.replace(/^(apps|features)\//, '');
+        const candidates = kind === 'FeatureSpec' || kind === 'FeatureStory'
           ? [
+              join(project.path, '.factory', 'stories', 'features', cleanFile),
+              join(project.path, '.factory', 'stories', storyFile),
               join(project.path, '.factory', 'specs', 'features', cleanFile),
-              join(project.path, '.factory', 'specs', specFile),
+              join(project.path, '.factory', 'specs', storyFile),
             ]
           : [
+              join(project.path, '.factory', 'stories', 'apps', cleanFile),
+              join(project.path, '.factory', 'stories', 'features', cleanFile),
+              join(project.path, '.factory', 'stories', storyFile),
               join(project.path, '.factory', 'specs', 'apps', cleanFile),
               join(project.path, '.factory', 'specs', 'features', cleanFile),
-              join(project.path, '.factory', 'specs', specFile),
+              join(project.path, '.factory', 'specs', storyFile),
             ];
 
         for (const candidate of candidates) {
@@ -62,10 +67,13 @@ function resolveSpecPath(specFile: string, kind: string): string {
   }
 
   // Fallback: factory root
-  const fallback = join(FACTORY_ROOT, 'specs', specFile);
+  const fallback = join(FACTORY_ROOT, 'stories', storyFile);
   if (existsSync(fallback)) return fallback;
 
-  return specFile; // Return as-is, let CLI report the error
+  const oldFallback = join(FACTORY_ROOT, 'specs', storyFile);
+  if (existsSync(oldFallback)) return oldFallback;
+
+  return storyFile; // Return as-is, let CLI report the error
 }
 
 /**
@@ -73,16 +81,20 @@ function resolveSpecPath(specFile: string, kind: string): string {
  * This function runs detached from the HTTP request.
  * Retries for transient LLM errors happen inside the CLI build process itself.
  *
- * Dependency cascade: if an item's dependencies (app spec or explicit depends_on)
+ * Dependency cascade: if an item's dependencies (app story or explicit depends_on)
  * have failed or been blocked, this item is auto-blocked. No wasted LLM tokens.
  */
 function processQueueInBackground() {
   const db = getDb();
 
-  const pending = db.prepare(`
+  const pending = (db.prepare(`
     SELECT * FROM queue_items WHERE status = 'pending'
     ORDER BY phase ASC, priority DESC, added_at ASC
-  `).all() as any[];
+  `).all() as any[]).map(row => ({
+    ...row,
+    story_file: row.story_file || row.spec_file,
+    spec_file: row.story_file || row.spec_file,
+  }));
 
   if (pending.length === 0) {
     db.prepare(`UPDATE queue_state SET value = 'false' WHERE key = 'is_running'`).run();
@@ -119,30 +131,30 @@ function processQueueInBackground() {
   function checkDependencyBlock(item: any): string | null {
     const checkDb = getDb();
     try {
-      // 1. For FeatureSpecs: implicit dependency on the app spec
-      if (item.kind === 'FeatureSpec' && item.target_app) {
-        // Find the app spec for this target_app
-        // App specs are identified by kind='AppSpec' — check if any matching one failed/blocked
+      const file = item.story_file || item.spec_file;
+      // 1. For FeatureStories/Specs: implicit dependency on the app story
+      if ((item.kind === 'FeatureSpec' || item.kind === 'FeatureStory') && item.target_app) {
+        // Find the app spec/story for this target_app
         const appItems = checkDb.prepare(`
-          SELECT id, status, spec_file FROM queue_items
-          WHERE kind = 'AppSpec'
+          SELECT id, status, story_file, spec_file FROM queue_items
+          WHERE kind IN ('AppSpec', 'AppStory')
           ORDER BY added_at ASC
-        `).all() as { id: string; status: string; spec_file: string }[];
+        `).all() as any[];
 
-        // Check if ANY app spec in the queue has failed or is blocked
-        // (For the target app specifically — match by slug in spec_file)
+        // Check if ANY app spec/story in the queue has failed or is blocked
         const matchingApp = appItems.find(a => {
-          const slug = a.spec_file.replace(/\.ya?ml$/, '').replace(/^apps\//, '');
+          const appFile = a.story_file || a.spec_file || '';
+          const slug = appFile.replace(/\.ya?ml$/, '').replace(/^apps\//, '');
           return slug === item.target_app;
         });
 
         if (matchingApp) {
+          const appFile = matchingApp.story_file || matchingApp.spec_file;
           if (matchingApp.status === 'failed' || matchingApp.status === 'blocked') {
-            return `App spec "${matchingApp.spec_file}" ${matchingApp.status}. Cannot build feature on a broken app.`;
+            return `App story "${appFile}" ${matchingApp.status}. Cannot build feature on a broken app.`;
           }
           if (matchingApp.status === 'pending' || matchingApp.status === 'running') {
-            // This shouldn't happen due to phase ordering, but safety check
-            return `App spec "${matchingApp.spec_file}" has not completed yet.`;
+            return `App story "${appFile}" has not completed yet.`;
           }
         }
       }
@@ -155,13 +167,14 @@ function processQueueInBackground() {
         for (const dep of dependsOn) {
           // dep is a slug — find matching queue item
           const depItem = checkDb.prepare(`
-            SELECT id, status, spec_file FROM queue_items
-            WHERE spec_file LIKE ?
+            SELECT id, status, story_file, spec_file FROM queue_items
+            WHERE story_file LIKE ? OR spec_file LIKE ?
             ORDER BY added_at DESC LIMIT 1
-          `).get(`%${dep}%`) as { id: string; status: string; spec_file: string } | undefined;
+          `).get(`%${dep}%`, `%${dep}%`) as any;
 
           if (depItem && (depItem.status === 'failed' || depItem.status === 'blocked')) {
-            return `Dependency "${dep}" (${depItem.spec_file}) ${depItem.status}. Cannot proceed.`;
+            const depFile = depItem.story_file || depItem.spec_file;
+            return `Dependency "${dep}" (${depFile}) ${depItem.status}. Cannot proceed.`;
           }
         }
       }
@@ -177,25 +190,26 @@ function processQueueInBackground() {
    * This lets the LLM wire things up with previously built features.
    */
   function writeQueueContext(item: any) {
-    if (item.kind !== 'FeatureSpec') return;
+    if (item.kind !== 'FeatureSpec' && item.kind !== 'FeatureStory') return;
 
     const ctxDb = getDb();
     try {
       // Get all completed items for context
       const completed = ctxDb.prepare(`
-        SELECT spec_file, kind, output, target_app FROM queue_items
+        SELECT story_file, spec_file, kind, output, target_app FROM queue_items
         WHERE status = 'completed'
         ORDER BY completed_at ASC
-      `).all() as { spec_file: string; kind: string; output: string; target_app: string }[];
+      `).all() as any[];
 
       if (completed.length === 0) return;
 
       // Extract file lists from build output (they appear as "Generated N files" sections)
       const context = completed.map(c => {
-        // Extract generated file paths from output
+        const file = c.story_file || c.spec_file;
         const fileMatches = c.output?.match(/(?:src\/|lib\/|app\/|pages\/|components\/)[\w/.-]+\.(?:ts|tsx|js|jsx|json|css)/g) || [];
         return {
-          specFile: c.spec_file,
+          storyFile: file,
+          specFile: file,
           kind: c.kind,
           targetApp: c.target_app,
           generatedFiles: [...new Set(fileMatches)].slice(0, 50),
@@ -214,7 +228,6 @@ function processQueueInBackground() {
       const finDb = getDb();
       finDb.prepare(`UPDATE queue_state SET value = 'false' WHERE key = 'is_running'`).run();
       finDb.close();
-      // Clean up queue context file
       try {
         const ctxPath = join(FACTORY_ROOT, 'queue-context.json');
         if (existsSync(ctxPath)) {
@@ -238,9 +251,9 @@ function processQueueInBackground() {
       `).run(blockReason, new Date().toISOString(), item.id);
       blockDb.close();
 
-      // Log to build log
+      const file = item.story_file || item.spec_file;
       try {
-        appendFileSync(LOG_FILE, `\n[blocked] ${item.spec_file}: ${blockReason}\n`);
+        appendFileSync(LOG_FILE, `\n[blocked] ${file}: ${blockReason}\n`);
       } catch {}
 
       processNext(); // Skip to next item
@@ -255,18 +268,19 @@ function processQueueInBackground() {
       .run(new Date().toISOString(), item.id);
     runDb.close();
 
+    const file = item.story_file || item.spec_file;
     // Clear live log file and write header
-    writeFileSync(LOG_FILE, `[build] ${item.spec_file} (${item.kind})\n`);
+    writeFileSync(LOG_FILE, `[build] ${file} (${item.kind})\n`);
 
-    // Write queue context for feature builds (what's been completed so far)
+    // Write queue context for feature builds
     writeQueueContext(item);
 
-    // Resolve the spec path
-    const resolvedPath = resolveSpecPath(item.spec_file, item.kind);
+    // Resolve the story/spec path
+    const resolvedPath = resolveStoryPath(file, item.kind);
 
     // Build the command — pass engine flag if not factory (default)
     const engineFlag = item.engine && item.engine !== 'factory' ? ['--engine', item.engine] : [];
-    const cmdArgs = item.kind === 'FeatureSpec'
+    const cmdArgs = item.kind === 'FeatureSpec' || item.kind === 'FeatureStory'
       ? ['feature', 'build', resolvedPath, ...engineFlag]
       : ['build', resolvedPath, ...engineFlag];
 
@@ -306,7 +320,7 @@ function processQueueInBackground() {
 
         logBuild(doneDb, item, 'completed', output, durationMs);
       } else {
-        // Failed — extract real error from stdout ✗ lines
+        // Failed
         const realError = extractRealError(stdout, stderr, code);
         doneDb.prepare(`
           UPDATE queue_items
@@ -373,7 +387,6 @@ export async function POST() {
       pending: pendingCount,
     });
   } catch (error) {
-    // Ensure we reset running state on crash
     try {
       db.prepare(`UPDATE queue_state SET value = 'false' WHERE key = 'is_running'`).run();
       db.close();
@@ -391,11 +404,11 @@ function logBuild(
   rawOutput: string,
   durationMs: number,
 ) {
-  // Ensure builds table exists
+  // Ensure builds table exists with story_file (renamed from spec_file)
   db.exec(`
     CREATE TABLE IF NOT EXISTS builds (
       id TEXT PRIMARY KEY,
-      spec_file TEXT NOT NULL,
+      story_file TEXT NOT NULL,
       kind TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       duration_ms INTEGER,
@@ -410,10 +423,14 @@ function logBuild(
 
   const id = `build_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  // Add engine column if missing
+  // Add columns if missing
   try {
     const cols = db.prepare(`PRAGMA table_info(builds)`).all() as any[];
-    if (!cols.some(c => c.name === 'engine')) {
+    const colNames = new Set(cols.map(c => c.name));
+    if (!colNames.has('story_file') && colNames.has('spec_file')) {
+      db.exec(`ALTER TABLE builds RENAME COLUMN spec_file TO story_file`);
+    }
+    if (!colNames.has('engine')) {
       db.exec(`ALTER TABLE builds ADD COLUMN engine TEXT DEFAULT 'factory'`);
     }
   } catch { /* ignore */ }
@@ -434,7 +451,8 @@ function logBuild(
     .map(([dir, count]) => `| ${dir} | ${count} |`)
     .join('\n');
 
-  const specName = item.spec_file?.split('/').pop()?.replace('.yaml', '') || item.spec_file;
+  const file = item.story_file || item.spec_file;
+  const specName = file?.split('/').pop()?.replace('.yaml', '') || file;
   const outcome = status === 'failed'
     ? 'Build failed — check queue output for details'
     : `Successfully generated ${filesGenerated.length} file(s)`;
@@ -444,8 +462,8 @@ function logBuild(
 > ${outcome}
 
 ## What Was Built
-- **Spec**: \`${item.spec_file}\`
-- **Type**: ${item.kind === 'FeatureSpec' ? 'Feature' : 'App'}
+- **Story**: \`${file}\`
+- **Type**: ${item.kind === 'FeatureStory' || item.kind === 'FeatureSpec' ? 'Feature' : 'App'}
 
 ## Files Generated
 
@@ -465,11 +483,11 @@ Built in ${(durationMs / 1000).toFixed(1)}s.
     : `Built ${filesGenerated.length} file(s) in ${(durationMs / 1000).toFixed(1)}s`;
 
   db.prepare(`
-    INSERT INTO builds (id, spec_file, kind, timestamp, duration_ms, status, files_generated, output, notes, engine)
+    INSERT INTO builds (id, story_file, kind, timestamp, duration_ms, status, files_generated, output, notes, engine)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
-    item.spec_file,
+    file,
     item.kind,
     new Date().toISOString(),
     durationMs,

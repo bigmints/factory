@@ -13,11 +13,20 @@ function getDb() {
   const db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
 
+  // Ensure table info column renaming migration
+  try {
+    const cols = db.prepare(`PRAGMA table_info(builds)`).all() as { name: string }[];
+    const colNames = new Set(cols.map((c) => c.name));
+    if (colNames.has('spec_file') && !colNames.has('story_file')) {
+      db.exec(`ALTER TABLE builds RENAME COLUMN spec_file TO story_file`);
+    }
+  } catch {}
+
   // Ensure tables exist
   db.exec(`
     CREATE TABLE IF NOT EXISTS builds (
       id TEXT PRIMARY KEY,
-      spec_file TEXT NOT NULL,
+      story_file TEXT NOT NULL,
       kind TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       duration_ms INTEGER,
@@ -52,7 +61,7 @@ function getDb() {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const specFile = url.searchParams.get('specFile');
+    const storyFile = url.searchParams.get('storyFile') || url.searchParams.get('specFile');
     const query = url.searchParams.get('q');
     const limit = parseInt(url.searchParams.get('limit') || '50');
 
@@ -74,15 +83,15 @@ export async function GET(request: Request) {
         // FTS table might not exist yet — fallback to LIKE search
         rows = db.prepare(`
           SELECT * FROM builds
-          WHERE spec_file LIKE ? OR output LIKE ? OR notes LIKE ?
+          WHERE story_file LIKE ? OR output LIKE ? OR notes LIKE ?
           ORDER BY timestamp DESC
           LIMIT ?
         `).all(`%${query}%`, `%${query}%`, `%${query}%`, limit);
       }
-    } else if (specFile) {
+    } else if (storyFile) {
       rows = db.prepare(`
-        SELECT * FROM builds WHERE spec_file = ? ORDER BY timestamp DESC LIMIT ?
-      `).all(specFile, limit);
+        SELECT * FROM builds WHERE story_file = ? ORDER BY timestamp DESC LIMIT ?
+      `).all(storyFile, limit);
     } else {
       rows = db.prepare(`
         SELECT * FROM builds ORDER BY timestamp DESC LIMIT ?
@@ -93,7 +102,7 @@ export async function GET(request: Request) {
     const total = db.prepare('SELECT COUNT(*) as count FROM builds').get() as { count: number };
     const successful = db.prepare(`SELECT COUNT(*) as count FROM builds WHERE status = 'completed'`).get() as { count: number };
     const failed = db.prepare(`SELECT COUNT(*) as count FROM builds WHERE status = 'failed'`).get() as { count: number };
-    const unique = db.prepare('SELECT COUNT(DISTINCT spec_file) as count FROM builds').get() as { count: number };
+    const unique = db.prepare('SELECT COUNT(DISTINCT story_file) as count FROM builds').get() as { count: number };
 
     // Token stats
     const tokenStats = db.prepare(`
@@ -126,6 +135,10 @@ export async function GET(request: Request) {
     // Parse files_generated JSON and expose new fields
     const entries = rows.map((row: any) => ({
       ...row,
+      storyFile: row.story_file || row.spec_file,
+      specFile: row.story_file || row.spec_file,
+      story_file: row.story_file || row.spec_file,
+      spec_file: row.story_file || row.spec_file,
       summary: row.output || '',
       filesGenerated: JSON.parse(row.files_generated || '[]'),
     }));
@@ -136,6 +149,7 @@ export async function GET(request: Request) {
         totalBuilds: total.count,
         successfulBuilds: successful.count,
         failedBuilds: failed.count,
+        uniqueStories: unique.count,
         uniqueSpecs: unique.count,
         totalTokensIn: tokenStats.total_tokens_in,
         totalTokensOut: tokenStats.total_tokens_out,

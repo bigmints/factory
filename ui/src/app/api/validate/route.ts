@@ -1,10 +1,9 @@
 import { homedir } from 'node:os';
 /**
- * POST /api/validate — Validate a spec file
- * Body: { specFile: "filename.yaml", quick?: boolean }
+ * POST /api/validate — Validate a story file
+ * Body: { storyFile: "filename.yaml", quick?: boolean }
  *
- * Resolves spec path from the active project's .factory/specs/apps/ directory,
- * falling back to the factory's own specs/ directory.
+ * Resolves story path from the active project's .factory/stories/apps/ directory.
  *
  * When `quick` is true, only parses YAML and checks basic structure (fast).
  * When `quick` is false/omitted, runs the full CLI validation (slow).
@@ -18,10 +17,10 @@ import { parse as parseYaml } from 'yaml';
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
 /**
- * Resolve a spec filename to its absolute path.
+ * Resolve a story filename to its absolute path.
  */
-function resolveSpecFile(specFile: string): string {
-  // 1. Try active project's .factory/specs/apps/
+function resolveStoryFile(storyFile: string): string {
+  // 1. Try active project's .factory/stories/
   try {
     const projectsPath = join(FACTORY_ROOT, 'projects.json');
     if (existsSync(projectsPath)) {
@@ -31,38 +30,38 @@ function resolveSpecFile(specFile: string): string {
           (p: any) => p.id === config.activeProject
         );
         if (project) {
-          const isFeature = specFile.startsWith('features/');
+          const isFeature = storyFile.startsWith('features/');
           const subdir = isFeature ? 'features' : 'apps';
-          const cleanFile = isFeature ? specFile.replace(/^features\//, '') : specFile;
-          const projectPath = join(project.path, '.factory', 'specs', subdir, cleanFile);
+          const cleanFile = isFeature ? storyFile.replace(/^features\//, '') : storyFile;
+          const projectPath = join(project.path, '.factory', 'stories', subdir, cleanFile);
           if (existsSync(projectPath)) return projectPath;
         }
       }
     }
   } catch {}
 
-  // 2. Fallback: factory's own specs/
-  const factoryPath = join(FACTORY_ROOT, 'specs', specFile);
+  // 2. Fallback: factory's own stories/
+  const factoryPath = join(FACTORY_ROOT, 'stories', storyFile);
   if (existsSync(factoryPath)) return factoryPath;
 
-  const factoryAppsPath = join(FACTORY_ROOT, 'specs', 'apps', specFile);
+  const factoryAppsPath = join(FACTORY_ROOT, 'stories', 'apps', storyFile);
   if (existsSync(factoryAppsPath)) return factoryAppsPath;
 
-  if (specFile.startsWith('/') && existsSync(specFile)) return specFile;
+  if (storyFile.startsWith('/') && existsSync(storyFile)) return storyFile;
 
-  throw new Error(`Spec file not found: ${specFile}`);
+  throw new Error(`Story file not found: ${storyFile}`);
 }
 
 /**
  * Quick validation — parse YAML + basic structure checks.
  * Returns immediately, no subprocess needed.
  */
-function quickValidate(specPath: string, specFile: string): { passed: boolean; checks: { passed: boolean; name: string; message: string }[] } {
+function quickValidate(storyPath: string, storyFile: string): { passed: boolean; checks: { passed: boolean; name: string; message: string }[] } {
   const checks: { passed: boolean; name: string; message: string }[] = [];
 
   // 1. File exists
-  if (!existsSync(specPath)) {
-    checks.push({ passed: false, name: 'File exists', message: `File not found: ${specFile}` });
+  if (!existsSync(storyPath)) {
+    checks.push({ passed: false, name: 'File exists', message: `File not found: ${storyFile}` });
     return { passed: false, checks };
   }
   checks.push({ passed: true, name: 'File exists', message: '' });
@@ -70,7 +69,7 @@ function quickValidate(specPath: string, specFile: string): { passed: boolean; c
   // 2. YAML parse
   let parsed: any;
   try {
-    const raw = readFileSync(specPath, 'utf-8');
+    const raw = readFileSync(storyPath, 'utf-8');
     parsed = parseYaml(raw);
   } catch (err) {
     checks.push({ passed: false, name: 'YAML parse', message: err instanceof Error ? err.message : 'YAML parse error' });
@@ -79,7 +78,7 @@ function quickValidate(specPath: string, specFile: string): { passed: boolean; c
   checks.push({ passed: true, name: 'YAML parse', message: '' });
 
   // 3. Basic structure
-  const isFeature = specFile.startsWith('features/') || !!parsed.feature;
+  const isFeature = storyFile.startsWith('features/') || !!parsed.feature;
   if (isFeature) {
     if (!parsed.feature?.name) {
       checks.push({ passed: false, name: 'Feature name', message: 'Missing feature.name' });
@@ -104,16 +103,19 @@ function quickValidate(specPath: string, specFile: string): { passed: boolean; c
 
 export async function POST(request: Request) {
   try {
-    const { specFile, quick } = await request.json();
-    if (!specFile) {
-      return NextResponse.json({ error: 'specFile is required' }, { status: 400 });
+    const body = await request.json();
+    const storyFile = body.storyFile || body.specFile;
+    const { quick } = body;
+
+    if (!storyFile) {
+      return NextResponse.json({ error: 'storyFile is required' }, { status: 400 });
     }
 
-    const specPath = resolveSpecFile(specFile);
+    const storyPath = resolveStoryFile(storyFile);
 
     // Quick mode: fast YAML parse only
     if (quick) {
-      const result = quickValidate(specPath, specFile);
+      const result = quickValidate(storyPath, storyFile);
       return NextResponse.json(result);
     }
 
@@ -125,7 +127,7 @@ export async function POST(request: Request) {
     };
 
     const result = execSync(
-      `factory validate "${specPath}" 2>&1`,
+      `factory validate "${storyPath}" 2>&1`,
       execOptions
     );
 
@@ -156,4 +158,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ passed: false, error: message }, { status: 500 });
   }
 }
-

@@ -7,7 +7,7 @@ description: Autonomous app scaffolding and feature generation factory
 
 ## What This Does
 
-The Factory generates production-ready Next.js apps and features from YAML specs. It scaffolds, customises, validates, generates integration patches, and produces build reports — all autonomously.
+The Factory generates production-ready Next.js apps and features from YAML stories. It scaffolds, customises, validates, generates integration patches, and produces build reports — all autonomously.
 
 ## Commands
 
@@ -15,23 +15,20 @@ The Factory generates production-ready Next.js apps and features from YAML specs
 
 ```bash
 # Full build pipeline (validate → scaffold → customise → patch → report)
-npx tsx engine/cli.ts build specs/apps/<spec>.yaml
+npx tsx engine/cli.ts build .factory/stories/apps/<story>.yaml
 
 # Individual steps
-npx tsx engine/cli.ts validate specs/apps/<spec>.yaml
-npx tsx engine/cli.ts scaffold specs/apps/<spec>.yaml
-npx tsx engine/cli.ts patch specs/apps/<spec>.yaml
-npx tsx engine/cli.ts report specs/apps/<spec>.yaml
+npx tsx engine/cli.ts validate .factory/stories/apps/<story>.yaml
 ```
 
 ### Feature Generation
 
 ```bash
 # Full feature build (validate → scaffold → apply instructions)
-npx tsx engine/cli.ts feature-build specs/features/<spec>.yaml
+npx tsx engine/cli.ts feature build .factory/stories/features/<story>.yaml
 
 # Validate only
-npx tsx engine/cli.ts feature-validate specs/features/<spec>.yaml
+npx tsx engine/cli.ts feature validate .factory/stories/features/<story>.yaml
 ```
 
 ### Project Management
@@ -53,21 +50,21 @@ npx tsx engine/cli.ts init-bridge /path/to/repo
 ### Queue
 
 ```bash
-npx tsx engine/cli.ts queue list                     # List all queue items (with phase/dep status)
-npx tsx engine/cli.ts queue add specs/features/x.yaml # Add spec (auto-detects phase/dependsOn)
-npx tsx engine/cli.ts queue start                    # Process all pending items autonomously
-npx tsx engine/cli.ts queue stats                    # Show queue statistics
-npx tsx engine/cli.ts queue clear                    # Clear completed items
-npx tsx engine/cli.ts queue retry <id>               # Retry a failed item
-npx tsx engine/cli.ts queue remove <id>              # Remove an item from queue
-npx tsx engine/cli.ts status                         # Show all specs and their status
+npx tsx engine/cli.ts queue list                       # List all queue items (with phase/dep status)
+npx tsx engine/cli.ts queue add .factory/stories/features/x.yaml # Add story (auto-detects phase/dependsOn)
+npx tsx engine/cli.ts queue start                      # Process all pending items autonomously
+npx tsx engine/cli.ts queue stats                      # Show queue statistics
+npx tsx engine/cli.ts queue clear                      # Clear completed items
+npx tsx engine/cli.ts queue retry <id>                 # Retry a failed item
+npx tsx engine/cli.ts queue remove <id>                # Remove an item from queue
+npx tsx engine/cli.ts status                           # Show all stories and their status
 ```
 
 > The queue respects `phase` (ascending order) and `dependsOn` (blocks until deps complete).
 
-## Spec Format
+## Story Format
 
-### App Spec (`specs/apps/*.yaml`)
+### App Story (`.factory/stories/apps/*.yaml`)
 
 ```yaml
 metadata:
@@ -94,7 +91,7 @@ api:
         status: { type: string, default: "active" }
 ```
 
-### Feature Spec (`specs/features/*.yaml`)
+### Feature Story (`.factory/stories/features/*.yaml`)
 
 ```yaml
 feature:
@@ -106,7 +103,7 @@ target:
 
 phase: 1 # Build order: 1 = foundation, 2 = core, 3 = polish
 
-dependsOn: [] # Slugs of specs that must complete first
+dependsOn: [] # Slugs of stories that must complete first
   # e.g. dependsOn: [auth-system, data-models]
 
 model:
@@ -121,7 +118,7 @@ pages:
   - { slug: detail, type: detail, title: "Schedule Detail" }
 ```
 
-> **`phase`** controls build priority (lower phases build first). **`dependsOn`** is the hard gate — the engine will not dequeue a spec until all its dependencies are `completed`.
+> **`phase`** controls build priority (lower phases build first). **`dependsOn`** is the hard gate — the engine will not dequeue a story until all its dependencies are `completed`.
 
 ## Output
 
@@ -130,11 +127,10 @@ All generated files go to `output/<slug>/`:
 - App source code (ready to copy into `apps/<slug>/`)
 - `patches/` — integration files for the target project
 - `patches/APPLY.md` — step-by-step apply guide
-
-Reports go to `reports/<slug>-<timestamp>.md`.
+- Reports go to `reports/<slug>-<timestamp>.md`.
 
 ## UI Dashboard
 
 Start with `./start.sh` → available at `http://localhost:4040`.
 
-Views: Dashboard, Specs (view/edit YAML), Queue, Reports, Knowledge, Projects.
+Views: Dashboard, Stories (view/edit YAML), Queue, Reports, Knowledge, Projects.

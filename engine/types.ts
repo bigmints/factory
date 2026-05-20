@@ -4,10 +4,10 @@
  * Every type lives here — no local duplicates anywhere.
  */
 
-// ─── Spec Types ──────────────────────────────────────────
+// ─── Story Types ──────────────────────────────────────────
 
-/** Top-level app spec (parsed from YAML in .factory/specs/apps/) */
-export interface AppSpec {
+/** Top-level app story (parsed from YAML in .factory/stories/apps/) */
+export interface AppStory {
     appName: string;
     description: string;
     stack: StackConfig;
@@ -18,12 +18,12 @@ export interface AppSpec {
     pages?: PagesConfig;
     deployment?: DeploymentConfig;
     dependencies?: string[];       // npm packages this app requires (e.g. ['express', 'dotenv'])
-    status?: SpecStatus;
+    status?: StoryStatus;
     engine?: 'factory' | 'worker';
     build?: BuildMeta;
 }
 
-/** Build metadata written back into the spec after a successful build */
+/** Build metadata written back into the story after a successful build */
 export interface BuildMeta {
     lastBuiltAt: string;       // ISO timestamp
     buildCount: number;        // incremented each build
@@ -101,7 +101,7 @@ export interface DeploymentConfig {
     region?: string;
 }
 
-export type SpecStatus = 'draft' | 'ready' | 'in-progress' | 'validation' | 'review' | 'done';
+export type StoryStatus = 'draft' | 'ready' | 'in-progress' | 'validation' | 'review' | 'done';
 
 /** Context about an existing app that feature builds need for integration */
 export interface AppIntegrationContext {
@@ -119,9 +119,9 @@ export interface AppIntegrationContext {
     stack?: StackConfig;
 }
 
-// ─── Feature Spec ────────────────────────────────────────
+// ─── Feature Story ────────────────────────────────────────
 
-export interface FeatureSpec {
+export interface FeatureStory {
     feature: {
         name: string;
         slug: string;
@@ -130,7 +130,7 @@ export interface FeatureSpec {
         app: string;
     };
     phase?: number;              // 1 = foundation, 2 = core, 3 = polish
-    dependsOn?: string[];        // slugs of other feature specs that must complete first
+    dependsOn?: string[];        // slugs of other feature stories that must complete first
     dependencies?: string[];     // npm packages this feature requires (e.g. ['puppeteer', 'nodemailer'])
     model?: {
         collection: string;
@@ -324,8 +324,8 @@ export interface ScoredSkill {
 
 /** Context used to match skills against a build task */
 export interface SkillMatchContext {
-    specName: string;
-    specDescription: string;
+    storyName: string;
+    storyDescription: string;
     stack: string;
     tags: string[];
     taskDescription?: string;
@@ -341,17 +341,17 @@ export function slugify(name: string): string {
         .replace(/^-|-$/g, '');
 }
 
-/** Get the slug from an AppSpec */
-export function specSlug(spec: AppSpec): string {
-    return slugify(spec.appName);
+/** Get the slug from an AppStory */
+export function storySlug(story: AppStory): string {
+    return slugify(story.appName);
 }
 
-/** Get the port from an AppSpec (defaults to 3000) */
-export function specPort(spec: AppSpec): number {
-    return spec.deployment?.port || 3000;
+/** Get the port from an AppStory (defaults to 3000) */
+export function storyPort(story: AppStory): number {
+    return story.deployment?.port || 3000;
 }
 
-/** Get the region from an AppSpec (defaults to us-central1) */
-export function specRegion(spec: AppSpec): string {
-    return spec.deployment?.region || 'us-central1';
+/** Get the region from an AppStory (defaults to us-central1) */
+export function storyRegion(story: AppStory): string {
+    return story.deployment?.region || 'us-central1';
 }

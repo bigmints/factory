@@ -29,7 +29,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlink
 import { join, basename } from 'node:path';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log } from './log.ts';
-import type { Skill, ScoredSkill, SkillMatchContext, SkillCategory, AppSpec, ProjectContext } from './types.ts';
+import type { Skill, ScoredSkill, SkillMatchContext, SkillCategory, AppStory, ProjectContext } from './types.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -232,8 +232,8 @@ export function matchSkills(ctx: SkillMatchContext): ScoredSkill[] {
 
     // Combine all context into a searchable corpus
     const corpus = [
-        ctx.specName,
-        ctx.specDescription,
+        ctx.storyName,
+        ctx.storyDescription,
         ctx.stack,
         ctx.taskDescription || '',
         ...ctx.tags,
@@ -278,7 +278,7 @@ export function matchSkills(ctx: SkillMatchContext): ScoredSkill[] {
             reasons.push('word overlap');
         }
 
-        // 4. Category matching — if spec tags or description mention the category
+        // 4. Category matching — if story tags or description mention the category
         if (corpus.includes(skill.category)) {
             score += 0.1;
             reasons.push(`category: ${skill.category}`);
@@ -302,17 +302,17 @@ export function matchSkills(ctx: SkillMatchContext): ScoredSkill[] {
  * Resolve relevant skills for a build and return scored matches.
  */
 export function resolveSkillsForBuild(
-    spec: AppSpec,
+    story: AppStory,
     context: ProjectContext,
 ): ScoredSkill[] {
     const matchCtx: SkillMatchContext = {
-        specName: spec.appName,
-        specDescription: spec.description || '',
-        stack: context.stack?.framework || spec.stack?.framework || '',
+        storyName: story.appName,
+        storyDescription: story.description || '',
+        stack: context.stack?.framework || story.stack?.framework || '',
         tags: [
-            ...(spec.stack ? [spec.stack.framework, spec.stack.database || '', spec.stack.testing || ''] : []),
-            ...(spec.frontend?.ui ? [spec.frontend.ui] : []),
-            ...(spec.auth?.provider ? [spec.auth.provider] : []),
+            ...(story.stack ? [story.stack.framework, story.stack.database || '', story.stack.testing || ''] : []),
+            ...(story.frontend?.ui ? [story.frontend.ui] : []),
+            ...(story.auth?.provider ? [story.auth.provider] : []),
         ].filter(Boolean),
     };
 

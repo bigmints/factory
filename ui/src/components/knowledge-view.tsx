@@ -20,7 +20,8 @@ import {
 
 interface BuildEntry {
   id: string;
-  spec_file: string;
+  spec_file?: string;
+  story_file?: string;
   kind: string;
   timestamp: string;
   duration_ms: number | null;
@@ -39,7 +40,8 @@ interface KnowledgeStats {
   totalBuilds: number;
   successfulBuilds: number;
   failedBuilds: number;
-  uniqueSpecs: number;
+  uniqueStories?: number;
+  uniqueSpecs?: number;
 }
 
 export function KnowledgeView() {
@@ -86,7 +88,7 @@ export function KnowledgeView() {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const specName = (path: string) => {
+  const storyName = (path: string) => {
     return path.split('/').pop()?.replace('.yaml', '') || path;
   };
 
@@ -119,7 +121,7 @@ export function KnowledgeView() {
           { icon: BookOpen, value: stats.totalBuilds, label: 'Total Builds' },
           { icon: CheckCircle2, value: stats.successfulBuilds, label: 'Successful' },
           { icon: XCircle, value: stats.failedBuilds, label: 'Failed' },
-          { icon: Layers, value: stats.uniqueSpecs, label: 'Unique Specs' },
+          { icon: Layers, value: stats.uniqueStories ?? stats.uniqueSpecs ?? 0, label: 'Unique Stories' },
         ].map((stat, i) => (
           <Card key={i}>
             <CardContent className="p-5 flex items-center gap-4">
@@ -187,9 +189,9 @@ export function KnowledgeView() {
                     ) : (
                       <XCircle className="h-4 w-4 text-destructive shrink-0" />
                     )}
-                    <span className="font-bold text-xs sm:text-sm text-foreground truncate">{specName(entry.spec_file)}</span>
-                    <Badge variant={entry.kind === 'FeatureSpec' ? 'secondary' : 'default'} className="text-[9px] shrink-0">
-                      {entry.kind === 'FeatureSpec' ? 'Feature' : 'App'}
+                    <span className="font-bold text-xs sm:text-sm text-foreground truncate">{storyName(entry.story_file || entry.spec_file || '')}</span>
+                    <Badge variant={entry.kind === 'FeatureSpec' || entry.kind === 'FeatureStory' ? 'secondary' : 'default'} className="text-[9px] shrink-0">
+                      {entry.kind === 'FeatureSpec' || entry.kind === 'FeatureStory' ? 'Feature' : 'App'}
                     </Badge>
                     {entry.model && (
                       <Badge variant="outline" className="text-[9px] gap-1 shrink-0 hidden sm:flex font-mono">

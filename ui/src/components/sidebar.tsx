@@ -36,7 +36,7 @@ interface SidebarProps {
 
 const mainNav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'specs', label: 'Specs', icon: FileText },
+  { id: 'stories', label: 'Stories', icon: FileText },
   { id: 'queue', label: 'Queue', icon: ListOrdered },
   { id: 'skills', label: 'Skills', icon: Wand2 },
   { id: 'reports', label: 'Reports', icon: BookOpen },

@@ -1,9 +1,9 @@
 import { homedir } from 'node:os';
 /**
- * GET /api/specs — List all spec files (app specs + feature specs)
+ * GET /api/stories — List all story files (app stories + feature stories)
  *
- * Reads specs from the active project's .factory/specs/ directory.
- * Falls back to the factory's own specs/ directory if no project is active.
+ * Reads stories from the active project's .factory/stories/ directory.
+ * Falls back to the factory's own stories/ directory if no project is active.
  */
 import { NextResponse } from 'next/server';
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
@@ -26,9 +26,9 @@ function sanitizeYaml(raw: string): { content: string; fixed: boolean } {
 }
 
 /**
- * Resolve the specs directories — active project's .factory/specs/.
+ * Resolve the stories directories — active project's .factory/stories/.
  */
-function getSpecsDirs(): { apps: string; features: string; source: string } {
+function getStoriesDirs(): { apps: string; features: string; source: string } {
   try {
     const projectsPath = join(FACTORY_ROOT, 'projects.json');
     if (existsSync(projectsPath)) {
@@ -38,8 +38,8 @@ function getSpecsDirs(): { apps: string; features: string; source: string } {
           (p: any) => p.id === config.activeProject
         );
         if (project) {
-          const projectApps = join(project.path, '.factory', 'specs', 'apps');
-          const projectFeatures = join(project.path, '.factory', 'specs', 'features');
+          const projectApps = join(project.path, '.factory', 'stories', 'apps');
+          const projectFeatures = join(project.path, '.factory', 'stories', 'features');
           return {
             apps: projectApps,
             features: projectFeatures,
@@ -55,16 +55,16 @@ function getSpecsDirs(): { apps: string; features: string; source: string } {
 
 export async function GET() {
   try {
-    const { apps: APPS_DIR, features: FEATURES_DIR, source } = getSpecsDirs();
+    const { apps: APPS_DIR, features: FEATURES_DIR, source } = getStoriesDirs();
 
-    // App specs
-    let specs: any[] = [];
+    // App stories
+    let stories: any[] = [];
     if (APPS_DIR && existsSync(APPS_DIR)) {
       const appFiles = readdirSync(APPS_DIR).filter(
         (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
       );
 
-      specs = appFiles.map((file) => {
+      stories = appFiles.map((file) => {
         try {
           const raw = readFileSync(join(APPS_DIR, file), 'utf-8');
           const { content: sanitized, fixed } = sanitizeYaml(raw);
@@ -74,7 +74,7 @@ export async function GET() {
           const parsed = parseYaml(sanitized);
           return {
             file,
-            kind: 'AppSpec' as const,
+            kind: 'AppStory' as const,
             valid: true,
             metadata: parsed.metadata || {},
             status: parsed.status || 'unknown',
@@ -84,19 +84,19 @@ export async function GET() {
             features: parsed.features || {},
           };
         } catch {
-          return { file, kind: 'AppSpec' as const, valid: false, error: 'Failed to parse' };
+          return { file, kind: 'AppStory' as const, valid: false, error: 'Failed to parse' };
         }
       });
     }
 
-    // Feature specs
-    let featureSpecs: any[] = [];
+    // Feature stories
+    let featureStories: any[] = [];
     if (FEATURES_DIR && existsSync(FEATURES_DIR)) {
       const featureFiles = readdirSync(FEATURES_DIR).filter(
         (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
       );
 
-      featureSpecs = featureFiles.map((file) => {
+      featureStories = featureFiles.map((file) => {
         try {
           const raw = readFileSync(join(FEATURES_DIR, file), 'utf-8');
           const { content: sanitized, fixed } = sanitizeYaml(raw);
@@ -106,7 +106,7 @@ export async function GET() {
           const parsed = parseYaml(sanitized);
           return {
             file: `features/${file}`,
-            kind: 'FeatureSpec' as const,
+            kind: 'FeatureStory' as const,
             valid: true,
             feature: parsed.feature || {},
             target: parsed.target || {},
@@ -118,19 +118,19 @@ export async function GET() {
             dependsOn: parsed.dependsOn ?? [],
           };
         } catch {
-          return { file: `features/${file}`, kind: 'FeatureSpec' as const, valid: false, error: 'Failed to parse' };
+          return { file: `features/${file}`, kind: 'FeatureStory' as const, valid: false, error: 'Failed to parse' };
         }
       });
     }
 
-    return NextResponse.json({ specs, featureSpecs, source });
+    return NextResponse.json({ stories, featureStories, source });
   } catch {
-    return NextResponse.json({ specs: [], featureSpecs: [], source: 'error', error: 'specs directory not found' });
+    return NextResponse.json({ stories: [], featureStories: [], source: 'error', error: 'stories directory not found' });
   }
 }
 
 /**
- * POST /api/specs — Create a new spec file
+ * POST /api/stories — Create a new story file
  * Body: { name: string, content?: string }
  */
 export async function POST(request: Request) {
@@ -150,8 +150,8 @@ export async function POST(request: Request) {
 
     const filename = `${slug.replace(/_/g, '-')}.yaml`;
 
-    // Resolve target directory — features go to specs/features/, apps go to specs/apps/
-    const { apps: appsDir, features: featuresDir } = getSpecsDirs();
+    // Resolve target directory — features go to stories/features/, apps go to stories/apps/
+    const { apps: appsDir, features: featuresDir } = getStoriesDirs();
     const targetDir = kind === 'feature' ? featuresDir : appsDir;
 
     if (!targetDir) {
@@ -160,7 +160,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
 
     // Ensure directory exists
     const { mkdirSync } = await import('node:fs');
@@ -171,13 +170,13 @@ export async function POST(request: Request) {
     // Don't overwrite existing
     if (existsSync(filePath)) {
       return NextResponse.json(
-        { error: `Spec already exists: ${filename}` },
+        { error: `Story already exists: ${filename}` },
         { status: 409 }
       );
     }
 
     // Use custom content or generate template
-    const specContent = content || `metadata:
+    const storyContent = content || `metadata:
   name: "${name}"
   slug: "${slug}"
   description: "A ${name.toLowerCase()} application"
@@ -209,7 +208,7 @@ api:
           default: active
 `;
 
-    writeFileSync(filePath, specContent, 'utf-8');
+    writeFileSync(filePath, storyContent, 'utf-8');
 
     return NextResponse.json({
       success: true,
@@ -218,7 +217,7 @@ api:
     });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || 'Failed to create spec' },
+      { error: err.message || 'Failed to create story' },
       { status: 500 }
     );
   }

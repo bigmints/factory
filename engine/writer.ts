@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { execSync } from 'node:child_process';
-import type { GeneratedFile, AppSpec, FeatureSpec, BuildResult, StackConfig } from './types.ts';
+import type { GeneratedFile, AppStory, FeatureStory, BuildResult, StackConfig } from './types.ts';
 import { log, logError } from './log.ts';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 
@@ -144,7 +144,7 @@ export function buildDebrief(
     appName: string,
     result: BuildResult,
     stack: StackConfig,
-    specFile: string,
+    storyFile: string,
     durationMs?: number,
 ): string {
     const lines: string[] = [];
@@ -230,7 +230,7 @@ function extractExports(content: string): string[] {
 
 /**
  * Write a structured debrief into `.factory/knowledge/builds/` so future
- * specs have context about what has already been built.
+ * stories have context about what has already been built.
  *
  * The context gatherer auto-discovers these if the directory is listed
  * in factory.yaml skills.files or if discovery is set to auto.
@@ -240,7 +240,7 @@ export function writeKnowledgeEntry(
     appName: string,
     result: BuildResult,
     stack: StackConfig,
-    specFile: string,
+    storyFile: string,
 ): void {
     const knowledgeDir = join(repoPath, '.factory', 'knowledge', 'builds');
     if (!existsSync(knowledgeDir)) {
@@ -249,7 +249,7 @@ export function writeKnowledgeEntry(
 
     const slug = appName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const filePath = join(knowledgeDir, `${slug}.md`);
-    const content = buildDebrief(appName, result, stack, specFile);
+    const content = buildDebrief(appName, result, stack, storyFile);
 
     writeFileSync(filePath, content);
     log('✓', `Knowledge entry written: .factory/knowledge/builds/${slug}.md`);
@@ -356,7 +356,7 @@ function testCmdForAgents(testing: string): string {
  * Write .factory/task-manager/todo.yaml (or legacy todo.toon) snapshot of completed tasks.
  * Called after each successful build so the task queue reflects reality.
  */
-export function writeTasksToon(repoPath: string, specSlug: string): void {
+export function writeTasksToon(repoPath: string, storySlug: string): void {
     const todoYamlPath = join(repoPath, '.factory', 'task-manager', 'todo.yaml');
     const todoToonPath = join(repoPath, '.factory', 'task-manager', 'todo.toon');
     const todoPath = existsSync(todoYamlPath) ? todoYamlPath : (existsSync(todoToonPath) ? todoToonPath : null);
@@ -373,16 +373,16 @@ export function writeTasksToon(repoPath: string, specSlug: string): void {
 
         if (!data) data = {};
 
-        // Move specSlug from in_progress/next to completed if present
+        // Move storySlug from in_progress/next to completed if present
         for (const section of ['in_progress', 'next']) {
             if (data[section] && Array.isArray(data[section])) {
                 data[section] = data[section].filter((t: any) => {
-                    if (typeof t === 'string') return t !== specSlug;
+                    if (typeof t === 'string') return t !== storySlug;
                     if (t && typeof t === 'object') {
-                        // Check if it's in format: { [specSlug]: summary } or { id: specSlug }
+                        // Check if it's in format: { [storySlug]: summary } or { id: storySlug }
                         const keys = Object.keys(t);
-                        if (keys.length > 0 && keys[0] === specSlug) return false;
-                        return t.id !== specSlug;
+                        if (keys.length > 0 && keys[0] === storySlug) return false;
+                        return t.id !== storySlug;
                     }
                     return true;
                 });
@@ -393,20 +393,20 @@ export function writeTasksToon(repoPath: string, specSlug: string): void {
         if (Array.isArray(data.completed)) {
             // Check if already completed
             const alreadyCompleted = data.completed.some((t: any) => {
-                if (typeof t === 'string') return t === specSlug;
+                if (typeof t === 'string') return t === storySlug;
                 if (t && typeof t === 'object') {
                     const keys = Object.keys(t);
-                    if (keys.length > 0 && keys[0] === specSlug) return true;
-                    return t.id === specSlug;
+                    if (keys.length > 0 && keys[0] === storySlug) return true;
+                    return t.id === storySlug;
                 }
                 return false;
             });
 
             if (!alreadyCompleted) {
                 if (todoPath.endsWith('.yaml') || todoPath.endsWith('.yml')) {
-                    data.completed.push({ [specSlug]: `Completed build for ${specSlug}` });
+                    data.completed.push({ [storySlug]: `Completed build for ${storySlug}` });
                 } else {
-                    data.completed.push({ id: specSlug, completed: new Date().toISOString() });
+                    data.completed.push({ id: storySlug, completed: new Date().toISOString() });
                 }
             }
         }

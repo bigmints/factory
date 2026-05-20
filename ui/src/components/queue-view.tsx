@@ -14,7 +14,8 @@ import {
 
 interface QueueItem {
   id: string;
-  spec_file: string;
+  spec_file?: string;
+  story_file?: string;
   kind: string;
   status: string;
   priority: number;
@@ -356,7 +357,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
   };
 
   const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const specName = (path: string) => path.split('/').pop()?.replace('.yaml', '') || path;
+  const storyName = (path: string) => path.split('/').pop()?.replace('.yaml', '') || path;
 
   return (
     <div className="space-y-5 pb-20 sm:pb-8">
@@ -442,7 +443,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
             <Clock className="h-6 w-6 text-muted-foreground/60" />
           </div>
           <h3 className="text-sm font-semibold text-foreground">Build queue is empty</h3>
-          <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1.5 leading-relaxed">Go to the Specs panel and configure your build specifications to load items here.</p>
+          <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1.5 leading-relaxed">Go to the Stories panel and configure your build stories to load items here.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -467,9 +468,9 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-xs sm:text-sm text-foreground/90 truncate">{specName(item.spec_file)}</span>
+                          <span className="font-semibold text-xs sm:text-sm text-foreground/90 truncate">{storyName(item.story_file || item.spec_file || '')}</span>
                            <Badge variant="outline" className="text-[9px] shrink-0 font-medium px-1.5 rounded-md">
-                             {item.kind === 'FeatureSpec' ? 'Feature' : 'App'}
+                             {item.kind === 'FeatureSpec' || item.kind === 'FeatureStory' ? 'Feature' : 'App'}
                            </Badge>
                            {item.engine === 'gemini-cli' && (
                              <Badge variant="outline" className="text-[9px] border-primary text-primary font-medium px-1.5 rounded-md gap-1 shrink-0">
@@ -506,8 +507,8 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                     <div className="mt-4 ml-0 sm:ml-9 border-t border-border pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted border border-border rounded-lg p-4 text-[10px] sm:text-[11px] text-muted-foreground mb-4">
                         <div>
-                          <span className="block text-muted-foreground/50 font-medium">Spec File</span>
-                          <span className="text-foreground/95 truncate block mt-0.5">{item.spec_file.split('/').pop()}</span>
+                          <span className="block text-muted-foreground/50 font-medium">Story File</span>
+                          <span className="text-foreground/95 truncate block mt-0.5">{(item.story_file || item.spec_file || '').split('/').pop()}</span>
                         </div>
                         {item.engine && (
                           <div>

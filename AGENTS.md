@@ -15,7 +15,7 @@ You are a senior TypeScript/Node.js engineer working on the Factory build engine
 | Language | TypeScript 5, strict mode |
 | Package Manager | npm |
 | Context Format | TOON (@toon-format/toon) |
-| CLI Delegation | Minions (YAML prompt queue → pi/gemini CLI) |
+| CLI Delegation | Worker (YAML prompt queue → pi/gemini/claude/agy CLI) |
 | LLM Engine | Tool-calling loop (replacing plan→build→test→iterate) |
 
 ## Quick Commands
@@ -33,7 +33,8 @@ factory pulse "<msg>"
 factory task list
 factory context update "<msg>"
 factory validate
-factory minions --queue <file>
+factory worker --queue <file>
+factory worker default-cli <cli-name>
 factory hooks install
 
 # Agentic scripts
@@ -204,6 +205,9 @@ factory queue stats                    Show queue statistics
 factory queue clear                    Clear completed items
 factory queue retry <id>               Retry a failed item
 factory queue remove <id>              Remove an item from queue
+
+factory worker --queue <file>          Run YAML prompt queue natively
+factory worker default-cli [cli]       Get/set default CLI (pi, gemini, claude, agy)
 ```
 
 ## Conventions

@@ -1394,7 +1394,7 @@ async function callOpenAI(apiKey: string, model: string, prompt: string, baseUrl
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
         body: JSON.stringify({
             model,
@@ -1836,7 +1836,7 @@ async function callOpenAICompatWithTools(
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
+                    ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
                 },
                 body: JSON.stringify({
                     model,

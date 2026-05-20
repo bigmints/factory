@@ -97,9 +97,9 @@ export function validateSpec(spec: AppSpec): ValidationResult {
         }
     }
 
-    // Engine: if specified, must be 'factory' or 'minions'
-    if (spec.engine && !['factory', 'minions'].includes(spec.engine)) {
-        errors.push(`Unknown engine "${spec.engine}". Known: factory, minions`);
+    // Engine: if specified, must be 'factory' or 'worker'
+    if (spec.engine && !['factory', 'worker'].includes(spec.engine)) {
+        errors.push(`Unknown engine "${spec.engine}". Known: factory, worker`);
     }
 
     return { passed: errors.length === 0, errors };
@@ -140,9 +140,9 @@ export function validateFeatureSpec(spec: FeatureSpec): ValidationResult {
         }
     }
 
-    // Engine: if specified, must be 'factory' or 'minions'
-    if (spec.engine && !['factory', 'minions'].includes(spec.engine)) {
-        errors.push(`Unknown engine "${spec.engine}". Known: factory, minions`);
+    // Engine: if specified, must be 'factory' or 'worker'
+    if (spec.engine && !['factory', 'worker'].includes(spec.engine)) {
+        errors.push(`Unknown engine "${spec.engine}". Known: factory, worker`);
     }
 
     return { passed: errors.length === 0, errors };

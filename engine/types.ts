@@ -19,7 +19,7 @@ export interface AppSpec {
     deployment?: DeploymentConfig;
     dependencies?: string[];       // npm packages this app requires (e.g. ['express', 'dotenv'])
     status?: SpecStatus;
-    engine?: 'factory' | 'minions';
+    engine?: 'factory' | 'worker';
     build?: BuildMeta;
 }
 
@@ -146,7 +146,7 @@ export interface FeatureSpec {
         type: string;
         title: string;
     }>;
-    engine?: 'factory' | 'minions';
+    engine?: 'factory' | 'worker';
 }
 
 // ─── Bridge Config (.factory/factory.yaml) ───────────────
@@ -227,6 +227,7 @@ export interface FactorySettings {
     activeProvider: string;
     buildModel: string;
     updatedAt?: string;
+    defaultCli?: 'pi' | 'gemini' | 'claude' | 'agy';
 }
 
 // ─── Build Pipeline ──────────────────────────────────────

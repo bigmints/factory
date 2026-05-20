@@ -12,7 +12,7 @@ import { homedir } from 'node:os';
 
 // ─── Types ───────────────────────────────────────────────
 
-export type BuildEngine = 'factory' | 'minions';
+export type BuildEngine = 'factory' | 'worker';
 
 export interface QueueItem {
     id: string;

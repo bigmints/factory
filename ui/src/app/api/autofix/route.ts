@@ -44,7 +44,7 @@ function resolveSpecFile(specFile: string): string {
 /**
  * Load the LLM settings from the factory's settings.json
  */
-function loadLLMSettings(): { provider: string; model: string; apiKey?: string; baseUrl?: string } | null {
+function loadLLMSettings(): { provider: string; model: string; apiKey?: string; baseUrl?: string; kind?: string } | null {
   try {
     const settingsPath = join(FACTORY_ROOT, 'settings.json');
     if (!existsSync(settingsPath)) return null;
@@ -62,6 +62,7 @@ function loadLLMSettings(): { provider: string; model: string; apiKey?: string; 
       model,
       apiKey: providerConfig.apiKey,
       baseUrl: providerConfig.baseUrl,
+      kind: providerConfig.kind,
     };
   } catch {
     return null;
@@ -70,10 +71,10 @@ function loadLLMSettings(): { provider: string; model: string; apiKey?: string; 
 
 /**
  * Call the LLM to fix a broken YAML spec.
- * Supports gemini, openai, and ollama providers.
+ * Supports gemini, openai, ollama, and openai-compat providers.
  */
 async function callLLMForFix(prompt: string, settings: NonNullable<ReturnType<typeof loadLLMSettings>>): Promise<string> {
-  const { provider, model, apiKey, baseUrl } = settings;
+  const { provider, model, apiKey, baseUrl, kind } = settings;
 
   if (provider === 'gemini') {
     if (!apiKey) throw new Error('Gemini API key not configured');
@@ -93,13 +94,13 @@ async function callLLMForFix(prompt: string, settings: NonNullable<ReturnType<ty
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 
-  if (provider === 'openai') {
-    if (!apiKey) throw new Error('OpenAI API key not configured');
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  if (provider === 'openai' || kind === 'openai-compat') {
+    const url = baseUrl ? baseUrl.replace(/\/+$/, '') + '/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
       },
       body: JSON.stringify({
         model,
@@ -109,7 +110,7 @@ async function callLLMForFix(prompt: string, settings: NonNullable<ReturnType<ty
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(`OpenAI API error: ${JSON.stringify(data)}`);
+    if (!res.ok) throw new Error(`OpenAI-compatible API error: ${JSON.stringify(data)}`);
     return data.choices?.[0]?.message?.content || '';
   }
 

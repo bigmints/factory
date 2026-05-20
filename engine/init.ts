@@ -202,7 +202,7 @@ factory task list              # Show task queue
 factory task start <id>        # Claim a task
 factory context update "<msg>" # Append to worklog
 factory validate               # Run tsc + lint
-factory minions --queue <file> # Run YAML prompt queue
+factory worker --queue <file>   # Run YAML prompt queue
 factory hooks install          # Install git hooks
 \`\`\`
 
@@ -386,7 +386,7 @@ export function initBridge(repoPath: string): InitResult {
                 { name: 'auto-context', path: `${factoryRoot}/factory/scripts/auto-context/update-context.sh`, description: 'Append to worklog' },
                 { name: 'compress-worklog', path: `${factoryRoot}/factory/scripts/compress-worklog/compress.sh`, description: 'Archive old worklog entries' },
                 { name: 'validate-code', path: `${factoryRoot}/factory/scripts/validate-code/validate.sh`, description: 'Run lint and type checks' },
-                { name: 'minions', path: `${factoryRoot}/factory/scripts/minions/scripts/minions`, description: 'Run YAML prompt queue' },
+                { name: 'worker', path: 'factory worker', description: 'Run YAML prompt queue' },
                 { name: 'task-manager', path: '.factory/task-manager/manage.sh', description: 'Manage task lifecycle' },
             ],
         }));

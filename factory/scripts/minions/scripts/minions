@@ -1,6 +1,0 @@
-#!/bin/bash
-# minions — wrapper that invokes the Node.js queue runner
-# symlink or add this to PATH for global use: ln -s $(pwd)/.agents/skills/minions/scripts/minions /usr/local/bin/minions
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec node "$SCRIPT_DIR/minions.mjs" "$@"

@@ -15,16 +15,16 @@
  *   factory feature validate <spec.yaml>     Validate a feature spec
  */
 
-import { resolve, basename, dirname, join } from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { spawn, SpawnOptions, execSync } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { loadSpec, loadFeatureSpec, listSpecs, validateSpec, validateFeatureSpec, updateSpecStatus, updateSpecBuildMeta, archiveSpec } from './spec.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherContext } from './context.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
-import { runMinionsBuild, runMinionsFeatureBuild } from './minions-engine.ts';
+import { runWorkerBuild, runWorkerFeatureBuild } from './worker-engine.ts';
 import { writeFiles, setupProject, gitCommit, gitPush, writeKnowledgeEntry, writeAppAgentsMd, buildDebrief } from './writer.ts';
 import { autoFixSpec } from './autofix.ts';
 import { log, logHeader, logStep, logError } from './log.ts';
@@ -91,8 +91,8 @@ async function main(): Promise<void> {
             return handleContext();
         case 'compress':
             return handleCompress();
-        case 'minions':
-            return handleMinions();
+        case 'worker':
+            return handleWorker();
         case 'hooks':
             return handleHooks();
         case 'repl':
@@ -132,7 +132,7 @@ async function handleBuild(specPath?: string): Promise<void> {
     // Steps 3-5: Plan → Build → Test → Iterate (or minions engine)
     const engineFlag = parseFlags(args.slice(2)).engine as string | undefined;
     const effectiveEngine = engineFlag || spec.engine || 'factory';
-    const useMinions = effectiveEngine === 'minions';
+    const useWorker = effectiveEngine === 'worker';
 
     const slug = specSlug(spec);
     const targetDir = bridge.apps_dir
@@ -140,9 +140,9 @@ async function handleBuild(specPath?: string): Promise<void> {
         : resolve(project.path, slug);
 
     let result;
-    if (useMinions) {
-        logStep(3, 7, 'Generating with minions engine...');
-        result = await runMinionsBuild(spec, context);
+    if (useWorker) {
+        logStep(3, 7, 'Generating with worker engine...');
+        result = await runWorkerBuild(spec, context);
     } else {
         result = await runPipeline(spec, context, targetDir, specPath!);
     }
@@ -391,16 +391,16 @@ async function handleFeature(subcommand?: string, specPath?: string): Promise<vo
             // Check for --engine flag
             const featureFlags = parseFlags(args.slice(3));
             const effectiveFeatureEngine = featureFlags.engine || spec.engine || 'factory';
-            const useMinionsFeature = effectiveFeatureEngine === 'minions';
+            const useWorkerFeature = effectiveFeatureEngine === 'worker';
 
             const targetDir = bridge.apps_dir
                 ? resolve(project.path, bridge.apps_dir, spec.target.app)
                 : resolve(project.path, spec.target.app);
 
             let result;
-            if (useMinionsFeature) {
-                log('→', 'Using minions engine for feature...');
-                result = await runMinionsFeatureBuild(spec, context, targetDir);
+            if (useWorkerFeature) {
+                log('→', 'Using worker engine for feature...');
+                result = await runWorkerFeatureBuild(spec, context, targetDir);
             } else {
                 result = await runFeaturePipeline(spec, context, targetDir, specPath);
                 writeFiles(targetDir, result.files);
@@ -486,7 +486,7 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
             let kind: 'AppSpec' | 'FeatureSpec' = 'AppSpec';
             let phase: number | undefined;
             let dependsOn: string[] | undefined;
-            let specEngine: 'factory' | 'minions' | undefined;
+            let specEngine: 'factory' | 'worker' | undefined;
             try {
                 const fSpec = loadFeatureSpec(specPath);
                 kind = 'FeatureSpec';
@@ -502,7 +502,7 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
 
             // Detect engine flag from CLI args
             const queueFlags = parseFlags(args.slice(3));
-            const engine = (queueFlags.engine || specEngine || 'factory') === 'minions' ? 'minions' as const : 'factory' as const;
+            const engine = (queueFlags.engine || specEngine || 'factory') === 'worker' ? 'worker' as const : 'factory' as const;
 
             const item = enqueue(specPath, kind, { phase, dependsOn, engine });
             const phaseInfo = phase ? ` [phase ${phase}]` : '';
@@ -678,13 +678,13 @@ async function handleQueueStart(): Promise<void> {
                         ? resolve(project.path, bridge.apps_dir, spec.target.app)
                         : resolve(project.path, spec.target.app);
                     const result = await withRetry(
-                        () => (current.engine === 'minions')
-                            ? runMinionsFeatureBuild(spec, context, targetDir)
+                        () => (current.engine === 'worker')
+                            ? runWorkerFeatureBuild(spec, context, targetDir)
                             : runFeaturePipeline(spec, context, targetDir, current.specFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'Feature Pipeline' }
                     );
 
-                    if (current.engine !== 'minions') {
+                    if (current.engine !== 'worker') {
                         writeFiles(targetDir, result.files);
                         setupProject(targetDir, bridge.stack?.packageManager);
                     }
@@ -804,13 +804,13 @@ async function handleQueueStart(): Promise<void> {
                         : resolve(project.path, slug);
 
                     const result = await withRetry(
-                        () => (current.engine === 'minions')
-                            ? runMinionsBuild(spec, context)
+                        () => (current.engine === 'worker')
+                            ? runWorkerBuild(spec, context)
                             : runPipeline(spec, context, targetDir, current.specFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'App Pipeline' }
                     );
 
-                    if (current.engine !== 'minions') {
+                    if (current.engine !== 'worker') {
                         writeFiles(targetDir, result.files);
                         setupProject(targetDir, spec.stack.packageManager);
                     }
@@ -942,7 +942,7 @@ function printUsage(): void {
 Usage: factory <command> [options]
 
 Commands:
-  build <spec.yaml> [--engine minions]   Full pipeline (or minions engine)
+  build <spec.yaml> [--engine worker]   Full pipeline (or worker engine)
   validate <spec.yaml>       Validate a spec
   repl [<spec.yaml>] [--auto] Start the beautiful interactive CLI terminal UI (REPL)
   status                     Show spec statuses
@@ -958,16 +958,18 @@ Commands:
   project switch <id>        Switch active project
   project remove <id>        Disconnect a repo
 
-  feature build <spec.yaml> [--engine minions]  Build a feature
+  feature build <spec.yaml> [--engine worker]  Build a feature
   feature validate <spec.yaml>  Validate a feature spec
 
   queue list                    List all queue items
-  queue add <spec.yaml> [--engine minions]  Add to queue
+  queue add <spec.yaml> [--engine worker]  Add to queue
   queue start                   Process all pending items autonomously
   queue stats                   Show queue statistics
   queue clear                   Clear completed items
   queue retry <id>              Retry a failed item
   queue remove <id>             Remove an item from queue
+
+  worker [options...]           Run task queue natively (formerly minions CLI)
 `);
 }
 
@@ -1115,10 +1117,111 @@ function handleCompress(): void {
     spawnScript(script, []);
 }
 
-/** factory minions [--queue <file>] [options...] — run minions queue */
-function handleMinions(): void {
-    const script = resolveScript('minions/scripts/minions');
-    spawnScript(script, args.slice(1));
+/** factory worker [--queue <file>] [options...] — run worker queue natively */
+async function handleWorker(): Promise<void> {
+    const subcommand = args[1];
+    if (subcommand === 'cli' || subcommand === 'default-cli') {
+        const cliName = args[2];
+        const { loadSettings, saveSettings } = await import('./config.ts');
+        if (!cliName) {
+            try {
+                const settings = loadSettings();
+                console.log(`Current default CLI: ${settings.defaultCli || 'not set (auto-detect)'}`);
+            } catch (err: any) {
+                console.log('Current default CLI: not set (auto-detect)');
+            }
+            process.exit(0);
+        }
+        const validClis = ['agy', 'claude', 'gemini', 'pi'];
+        if (!validClis.includes(cliName)) {
+            console.error(`Error: Invalid CLI name. Must be one of: ${validClis.join(', ')}`);
+            process.exit(1);
+        }
+        try {
+            let settings: any;
+            try {
+                settings = loadSettings();
+            } catch {
+                settings = { providers: [], activeProvider: '', buildModel: '' };
+            }
+            settings.defaultCli = cliName;
+            saveSettings(settings);
+            console.log(`✓ Default CLI set to: ${cliName}`);
+            process.exit(0);
+        } catch (err: any) {
+            console.error(`Error saving settings: ${err.message}`);
+            process.exit(1);
+        }
+    }
+
+    const queueFileIdx = args.indexOf('--queue');
+    let queueFile: string | null = null;
+    if (queueFileIdx !== -1 && args[queueFileIdx + 1]) {
+        queueFile = args[queueFileIdx + 1];
+    }
+
+    // Try to auto-resolve queue file if not specified
+    if (!queueFile) {
+        const candidates = ['queue.yaml', 'prompts.yaml', 'batch.yaml'];
+        for (const c of candidates) {
+            if (existsSync(c)) {
+                queueFile = c;
+                break;
+            }
+        }
+    }
+
+    if (!queueFile) {
+        const agentQueue = '.agents/queue';
+        if (existsSync(agentQueue)) {
+            const files = readdirSync(agentQueue).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+            if (files.length > 0) {
+                queueFile = join(agentQueue, files[0]);
+            }
+        }
+    }
+
+    if (!queueFile) {
+        console.error('Error: No queue file found. Use --queue <file> or create queue.yaml in the project root.');
+        process.exit(1);
+    }
+
+    const workdirIdx = args.indexOf('--workdir');
+    const workdir = workdirIdx !== -1 && args[workdirIdx + 1] ? args[workdirIdx + 1] : process.cwd();
+
+    const modelIdx = args.indexOf('--model');
+    const model = modelIdx !== -1 && args[modelIdx + 1] ? args[modelIdx + 1] : null;
+
+    const cliIdx = args.indexOf('--cli');
+    const cli = cliIdx !== -1 && args[cliIdx + 1] ? args[cliIdx + 1] : null;
+
+    const delayIdx = args.indexOf('--delay');
+    const delay = delayIdx !== -1 && args[delayIdx + 1] ? parseInt(args[delayIdx + 1], 10) : 2;
+
+    const logDirIdx = args.indexOf('--log-dir');
+    const logDir = logDirIdx !== -1 && args[logDirIdx + 1] ? args[logDirIdx + 1] : './runs';
+
+    const dryRun = args.includes('--dry-run');
+    const continueOnError = args.includes('--continue-on-error');
+
+    const { runQueue } = await import('./worker-engine.ts');
+
+    try {
+        const result = await runQueue(queueFile, {
+            workdir,
+            model,
+            cli,
+            delay,
+            logDir,
+            continueOnError,
+            dryRun,
+            quiet: false,
+        });
+        process.exit(result.success ? 0 : 1);
+    } catch (err: any) {
+        console.error('Error:', err.message);
+        process.exit(1);
+    }
 }
 
 /** factory hooks install — install git hooks into the active/target project */

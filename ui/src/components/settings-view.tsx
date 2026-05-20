@@ -263,7 +263,16 @@ export function SettingsView() {
                   <div className="space-y-1.5">
                     <Label className="text-[10px] md:text-xs font-semibold text-muted-foreground">Model</Label>
                     {provider.models.length > 0 ? (
-                      <Select value={provider.defaultModel || ''} onValueChange={(val) => updateProvider(provider.id, { defaultModel: val })}>
+                      <Select
+                        value={provider.defaultModel || ''}
+                        onValueChange={(val) => {
+                          updateProvider(provider.id, { defaultModel: val });
+                          if (settings.activeProvider === provider.id) {
+                            setSettings(prev => prev ? { ...prev, buildModel: val } : null);
+                            setDirty(true);
+                          }
+                        }}
+                      >
                         <SelectTrigger className="font-mono text-xs h-10 rounded-md"><SelectValue placeholder="Select a model" /></SelectTrigger>
                         <SelectContent>
                           {provider.models.map(model => <SelectItem key={model.id} value={model.id} className="font-mono text-xs">{model.name}</SelectItem>)}

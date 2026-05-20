@@ -4,7 +4,7 @@
 
 summary:
   completed: 28
-  next: 15
+  next: 16
   cancelled: 5
 
   completed:
@@ -59,6 +59,7 @@ summary:
     - us_092_failure_knowledge: "On build failure, markFailed() records in SQLite but writes nothing to disk. Fix: in queue.ts markFailed(), write .factory/knowledge/failures/{slug}-{timestamp}.md with: spec slug, error message, attempt count, timestamp, tsc output if available. Future builds read this via gatherContext() to avoid repeating the same mistake." [P2 engine/queue.ts engine/context.ts]
     - us_093_launchd_plist: "factory daemon install is referenced in plan but not implemented. Implement: generate a macOS launchd plist at ~/Library/LaunchAgents/com.factory.daemon.plist that runs 'factory daemon' on login. Write plist with correct WorkingDirectory and EnvironmentVariables. Run: launchctl load to activate. factory daemon uninstall removes it." [P2 engine/cli.ts]
     - us_094_cli_hooks_on_add: "factory project add does not trigger git hooks installation. After initBridge() is wired (us_083), also run setup-hooks.sh in the target repo if it is a git repo (check for .git/). Prompt user: 'Install git hooks? (y/n)' in CLI. In UI wizard: the hooks toggle already exists — wire it to call factory hooks install after init completes." [P2 engine/config.ts engine/cli.ts]
+    - us_095_toon_as_codec_not_storage: "TOON is a token-compression codec (like gzip for LLM prompts), not a storage format. Correct the architecture: (1) Rename context.toon → context.yaml, heartbeat.toon → heartbeat.yaml, worklog.toon → worklog.yaml, skill-index.toon → skill-index.yaml, todo.toon → todo.yaml — store as plain YAML, git-trackable, human-editable. (2) In gatherToonSnapshot() (context.ts): read the YAML files, call encode() from @toon-format/toon on the data objects, inject the resulting TOON string into the LLM system prompt. (3) Update manage.sh, pulse.sh, update-context.sh to read/write YAML instead. (4) Keep the .toon extension ONLY for ephemeral compressed snapshots written for LLM consumption, not for persistent storage. (5) Update all references in cli.ts, init.ts, writer.ts, toon.ts." [P1 engine/toon.ts engine/context.ts engine/init.ts factory/scripts/]
 
   in_progress:
 

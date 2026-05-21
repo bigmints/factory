@@ -1693,9 +1693,9 @@ export async function runToolSession(
             break;
         }
 
-        // Token guard: keep system + last KEEP_LAST messages to avoid context overflow
+        // Token guard: keep system + bootstrap user + last KEEP_LAST messages to avoid context overflow
         if (messages.length >= TOKEN_GUARD_AT) {
-            const keep = messages.slice(0, 1).concat(messages.slice(-KEEP_LAST));
+            const keep = messages.slice(0, 2).concat(messages.slice(-KEEP_LAST));
             messages.length = 0;
             messages.push(...keep);
         }

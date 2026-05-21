@@ -1612,6 +1612,21 @@ export function buildToolSystemPrompt(
 ## Target Directory
 ${targetDir}
 
+## Tool Calling Format
+You MUST invoke tools using this XML format:
+<tool_call>{"name": "tool_name", "arguments": {"arg1": "val1"}}</tool_call>
+
+For example, to read the story:
+<tool_call>{"name": "read_story", "arguments": {}}</tool_call>
+
+To list directory contents:
+<tool_call>{"name": "list_dir", "arguments": {"recursive": true}}</tool_call>
+
+To write a file:
+<tool_call>{"name": "write_file", "arguments": {"filename": "src/app.ts", "content": "console.log('hello');"}}</tool_call>
+
+Make sure to format all your tool calls exactly like this inside your response. Do not use plain text or standard markdown code blocks for calling tools.
+
 ## Recommended Workflow
 1. Call read_story to fully understand the build requirements.
 2. Call list_dir(recursive=true) to explore what already exists.
@@ -1709,13 +1724,13 @@ export async function runToolSession(
         const toolCalls = response.toolCalls || [];
 
         if (toolCalls.length === 0) {
-            // LLM returned text with no tool calls — session ended without a terminal call
             messages.push({ role: 'assistant', content: response.text });
-            if (!ctx.terminal) {
-                log('!', 'LLM returned no tool calls — session ended without mark_complete or mark_failed');
-                ctx.logs.push({ level: 'warn', message: 'Session ended without a terminal tool call' });
-            }
-            break;
+            log('!', 'LLM returned no tool calls — prompting to invoke a tool');
+            messages.push({
+                role: 'user',
+                content: 'Please proceed by invoking one or more tools (e.g. read_story, list_dir, write_file, or run_command) in the required XML tool-calling format:\n<tool_call>{"name": "tool_name", "arguments": {...}}</tool_call>'
+            });
+            continue;
         }
 
         messages.push({ role: 'assistant', content: response.text, tool_calls: toolCalls });
@@ -2008,6 +2023,7 @@ async function callOpenAICompatWithTools(
         if (!choice) throw new Error('Provider returned no choices');
 
         const text = choice.message?.content || '';
+        log('●', `LLM response text: ${JSON.stringify(text.slice(0, 200))}... tool_calls from API: ${JSON.stringify(choice.message?.tool_calls)}`);
         let toolCalls: ToolCallResult = (choice.message?.tool_calls || []).map((tc: any) => {
             let parsedArgs: Record<string, unknown> = {};
             try {

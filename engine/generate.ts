@@ -1812,6 +1812,132 @@ export async function callProviderWithTools(
     return callOpenAICompatWithTools(provider.apiKey || '', model, messages, tools, baseUrl);
 }
 
+/** Robust regex-based XML/tag tool-calling parser for Qwen and other local LLMs */
+function parseXmlToolCalls(content: string): ToolCallResult {
+    const toolCalls: ToolCallResult = [];
+
+    // Pattern 1: <tool_call>JSON</tool_call>
+    const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+    let match;
+    while ((match = toolCallRegex.exec(content)) !== null) {
+        try {
+            const parsed = JSON.parse(match[1].trim());
+            if (parsed.name) {
+                toolCalls.push({
+                    id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    function: {
+                        name: parsed.name,
+                        arguments: parsed.arguments || parsed.args || {}
+                    }
+                });
+            } else if (parsed.function) {
+                toolCalls.push({
+                    id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    function: {
+                        name: parsed.function.name,
+                        arguments: parsed.function.arguments || {}
+                    }
+                });
+            }
+        } catch {
+            // Not valid JSON, ignore
+        }
+    }
+    if (toolCalls.length > 0) return toolCalls;
+
+    // Pattern 2: <invoke name="tool_name">...params...</invoke> or <invoke>tool_name</invoke>
+    const invokeRegex = /<invoke(?:\s+name="([^"]+)")?>([\s\S]*?)<\/invoke>/g;
+    while ((match = invokeRegex.exec(content)) !== null) {
+        let name = match[1]?.trim() || '';
+        const body = match[2]?.trim() || '';
+
+        if (!name) {
+            // Maybe <invoke>tool_name</invoke> or tool_name is the first line of body
+            const lines = body.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length > 0 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lines[0])) {
+                name = lines[0];
+            }
+        }
+
+        if (name) {
+            const args = parseArgsFromBody(body);
+            toolCalls.push({
+                id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                function: { name, arguments: args }
+            });
+        }
+    }
+    if (toolCalls.length > 0) return toolCalls;
+
+    // Pattern 3: <function=tool_name>...params...</function>
+    const functionRegex = /<function=([a-zA-Z_][a-zA-Z0-9_]*)>([\s\S]*?)<\/function>/g;
+    while ((match = functionRegex.exec(content)) !== null) {
+        const name = match[1];
+        const body = match[2].trim();
+        const args = parseArgsFromBody(body);
+        toolCalls.push({
+            id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            function: { name, arguments: args }
+        });
+    }
+    if (toolCalls.length > 0) return toolCalls;
+
+    // Pattern 4: <invoke:tool_name>...params...</invoke:tool_name>
+    const invokeColonRegex = /<invoke:([a-zA-Z_][a-zA-Z0-9_]*)>([\s\S]*?)<\/invoke:\1>/g;
+    while ((match = invokeColonRegex.exec(content)) !== null) {
+        const name = match[1];
+        const body = match[2].trim();
+        const args = parseArgsFromBody(body);
+        toolCalls.push({
+            id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            function: { name, arguments: args }
+        });
+    }
+    if (toolCalls.length > 0) return toolCalls;
+
+    // Pattern 5: Simple <invoke>tool_name</invoke> without body or matching invoke tags
+    const simpleInvokeRegex = /<invoke>([a-zA-Z_][a-zA-Z0-9_]*)<\/invoke>/g;
+    while ((match = simpleInvokeRegex.exec(content)) !== null) {
+        const name = match[1];
+        toolCalls.push({
+            id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            function: { name, arguments: {} }
+        });
+    }
+
+    return toolCalls;
+}
+
+function parseArgsFromBody(body: string): Record<string, unknown> {
+    const args: Record<string, unknown> = {};
+
+    // Check if body itself is JSON
+    try {
+        const parsed = JSON.parse(body);
+        if (typeof parsed === 'object' && parsed !== null) {
+            return parsed;
+        }
+    } catch {}
+
+    // Check for <parameter name="param_name">value</parameter>
+    const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
+    let match;
+    let foundParams = false;
+    while ((match = paramRegex.exec(body)) !== null) {
+        args[match[1]] = match[2].trim();
+        foundParams = true;
+    }
+    if (foundParams) return args;
+
+    // Check for custom tags like <param_name>value</param_name>
+    const tagRegex = /<([a-zA-Z_][a-zA-Z0-9_]*)>([\s\S]*?)<\/\1>/g;
+    while ((match = tagRegex.exec(body)) !== null) {
+        args[match[1]] = match[2].trim();
+    }
+    
+    return args;
+}
+
 /** OpenAI-compatible tool-calling with retry on transient errors and guarded JSON.parse */
 async function callOpenAICompatWithTools(
     apiKey: string,
@@ -1882,7 +2008,7 @@ async function callOpenAICompatWithTools(
         if (!choice) throw new Error('Provider returned no choices');
 
         const text = choice.message?.content || '';
-        const toolCalls: ToolCallResult = (choice.message?.tool_calls || []).map((tc: any) => {
+        let toolCalls: ToolCallResult = (choice.message?.tool_calls || []).map((tc: any) => {
             let parsedArgs: Record<string, unknown> = {};
             try {
                 const raw = tc.function?.arguments;
@@ -1893,6 +2019,15 @@ async function callOpenAICompatWithTools(
                 function: { name: tc.function?.name || '', arguments: parsedArgs },
             };
         });
+
+        // Fallback for Qwen/local LLMs XML-style tool invocation
+        if (toolCalls.length === 0 && text) {
+            const parsedXmlCalls = parseXmlToolCalls(text);
+            if (parsedXmlCalls.length > 0) {
+                log('●', `Parsed ${parsedXmlCalls.length} XML tool call(s) from content`);
+                toolCalls = parsedXmlCalls;
+            }
+        }
 
         return {
             text,
@@ -2052,7 +2187,7 @@ async function callOllamaWithTools(
     const data = await res.json();
     const message = data.message;
     const text = message?.content || '';
-    const toolCalls: ToolCallResult = (message?.tool_calls || []).map((tc: any, i: number) => {
+    let toolCalls: ToolCallResult = (message?.tool_calls || []).map((tc: any, i: number) => {
         let parsedArgs: Record<string, unknown> = {};
         try {
             const raw = tc.function?.arguments;
@@ -2063,6 +2198,15 @@ async function callOllamaWithTools(
             function: { name: tc.function?.name || '', arguments: parsedArgs },
         };
     });
+
+    // Fallback for Qwen/local LLMs XML-style tool invocation
+    if (toolCalls.length === 0 && text) {
+        const parsedXmlCalls = parseXmlToolCalls(text);
+        if (parsedXmlCalls.length > 0) {
+            log('●', `Parsed ${parsedXmlCalls.length} XML tool call(s) from content`);
+            toolCalls = parsedXmlCalls;
+        }
+    }
 
     return {
         text,

@@ -9,10 +9,10 @@ import { resolve } from 'node:path';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { getActiveProject, loadBridgeConfig } from './config.ts';
-import { gatherContext, gatherAppContext } from './context.ts';
+import { gatherBlueprint, gatherAppBlueprint } from './blueprint.ts';
 import { loadStory, loadFeatureStory, listStories } from './story.ts';
 import { log, logError } from './log.ts';
-import { TOOL_DEFINITIONS, executeTool, type BuildToolContext } from './build-tools.ts';
+import { TOOL_DEFINITIONS, executeTool, type BuildToolBlueprint } from './build-tools.ts';
 import { buildToolSystemPrompt, callProviderWithTools, requireActiveProvider, type ToolMessages } from './generate.ts';
 import { storySlug, type AppStory, type FeatureStory } from './types.ts';
 
@@ -61,7 +61,7 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
 
     const project = getActiveProject();
     const bridge = loadBridgeConfig(project.path);
-    const context = gatherContext(project.path, bridge);
+    const blueprint = gatherBlueprint(project.path, bridge);
 
     let activeStory: AppStory | FeatureStory | undefined;
     let actualStoryPath = storyPath;
@@ -122,15 +122,15 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
             : resolve(project.path, slug);
     }
 
-    // Gather existing app integration context if this is a feature build
-    let appContext;
+    // Gather existing app integration blueprint if this is a feature build
+    let appBlueprint;
     if (activeStory && !('appName' in activeStory)) {
-        appContext = gatherAppContext(project.path, bridge, (activeStory as FeatureStory).target.app);
+        appBlueprint = gatherAppBlueprint(project.path, bridge, (activeStory as FeatureStory).target.app);
     }
 
-    // ─── Initialize Tool Context ────────────────────────────
+    // ─── Initialize Tool Blueprint ───────────────────────────
 
-    const ctx: BuildToolContext = {
+    const ctx: BuildToolBlueprint = {
         targetDir,
         storyFile: actualStoryPath || '',
         terminal: false,
@@ -138,9 +138,9 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
         generatedFiles: new Map(),
         logs: [],
         contextData: {
-            conventions: context.conventions.length > 0 ? context.conventions.join('\n\n') : undefined,
-            knowledge: context.knowledgeFiles.length > 0
-                ? context.knowledgeFiles.map(k => `### ${k.app} (${k.filename})\n${k.content}`).join('\n\n')
+            conventions: blueprint.conventions.length > 0 ? blueprint.conventions.join('\n\n') : undefined,
+            knowledge: blueprint.knowledgeFiles.length > 0
+                ? blueprint.knowledgeFiles.map((k: any) => `### ${k.app} (${k.filename})\n${k.content}`).join('\n\n')
                 : undefined,
         },
     };
@@ -172,7 +172,7 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
 
     // Prepopulate tool message history
     const systemPrompt = activeStory
-        ? buildToolSystemPrompt(activeStory, context, targetDir, appContext)
+        ? buildToolSystemPrompt(activeStory, blueprint, targetDir, appBlueprint)
         : `You are an autonomous code generation engine with access to tools in the directory: ${targetDir}. Always complete with mark_complete.`;
 
     const messages: ToolMessages = [
@@ -264,7 +264,7 @@ ${C.bold}🛠️ FACTORY BUILD ENGINE TOOLS (GROUPED):${C.reset}
 `);
 }
 
-function printStatus(ctx: BuildToolContext): void {
+function printStatus(ctx: BuildToolBlueprint): void {
     console.log(`\n${C.bold}📊 Session Status Profile:${C.reset}`);
     console.log(` • ${C.bold}Target Directory:${C.reset} ${ctx.targetDir}`);
     console.log(` • ${C.bold}Active Story File:${C.reset} ${ctx.storyFile || '(none)'}`);
@@ -301,7 +301,7 @@ async function handleManualToolCall(
     name: string,
     argsList: string[],
     argStr: string,
-    ctx: BuildToolContext,
+    ctx: BuildToolBlueprint,
     rl: readline.Interface,
 ): Promise<void> {
     console.log(`\n${C.dim}⚡ Executing "${name}"...${C.reset}`);
@@ -396,7 +396,7 @@ async function handleManualToolCall(
 async function handleAgentChatTurn(
     userInput: string,
     messages: ToolMessages,
-    ctx: BuildToolContext,
+    ctx: BuildToolBlueprint,
     auto: boolean,
     rl: readline.Interface,
 ): Promise<void> {

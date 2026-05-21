@@ -1,30 +1,31 @@
 /**
- * Context gathering — reads knowledge files and conventions from the target repo.
+ * Blueprint gathering — reads knowledge files and conventions from the target repo.
  *
  * Only reads from paths declared in factory.yaml. No filesystem scanning.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { encode } from '@toon-format/toon';
-import type { BridgeConfig, ProjectContext, KnowledgeFile, ProjectStack, AppIntegrationContext, StackConfig } from './types.ts';
-import { log } from './log.ts';
+import type { BridgeConfig, ProjectBlueprint, KnowledgeFile, AppIntegrationBlueprint } from './types.ts';
+import { log, logError } from './log.ts';
+import { analyzeExistingProject } from './init.ts';
 
 /**
- * Gather integration context for a specific target app.
+ * Gather integration blueprint for a specific target app.
  * Reads package.json, tsconfig, file tree so feature builds know what exists.
  */
-export function gatherAppContext(repoPath: string, bridge: BridgeConfig, appSlug: string): AppIntegrationContext {
+export function gatherAppBlueprint(repoPath: string, bridge: BridgeConfig, appSlug: string): AppIntegrationBlueprint {
     const appDir = bridge.apps_dir
         ? join(repoPath, bridge.apps_dir, appSlug)
         : join(repoPath, appSlug);
 
-    const ctx: AppIntegrationContext = { fileTree: [] };
+    const bp: AppIntegrationBlueprint = { fileTree: [] };
 
     if (!existsSync(appDir)) {
         log('!', `Target app directory not found: ${appDir}`);
-        return ctx;
+        return bp;
     }
 
     // Read package.json
@@ -33,7 +34,7 @@ export function gatherAppContext(repoPath: string, bridge: BridgeConfig, appSlug
         try {
             const raw = readFileSync(pkgPath, 'utf-8');
             const pkg = JSON.parse(raw);
-            ctx.packageJson = {
+            bp.packageJson = {
                 dependencies: pkg.dependencies,
                 devDependencies: pkg.devDependencies,
                 scripts: pkg.scripts,
@@ -41,7 +42,7 @@ export function gatherAppContext(repoPath: string, bridge: BridgeConfig, appSlug
 
             // Derive stack from package.json
             const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-            ctx.stack = {
+            bp.stack = {
                 framework: allDeps['next'] ? 'next.js'
                     : allDeps['express'] ? 'express'
                     : allDeps['react'] ? 'react'
@@ -67,7 +68,7 @@ export function gatherAppContext(repoPath: string, bridge: BridgeConfig, appSlug
     const tscPath = join(appDir, 'tsconfig.json');
     if (existsSync(tscPath)) {
         try {
-            ctx.tsconfigRaw = readFileSync(tscPath, 'utf-8');
+            bp.tsconfigRaw = readFileSync(tscPath, 'utf-8');
         } catch { /* ignore */ }
     }
 
@@ -93,14 +94,14 @@ export function gatherAppContext(repoPath: string, bridge: BridgeConfig, appSlug
         } catch { /* permission errors etc */ }
     }
     walk(appDir);
-    ctx.fileTree = fileTree.sort();
+    bp.fileTree = fileTree.sort();
 
-    log('✓', `App context for "${appSlug}": ${ctx.fileTree.length} files, ${Object.keys(ctx.packageJson?.dependencies || {}).length} deps`);
-    return ctx;
+    log('✓', `App blueprint for "${appSlug}": ${bp.fileTree.length} files, ${Object.keys(bp.packageJson?.dependencies || {}).length} deps`);
+    return bp;
 }
 
-/** Completed build info from the queue — used for context accumulation */
-export interface QueueBuildContext {
+/** Completed build info from the queue — used for blueprint accumulation */
+export interface QueueBuildBlueprint {
     storyFile: string;
     kind: string;
     targetApp: string;
@@ -108,23 +109,26 @@ export interface QueueBuildContext {
 }
 
 /**
- * Load queue context — what builds have already completed in this queue run.
- * The queue processor writes this to queue-context.json before spawning each feature build.
+ * Load queue blueprint / context — what builds have already completed in this queue run.
+ * The queue processor writes this to queue-blueprint.json before spawning each feature build.
  */
-export function loadQueueContext(repoPath: string): QueueBuildContext[] {
-    // queue-context.json is at the factory root (parent of app dirs)
+export function loadQueueBlueprint(repoPath: string): QueueBuildBlueprint[] {
+    // queue-blueprint.json is at the factory root (parent of app dirs)
     const candidates = [
+        join(repoPath, 'queue-blueprint.json'),
+        join(repoPath, '..', 'queue-blueprint.json'),
+        // legacy fallbacks
         join(repoPath, 'queue-context.json'),
         join(repoPath, '..', 'queue-context.json'),
     ];
 
-    for (const ctxPath of candidates) {
-        if (existsSync(ctxPath)) {
+    for (const bpPath of candidates) {
+        if (existsSync(bpPath)) {
             try {
-                const raw = readFileSync(ctxPath, 'utf-8');
+                const raw = readFileSync(bpPath, 'utf-8');
                 const data = JSON.parse(raw);
                 if (data.completedBuilds && Array.isArray(data.completedBuilds)) {
-                    log('✓', `Queue context: ${data.completedBuilds.length} completed build(s)`);
+                    log('✓', `Queue blueprint: ${data.completedBuilds.length} completed build(s)`);
                     return data.completedBuilds;
                 }
             } catch { /* ignore parse errors */ }
@@ -135,19 +139,19 @@ export function loadQueueContext(repoPath: string): QueueBuildContext[] {
 }
 
 /**
- * Gather all context from a target repo for the LLM prompt.
+ * Gather all blueprint data from a target repo for the LLM prompt.
  *
  * Reads:
  *  - Knowledge/skill files declared in factory.yaml
  *  - Convention files declared in factory.yaml
  *  - Stack information from factory.yaml
  */
-export function gatherContext(repoPath: string, bridge: BridgeConfig): ProjectContext {
+export function gatherBlueprint(repoPath: string, bridge: BridgeConfig): ProjectBlueprint {
     const knowledgeFiles = gatherKnowledgeFiles(repoPath, bridge);
     const conventions = gatherConventions(repoPath, bridge);
     const { toonSnapshot, projectSkills } = gatherToonSnapshot(repoPath);
 
-    log('✓', `Gathered ${knowledgeFiles.length} knowledge files, ${conventions.length} convention files`);
+    log('✓', `Gathered ${knowledgeFiles.length} knowledge files, ${conventions.length} convention files for blueprint`);
 
     return {
         repoPath,
@@ -275,32 +279,38 @@ function extractAppName(filePath: string): string {
     return parts.length >= 2 ? parts[parts.length - 2] : 'root';
 }
 
-// ─── TOON Context Bridge ─────────────────────────────────
+// ─── TOON Blueprint Bridge ─────────────────────────────────
 
 /**
- * Gather context from .factory/ YAML files and encode to TOON at prompt-injection time.
+ * Gather blueprint from .factory/ YAML files and encode to TOON at prompt-injection time.
  *
  * Architecture: data is STORED as YAML (human-editable, git-trackable).
  * TOON encoding happens HERE, just before injecting into the LLM system prompt —
  * the same role gzip plays in HTTP: store raw, compress on transmission.
  */
 export function gatherToonSnapshot(repoPath: string): { toonSnapshot?: string; projectSkills?: Array<{ name: string; path: string; description: string }> } {
-    // Prefer .yaml — fall back to .toon for backward compat with existing projects
+    // Prefer blueprint — fall back to context for backward compatibility
+    const blueprintYaml = join(repoPath, '.factory/blueprint/blueprint.yaml');
+    const blueprintToon = join(repoPath, '.factory/blueprint/blueprint.toon');
     const contextYaml = join(repoPath, '.factory/context/context.yaml');
     const contextToon = join(repoPath, '.factory/context/context.toon');
+
     const skillIndexYaml = join(repoPath, '.factory/skill-index.yaml');
     const skillIndexToon = join(repoPath, '.factory/skill-index.toon');
 
     let toonSnapshot: string | undefined;
     let projectSkills: Array<{ name: string; path: string; description: string }> | undefined;
 
-    // Read context — encode YAML → TOON for token-efficient LLM injection
-    const contextFile = existsSync(contextYaml) ? contextYaml
+    // Read blueprint / context — encode YAML → TOON for token-efficient LLM injection
+    const blueprintFile = existsSync(blueprintYaml) ? blueprintYaml
+        : existsSync(blueprintToon) ? blueprintToon
+        : existsSync(contextYaml) ? contextYaml
         : existsSync(contextToon) ? contextToon : null;
-    if (contextFile) {
+
+    if (blueprintFile) {
         try {
-            const raw = readFileSync(contextFile, 'utf-8');
-            if (contextFile.endsWith('.yaml')) {
+            const raw = readFileSync(blueprintFile, 'utf-8');
+            if (blueprintFile.endsWith('.yaml')) {
                 const data = parseYaml(raw) as Record<string, unknown>;
                 toonSnapshot = encode(data);
             } else {
@@ -327,4 +337,104 @@ export function gatherToonSnapshot(repoPath: string): { toonSnapshot?: string; p
     }
 
     return { toonSnapshot, projectSkills };
+}
+
+/**
+ * Perform a codebase analysis and merge/integrate the new context into the existing blueprint.yaml.
+ * Ensures manual edits, key decisions, and custom configurations are preserved.
+ */
+export function syncBlueprint(repoPath: string): void {
+    const factoryDir = join(repoPath, '.factory');
+    if (!existsSync(factoryDir)) {
+        log('!', `No .factory directory in ${repoPath} — skipping blueprint sync`);
+        return;
+    }
+
+    const blueprintDir = join(factoryDir, 'blueprint');
+    const blueprintPath = join(blueprintDir, 'blueprint.yaml');
+    const legacyContextPath = join(factoryDir, 'context', 'context.yaml');
+
+    if (!existsSync(blueprintDir)) {
+        try {
+            mkdirSync(blueprintDir, { recursive: true });
+        } catch (e) {
+            log('!', `Failed to create blueprint directory: ${e}`);
+        }
+    }
+
+    log('→', `Running codebase analysis for ${repoPath}...`);
+    const newAnalysis = analyzeExistingProject(repoPath);
+
+    let existingData: Record<string, any> = {};
+    const pathToRead = existsSync(blueprintPath) ? blueprintPath : (existsSync(legacyContextPath) ? legacyContextPath : null);
+
+    if (pathToRead) {
+        try {
+            const raw = readFileSync(pathToRead, 'utf-8');
+            existingData = parseYaml(raw) as Record<string, any>;
+            if (!existingData || typeof existingData !== 'object') {
+                existingData = {};
+            }
+        } catch (e) {
+            log('!', `Failed to parse existing blueprint/context at ${pathToRead}: ${e}`);
+        }
+    }
+
+    // Merge logic prioritizing existing user data where custom
+    const mergedData: Record<string, any> = { ...existingData };
+
+    // 1. Merge "project"
+    const existingProject = existingData.project || {};
+    const newProject = newAnalysis.project as Record<string, any> || {};
+    mergedData.project = {
+        name: existingProject.name || newProject.name,
+        status: existingProject.status || newProject.status,
+        readme_summary: existingProject.readme_summary || newProject.readme_summary,
+        ...existingProject,
+        analyzed: newProject.analyzed,
+    };
+
+    // 2. Merge "package" (overwrite/update with latest deps, but keep description if customized)
+    const existingPackage = existingData.package || {};
+    const newPackage = newAnalysis.package as Record<string, any> || {};
+    if (Object.keys(newPackage).length > 0) {
+        mergedData.package = {
+            ...newPackage,
+            ...existingPackage,
+            name: newPackage.name || existingPackage.name,
+            description: existingPackage.description || newPackage.description,
+            version: newPackage.version || existingPackage.version,
+            key_deps: newPackage.key_deps || existingPackage.key_deps,
+        };
+    }
+
+    // 3. Overwrite "stack" and "structure" with latest active codebase analysis
+    if (newAnalysis.stack) {
+        mergedData.stack = newAnalysis.stack;
+    }
+    if (newAnalysis.structure) {
+        mergedData.structure = newAnalysis.structure;
+    }
+
+    // 4. Merge "conventions" (union of existing ones with newly detected ones)
+    const existingConventions = Array.isArray(existingData.conventions) ? existingData.conventions : [];
+    const newConventions = Array.isArray(newAnalysis.conventions) ? newAnalysis.conventions : [];
+    const conventionsSet = new Set([...existingConventions, ...newConventions]);
+    if (conventionsSet.size > 0) {
+        mergedData.conventions = Array.from(conventionsSet);
+    }
+
+    // 5. Preserving "key_decisions" is CRITICAL.
+    const existingDecisions = Array.isArray(existingData.key_decisions) ? existingData.key_decisions : [];
+    const newDecisions = Array.isArray(newAnalysis.key_decisions) ? newAnalysis.key_decisions : [];
+    const mergedDecisions = existingDecisions.length > 0 ? existingDecisions : newDecisions;
+    mergedData.key_decisions = mergedDecisions;
+
+    // 6. Write back to blueprint.yaml
+    try {
+        writeFileSync(blueprintPath, toYaml(mergedData));
+        log('✓', `Codebase analysis merged and written to ${blueprintPath}`);
+    } catch (e) {
+        logError(`Failed to write merged blueprint to ${blueprintPath}: ${e}`);
+    }
 }

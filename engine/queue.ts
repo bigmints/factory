@@ -435,14 +435,14 @@ async function runBuild(item: QueueItem): Promise<boolean> {
     try {
         const { runPipeline, runFeaturePipeline } = await import('./generate.ts');
         const { loadStory, loadFeatureStory } = await import('./story.ts');
-        const { gatherContext } = await import('./context.ts');
+        const { gatherBlueprint } = await import('./blueprint.ts');
         const { loadBridgeConfig } = await import('./config.ts');
         const { writeFiles, setupProject, writeKnowledgeEntry, writeAppAgentsMd } = await import('./writer.ts');
         const { resolve } = await import('node:path');
         const { storySlug } = await import('./types.ts');
 
         const bridge = loadBridgeConfig(process.cwd());
-        const context = gatherContext(process.cwd(), bridge);
+        const blueprint = gatherBlueprint(process.cwd(), bridge);
 
         let result;
         let targetDir: string;
@@ -451,14 +451,14 @@ async function runBuild(item: QueueItem): Promise<boolean> {
             targetDir = bridge.apps_dir
                 ? resolve(process.cwd(), bridge.apps_dir, story.target.app)
                 : resolve(process.cwd(), story.target.app);
-            result = await runFeaturePipeline(story, context, targetDir, item.storyFile);
+            result = await runFeaturePipeline(story, blueprint, targetDir, item.storyFile);
         } else {
             const story = loadStory(item.storyFile);
             const slug = storySlug(story);
             targetDir = bridge.apps_dir
                 ? resolve(process.cwd(), bridge.apps_dir, slug)
                 : resolve(process.cwd(), slug);
-            result = await runPipeline(story, context, targetDir, item.storyFile);
+            result = await runPipeline(story, blueprint, targetDir, item.storyFile);
         }
 
         // Write files

@@ -8,15 +8,15 @@
  */
 
 import type {
-    AppStory, FeatureStory, ProjectContext,
+    AppStory, FeatureStory, ProjectBlueprint,
     GeneratedFile, BuildPlan, BuildResult,
-    LLMProvider, TaskProfile, AppIntegrationContext,
+    LLMProvider, TaskProfile, AppIntegrationBlueprint,
 } from './types.ts';
-import type { QueueBuildContext } from './context.ts';
+import type { QueueBuildBlueprint } from './blueprint.ts';
 import { classifyTask, classifyFeatureTask } from './task-classifier.ts';
 import { storySlug, storyPort } from './types.ts';
 import { loadSettings, getActiveProvider } from './config.ts';
-import { gatherAppContext, loadQueueContext } from './context.ts';
+import { gatherAppBlueprint, loadQueueBlueprint } from './blueprint.ts';
 import { log, logStep, logError } from './log.ts';
 import { resolveSkillsForBuild, formatSkillsForPrompt, seedDefaultSkills } from './skills.ts';
 
@@ -38,27 +38,27 @@ export interface LLMResponse {
  */
 export async function runPipeline(
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
 ): Promise<BuildResult> {
     log('●', `Starting tool-calling build session for app: ${story.appName}`);
-    return runToolSession(story, context, targetDir, storyFile);
+    return runToolSession(story, blueprint, targetDir, storyFile);
 }
 
 /**
  * Run the pipeline for a feature story.
- * Gathers AppIntegrationContext from the target app and passes it into the tool session.
+ * Gathers AppIntegrationBlueprint from the target app and passes it into the tool session.
  */
 export async function runFeaturePipeline(
     story: FeatureStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
 ): Promise<BuildResult> {
     log('●', `Starting tool-calling build session for feature: ${story.feature.name}`);
-    const appContext = gatherAppContext(context.repoPath, context.bridge, story.target.app);
-    return runToolSession(story, context, targetDir, storyFile, appContext);
+    const appBlueprint = gatherAppBlueprint(blueprint.repoPath, blueprint.bridge, story.target.app);
+    return runToolSession(story, blueprint, targetDir, storyFile, appBlueprint);
 }
 
 // ─── Plan ────────────────────────────────────────────────
@@ -69,20 +69,20 @@ export async function runFeaturePipeline(
  */
 async function planBuild(
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     provider: LLMProvider,
     model: string,
 ): Promise<{ plan: BuildPlan; tokensIn: number; tokensOut: number }> {
-    const contextBlock = formatContext(context);
+    const blueprintBlock = formatBlueprint(blueprint);
     const storyBlock = formatStory(story);
 
     const prompt = `You are a senior architect planning a new application build.
 
-Given the following story and project context, create a build plan.
+Given the following story and project blueprint, create a build plan.
 
 ${storyBlock}
 
-${contextBlock}
+${blueprintBlock}
 
 Respond in this exact JSON format only:
 {
@@ -117,12 +117,12 @@ Output ONLY the JSON. No markdown, no explanation.`;
 // ─── Build ───────────────────────────────────────────────
 
 /**
- * Generate code files from story + plan + context.
+ * Generate code files from story + plan + blueprint.
  * @deprecated Use tool-calling session instead.
  */
 async function executeBuild(
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     plan: BuildPlan,
     provider: LLMProvider,
     model: string,
@@ -132,11 +132,11 @@ async function executeBuild(
     const MODULE_THRESHOLD = 15;
     if (plan.files.length > MODULE_THRESHOLD) {
         log('●', `Large app detected (${plan.files.length} files > ${MODULE_THRESHOLD}). Using module-by-module generation.`);
-        return executeModularBuild(story, context, plan, provider, model);
+        return executeModularBuild(story, blueprint, plan, provider, model);
     }
 
     // Standard single-shot generation for smaller apps
-    const prompt = buildAppPrompt(story, context, plan, skillsBlock);
+    const prompt = buildAppPrompt(story, blueprint, plan, skillsBlock);
 
     log('→', `Prompt: ${prompt.length.toLocaleString()} chars`);
     log('→', `Calling ${provider.name}...`);
@@ -241,11 +241,11 @@ function moduleDecomposition(plan: BuildPlan): BuildModule[] {
 function buildModulePrompt(
     module: BuildModule,
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     previousModules: { name: string; files: GeneratedFile[] }[],
 ): string {
     const storyBlock = formatStory(story);
-    const contextBlock = formatContext(context);
+    const blueprintBlock = formatBlueprint(blueprint);
 
     // Show interfaces/exports from previous modules so this module can import from them
     let prevContext = '';
@@ -281,7 +281,7 @@ ${module.description}
 ${module.files.map(f => `- ${f}`).join('\n')}
 
 ${storyBlock}
-${contextBlock}
+${blueprintBlock}
 ${prevContext}
 
 ## Rules
@@ -302,12 +302,12 @@ Output ONLY the files. No explanations.`;
 
 /**
  * Execute modular build — generate each module as a separate LLM call,
- * building context from previously generated modules.
+ * building blueprint context from previously generated modules.
  * @deprecated Use tool-calling session instead.
  */
 async function executeModularBuild(
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     plan: BuildPlan,
     provider: LLMProvider,
     model: string,
@@ -324,7 +324,7 @@ async function executeModularBuild(
         const mod = modules[i];
         log('→', `[${i + 1}/${modules.length}] Generating ${mod.name} module (${mod.files.length} files)...`);
 
-        const prompt = buildModulePrompt(mod, story, context, completedModules);
+        const prompt = buildModulePrompt(mod, story, blueprint, completedModules);
         log('→', `  Prompt: ${prompt.length.toLocaleString()} chars`);
 
         const raw = await callProvider(provider, model, prompt);
@@ -913,7 +913,7 @@ function identifyRelatedFiles(brokenFiles: Set<string>, allFiles: GeneratedFile[
  */
 async function iterateBuild(
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     plan: BuildPlan,
     previousFiles: GeneratedFile[],
     errors: string[],
@@ -999,8 +999,8 @@ Output ONLY the files. No explanations.`;
  */
 async function iterateFeatureBuild(
     story: FeatureStory,
-    context: ProjectContext,
-    appContext: AppIntegrationContext,
+    blueprint: ProjectBlueprint,
+    appBlueprint: AppIntegrationBlueprint,
     previousFiles: GeneratedFile[],
     errors: string[],
     provider: LLMProvider,
@@ -1024,8 +1024,8 @@ async function iterateFeatureBuild(
         : '';
 
     // Integration context
-    const existingDeps = appContext.packageJson
-        ? Object.keys({ ...appContext.packageJson.dependencies, ...appContext.packageJson.devDependencies }).join(', ')
+    const existingDeps = appBlueprint.packageJson
+        ? Object.keys({ ...appBlueprint.packageJson.dependencies, ...appBlueprint.packageJson.devDependencies }).join(', ')
         : 'unknown';
 
     const instruction = isTargeted
@@ -1093,19 +1093,19 @@ Output ONLY the files. No explanations.`;
 
 // ─── Prompt Builders ─────────────────────────────────────
 
-function buildAppPrompt(story: AppStory, context: ProjectContext, plan: BuildPlan, skillsBlock?: string): string {
+function buildAppPrompt(story: AppStory, blueprint: ProjectBlueprint, plan: BuildPlan, skillsBlock?: string): string {
     const storyBlock = formatStory(story);
-    const contextBlock = formatContext(context);
+    const blueprintBlock = formatBlueprint(blueprint);
     const planBlock = `## Build Plan\n- Architecture: ${plan.architecture}\n- Files to generate: ${plan.files.join(', ')}\n- Decisions: ${plan.decisions.join('; ')}`;
     const skillsSection = skillsBlock ? `\n${skillsBlock}\n` : '';
 
-    return `You are a senior full-stack developer. Generate a complete, production-ready application based on the following story, plan, and project context.
+    return `You are a senior full-stack developer. Generate a complete, production-ready application based on the following story, plan, and project blueprint.
 
 ${storyBlock}
 
 ${planBlock}
 
-${contextBlock}
+${blueprintBlock}
 ${skillsSection}
 
 ## Requirements
@@ -1114,7 +1114,7 @@ ${skillsSection}
 2. Generate ALL files needed for a working application
 3. Include proper TypeScript types for all models
 4. The app should work out of the box with package install + dev server
-5. Follow the conventions and patterns from the project context if provided
+5. Follow the conventions and patterns from the project blueprint if provided
 6. Use modern, clean code with proper error handling
 7. CRITICAL: Every plugin/preset referenced in config files (.eslintrc, jest.config, etc.) MUST be listed in package.json devDependencies
 8. If using ESLint with TypeScript, you MUST include these devDependencies: eslint, @typescript-eslint/parser, @typescript-eslint/eslint-plugin
@@ -1137,46 +1137,46 @@ Output EVERY file with this exact delimiter format:
 Do NOT include any explanatory text outside of the file delimiters. Output ONLY the files.`;
 }
 
-function buildFeaturePrompt(story: FeatureStory, context: ProjectContext, appContext?: AppIntegrationContext, queueContext?: QueueBuildContext[], skillsBlock?: string): string {
-    const contextBlock = formatContext(context);
+function buildFeaturePrompt(story: FeatureStory, blueprint: ProjectBlueprint, appBlueprint?: AppIntegrationBlueprint, queueBlueprint?: QueueBuildBlueprint[], skillsBlock?: string): string {
+    const blueprintBlock = formatBlueprint(blueprint);
     const depsBlock = story.dependencies?.length
         ? `\n## Required Packages\nThese packages MUST be in package.json dependencies:\n${story.dependencies.map(d => `- ${d}`).join('\n')}\n\nDo not add version numbers — use "*" and the engine will resolve to latest.`
         : '';
 
     // Integration context from existing app
     let integrationBlock = '';
-    if (appContext) {
+    if (appBlueprint) {
         const parts: string[] = [];
 
-        if (appContext.packageJson) {
+        if (appBlueprint.packageJson) {
             const existingDeps = Object.keys({
-                ...appContext.packageJson.dependencies,
-                ...appContext.packageJson.devDependencies,
+                ...appBlueprint.packageJson.dependencies,
+                ...appBlueprint.packageJson.devDependencies,
             });
             if (existingDeps.length > 0) {
                 parts.push(`### Existing Dependencies (already installed)\n${existingDeps.map(d => `- ${d}`).join('\n')}\n\nDo NOT add these to your package.json — they are already available.`);
             }
-            if (appContext.packageJson.scripts) {
-                parts.push(`### Existing Scripts\n${Object.entries(appContext.packageJson.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`);
+            if (appBlueprint.packageJson.scripts) {
+                parts.push(`### Existing Scripts\n${Object.entries(appBlueprint.packageJson.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`);
             }
         }
 
-        if (appContext.tsconfigRaw) {
-            parts.push(`### tsconfig.json\n\`\`\`json\n${appContext.tsconfigRaw}\n\`\`\`\n\nUse the SAME compiler options. Do NOT generate a conflicting tsconfig.`);
+        if (appBlueprint.tsconfigRaw) {
+            parts.push(`### tsconfig.json\n\`\`\`json\n${appBlueprint.tsconfigRaw}\n\`\`\`\n\nUse the SAME compiler options. Do NOT generate a conflicting tsconfig.`);
         }
 
-        if (appContext.fileTree.length > 0) {
+        if (appBlueprint.fileTree.length > 0) {
             // Show at most 60 files to avoid prompt bloat
-            const shownFiles = appContext.fileTree.slice(0, 60);
-            parts.push(`### Existing File Structure\n\`\`\`\n${shownFiles.join('\n')}${appContext.fileTree.length > 60 ? `\n... and ${appContext.fileTree.length - 60} more files` : ''}\n\`\`\`\n\nDo NOT create files that conflict with these existing files. Add complementary files that integrate cleanly.`);
+            const shownFiles = appBlueprint.fileTree.slice(0, 60);
+            parts.push(`### Existing File Structure\n\`\`\`\n${shownFiles.join('\n')}${appBlueprint.fileTree.length > 60 ? `\n... and ${appBlueprint.fileTree.length - 60} more files` : ''}\n\`\`\`\n\nDo NOT create files that conflict with these existing files. Add complementary files that integrate cleanly.`);
         }
 
-        if (appContext.stack) {
-            parts.push(`### Detected Stack\n- Framework: ${appContext.stack.framework}\n- Package Manager: ${appContext.stack.packageManager || 'npm'}\n- Language: ${appContext.stack.language || 'typescript'}\n- Database: ${appContext.stack.database || 'none'}`);
+        if (appBlueprint.stack) {
+            parts.push(`### Detected Stack\n- Framework: ${appBlueprint.stack.framework}\n- Package Manager: ${appBlueprint.stack.packageManager || 'npm'}\n- Language: ${appBlueprint.stack.language || 'typescript'}\n- Database: ${appBlueprint.stack.database || 'none'}`);
         }
 
         if (parts.length > 0) {
-            integrationBlock = `\n## Existing App Context (IMPORTANT — read carefully)\n\n${parts.join('\n\n')}\n`;
+            integrationBlock = `\n## Existing App Blueprint (IMPORTANT — read carefully)\n\n${parts.join('\n\n')}\n`;
         }
     }
 
@@ -1189,12 +1189,12 @@ function buildFeaturePrompt(story: FeatureStory, context: ProjectContext, appCon
 ${depsBlock}
 ${integrationBlock}
 
-${queueContext && queueContext.length > 0 ? `## Previously Completed Builds (CRITICAL — wire up with these)
+${queueBlueprint && queueBlueprint.length > 0 ? `## Previously Completed Builds (CRITICAL — wire up with these)
 
 The following stories have already been built successfully in this queue run.
 Your feature MUST integrate with these — import from their files, use their types, and follow their patterns.
 
-${queueContext.map(c => `### ${c.storyFile} (${c.kind})
+${queueBlueprint.map(c => `### ${c.storyFile} (${c.kind})
 Generated files:
 ${c.generatedFiles.map(f => `- ${f}`).join('\n')}`).join('\n\n')}
 
@@ -1209,7 +1209,7 @@ ${story.model.fields.map(f => `  - ${f.name}: ${f.type}${f.required ? ' (require
 ${story.pages ? `## Pages
 ${story.pages.map(p => `- ${p.title} (${p.type}) at /${p.slug}`).join('\n')}` : ''}
 
-${contextBlock}
+${blueprintBlock}
 ${skillsBlock ? `\n${skillsBlock}\n` : ''}
 ## Requirements
 1. Every "import ... from 'package'" MUST reference a package listed in package.json
@@ -1281,27 +1281,27 @@ ${depsInfo}
 ${tableDefs || '    No tables defined — use in-memory state.'}`;
 }
 
-function formatContext(context: ProjectContext): string {
-    if (context.knowledgeFiles.length === 0 && context.conventions.length === 0) {
+function formatBlueprint(blueprint: ProjectBlueprint): string {
+    if (blueprint.knowledgeFiles.length === 0 && blueprint.conventions.length === 0) {
         return '';
     }
 
-    let block = '## Project Context\n\n';
+    let block = '## Project Blueprint\n\n';
 
-    if (context.stack) {
-        block += `### Stack: ${context.stack.framework}, ${context.stack.packageManager || 'npm'}\n\n`;
+    if (blueprint.stack) {
+        block += `### Stack: ${blueprint.stack.framework}, ${blueprint.stack.packageManager || 'npm'}\n\n`;
     }
 
-    if (context.conventions.length > 0) {
+    if (blueprint.conventions.length > 0) {
         block += '### Conventions\n\n';
-        for (const conv of context.conventions) {
+        for (const conv of blueprint.conventions) {
             block += conv + '\n\n';
         }
     }
 
-    if (context.knowledgeFiles.length > 0) {
+    if (blueprint.knowledgeFiles.length > 0) {
         block += '### Existing App Knowledge\n\n';
-        for (const kf of context.knowledgeFiles) {
+        for (const kf of blueprint.knowledgeFiles) {
             block += `#### ${kf.app} (${kf.filename})\n\n${kf.content}\n\n`;
         }
     }
@@ -1555,7 +1555,7 @@ export function parseGeneratedFiles(raw: string): GeneratedFile[] {
 
 // ─── Tool-Calling Loop (us_012 + us_013) ─────────────────
 
-import { TOOL_DEFINITIONS, executeTool, type BuildToolContext, type ToolResult } from './build-tools.ts';
+import { TOOL_DEFINITIONS, executeTool, type BuildToolBlueprint, type ToolResult } from './build-tools.ts';
 import { readToonFile, parseToonSkillIndex } from './toon.ts';
 
 /**
@@ -1564,46 +1564,46 @@ import { readToonFile, parseToonSkillIndex } from './toon.ts';
  */
 export function buildToolSystemPrompt(
     story: AppStory | FeatureStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     targetDir: string,
-    appContext?: AppIntegrationContext,
+    appBlueprint?: AppIntegrationBlueprint,
 ): string {
     const isApp = 'appName' in story;
     const storyBlock = isApp ? formatStory(story as AppStory) : formatFeatureStory(story as FeatureStory);
 
-    const toonContext = context.toonSnapshot
-        ? `\n## Project Context (TOON)\n\`\`\`toon\n${context.toonSnapshot}\n\`\`\`\n`
+    const toonBlueprint = blueprint.toonSnapshot
+        ? `\n## Project Blueprint (TOON)\n\`\`\`toon\n${blueprint.toonSnapshot}\n\`\`\`\n`
         : '';
 
-    const skillsBlock = context.projectSkills && context.projectSkills.length > 0
-        ? `\n## Project Skills\n${context.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
+    const skillsBlock = blueprint.projectSkills && blueprint.projectSkills.length > 0
+        ? `\n## Project Skills\n${blueprint.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
         : '';
 
-    let appContextBlock = '';
-    if (appContext) {
+    let appBlueprintBlock = '';
+    if (appBlueprint) {
         const parts: string[] = [];
-        if (appContext.packageJson) {
+        if (appBlueprint.packageJson) {
             const deps = Object.keys({
-                ...appContext.packageJson.dependencies,
-                ...appContext.packageJson.devDependencies,
+                ...appBlueprint.packageJson.dependencies,
+                ...appBlueprint.packageJson.devDependencies,
             });
             if (deps.length > 0) {
                 parts.push(`### Existing Dependencies (do NOT add to package.json)\n${deps.map(d => `- ${d}`).join('\n')}`);
             }
-            if (appContext.packageJson.scripts) {
-                parts.push(`### NPM Scripts\n${Object.entries(appContext.packageJson.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`);
+            if (appBlueprint.packageJson.scripts) {
+                parts.push(`### NPM Scripts\n${Object.entries(appBlueprint.packageJson.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`);
             }
         }
-        if (appContext.tsconfigRaw) {
-            parts.push(`### tsconfig.json (use the SAME options)\n\`\`\`json\n${appContext.tsconfigRaw}\n\`\`\``);
+        if (appBlueprint.tsconfigRaw) {
+            parts.push(`### tsconfig.json (use the SAME options)\n\`\`\`json\n${appBlueprint.tsconfigRaw}\n\`\`\``);
         }
-        if (appContext.fileTree.length > 0) {
-            const shown = appContext.fileTree.slice(0, 80);
-            const more = appContext.fileTree.length > 80 ? `\n... and ${appContext.fileTree.length - 80} more` : '';
+        if (appBlueprint.fileTree.length > 0) {
+            const shown = appBlueprint.fileTree.slice(0, 80);
+            const more = appBlueprint.fileTree.length > 80 ? `\n... and ${appBlueprint.fileTree.length - 80} more` : '';
             parts.push(`### Existing Files (do NOT recreate)\n\`\`\`\n${shown.join('\n')}${more}\n\`\`\``);
         }
         if (parts.length > 0) {
-            appContextBlock = `\n## Existing App Integration Context\n${parts.join('\n\n')}\n`;
+            appBlueprintBlock = `\n## Existing App Integration Blueprint\n${parts.join('\n\n')}\n`;
         }
     }
 
@@ -1615,7 +1615,7 @@ ${targetDir}
 ## Recommended Workflow
 1. Call read_story to fully understand the build requirements.
 2. Call list_dir(recursive=true) to explore what already exists.
-3. Read key files with read_context(type='package_json') and read_context(type='tsconfig').
+3. Read key files with read_blueprint(type='package_json') and read_blueprint(type='tsconfig').
 4. Write files using write_file. Use patch_file for targeted edits to existing files.
 5. Call run_command to install deps (e.g. npm install) and type-check (npx tsc --noEmit).
 6. Fix any errors using patch_file or write_file, then re-run checks.
@@ -1630,7 +1630,7 @@ ${targetDir}
 5. Use log_step(info/warn/error) to track progress.
 6. Only call mark_failed after genuinely exhausting all remediation options.
 ${storyBlock}
-${toonContext}${skillsBlock}${appContextBlock}
+${toonBlueprint}${skillsBlock}${appBlueprintBlock}
 ## Available Tools
 ${TOOL_DEFINITIONS.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
 
@@ -1644,15 +1644,15 @@ Call mark_complete when the build is verified and complete.`;
  */
 export async function runToolSession(
     story: AppStory | FeatureStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
-    appContext?: AppIntegrationContext,
+    appBlueprint?: AppIntegrationBlueprint,
 ): Promise<BuildResult> {
     const { provider, model } = requireActiveProvider();
-    const systemPrompt = buildToolSystemPrompt(story, context, targetDir, appContext);
+    const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint);
 
-    const ctx: BuildToolContext = {
+    const ctx: BuildToolBlueprint = {
         targetDir,
         storyFile,
         terminal: false,
@@ -1660,9 +1660,9 @@ export async function runToolSession(
         generatedFiles: new Map(),
         logs: [],
         contextData: {
-            conventions: context.conventions.length > 0 ? context.conventions.join('\n\n') : undefined,
-            knowledge: context.knowledgeFiles.length > 0
-                ? context.knowledgeFiles.map(k => `### ${k.app} (${k.filename})\n${k.content}`).join('\n\n')
+            conventions: blueprint.conventions.length > 0 ? blueprint.conventions.join('\n\n') : undefined,
+            knowledge: blueprint.knowledgeFiles.length > 0
+                ? blueprint.knowledgeFiles.map(k => `### ${k.app} (${k.filename})\n${k.content}`).join('\n\n')
                 : undefined,
         },
     };
@@ -1827,7 +1827,18 @@ async function callOpenAICompatWithTools(
             role: m.role,
             content: m.content,
             ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-            ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+            ...(m.tool_calls ? {
+                tool_calls: m.tool_calls.map(tc => ({
+                    id: tc.id,
+                    type: 'function',
+                    function: {
+                        name: tc.function.name,
+                        arguments: typeof tc.function.arguments === 'string'
+                            ? tc.function.arguments
+                            : JSON.stringify(tc.function.arguments),
+                    },
+                }))
+            } : {}),
         }));
 
         let res: Response;
@@ -2004,7 +2015,18 @@ async function callOllamaWithTools(
         role: m.role,
         content: m.content,
         ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-        ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+        ...(m.tool_calls ? {
+            tool_calls: m.tool_calls.map(tc => ({
+                id: tc.id,
+                type: 'function',
+                function: {
+                    name: tc.function.name,
+                    arguments: typeof tc.function.arguments === 'string'
+                        ? tc.function.arguments
+                        : JSON.stringify(tc.function.arguments),
+                },
+            }))
+        } : {}),
     }));
 
     const res = await fetch(`${baseUrl}/api/chat`, {

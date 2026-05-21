@@ -2,28 +2,28 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-export function ToonContextViewer() {
-    const [context, setContext] = useState<any>(null);
+export function ToonBlueprintViewer() {
+    const [blueprint, setBlueprint] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch('/api/toon-context')
+        fetch('/api/toon-blueprint')
             .then(res => res.json())
-            .then(setContext)
+            .then(setBlueprint)
             .catch(() => {})
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) return <div className="text-muted-foreground">Loading context...</div>;
+    if (loading) return <div className="text-muted-foreground">Loading blueprint...</div>;
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>TOON Context</CardTitle>
+                <CardTitle>TOON Blueprint</CardTitle>
             </CardHeader>
             <CardContent>
                 <pre className="text-sm bg-muted p-4 rounded overflow-auto max-h-96">
-                    {JSON.stringify(context, null, 2)}
+                    {JSON.stringify(blueprint, null, 2)}
                 </pre>
             </CardContent>
         </Card>

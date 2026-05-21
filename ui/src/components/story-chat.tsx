@@ -147,7 +147,7 @@ export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) 
   const [isExistingApp, setIsExistingApp] = useState(false);
   const [existingAppName, setExistingAppName] = useState('');
 
-  const [repoContext, setRepoContext] = useState<any>(null);
+  const [repoBlueprint, setRepoBlueprint] = useState<any>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
 
@@ -183,7 +183,7 @@ export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) 
           if (data.error) {
             setScanError(data.error);
           } else {
-            setRepoContext(data);
+            setRepoBlueprint(data);
           }
         })
         .catch((err) => setScanError(err.message || 'Scan failed'))
@@ -235,7 +235,7 @@ export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) 
           messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
           isExistingApp,
           existingAppName,
-          repoContext,
+          repoBlueprint,
         }),
       });
 
@@ -525,15 +525,15 @@ export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) 
               <div className={cn(
                 "mx-4 mt-3 px-3 py-2.5 rounded-lg border text-[10px] sm:text-xs font-semibold flex items-center gap-2 transition-colors",
                 scanning ? "border-border bg-muted text-foreground" :
-                repoContext ? "border-border bg-muted text-foreground" :
+                repoBlueprint ? "border-border bg-muted text-foreground" :
                 scanError ? "border-destructive bg-muted text-destructive" : ""
               )}>
                 {scanning ? (
                   <><ScanSearch className="h-4 w-4 text-muted-foreground shrink-0 animate-pulse" /> <span>Analyzing codebase structure...</span></>
-                ) : repoContext ? (
+                ) : repoBlueprint ? (
                   <><ScanSearch className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="truncate text-foreground/90 font-medium">
-                      Codebase Base: {repoContext.stack?.framework || 'Next.js'} ({Object.keys(repoContext.dependencies || {}).length} packages detected)
+                      Codebase Base: {repoBlueprint.stack?.framework || 'Next.js'} ({Object.keys(repoBlueprint.dependencies || {}).length} packages detected)
                     </span>
                   </>
                 ) : scanError ? (
@@ -554,30 +554,30 @@ export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) 
                   <div className="space-y-2">
                     <h3 className="text-sm sm:text-base font-bold text-foreground">Describe your project goal</h3>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      {repoContext
+                      {repoBlueprint
                         ? "State the page, system, or features you'd like to construct. The engine will decompose the requirement into a production-grade plan."
                         : "Describe the application idea and stack preferences. I'll translate it into modular, clean story models."}
                     </p>
                   </div>
 
                   {/* Environment Details list */}
-                  {repoContext && (
+                  {repoBlueprint && (
                     <div className="w-full pt-4 space-y-2">
-                      {repoContext.agentInstructions && (
+                      {repoBlueprint.agentInstructions && (
                         <div className="flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-[11px] sm:text-xs border border-border bg-muted text-foreground text-left">
                           <FileCode className="h-4 w-4 shrink-0" />
-                          <span className="font-semibold truncate">Loaded agent rules context (AGENTS.md)</span>
+                          <span className="font-semibold truncate">Loaded agent rules blueprint (AGENTS.md)</span>
                         </div>
                       )}
                       
                       <div className="grid grid-cols-2 gap-2 text-left text-[10px] sm:text-xs">
                         <div className="flex items-center gap-2 rounded-lg px-3 py-2 border border-border bg-muted">
                           <Blocks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="text-muted-foreground truncate">{repoContext.stack?.framework || 'Next.js 15'}</span>
+                          <span className="text-muted-foreground truncate">{repoBlueprint.stack?.framework || 'Next.js 15'}</span>
                         </div>
                         <div className="flex items-center gap-2 rounded-lg px-3 py-2 border border-border bg-muted">
                           <FolderTree className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="text-muted-foreground truncate">{repoContext.fileTree?.length || 0} files</span>
+                          <span className="text-muted-foreground truncate">{repoBlueprint.fileTree?.length || 0} files</span>
                         </div>
                       </div>
                     </div>

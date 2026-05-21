@@ -20,8 +20,8 @@ const MAX_SEARCH_RESULTS = 50;
 
 // ─── Types ───────────────────────────────────────────────
 
-/** Context passed to every tool call */
-export interface BuildToolContext {
+/** Blueprint / Context passed to every tool call */
+export interface BuildToolBlueprint {
     /** Path to the target app directory */
     targetDir: string;
     /** Path to the story YAML file */
@@ -34,7 +34,7 @@ export interface BuildToolContext {
     generatedFiles: Map<string, string>;
     /** Log messages from the LLM session */
     logs: Array<{ level: 'info' | 'warn' | 'error'; message: string }>;
-    /** Pre-loaded context data available via read_context tool */
+    /** Pre-loaded blueprint data available via read_blueprint tool */
     contextData?: {
         conventions?: string;
         knowledge?: string;
@@ -145,15 +145,15 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'read_context',
-        description: 'Read project context. Type must be one of: conventions, knowledge, file_tree, package_json, tsconfig.',
+        name: 'read_blueprint',
+        description: 'Read project blueprint/context. Type must be one of: conventions, knowledge, file_tree, package_json, tsconfig.',
         parameters: {
             type: 'object',
             properties: {
                 type: {
                     type: 'string',
                     enum: ['conventions', 'knowledge', 'file_tree', 'package_json', 'tsconfig'],
-                    description: 'What context to read',
+                    description: 'What blueprint section to read',
                 },
             },
             required: ['type'],
@@ -204,7 +204,7 @@ export const TOOL_DEFINITIONS = [
 export async function executeTool(
     name: string,
     args: Record<string, unknown>,
-    ctx: BuildToolContext,
+    ctx: BuildToolBlueprint,
 ): Promise<ToolResult> {
     try {
         switch (name) {
@@ -216,7 +216,8 @@ export async function executeTool(
             case 'search_files':  return execSearchFiles(args, ctx);
             case 'run_command':   return execRunCommand(args, ctx);
             case 'read_story':    return execReadStory(args, ctx);
-            case 'read_context':  return execReadContext(args, ctx);
+            case 'read_blueprint':
+            case 'read_context':  return execReadBlueprint(args, ctx);
             case 'log_step':      return execLogStep(args, ctx);
             case 'mark_complete': return execMarkComplete(args, ctx);
             case 'mark_failed':   return execMarkFailed(args, ctx);
@@ -233,7 +234,7 @@ export async function executeTool(
 
 // ─── Individual Tool Implementations ────────────────────
 
-function execReadFile(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execReadFile(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const rawPath = args.path as string;
     if (!rawPath) return { content: '"path" is required for read_file', isError: true };
     const filePath = resolvePath(rawPath, ctx);
@@ -250,7 +251,7 @@ function execReadFile(args: Record<string, unknown>, ctx: BuildToolContext): Too
     return { content };
 }
 
-function execWriteFile(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execWriteFile(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const rawPath = args.path as string;
     if (!rawPath) return { content: '"path" is required for write_file', isError: true };
     const content = args.content as string;
@@ -262,7 +263,7 @@ function execWriteFile(args: Record<string, unknown>, ctx: BuildToolContext): To
     return { content: `Written: ${filePath} (${content.length} bytes)` };
 }
 
-function execPatchFile(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execPatchFile(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const rawPath = args.path as string;
     if (!rawPath) return { content: '"path" is required for patch_file', isError: true };
     const oldContent = args.old_content as string;
@@ -287,7 +288,7 @@ function execPatchFile(args: Record<string, unknown>, ctx: BuildToolContext): To
     return { content: `Patched: ${filePath}` };
 }
 
-function execDeleteFile(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execDeleteFile(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const rawPath = args.path as string;
     if (!rawPath) return { content: '"path" is required for delete_file', isError: true };
     const filePath = resolvePath(rawPath, ctx);
@@ -299,7 +300,7 @@ function execDeleteFile(args: Record<string, unknown>, ctx: BuildToolContext): T
     return { content: `Deleted: ${filePath}` };
 }
 
-function execListDir(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execListDir(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const dirPath = resolvePath((args.path as string) || '.', ctx);
     const recursive = (args.recursive as boolean) || false;
 
@@ -313,7 +314,7 @@ function execListDir(args: Record<string, unknown>, ctx: BuildToolContext): Tool
     return { content: items.length > 0 ? items.join('\n') : '(empty directory)' };
 }
 
-function execSearchFiles(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execSearchFiles(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const pattern = args.pattern as string;
     if (!pattern) return { content: '"pattern" is required for search_files', isError: true };
     const searchDir = resolvePath((args.path as string) || '.', ctx);
@@ -371,7 +372,7 @@ function execSearchFiles(args: Record<string, unknown>, ctx: BuildToolContext): 
     return { content: results.join('\n') + truncNote };
 }
 
-async function execRunCommand(args: Record<string, unknown>, ctx: BuildToolContext): Promise<ToolResult> {
+async function execRunCommand(args: Record<string, unknown>, ctx: BuildToolBlueprint): Promise<ToolResult> {
     return new Promise((resolve) => {
         const command = args.command as string;
         if (!command) { resolve({ content: '"command" is required for run_command', isError: true }); return; }
@@ -417,14 +418,14 @@ async function execRunCommand(args: Record<string, unknown>, ctx: BuildToolConte
     });
 }
 
-function execReadStory(_args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execReadStory(_args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     if (!ctx.storyFile || !existsSync(ctx.storyFile)) {
         return { content: 'No story file configured for this session', isError: true };
     }
     return { content: readFileSync(ctx.storyFile, 'utf-8') };
 }
 
-function execReadContext(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execReadBlueprint(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const type = args.type as string;
     switch (type) {
         case 'package_json': {
@@ -451,13 +452,13 @@ function execReadContext(args: Record<string, unknown>, ctx: BuildToolContext): 
         }
         default:
             return {
-                content: `Unknown context type: "${type}". Valid types: conventions, knowledge, file_tree, package_json, tsconfig`,
+                content: `Unknown blueprint type: "${type}". Valid types: conventions, knowledge, file_tree, package_json, tsconfig`,
                 isError: true,
             };
     }
 }
 
-function execLogStep(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execLogStep(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     const level = (args.level as 'info' | 'warn' | 'error') || 'info';
     const message = args.message as string;
     if (!message) return { content: '"message" is required for log_step', isError: true };
@@ -465,7 +466,7 @@ function execLogStep(args: Record<string, unknown>, ctx: BuildToolContext): Tool
     return { content: `Logged [${level}]: ${message}` };
 }
 
-function execMarkComplete(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execMarkComplete(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     ctx.terminal = true;
     ctx.success = true;
     const summary = (args.summary as string) || 'Build completed';
@@ -473,7 +474,7 @@ function execMarkComplete(args: Record<string, unknown>, ctx: BuildToolContext):
     return { content: `Build marked as complete: ${summary}` };
 }
 
-function execMarkFailed(args: Record<string, unknown>, ctx: BuildToolContext): ToolResult {
+function execMarkFailed(args: Record<string, unknown>, ctx: BuildToolBlueprint): ToolResult {
     ctx.terminal = true;
     ctx.success = false;
     const reason = (args.reason as string) || 'Build failed (no reason given)';
@@ -487,7 +488,7 @@ function execMarkFailed(args: Record<string, unknown>, ctx: BuildToolContext): T
  * Resolve a path — relative paths are resolved against targetDir.
  * An empty string or '.' returns targetDir itself.
  */
-export function resolvePath(path: string, ctx: BuildToolContext): string {
+export function resolvePath(path: string, ctx: BuildToolBlueprint): string {
     if (!path || path === '.') return ctx.targetDir;
     if (path.startsWith('/')) return path;
     return join(ctx.targetDir, path);

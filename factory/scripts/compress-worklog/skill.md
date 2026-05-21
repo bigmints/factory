@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Prevents the `.agents/context/worklog.toon` file from becoming too large and consuming excessive LLM context tokens.
+Prevents the `.factory/blueprint/worklog.yaml` or `.factory/blueprint/worklog.toon` file from becoming too large and consuming excessive LLM context tokens.
 
 ## When to use
 

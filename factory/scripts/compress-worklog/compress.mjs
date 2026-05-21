@@ -3,9 +3,16 @@ import path from 'path';
 import { encode, decode } from '@toon-format/toon';
 
 const PROJECT_ROOT = process.env.FACTORY_PROJECT_ROOT || process.cwd();
-const yamlPath = path.join(PROJECT_ROOT, '.factory/context/worklog.yaml');
-const toonPath = path.join(PROJECT_ROOT, '.factory/context/worklog.toon');
-const WORKLOG_PATH = fs.existsSync(yamlPath) ? yamlPath : (fs.existsSync(toonPath) ? toonPath : null);
+const bpYaml = path.join(PROJECT_ROOT, '.factory/blueprint/worklog.yaml');
+const bpToon = path.join(PROJECT_ROOT, '.factory/blueprint/worklog.toon');
+const ctxYaml = path.join(PROJECT_ROOT, '.factory/context/worklog.yaml');
+const ctxToon = path.join(PROJECT_ROOT, '.factory/context/worklog.toon');
+
+const WORKLOG_PATH = fs.existsSync(bpYaml) ? bpYaml
+  : fs.existsSync(bpToon) ? bpToon
+  : fs.existsSync(ctxYaml) ? ctxYaml
+  : fs.existsSync(ctxToon) ? ctxToon
+  : null;
 
 if (!WORKLOG_PATH) {
   console.log('No worklog found to compress.');
@@ -18,8 +25,34 @@ if (!content.trim()) process.exit(0);
 let data;
 try {
   data = decode(content);
+  // Ensure entries is an array (robust fallback if parsed from standard YAML)
+  if (data && !Array.isArray(data.entries)) {
+    const entries = [];
+    const lines = content.split('\n');
+    let currentEntry = null;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('- date:')) {
+        if (currentEntry) entries.push(currentEntry);
+        currentEntry = { date: trimmed.replace('- date:', '').trim(), message: '' };
+      } else if (trimmed.startsWith('date:') && !trimmed.startsWith('-')) {
+        if (currentEntry) entries.push(currentEntry);
+        currentEntry = { date: trimmed.replace('date:', '').trim(), message: '' };
+      } else if (trimmed.startsWith('message:')) {
+        if (currentEntry) {
+          currentEntry.message = trimmed.replace('message:', '').trim();
+        }
+      } else if (trimmed.startsWith('files:')) {
+        if (currentEntry) {
+          currentEntry.files = trimmed.replace('files:', '').trim();
+        }
+      }
+    }
+    if (currentEntry) entries.push(currentEntry);
+    data.entries = entries;
+  }
 } catch (e) {
-  console.error('Failed to parse worklog.toon:', e.message);
+  console.error('Failed to parse worklog:', e.message);
   process.exit(1);
 }
 

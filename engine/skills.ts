@@ -29,7 +29,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlink
 import { join, basename } from 'node:path';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log } from './log.ts';
-import type { Skill, ScoredSkill, SkillMatchContext, SkillCategory, AppStory, ProjectContext } from './types.ts';
+import type { Skill, ScoredSkill, SkillMatchBlueprint, SkillCategory, AppStory, ProjectBlueprint } from './types.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -226,7 +226,7 @@ const RELEVANCE_THRESHOLD = 0.3;
  * Match skills against a build context.
  * Returns skills sorted by relevance score (descending).
  */
-export function matchSkills(ctx: SkillMatchContext): ScoredSkill[] {
+export function matchSkills(ctx: SkillMatchBlueprint): ScoredSkill[] {
     const allSkills = listSkills({ enabled: true });
     const scored: ScoredSkill[] = [];
 
@@ -303,12 +303,12 @@ export function matchSkills(ctx: SkillMatchContext): ScoredSkill[] {
  */
 export function resolveSkillsForBuild(
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
 ): ScoredSkill[] {
-    const matchCtx: SkillMatchContext = {
+    const matchBlueprint: SkillMatchBlueprint = {
         storyName: story.appName,
         storyDescription: story.description || '',
-        stack: context.stack?.framework || story.stack?.framework || '',
+        stack: blueprint.stack?.framework || story.stack?.framework || '',
         tags: [
             ...(story.stack ? [story.stack.framework, story.stack.database || '', story.stack.testing || ''] : []),
             ...(story.frontend?.ui ? [story.frontend.ui] : []),
@@ -316,7 +316,7 @@ export function resolveSkillsForBuild(
         ].filter(Boolean),
     };
 
-    return matchSkills(matchCtx);
+    return matchSkills(matchBlueprint);
 }
 
 /**

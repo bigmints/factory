@@ -11,19 +11,20 @@ export async function GET(request: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
         start(controller) {
-            const yamlPath = join(process.cwd(), '.factory', 'context', 'heartbeat.yaml');
-            const toonPath = join(process.cwd(), '.factory', 'context', 'heartbeat.toon');
+            const bpYaml = join(process.cwd(), '.factory', 'blueprint', 'heartbeat.yaml');
+            const bpToon = join(process.cwd(), '.factory', 'blueprint', 'heartbeat.toon');
+            const ctxYaml = join(process.cwd(), '.factory', 'context', 'heartbeat.yaml');
+            const ctxToon = join(process.cwd(), '.factory', 'context', 'heartbeat.toon');
 
             const getHeartbeatData = () => {
-                if (existsSync(yamlPath)) {
-                    try {
-                        return parse(readFileSync(yamlPath, 'utf-8'));
-                    } catch {}
-                }
-                if (existsSync(toonPath)) {
-                    try {
-                        return JSON.parse(readFileSync(toonPath, 'utf-8'));
-                    } catch {}
+                const candidates = [bpYaml, bpToon, ctxYaml, ctxToon];
+                for (const p of candidates) {
+                    if (existsSync(p)) {
+                        try {
+                            const content = readFileSync(p, 'utf-8');
+                            return p.endsWith('.yaml') ? parse(content) : JSON.parse(content);
+                        } catch {}
+                    }
                 }
                 return null;
             };

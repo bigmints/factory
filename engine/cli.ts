@@ -22,7 +22,7 @@ import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
 import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from './story.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
-import { gatherContext } from './context.ts';
+import { gatherBlueprint, syncBlueprint } from './blueprint.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
 import { runWorkerBuild, runWorkerFeatureBuild } from './worker-engine.ts';
 import { writeFiles, setupProject, gitCommit, gitPush, writeKnowledgeEntry, writeAppAgentsMd, buildDebrief } from './writer.ts';
@@ -87,8 +87,9 @@ async function main(): Promise<void> {
             return handlePulse();
         case 'task':
             return handleTask();
+        case 'blueprint':
         case 'context':
-            return handleContext();
+            return handleBlueprint();
         case 'compress':
             return handleCompress();
         case 'worker':
@@ -124,10 +125,10 @@ async function handleBuild(storyPath?: string): Promise<void> {
     }
     log('✓', 'Story is valid');
 
-    // Step 2: Gather context
-    logStep(2, 7, 'Gathering context...');
+    // Step 2: Gather blueprint
+    logStep(2, 7, 'Gathering blueprint...');
     const bridge = loadBridgeConfig(project.path);
-    const context = gatherContext(project.path, bridge);
+    const blueprint = gatherBlueprint(project.path, bridge);
 
     // Steps 3-5: Plan → Build → Test → Iterate (or minions engine)
     const engineFlag = parseFlags(args.slice(2)).engine as string | undefined;
@@ -142,9 +143,9 @@ async function handleBuild(storyPath?: string): Promise<void> {
     let result;
     if (useWorker) {
         logStep(3, 7, 'Generating with worker engine...');
-        result = await runWorkerBuild(story, context);
+        result = await runWorkerBuild(story, blueprint);
     } else {
-        result = await runPipeline(story, context, targetDir, storyPath!);
+        result = await runPipeline(story, blueprint, targetDir, storyPath!);
     }
 
     // Step 6: Write files
@@ -281,6 +282,7 @@ function handleSync(repoPath?: string): void {
     const factoryDir = resolve(absPath, '.factory');
     if (existsSync(factoryDir)) {
         log('✓', '.factory directory found');
+        syncBlueprint(absPath);
     } else {
         log('!', 'No .factory directory — run: factory project add <path>');
     }
@@ -386,7 +388,7 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             logHeader(`Feature Build: ${story.feature.name}`);
 
             const bridge = loadBridgeConfig(project.path);
-            const context = gatherContext(project.path, bridge);
+            const blueprint = gatherBlueprint(project.path, bridge);
 
             // Check for --engine flag
             const featureFlags = parseFlags(args.slice(3));
@@ -400,9 +402,9 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             let result;
             if (useWorkerFeature) {
                 log('→', 'Using worker engine for feature...');
-                result = await runWorkerFeatureBuild(story, context, targetDir);
+                result = await runWorkerFeatureBuild(story, blueprint, targetDir);
             } else {
-                result = await runFeaturePipeline(story, context, targetDir, storyPath);
+                result = await runFeaturePipeline(story, blueprint, targetDir, storyPath);
                 writeFiles(targetDir, result.files);
                 setupProject(targetDir, bridge.stack?.packageManager);
             }
@@ -602,7 +604,7 @@ async function handleQueueStart(): Promise<void> {
     try {
         const project = getActiveProject();
         const bridge = loadBridgeConfig(project.path);
-        const context = gatherContext(project.path, bridge);
+        const blueprint = gatherBlueprint(project.path, bridge);
 
         let item = dequeue();
 
@@ -677,8 +679,8 @@ async function handleQueueStart(): Promise<void> {
                         : resolve(project.path, story.target.app);
                     const result = await withRetry(
                         () => (current.engine === 'worker')
-                            ? runWorkerFeatureBuild(story, context, targetDir)
-                            : runFeaturePipeline(story, context, targetDir, current.storyFile),
+                            ? runWorkerFeatureBuild(story, blueprint, targetDir)
+                            : runFeaturePipeline(story, blueprint, targetDir, current.storyFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'Feature Pipeline' }
                     );
 
@@ -803,8 +805,8 @@ async function handleQueueStart(): Promise<void> {
 
                     const result = await withRetry(
                         () => (current.engine === 'worker')
-                            ? runWorkerBuild(story, context)
-                            : runPipeline(story, context, targetDir, current.storyFile),
+                            ? runWorkerBuild(story, blueprint)
+                            : runPipeline(story, blueprint, targetDir, current.storyFile),
                         { maxAttempts: 3, delayMs: 5000, name: 'App Pipeline' }
                     );
 
@@ -1097,16 +1099,31 @@ function handleTask(): void {
     });
 }
 
-/** factory context update "<msg>" — append to worklog */
-function handleContext(): void {
+/** factory blueprint update "<msg>" — append to worklog
+ *  factory blueprint analyze [repo-path] — run codebase analysis and sync blueprint
+ */
+function handleBlueprint(): void {
     const subcommand = args[1];
-    if (!subcommand || subcommand !== 'update') {
-        console.error('Usage: factory context update "<message>"');
+    if (subcommand === 'update') {
+        const script = resolveScript('auto-blueprint/update-blueprint.sh');
+        const msg = args.slice(2).join(' ') || 'blueprint update';
+        spawnScript(script, [msg]);
+    } else if (subcommand === 'analyze') {
+        let repoPath = args[2];
+        if (!repoPath) {
+            try {
+                const project = getActiveProject();
+                repoPath = project.path;
+            } catch (err: any) {
+                console.error('Error: No active project and no path provided.');
+                process.exit(1);
+            }
+        }
+        syncBlueprint(resolve(repoPath));
+    } else {
+        console.error('Usage: factory blueprint <update "<message>" | analyze [repo-path]>');
         process.exit(1);
     }
-    const script = resolveScript('auto-context/update-context.sh');
-    const msg = args.slice(2).join(' ') || 'context update';
-    spawnScript(script, [msg]);
 }
 
 /** factory compress — compress worklog */
@@ -1255,7 +1272,7 @@ function installGitHooks(projectRoot: string): void {
     const postCommit = join(hooksDir, 'post-commit');
     const factoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
     const pulseScript = join(factoryRoot, 'factory', 'scripts', 'heartbeat', 'pulse.sh');
-    const contextScript = join(factoryRoot, 'factory', 'scripts', 'auto-context', 'update-context.sh');
+    const blueprintScript = join(factoryRoot, 'factory', 'scripts', 'auto-blueprint', 'update-blueprint.sh');
 
     const hookContent = [
         '#!/usr/bin/env bash',
@@ -1264,7 +1281,7 @@ function installGitHooks(projectRoot: string): void {
         `COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo 'commit')`,
         `CHANGED=$(git diff-tree --no-commit-id -r --name-only HEAD 2>/dev/null | tr '\n' ', ' | sed 's/,$//') `,
         existsSync(pulseScript)  ? `bash "${pulseScript}" "post-commit: $COMMIT_MSG"` : '',
-        existsSync(contextScript) ? `bash "${contextScript}" "committed: $COMMIT_MSG FILES:$CHANGED"` : '',
+        existsSync(blueprintScript) ? `bash "${blueprintScript}" "committed: $COMMIT_MSG FILES:$CHANGED"` : '',
         '',
     ].filter(l => l !== null).join('\n');
 

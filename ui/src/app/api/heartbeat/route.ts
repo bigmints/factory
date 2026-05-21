@@ -8,20 +8,21 @@ export async function GET() {
     const projectsDir = join(process.cwd(), '.factory');
     
     if (existsSync(projectsDir)) {
-        const yamlPath = join(projectsDir, 'context', 'heartbeat.yaml');
-        const toonPath = join(projectsDir, 'context', 'heartbeat.toon');
+        const bpYaml = join(projectsDir, 'blueprint', 'heartbeat.yaml');
+        const bpToon = join(projectsDir, 'blueprint', 'heartbeat.toon');
+        const ctxYaml = join(projectsDir, 'context', 'heartbeat.yaml');
+        const ctxToon = join(projectsDir, 'context', 'heartbeat.toon');
         
         let data: any = null;
-        if (existsSync(yamlPath)) {
-            try {
-                data = parse(readFileSync(yamlPath, 'utf-8'));
-            } catch { /* ignore */ }
-        }
-        
-        if (!data && existsSync(toonPath)) {
-            try {
-                data = JSON.parse(readFileSync(toonPath, 'utf-8'));
-            } catch { /* ignore */ }
+        const candidates = [bpYaml, bpToon, ctxYaml, ctxToon];
+        for (const p of candidates) {
+            if (existsSync(p)) {
+                try {
+                    const content = readFileSync(p, 'utf-8');
+                    data = p.endsWith('.yaml') ? parse(content) : JSON.parse(content);
+                    if (data) break;
+                } catch { /* ignore */ }
+            }
         }
         
         if (data) {

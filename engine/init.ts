@@ -1,14 +1,14 @@
 /**
  * Bridge Initialization — creates .factory/ scaffold in a target repo.
  *
- * Storage: all context files are stored as YAML (.yaml), human-editable.
- * TOON encoding happens at prompt-injection time (in context.ts), not here.
+ * Storage: all blueprint files are stored as YAML (.yaml), human-editable.
+ * TOON encoding happens at prompt-injection time (in blueprint.ts), not here.
  *
  * Creates:
  *   .factory/factory.yaml           — bridge config (absolute factory_home)
- *   .factory/context/context.yaml   — project context (analyzed from codebase)
- *   .factory/context/heartbeat.yaml — liveness signal
- *   .factory/context/worklog.yaml   — append-only session log
+ *   .factory/blueprint/blueprint.yaml — project blueprint (analyzed from codebase)
+ *   .factory/blueprint/heartbeat.yaml — liveness signal
+ *   .factory/blueprint/worklog.yaml   — append-only session log
  *   .factory/skill-index.yaml       — skills directory
  *   .factory/task-manager/todo.yaml — task queue
  *   .factory/task-manager/manage.sh — task lifecycle manager (copied)
@@ -197,13 +197,13 @@ This project is connected to [Factory](https://github.com/Bigmints-com/factory) 
 ### Quick Commands
 
 \`\`\`bash
-factory pulse "<msg>"          # Write liveness heartbeat
-factory task list              # Show task queue
-factory task start <id>        # Claim a task
-factory context update "<msg>" # Append to worklog
-factory validate               # Run tsc + lint
-factory worker --queue <file>   # Run YAML prompt queue
-factory hooks install          # Install git hooks
+factory pulse "<msg>"            # Write liveness heartbeat
+factory task list                # Show task queue
+factory task start <id>          # Claim a task
+factory blueprint update "<msg>" # Append to worklog
+factory validate                 # Run tsc + lint
+factory worker --queue <file>     # Run YAML prompt queue
+factory hooks install            # Install git hooks
 \`\`\`
 
 ### Factory Files
@@ -211,9 +211,9 @@ factory hooks install          # Install git hooks
 | File | Purpose |
 |------|---------|
 | \`.factory/factory.yaml\` | Bridge config (links to Factory install) |
-| \`.factory/context/context.yaml\` | Project state snapshot (read by agent on start) |
-| \`.factory/context/heartbeat.yaml\` | Liveness signal (written every build step) |
-| \`.factory/context/worklog.yaml\` | Append-only session log |
+| \`.factory/blueprint/blueprint.yaml\` | Project state snapshot (read by agent on start) |
+| \`.factory/blueprint/heartbeat.yaml\` | Liveness signal (written every build step) |
+| \`.factory/blueprint/worklog.yaml\` | Append-only session log |
 | \`.factory/skill-index.yaml\` | Available agentic skills |
 | \`.factory/task-manager/todo.yaml\` | Task queue (human + agent readable) |
 | \`.factory/task-manager/manage.sh\` | Task lifecycle CLI |
@@ -221,9 +221,9 @@ factory hooks install          # Install git hooks
 ### Workflow
 
 1. Start: \`factory task start <id>\` → \`factory pulse "starting <id>"\`
-2. Work: agent reads context.yaml, builds, writes heartbeat on each step
+2. Work: agent reads blueprint.yaml, builds, writes heartbeat on each step
 3. Done: \`factory task complete --id <id> --summary "what was done"\`
-4. Commit: \`factory context update "summary"\` → git commit
+4. Commit: \`factory blueprint update "summary"\` → git commit
 `.trim();
 
 /** Find agents.md or AGENTS.md in the project root (case-insensitive). */
@@ -247,7 +247,7 @@ export function patchAgentsMd(repoPath: string): { path: string; action: 'create
 
 ## Role
 You are a senior developer working on **${name}**.
-Always read \`.factory/context/context.yaml\` before starting work.
+Always read \`.factory/blueprint/blueprint.yaml\` before starting work.
 Write heartbeat on every significant step.
 
 ${stackLine}
@@ -303,7 +303,7 @@ export function initBridge(repoPath: string): InitResult {
     // Create directory structure
     const dirs = [
         factoryDir,
-        join(factoryDir, 'context'),
+        join(factoryDir, 'blueprint'),
         join(factoryDir, 'stories', 'apps'),
         join(factoryDir, 'stories', 'features'),
         join(factoryDir, 'knowledge', 'builds'),
@@ -327,6 +327,7 @@ export function initBridge(repoPath: string): InitResult {
         factory_home: factoryRoot,  // absolute path — resolves scripts correctly
         stack,
         agentic: {
+            blueprint_dir: '.factory/blueprint',
             context_dir: '.factory/context',
             task_queue: '.factory/task-manager/todo.yaml',
             skill_index: '.factory/skill-index.yaml',
@@ -337,18 +338,18 @@ export function initBridge(repoPath: string): InitResult {
     writeFileSync(yamlPath, toYaml(config));
     files.push({ path: '.factory/factory.yaml', action: 'created' });
 
-    // 2. context.yaml — analyze codebase (skip if already exists)
-    const contextPath = join(factoryDir, 'context', 'context.yaml');
-    if (!existsSync(contextPath)) {
-        const contextData = analyzeExistingProject(repoPath);
-        writeFileSync(contextPath, toYaml(contextData));
-        files.push({ path: '.factory/context/context.yaml', action: 'created' });
+    // 2. blueprint.yaml — analyze codebase (skip if already exists)
+    const blueprintPath = join(factoryDir, 'blueprint', 'blueprint.yaml');
+    if (!existsSync(blueprintPath)) {
+        const blueprintData = analyzeExistingProject(repoPath);
+        writeFileSync(blueprintPath, toYaml(blueprintData));
+        files.push({ path: '.factory/blueprint/blueprint.yaml', action: 'created' });
     } else {
-        files.push({ path: '.factory/context/context.yaml', action: 'skipped' });
+        files.push({ path: '.factory/blueprint/blueprint.yaml', action: 'skipped' });
     }
 
     // 3. heartbeat.yaml
-    const heartbeatPath = join(factoryDir, 'context', 'heartbeat.yaml');
+    const heartbeatPath = join(factoryDir, 'blueprint', 'heartbeat.yaml');
     if (!existsSync(heartbeatPath)) {
         writeFileSync(heartbeatPath, toYaml({
             heartbeat: {
@@ -358,13 +359,13 @@ export function initBridge(repoPath: string): InitResult {
                 status: 'idle',
             },
         }));
-        files.push({ path: '.factory/context/heartbeat.yaml', action: 'created' });
+        files.push({ path: '.factory/blueprint/heartbeat.yaml', action: 'created' });
     } else {
-        files.push({ path: '.factory/context/heartbeat.yaml', action: 'skipped' });
+        files.push({ path: '.factory/blueprint/heartbeat.yaml', action: 'skipped' });
     }
 
     // 4. worklog.yaml
-    const worklogPath = join(factoryDir, 'context', 'worklog.yaml');
+    const worklogPath = join(factoryDir, 'blueprint', 'worklog.yaml');
     if (!existsSync(worklogPath)) {
         writeFileSync(worklogPath, toYaml({
             entries: [{
@@ -372,9 +373,9 @@ export function initBridge(repoPath: string): InitResult {
                 message: `${name} .factory/ scaffold initialized`,
             }],
         }));
-        files.push({ path: '.factory/context/worklog.yaml', action: 'created' });
+        files.push({ path: '.factory/blueprint/worklog.yaml', action: 'created' });
     } else {
-        files.push({ path: '.factory/context/worklog.yaml', action: 'skipped' });
+        files.push({ path: '.factory/blueprint/worklog.yaml', action: 'skipped' });
     }
 
     // 5. skill-index.yaml
@@ -383,7 +384,7 @@ export function initBridge(repoPath: string): InitResult {
         writeFileSync(skillIndexPath, toYaml({
             skills: [
                 { name: 'heartbeat', path: `${factoryRoot}/factory/scripts/heartbeat/pulse.sh`, description: 'Write a liveness timestamp' },
-                { name: 'auto-context', path: `${factoryRoot}/factory/scripts/auto-context/update-context.sh`, description: 'Append to worklog' },
+                { name: 'auto-blueprint', path: `${factoryRoot}/factory/scripts/auto-blueprint/update-blueprint.sh`, description: 'Append to worklog' },
                 { name: 'compress-worklog', path: `${factoryRoot}/factory/scripts/compress-worklog/compress.sh`, description: 'Archive old worklog entries' },
                 { name: 'validate-code', path: `${factoryRoot}/factory/scripts/validate-code/validate.sh`, description: 'Run lint and type checks' },
                 { name: 'worker', path: 'factory worker', description: 'Run YAML prompt queue' },

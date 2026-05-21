@@ -5,7 +5,7 @@
 
 import Database from 'better-sqlite3';
 import { PATHS } from './config.ts';
-import { log } from './log.ts';
+import { log, logError } from './log.ts';
 
 let _db: Database.Database | null = null;
 
@@ -32,6 +32,95 @@ function initSchema(db: Database.Database): void {
         }
     } catch (e: any) {
         // Table may not exist yet, ignore
+    }
+
+    // ── Migration: Update CHECK constraint for kind ('AppSpec'/'FeatureSpec' -> 'AppStory'/'FeatureStory') ──
+    try {
+        const schemaRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='queue_items'").get() as { sql: string } | undefined;
+        if (schemaRow && schemaRow.sql.includes("'AppSpec'")) {
+            log('⚡', 'Migrating queue_items: updating kind CHECK constraint to AppStory/FeatureStory');
+            
+            // 1. Get info on existing columns in the old table
+            const oldCols = db.prepare(`PRAGMA table_info(queue_items)`).all() as { name: string }[];
+            const oldColNames = new Set(oldCols.map(c => c.name));
+            
+            // 2. Start transaction
+            db.exec('BEGIN TRANSACTION;');
+            
+            // 3. Rename old table
+            db.exec('ALTER TABLE queue_items RENAME TO queue_items_old;');
+            
+            // 4. Create new table with updated CHECK constraint
+            db.exec(`
+                CREATE TABLE queue_items (
+                    id TEXT PRIMARY KEY,
+                    story_file TEXT NOT NULL,
+                    kind TEXT NOT NULL CHECK(kind IN ('AppStory', 'FeatureStory')),
+                    status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending', 'running', 'completed', 'failed', 'needs-attention')),
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    added_at TEXT NOT NULL,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    output TEXT DEFAULT '',
+                    error TEXT,
+                    duration_ms INTEGER
+                );
+            `);
+            
+            // 5. Determine columns to copy
+            const columnsToCopy = ['id', 'status', 'priority', 'added_at', 'started_at', 'completed_at', 'output', 'error', 'duration_ms'];
+            const selectExprs = ['id', 'status', 'priority', 'added_at', 'started_at', 'completed_at', 'output', 'error', 'duration_ms'];
+            
+            if (oldColNames.has('story_file')) {
+                columnsToCopy.push('story_file');
+                selectExprs.push('story_file');
+            } else if (oldColNames.has('spec_file')) {
+                columnsToCopy.push('story_file');
+                selectExprs.push('spec_file');
+            }
+            
+            columnsToCopy.push('kind');
+            selectExprs.push(`
+                CASE kind 
+                    WHEN 'AppSpec' THEN 'AppStory' 
+                    WHEN 'FeatureSpec' THEN 'FeatureStory' 
+                    ELSE kind 
+                END
+            `);
+            
+            const extraColumns = [
+                ['phase', 'INTEGER DEFAULT 0'],
+                ['depends_on', "TEXT DEFAULT '[]'"],
+                ['error_category', 'TEXT'],
+                ['engine', "TEXT DEFAULT 'factory'"]
+            ];
+            
+            for (const [col, type] of extraColumns) {
+                if (oldColNames.has(col)) {
+                    db.exec(`ALTER TABLE queue_items ADD COLUMN ${col} ${type};`);
+                    columnsToCopy.push(col);
+                    selectExprs.push(col);
+                }
+            }
+            
+            // 6. Copy data
+            db.exec(`
+                INSERT INTO queue_items (${columnsToCopy.join(', ')})
+                SELECT ${selectExprs.join(', ')}
+                FROM queue_items_old;
+            `);
+            
+            // 7. Drop old table
+            db.exec('DROP TABLE queue_items_old;');
+            
+            // 8. Commit
+            db.exec('COMMIT;');
+            log('✓', 'Migrated SQLite queue_items constraint successfully');
+        }
+    } catch (e: any) {
+        logError(`Failed to migrate queue_items constraint: ${e?.message || e}`);
+        try { db.exec('ROLLBACK;'); } catch {}
     }
 
     try {

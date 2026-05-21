@@ -103,8 +103,8 @@ export interface DeploymentConfig {
 
 export type StoryStatus = 'draft' | 'ready' | 'in-progress' | 'validation' | 'review' | 'done';
 
-/** Context about an existing app that feature builds need for integration */
-export interface AppIntegrationContext {
+/** Blueprint about an existing app that feature builds need for integration */
+export interface AppIntegrationBlueprint {
     /** Parsed package.json — deps already installed */
     packageJson?: {
         dependencies?: Record<string, string>;
@@ -165,9 +165,10 @@ export interface BridgeConfig {
     skills?: SkillsConfig;
     templates?: { starter?: string };
     apps_dir?: string;
-    /** Agentic configuration — paths to context, tasks, skills, workflows, knowledge */
+    /** Agentic configuration — paths to blueprint, tasks, skills, workflows, knowledge */
     agentic?: {
-        context_dir?: string;
+        blueprint_dir?: string;
+        context_dir?: string; // legacy fallback
         task_queue?: string;
         skill_index?: string;
         workflows_dir?: string;
@@ -279,13 +280,13 @@ export interface KnowledgeFile {
     content: string;
 }
 
-export interface ProjectContext {
+export interface ProjectBlueprint {
     repoPath: string;
     bridge: BridgeConfig;
     knowledgeFiles: KnowledgeFile[];
     conventions: string[];
     stack: ProjectStack | undefined;
-    /** Raw TOON context snapshot from .factory/context/context.toon */
+    /** Raw TOON blueprint snapshot from .factory/blueprint/blueprint.toon */
     toonSnapshot?: string;
     /** Parsed skill index entries from .factory/skill-index.toon */
     projectSkills?: Array<{ name: string; path: string; description: string }>;
@@ -322,8 +323,8 @@ export interface ScoredSkill {
     matchReason: string;
 }
 
-/** Context used to match skills against a build task */
-export interface SkillMatchContext {
+/** Blueprint / Context used to match skills against a build task */
+export interface SkillMatchBlueprint {
     storyName: string;
     storyDescription: string;
     stack: string;

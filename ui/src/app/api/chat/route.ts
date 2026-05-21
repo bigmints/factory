@@ -200,10 +200,10 @@ RULES:
 Be thorough, creative, and production-ready.`;
 
 /**
- * Format repo scan results into a structured context block for the system prompt.
+ * Format repo scan results into a structured blueprint block for the system prompt.
  */
-function formatRepoContext(ctx: any): string {
-  const lines: string[] = ['\n\nREPO CONTEXT (from scanning the actual project codebase):'];
+function formatRepoBlueprint(ctx: any): string {
+  const lines: string[] = ['\n\nREPO BLUEPRINT (from scanning the actual project codebase):'];
 
   // Agent instructions (mandatory — project architecture and conventions)
   if (ctx.agentInstructions) {
@@ -333,7 +333,7 @@ function getSettings() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { messages, isExistingApp, existingAppName, repoContext } = body;
+    const { messages, isExistingApp, existingAppName, repoBlueprint } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'messages required' }), {
@@ -362,24 +362,24 @@ export async function POST(request: Request) {
 
     const model = settings.buildModel || provider.defaultModel;
 
-    // Build repo context block from scan results or fall back to bridge config
-    let repoContextBlock = '';
-    if (repoContext && typeof repoContext === 'object') {
-      repoContextBlock = formatRepoContext(repoContext);
+    // Build repo blueprint block from scan results or fall back to bridge config
+    let repoBlueprintBlock = '';
+    if (repoBlueprint && typeof repoBlueprint === 'object') {
+      repoBlueprintBlock = formatRepoBlueprint(repoBlueprint);
     } else {
       // Fallback: basic stack info from factory.yaml
       const bridge = getActiveBridgeConfig();
       if (bridge?.stack) {
-        repoContextBlock = `\n\nThe target project uses the following stack:\n- Framework: ${bridge.stack.framework}\n- Database: ${bridge.stack.database || 'Not specified'}\n- Cloud: ${bridge.stack.cloud || 'Not specified'}\n\nTailor your YAML and explanations accordingly. If the database is not Firestore, do not mention Firestore specific IDs.`;
+        repoBlueprintBlock = `\n\nThe target project uses the following stack:\n- Framework: ${bridge.stack.framework}\n- Database: ${bridge.stack.database || 'Not specified'}\n- Cloud: ${bridge.stack.cloud || 'Not specified'}\n\nTailor your YAML and explanations accordingly. If the database is not Firestore, do not mention Firestore specific IDs.`;
       }
     }
 
     // Choose the right system prompt based on whether this is a new or existing app
     let systemPrompt: string;
     if (isExistingApp && existingAppName) {
-      systemPrompt = SYSTEM_PROMPT_EXISTING_APP.replace(/EXISTING_APP_NAME/g, existingAppName) + repoContextBlock;
+      systemPrompt = SYSTEM_PROMPT_EXISTING_APP.replace(/EXISTING_APP_NAME/g, existingAppName) + repoBlueprintBlock;
     } else {
-      systemPrompt = SYSTEM_PROMPT_NEW_APP + repoContextBlock;
+      systemPrompt = SYSTEM_PROMPT_NEW_APP + repoBlueprintBlock;
     }
 
     // Build the full message list with system prompt

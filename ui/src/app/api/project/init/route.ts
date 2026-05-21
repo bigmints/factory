@@ -6,7 +6,7 @@
  *
  * Events:
  *   data: {"file": ".factory/factory.yaml", "action": "created"}
- *   data: {"file": ".factory/context/context.yaml", "action": "skipped"}
+ *   data: {"file": ".factory/blueprint/blueprint.yaml", "action": "skipped"}
  *   ...
  *   data: {"done": true, "success": true, "total": 9, "created": 7}
  */

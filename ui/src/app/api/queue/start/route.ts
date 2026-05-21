@@ -186,11 +186,11 @@ function processQueueInBackground() {
   }
 
   /**
-   * Write queue context for feature builds — what has been completed so far.
+   * Write queue blueprint for feature builds — what has been completed so far.
    * This lets the LLM wire things up with previously built features.
    */
-  function writeQueueContext(item: any) {
-    if (item.kind !== 'FeatureSpec' && item.kind !== 'FeatureStory') return;
+  function writeQueueBlueprint(item: any) {
+    if (item.kind !== 'FeatureSpec' && item.kind !== 'FeatureStory' && item.kind !== 'Feature' && item.kind !== 'feature') return;
 
     const ctxDb = getDb();
     try {
@@ -204,7 +204,7 @@ function processQueueInBackground() {
       if (completed.length === 0) return;
 
       // Extract file lists from build output (they appear as "Generated N files" sections)
-      const context = completed.map(c => {
+      const blueprint = completed.map(c => {
         const file = c.story_file || c.spec_file;
         const fileMatches = c.output?.match(/(?:src\/|lib\/|app\/|pages\/|components\/)[\w/.-]+\.(?:ts|tsx|js|jsx|json|css)/g) || [];
         return {
@@ -216,8 +216,8 @@ function processQueueInBackground() {
         };
       });
 
-      const contextPath = join(FACTORY_ROOT, 'queue-context.json');
-      writeFileSync(contextPath, JSON.stringify({ completedBuilds: context }, null, 2));
+      const bpPath = join(FACTORY_ROOT, 'queue-blueprint.json');
+      writeFileSync(bpPath, JSON.stringify({ completedBuilds: blueprint }, null, 2));
     } catch { /* non-critical */ }
     finally { ctxDb.close(); }
   }
@@ -229,6 +229,10 @@ function processQueueInBackground() {
       finDb.prepare(`UPDATE queue_state SET value = 'false' WHERE key = 'is_running'`).run();
       finDb.close();
       try {
+        const bpPath = join(FACTORY_ROOT, 'queue-blueprint.json');
+        if (existsSync(bpPath)) {
+          writeFileSync(bpPath, '{}');
+        }
         const ctxPath = join(FACTORY_ROOT, 'queue-context.json');
         if (existsSync(ctxPath)) {
           writeFileSync(ctxPath, '{}');
@@ -272,8 +276,8 @@ function processQueueInBackground() {
     // Clear live log file and write header
     writeFileSync(LOG_FILE, `[build] ${file} (${item.kind})\n`);
 
-    // Write queue context for feature builds
-    writeQueueContext(item);
+    // Write queue blueprint for feature builds
+    writeQueueBlueprint(item);
 
     // Resolve the story/spec path
     const resolvedPath = resolveStoryPath(file, item.kind);

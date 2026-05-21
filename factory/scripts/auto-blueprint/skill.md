@@ -1,4 +1,4 @@
-# Auto Context Skill
+# Auto Blueprint Skill
 
 ## Purpose
 
@@ -10,16 +10,16 @@ Agents MUST invoke this skill at the end of every active session or task block t
 
 ## Available Scripts
 
-### `update-context.sh`
+### `update-blueprint.sh`
 
 A shell script that wraps the TOON compilation logic.
 
 **Usage:**
 
 ```bash
-./.agents/skills/auto-context/update-context.sh "<Brief description of work completed>"
+./.factory/blueprint/update-blueprint.sh "<Brief description of work completed>"
 ```
 
-### `update-context.mjs`
+### `update-blueprint.mjs`
 
-The internal ESM Node script that actually parses `.agents/context/worklog.toon`, appends the new entry, and re-encodes the file natively. It is also triggered automatically by git's `post-commit` hook.
+The internal ESM Node script that actually parses `.factory/blueprint/worklog.yaml` (encoded/decoded via TOON format), appends the new entry, and re-encodes the file natively. It is also triggered automatically by git's `post-commit` hook.

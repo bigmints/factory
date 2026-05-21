@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parse as parseYaml } from 'yaml';
-import type { AppStory, FeatureStory, ProjectContext, BuildResult, GeneratedFile } from './types.ts';
+import type { AppStory, FeatureStory, ProjectBlueprint, BuildResult, GeneratedFile } from './types.ts';
 import { storySlug } from './types.ts';
 import { log, logError } from './log.ts';
 
@@ -292,7 +292,7 @@ export async function runQueue(
  */
 async function runWorkerEngine(
     story: AppStory | FeatureStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     targetDir: string,
 ): Promise<BuildResult> {
     const isApp = 'appName' in story;
@@ -374,18 +374,18 @@ function scanDir(dir: string, prefix: string, files: GeneratedFile[]): void {
 /** Build using worker engine */
 export async function runWorkerBuild(
     story: AppStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
 ): Promise<BuildResult> {
     const slug = storySlug(story);
     const targetDir = resolve(process.cwd(), slug);
-    return runWorkerEngine(story, context, targetDir);
+    return runWorkerEngine(story, blueprint, targetDir);
 }
 
 /** Feature build using worker engine */
 export async function runWorkerFeatureBuild(
     story: FeatureStory,
-    context: ProjectContext,
+    blueprint: ProjectBlueprint,
     targetDir: string,
 ): Promise<BuildResult> {
-    return runWorkerEngine(story, context, targetDir);
+    return runWorkerEngine(story, blueprint, targetDir);
 }

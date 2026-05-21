@@ -271,6 +271,9 @@ export function writeAppAgentsMd(
     stack: StackConfig,
     files: GeneratedFile[],
 ): void {
+    if (!existsSync(targetDir)) {
+        mkdirSync(targetDir, { recursive: true });
+    }
     const agentsPath = join(targetDir, 'AGENTS.md');
 
     // Group files by directory

@@ -2020,12 +2020,29 @@ async function callOpenAICompatWithTools(
             };
         });
 
-        // Fallback for Qwen/local LLMs XML-style tool invocation
-        if (toolCalls.length === 0 && text) {
+        // Fallback or enrichment for Qwen/local LLMs XML-style tool invocation
+        if (text) {
             const parsedXmlCalls = parseXmlToolCalls(text);
             if (parsedXmlCalls.length > 0) {
-                log('●', `Parsed ${parsedXmlCalls.length} XML tool call(s) from content`);
-                toolCalls = parsedXmlCalls;
+                if (toolCalls.length === 0) {
+                    log('●', `Parsed ${parsedXmlCalls.length} XML tool call(s) from content`);
+                    toolCalls = parsedXmlCalls;
+                } else {
+                    const nameCounts = new Map<string, number>();
+                    for (const tc of toolCalls) {
+                        const name = tc.function.name;
+                        if (Object.keys(tc.function.arguments).length === 0) {
+                            const count = nameCounts.get(name) || 0;
+                            nameCounts.set(name, count + 1);
+
+                            const matchingXmlCalls = parsedXmlCalls.filter(x => x.function.name === name);
+                            if (matchingXmlCalls[count] && Object.keys(matchingXmlCalls[count].function.arguments).length > 0) {
+                                log('●', `Enriched XML arguments for tool "${name}" from content`);
+                                tc.function.arguments = matchingXmlCalls[count].function.arguments;
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -2199,12 +2216,29 @@ async function callOllamaWithTools(
         };
     });
 
-    // Fallback for Qwen/local LLMs XML-style tool invocation
-    if (toolCalls.length === 0 && text) {
+    // Fallback or enrichment for Qwen/local LLMs XML-style tool invocation
+    if (text) {
         const parsedXmlCalls = parseXmlToolCalls(text);
         if (parsedXmlCalls.length > 0) {
-            log('●', `Parsed ${parsedXmlCalls.length} XML tool call(s) from content`);
-            toolCalls = parsedXmlCalls;
+            if (toolCalls.length === 0) {
+                log('●', `Parsed ${parsedXmlCalls.length} XML tool call(s) from content`);
+                toolCalls = parsedXmlCalls;
+            } else {
+                const nameCounts = new Map<string, number>();
+                for (const tc of toolCalls) {
+                    const name = tc.function.name;
+                    if (Object.keys(tc.function.arguments).length === 0) {
+                        const count = nameCounts.get(name) || 0;
+                        nameCounts.set(name, count + 1);
+
+                        const matchingXmlCalls = parsedXmlCalls.filter(x => x.function.name === name);
+                        if (matchingXmlCalls[count] && Object.keys(matchingXmlCalls[count].function.arguments).length > 0) {
+                            log('●', `Enriched XML arguments for tool "${name}" from content`);
+                            tc.function.arguments = matchingXmlCalls[count].function.arguments;
+                        }
+                    }
+                }
+            }
         }
     }
 

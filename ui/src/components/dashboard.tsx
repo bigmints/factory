@@ -504,29 +504,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Stats row — 2 cols mobile, 4 cols desktop with premium spacing & larger cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { icon: FileText, value: stories.length, label: 'App Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
-          { icon: Activity, value: featureStories.length, label: 'Features', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
-          { icon: CheckCircle2, value: stories.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
-          { icon: Package, value: reportStats?.totalBuilds || 0, label: 'Total Builds', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
-        ].map((stat, i) => (
-          <Card key={i} className="group bg-card border-border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border group-hover:scale-105 transition-transform duration-300", stat.bgColor)}>
-                  <stat.icon className={cn("h-6 w-6", stat.iconColor)} />
-                </div>
-                <div className="min-w-0 space-y-1">
-                  <p className="text-2xl md:text-3xl font-black tracking-tight leading-none text-foreground font-mono">{stat.value}</p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground font-extrabold truncate uppercase tracking-widest">{stat.label}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
 
       <div className="animate-in fade-in duration-300">
         <AppDashboard />

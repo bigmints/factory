@@ -1857,6 +1857,60 @@ Fix any errors found before finishing.
         const sessionDir = join(homedir(), '.pi', 'agent', 'sessions', slug);
         const startTime = Date.now();
 
+        const parseAndLogSessionLine = (line: string) => {
+            if (!line.trim()) return;
+            try {
+                const data = JSON.parse(line);
+                if (data.type === 'message' && data.message) {
+                    const role = data.message.role;
+                    if (role === 'assistant') {
+                        const content = data.message.content;
+                        if (Array.isArray(content)) {
+                            for (const item of content) {
+                                if (item.type === 'thinking' && item.thinking) {
+                                    // Omit thinking blocks entirely to keep logs clean
+                                } else if (item.type === 'toolCall') {
+                                    // Only print high-level progress tracking and completion tools
+                                    if (item.name === 'log_step' || item.name === 'mark_complete' || item.name === 'mark_failed') {
+                                        log('→', `🛠️  [Tool Call] ${item.name || ''} ${JSON.stringify(item.arguments || {})}`);
+                                    }
+                                } else if (item.type === 'text' && item.text) {
+                                    const chatText = item.text.trim();
+                                    if (chatText) {
+                                        log('  ', `💬 ${chatText.replace(/\n/g, '\n     ')}`);
+                                    }
+                                }
+                            }
+                        }
+                    } else if (role === 'toolResult') {
+                        const toolName = data.message.toolName || '';
+                        const isError = data.message.isError || false;
+                        let resultText = '';
+                        if (Array.isArray(data.message.content)) {
+                            const firstText = data.message.content.find((c: any) => c.type === 'text');
+                            if (firstText && typeof firstText.text === 'string') {
+                                resultText = firstText.text.trim();
+                            }
+                        }
+                        if (isError) {
+                            // Always preserve and log errors for low-level mechanical tools
+                            log('✗', `Tool ${toolName} failed.`);
+                            if (resultText) {
+                                log('  ', `Error: ${resultText.replace(/\n/g, '\n     ')}`);
+                            }
+                        } else {
+                            // Only print success indicators for high-level progress or completion tools
+                            if (toolName === 'log_step' || toolName === 'mark_complete' || toolName === 'mark_failed') {
+                                log('✓', `Tool ${toolName} completed successfully.`);
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // Ignore partial line parse errors
+            }
+        };
+
         pollingInterval = setInterval(() => {
             try {
                 if (!activeFilePath) {
@@ -1897,58 +1951,7 @@ Fix any errors found before finishing.
                         lineBuffer = lines.pop() || '';
 
                         for (const line of lines) {
-                            if (!line.trim()) continue;
-                            try {
-                                const data = JSON.parse(line);
-                                if (data.type === 'message' && data.message) {
-                                    const role = data.message.role;
-                                    if (role === 'assistant') {
-                                        const content = data.message.content;
-                                        if (Array.isArray(content)) {
-                                            for (const item of content) {
-                                                if (item.type === 'thinking' && item.thinking) {
-                                                    const thinkingText = item.thinking.trim();
-                                                    if (thinkingText) {
-                                                        log('  ', `🤔 ${thinkingText.replace(/\n/g, '\n     ')}`);
-                                                    }
-                                                } else if (item.type === 'toolCall') {
-                                                    log('→', `🛠️  [Tool Call] ${item.name || ''} ${JSON.stringify(item.arguments || {})}`);
-                                                } else if (item.type === 'text' && item.text) {
-                                                    const chatText = item.text.trim();
-                                                    if (chatText) {
-                                                        log('  ', `💬 ${chatText.replace(/\n/g, '\n     ')}`);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } else if (role === 'toolResult') {
-                                        const toolName = data.message.toolName || '';
-                                        const isError = data.message.isError || false;
-                                        let resultText = '';
-                                        if (Array.isArray(data.message.content)) {
-                                            const firstText = data.message.content.find((c: any) => c.type === 'text');
-                                            if (firstText && typeof firstText.text === 'string') {
-                                                resultText = firstText.text.trim();
-                                            }
-                                        }
-                                        if (isError) {
-                                            log('✗', `Tool ${toolName} failed.`);
-                                            if (resultText) {
-                                                log('  ', `Error: ${resultText.replace(/\n/g, '\n     ')}`);
-                                            }
-                                        } else {
-                                            log('✓', `Tool ${toolName} completed successfully.`);
-                                            if (resultText && toolName === 'bash') {
-                                                const lines = resultText.split('\n');
-                                                const snippet = lines.length > 5 ? lines.slice(0, 5).join('\n') + '\n     ... (truncated)' : resultText;
-                                                log('  ', `Output:\n     ${snippet.replace(/\n/g, '\n     ')}`);
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch {
-                                // Ignore partial line parse errors
-                            }
+                            parseAndLogSessionLine(line);
                         }
                     }
                 }
@@ -2013,12 +2016,11 @@ Fix any errors found before finishing.
                                 if (Array.isArray(content)) {
                                     for (const item of content) {
                                         if (item.type === 'thinking' && item.thinking) {
-                                            const thinkingText = item.thinking.trim();
-                                            if (thinkingText) {
-                                                log('  ', `🤔 ${thinkingText.replace(/\n/g, '\n     ')}`);
-                                            }
+                                            // Omit thinking block
                                         } else if (item.type === 'toolCall') {
-                                            log('→', `🛠️  [Tool Call] ${item.name || ''} ${JSON.stringify(item.arguments || {})}`);
+                                            if (item.name === 'log_step' || item.name === 'mark_complete' || item.name === 'mark_failed') {
+                                                log('→', `🛠️  [Tool Call] ${item.name || ''} ${JSON.stringify(item.arguments || {})}`);
+                                            }
                                         } else if (item.type === 'text' && item.text) {
                                             const chatText = item.text.trim();
                                             if (chatText) {
@@ -2043,11 +2045,8 @@ Fix any errors found before finishing.
                                         log('  ', `Error: ${resultText.replace(/\n/g, '\n     ')}`);
                                     }
                                 } else {
-                                    log('✓', `Tool ${toolName} completed successfully.`);
-                                    if (resultText && toolName === 'bash') {
-                                        const lines = resultText.split('\n');
-                                        const snippet = lines.length > 5 ? lines.slice(0, 5).join('\n') + '\n     ... (truncated)' : resultText;
-                                        log('  ', `Output:\n     ${snippet.replace(/\n/g, '\n     ')}`);
+                                    if (toolName === 'log_step' || toolName === 'mark_complete' || toolName === 'mark_failed') {
+                                        log('✓', `Tool ${toolName} completed successfully.`);
                                     }
                                 }
                             }

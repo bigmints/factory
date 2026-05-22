@@ -16,7 +16,7 @@ import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, ChevronDown, ChevronRight, Plus,
   Search, Filter, Tag, Columns, Layers, FileCode2, Brain, FlaskConical, Wrench,
   ShieldCheck, FolderOpen, RefreshCw, Sliders, X, Check, Package, ListTodo, Info,
-  BookOpen, Code, TerminalSquare, Link2, Users, Network
+  BookOpen, Code, TerminalSquare, Link2, Users, Network, Lock, Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
@@ -149,35 +149,35 @@ interface NotionBoardProps {
 // ─── Constants & Configurations ───
 
 const storyStatusMap: Record<string, { label: string; bg: string; dot: string }> = {
-  done: { label: 'Done', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-500' },
-  completed: { label: 'Done', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-500' },
-  review: { label: 'In Review', bg: 'bg-purple-500/10 text-purple-400 border-purple-500/30', dot: 'bg-purple-500' },
-  validation: { label: 'Validation', bg: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30', dot: 'bg-cyan-500' },
-  'in-progress': { label: 'In Progress', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/30', dot: 'bg-blue-500' },
-  running: { label: 'Building', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/30', dot: 'bg-blue-500 animate-pulse' },
-  ready: { label: 'Ready to Build', bg: 'bg-teal-500/10 text-teal-400 border-teal-500/30', dot: 'bg-teal-500' },
-  failed: { label: 'Failed', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dot: 'bg-rose-500' },
-  draft: { label: 'Draft', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/30', dot: 'bg-amber-500' },
-  unknown: { label: 'Draft', bg: 'bg-muted border-border text-muted-foreground', dot: 'bg-muted-foreground' }
+  done: { label: 'Done', bg: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10 backdrop-blur-xs font-semibold', dot: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
+  completed: { label: 'Done', bg: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10 backdrop-blur-xs font-semibold', dot: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
+  review: { label: 'In Review', bg: 'bg-purple-500/5 text-purple-300 border-purple-500/10 backdrop-blur-xs font-semibold', dot: 'bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.5)]' },
+  validation: { label: 'Validation', bg: 'bg-cyan-500/5 text-cyan-300 border-cyan-500/10 backdrop-blur-xs font-semibold', dot: 'bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)]' },
+  'in-progress': { label: 'In Progress', bg: 'bg-blue-500/5 text-blue-300 border-blue-500/10 backdrop-blur-xs font-semibold', dot: 'bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.5)]' },
+  running: { label: 'Building', bg: 'bg-blue-500/5 text-blue-300 border-blue-500/10 backdrop-blur-xs font-semibold', dot: 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)] animate-pulse' },
+  ready: { label: 'Ready to Build', bg: 'bg-teal-500/5 text-teal-300 border-teal-500/10 backdrop-blur-xs font-semibold', dot: 'bg-teal-400 shadow-[0_0_6px_rgba(45,212,191,0.5)]' },
+  failed: { label: 'Failed', bg: 'bg-rose-500/5 text-rose-300 border-rose-500/10 backdrop-blur-xs font-semibold', dot: 'bg-rose-400 shadow-[0_0_6px_rgba(248,113,113,0.5)]' },
+  draft: { label: 'Draft', bg: 'bg-amber-500/5 text-amber-300 border-amber-500/10 backdrop-blur-xs font-semibold', dot: 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]' },
+  unknown: { label: 'Draft', bg: 'bg-muted/30 border-border/20 text-muted-foreground', dot: 'bg-muted-foreground/60' }
 };
 
 const epicStatusMap: Record<string, { label: string; bg: string }> = {
-  completed: { label: 'Completed', bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' },
-  'in-progress': { label: 'In Progress', bg: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
-  blocked: { label: 'Blocked', bg: 'bg-rose-500/10 border-rose-500/20 text-rose-400' },
-  pending: { label: 'Pending', bg: 'bg-muted border-border text-muted-foreground' }
+  completed: { label: 'Completed', bg: 'bg-emerald-500/15 border-emerald-500/10 text-emerald-300 backdrop-blur-xs' },
+  'in-progress': { label: 'In Progress', bg: 'bg-blue-500/15 border-blue-500/10 text-blue-300 backdrop-blur-xs' },
+  blocked: { label: 'Blocked', bg: 'bg-rose-500/15 border-rose-500/10 text-rose-300 backdrop-blur-xs' },
+  pending: { label: 'Pending', bg: 'bg-muted/30 border-border/20 text-muted-foreground' }
 };
 
 // Rotating palette of epic accent colors (border-left + badge tints)
 const EPIC_COLORS = [
-  { border: 'border-l-violet-500',  badge: 'bg-violet-500/10 text-violet-400 border-violet-500/30' },
-  { border: 'border-l-sky-500',     badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30' },
-  { border: 'border-l-amber-500',   badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
-  { border: 'border-l-rose-500',    badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30' },
-  { border: 'border-l-teal-500',    badge: 'bg-teal-500/10 text-teal-400 border-teal-500/30' },
-  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/30' },
-  { border: 'border-l-lime-500',    badge: 'bg-lime-500/10 text-lime-400 border-lime-500/30' },
-  { border: 'border-l-orange-500',  badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
+  { border: 'border-l-violet-500',  badge: 'bg-violet-500/5 text-violet-300 border-violet-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-sky-500',     badge: 'bg-sky-500/5 text-sky-300 border-sky-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-emerald-500', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-rose-500',    badge: 'bg-rose-500/5 text-rose-300 border-rose-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-teal-500',    badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-500/5 text-fuchsia-300 border-fuchsia-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-amber-500',   badge: 'bg-amber-500/5 text-amber-300 border-amber-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-pink-500',    badge: 'bg-pink-500/5 text-pink-300 border-pink-500/10 backdrop-blur-md font-medium' },
 ];
 
 const taskStatusMap: Record<string, { label: string; bg: string; dot: string }> = {
@@ -1663,7 +1663,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             <KanbanColumn
               title="Backlog"
               description="Scaffold drafts or spec blueprints"
-              badgeColor="bg-amber-500/10 text-amber-500 border-amber-500/25"
+              badgeColor="bg-amber-500/5 text-amber-300 border-amber-500/10"
               stories={backlogStories}
               epicColorMap={epicColorMap}
               onSelect={handleOpenDrawer}
@@ -1680,7 +1680,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             <KanbanColumn
               title="Ready to Build"
               description="Verified specifications awaiting launch"
-              badgeColor="bg-teal-500/10 text-teal-400 border-teal-500/25"
+              badgeColor="bg-teal-500/5 text-teal-300 border-teal-500/10"
               stories={readyStories}
               epicColorMap={epicColorMap}
               onSelect={handleOpenDrawer}
@@ -1697,7 +1697,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             <KanbanColumn
               title="In Progress"
               description="Actively compiling or iterating"
-              badgeColor="bg-blue-500/10 text-blue-400 border-blue-500/25"
+              badgeColor="bg-blue-500/5 text-blue-300 border-blue-500/10"
               stories={buildingStories}
               epicColorMap={epicColorMap}
               onSelect={handleOpenDrawer}
@@ -1714,7 +1714,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             <KanbanColumn
               title="Completed"
               description="Code written and tests passed"
-              badgeColor="bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+              badgeColor="bg-emerald-500/5 text-emerald-300 border-emerald-500/10"
               stories={doneStories}
               epicColorMap={epicColorMap}
               onSelect={handleOpenDrawer}
@@ -2792,8 +2792,8 @@ function KanbanColumn({
   const clusters = useMemo(() => {
     if (!stories || stories.length === 0) return [];
     
-    // Drafts/Backlog should be a normal flat list of backlog items, no grouping.
-    if (title === 'Backlog') {
+    // Only group stories in "Ready to Build" column to keep the interface simple and clean.
+    if (title !== 'Ready to Build') {
       return stories.map(s => [s]);
     }
     
@@ -2854,17 +2854,17 @@ function KanbanColumn({
     <div
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className="flex flex-col h-[450px] md:h-full bg-muted/15 border border-border/60 rounded-xl overflow-hidden shadow-xs flex-1 transition-all duration-200 hover:bg-muted/20"
+      className="flex flex-col h-[450px] md:h-full bg-zinc-950/20 dark:bg-zinc-950/30 backdrop-blur-md border border-border/20 rounded-xl overflow-hidden shadow-[inset_0_1px_1px_rgba(255,255,255,0.01),0_8px_30px_rgb(0,0,0,0.12)] flex-1 transition-all duration-300 hover:bg-zinc-950/25 dark:hover:bg-zinc-950/40"
     >
       {/* Header info */}
-      <div className="p-3.5 bg-muted/20 border-b border-border/40 space-y-1 shrink-0 select-none">
+      <div className="p-4 bg-background/20 border-b border-border/20 space-y-1 shrink-0 select-none backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-sm text-foreground tracking-tight">{title}</h2>
-          <Badge className={cn("text-[9px] font-extrabold px-2 h-4.5 rounded-full border", badgeColor)}>
+          <h2 className="font-semibold text-sm text-foreground/90 tracking-tight">{title}</h2>
+          <Badge variant="outline" className={cn("text-[9px] font-bold px-2.5 h-4.5 rounded-full border backdrop-blur-md select-none", badgeColor)}>
             {stories.length}
           </Badge>
         </div>
-        <p className="text-[10px] text-muted-foreground leading-normal line-clamp-1">{description}</p>
+        <p className="text-[10px] text-muted-foreground/60 leading-normal line-clamp-1">{description}</p>
       </div>
 
       {/* Cards list */}
@@ -2888,51 +2888,32 @@ function KanbanColumn({
               );
             }
 
-            // Render a beautiful premium group container for clusters of size > 1
+            // Render a premium, clean, simplified group container for clusters of size > 1 (No unnecessary elements)
             return (
               <div
                 key={`cluster-${clusterIdx}-${cluster[0].file}`}
-                className="border border-indigo-500/20 bg-indigo-950/5 dark:bg-indigo-950/10 rounded-xl p-3.5 space-y-3.5 relative overflow-hidden transition-all duration-300 hover:border-indigo-500/40 hover:bg-indigo-950/15 group/cluster shadow-[inset_0_1px_1px_rgba(255,255,255,0.02)]"
+                className="border border-border/15 bg-muted/5 dark:bg-muted/10 rounded-xl p-2.5 space-y-2 relative overflow-hidden transition-all duration-300"
               >
-                {/* Glassmorphic border glow effect on hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 via-indigo-500/0 to-indigo-500/5 opacity-0 group-hover/cluster:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
-                {/* Elegant Group Header */}
-                <div className="flex items-center justify-between pb-1 select-none relative z-10">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                      <Network className="h-3.5 w-3.5" />
-                    </div>
-                    <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-wider">
-                      Related Queue
-                    </span>
-                  </div>
-                  <Badge variant="outline" className="text-[9px] text-indigo-300 border-indigo-500/20 px-1.5 h-4.5 bg-indigo-950/40 font-bold">
-                    {cluster.length} Stories
-                  </Badge>
+                {/* Clean, Minimalist Group Header */}
+                <div className="flex items-center justify-between px-1 pb-0.5 select-none text-[9px] text-muted-foreground/40 font-semibold uppercase tracking-wider">
+                  <span>Build Sequence</span>
+                  <span>{cluster.length} items</span>
                 </div>
                 
                 {/* The cards in the cluster */}
-                <div className="space-y-3 relative z-10 pl-1">
-                  {/* Visual connector line between cards */}
-                  <div className="absolute left-[7px] top-4 bottom-4 w-0.5 bg-indigo-500/15 pointer-events-none" />
-                  
-                  {cluster.map((item, idx) => (
-                    <div key={item.file} className="relative pl-4">
-                      {/* Connector node bullet */}
-                      <div className="absolute left-[4px] top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full border border-indigo-500/60 bg-background z-10" />
-                      
-                      <StoryKanbanCard
-                        item={item}
-                        epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
-                        onSelect={onSelect}
-                        onValidate={onValidate}
-                        onBuild={onBuild}
-                        activeAction={activeAction}
-                        onDragStart={onDragStart}
-                        allStories={allStories}
-                      />
-                    </div>
+                <div className="space-y-2">
+                  {cluster.map((item) => (
+                    <StoryKanbanCard
+                      key={item.file}
+                      item={item}
+                      epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
+                      onSelect={onSelect}
+                      onValidate={onValidate}
+                      onBuild={onBuild}
+                      activeAction={activeAction}
+                      onDragStart={onDragStart}
+                      allStories={allStories}
+                    />
                   ))}
                 </div>
               </div>
@@ -3001,18 +2982,18 @@ function StoryKanbanCard({
       onDragStart={(e) => isDraggable && onDragStart(e, item.file)}
       onClick={() => onSelect(item, 'story')}
       className={cn(
-        "border bg-background/25 hover:bg-background/60 hover:shadow-sm transition-all duration-300 group relative overflow-hidden rounded-lg cursor-pointer border-l-2",
+        "border bg-zinc-950/20 hover:bg-zinc-950/40 hover:shadow-lg hover:-translate-y-[1.5px] active:translate-y-0 transition-all duration-300 group relative overflow-hidden rounded-lg cursor-pointer border-l-[3px]",
         isDraggable ? "cursor-grab active:cursor-grabbing" : "",
         item.placeholder && "border-dashed border-border opacity-70",
-        isActive && "border-primary/40 bg-primary/5 shadow-xs",
-        !isActive && "border-border/40 hover:border-primary/20",
-        epicColor?.border || "border-l-border/40"
+        isActive && "border-indigo-500/30 bg-indigo-950/15 shadow-[0_0_12px_rgba(99,102,241,0.08)]",
+        !isActive && "border-border/25 hover:border-indigo-500/20",
+        epicColor?.border || "border-l-border/30"
       )}
     >
       <CardContent className="p-3 space-y-1.5 select-none">
         {/* Name row */}
         <div className="flex items-start justify-between gap-1.5">
-          <span className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-2 flex-1" title={name}>
+          <span className="font-medium text-xs text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-2 flex-1" title={name}>
             {name.replace('features/', '')}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -3020,52 +3001,53 @@ function StoryKanbanCard({
           </div>
         </div>
 
-        {/* Architect Gating Warnings */}
-        {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
-          <div className="flex flex-wrap items-center gap-1 pt-0.5">
-            {isScaffoldGated && (
-              <Badge variant="outline" className="text-[7.5px] font-extrabold bg-rose-500/10 text-rose-400 border-rose-500/25 px-1 h-4 rounded-xs shrink-0 select-none flex items-center gap-0.5">
-                <AlertTriangle className="h-2 w-2" /> Scaffold Gated
-              </Badge>
-            )}
-            {isPrereqGated && (
-              <Badge variant="outline" className="text-[7.5px] font-extrabold bg-amber-500/10 text-amber-400 border-amber-500/25 px-1 h-4 rounded-xs shrink-0 select-none flex items-center gap-0.5">
-                <AlertTriangle className="h-2 w-2" /> Deps Pending ({pendingPrereqs.length})
-              </Badge>
-            )}
-          </div>
-        )}
-
         {/* Description */}
         {desc && (
-          <p className="text-[9.5px] text-muted-foreground/70 line-clamp-1 leading-normal">{desc}</p>
+          <p className="text-[9.5px] text-muted-foreground/60 line-clamp-1 leading-normal font-light">{desc}</p>
         )}
 
         {/* Bottom meta */}
         <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
           {item.epicParent && epicColor && (
-            <Badge variant="outline" className={cn("text-[7.5px] font-bold h-3.5 px-1 rounded border", epicColor.badge)}>
+            <Badge variant="outline" className={cn("text-[7.5px] font-semibold h-3.5 px-1.5 rounded border leading-none shrink-0", epicColor.badge)}>
               {item.epicParent.name}
             </Badge>
           )}
-          <span className="text-[9px] text-muted-foreground ml-auto">
+
+          {/* Minimalist Gating Badges */}
+          {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
+            <div className="flex items-center gap-1 shrink-0">
+              {isScaffoldGated && (
+                <Badge variant="outline" className="text-[7.5px] font-medium tracking-wide bg-rose-500/5 text-rose-400/90 border-rose-500/10 px-1.5 h-4 rounded-full backdrop-blur-md select-none flex items-center gap-0.5">
+                  <Lock className="h-2 w-2 text-rose-400/70" /> Scaffold Gated
+                </Badge>
+              )}
+              {isPrereqGated && (
+                <Badge variant="outline" className="text-[7.5px] font-medium tracking-wide bg-amber-500/5 text-amber-400/90 border-amber-500/10 px-1.5 h-4 rounded-full backdrop-blur-md select-none flex items-center gap-0.5">
+                  <Clock className="h-2 w-2 text-amber-400/70" /> Pending ({pendingPrereqs.length})
+                </Badge>
+              )}
+            </div>
+          )}
+
+          <span className="text-[9px] text-muted-foreground/50 ml-auto font-mono">
             {totalTasks > 0 ? `${doneTasks}/${totalTasks} tasks` : 'No tasks'}
           </span>
         </div>
 
         {/* Dependencies */}
         {item.dependsOn && item.dependsOn.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-border/30 overflow-hidden">
-            <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+          <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-border/10 overflow-hidden">
+            <Link2 className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
             <div className="flex flex-wrap gap-1 min-w-0">
               {item.dependsOn.map((depSlug: string) => {
                 const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
                 const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
-                let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
+                let statusBadgeColor = 'bg-muted/30 text-muted-foreground/60 border-border/10';
                 if (status === 'done' || status === 'completed') {
-                  statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/35';
+                  statusBadgeColor = 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10';
                 } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
-                  statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/35 animate-pulse';
+                  statusBadgeColor = 'bg-blue-500/5 text-blue-300 border-blue-500/10 animate-pulse';
                 }
 
                 return (
@@ -3073,7 +3055,7 @@ function StoryKanbanCard({
                     key={depSlug}
                     variant="outline"
                     className={cn(
-                      "text-[8px] font-medium h-4 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/80 max-w-[100px] truncate",
+                      "text-[8px] font-medium h-4 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/40 max-w-[100px] truncate",
                       statusBadgeColor
                     )}
                     onClick={(e) => {
@@ -3184,13 +3166,13 @@ function ListStoryRow({
             {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 {isScaffoldGated && (
-                  <Badge variant="outline" className="text-[7.5px] font-extrabold bg-rose-500/10 text-rose-400 border-rose-500/25 px-1.5 h-4.5 rounded-sm shrink-0 select-none flex items-center gap-0.5">
-                    <AlertTriangle className="h-2.5 w-2.5" /> Scaffold Baseline Missing
+                  <Badge variant="outline" className="text-[8px] font-medium tracking-wide bg-rose-500/5 text-rose-400/90 border-rose-500/10 px-2 h-5 rounded-full backdrop-blur-sm select-none flex items-center gap-1">
+                    <Lock className="h-2.5 w-2.5 text-rose-400/70" /> Scaffold Baseline Missing
                   </Badge>
                 )}
                 {isPrereqGated && (
-                  <Badge variant="outline" className="text-[7.5px] font-extrabold bg-amber-500/10 text-amber-400 border-amber-500/25 px-1.5 h-4.5 rounded-sm shrink-0 select-none flex items-center gap-0.5">
-                    <AlertTriangle className="h-2.5 w-2.5" /> Prerequisite Dependencies Pending ({pendingPrereqs.length})
+                  <Badge variant="outline" className="text-[8px] font-medium tracking-wide bg-amber-500/5 text-amber-400/90 border-amber-500/10 px-2 h-5 rounded-full backdrop-blur-sm select-none flex items-center gap-1">
+                    <Clock className="h-2.5 w-2.5 text-amber-400/70" /> Prerequisite Dependencies Pending ({pendingPrereqs.length})
                   </Badge>
                 )}
               </div>
@@ -3199,15 +3181,15 @@ function ListStoryRow({
             {/* Dependencies in List View */}
             {item.dependsOn && item.dependsOn.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                <Link2 className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
                 {item.dependsOn.map((depSlug: string) => {
                   const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
                   const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
-                  let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
+                  let statusBadgeColor = 'bg-muted/30 text-muted-foreground/60 border-border/10';
                   if (status === 'done' || status === 'completed') {
-                    statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/35';
+                    statusBadgeColor = 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10';
                   } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
-                    statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/35 animate-pulse';
+                    statusBadgeColor = 'bg-blue-500/5 text-blue-300 border-blue-500/10 animate-pulse';
                   }
 
                   return (
@@ -3215,7 +3197,7 @@ function ListStoryRow({
                       key={depSlug}
                       variant="outline"
                       className={cn(
-                        "text-[8px] font-medium h-4 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/80 truncate max-w-[120px]",
+                        "text-[8px] font-medium h-4 px-1.5 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/40 truncate max-w-[120px]",
                         statusBadgeColor
                       )}
                       onClick={(e) => {

@@ -569,7 +569,7 @@ export function MobileCockpit() {
     <div className="flex flex-col min-h-screen pb-20 w-full space-y-4 md:space-y-6">
       
       {/* 1. CONNECTIVITY HEADER */}
-      <Card className="bg-card/40 backdrop-blur-xl border border-border/40 shadow-lg shadow-black/5 overflow-hidden transition-all duration-300 relative">
+      <Card className="overflow-hidden transition-all duration-300 relative">
         <div className="absolute top-0 right-0 h-40 w-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
@@ -611,7 +611,7 @@ export function MobileCockpit() {
       </Card>
 
       {/* 2. INSTANT INGESTION DECK */}
-      <Card className="bg-card/40 backdrop-blur-xl border border-border/40 shadow-lg shadow-black/5 overflow-hidden transition-all duration-300 relative">
+      <Card className="overflow-hidden transition-all duration-300 relative">
         <CardHeader className="p-4 sm:p-5 pb-2">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary animate-bounce" />
@@ -630,7 +630,7 @@ export function MobileCockpit() {
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleQuickIngestion()}
                 disabled={ingesting}
-                className="bg-muted/30 border-border/60 text-xs h-10 pr-9 focus:ring-1 focus:ring-primary focus-visible:ring-0"
+                className="bg-muted border-border text-xs h-10 pr-9 focus:ring-1 focus:ring-primary focus-visible:ring-0"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center text-muted-foreground/40 font-mono text-[9px] pointer-events-none select-none">
                 <CornerDownLeft className="h-3.5 w-3.5" />
@@ -660,7 +660,7 @@ export function MobileCockpit() {
       </Card>
 
       {/* 3. QUEUE STACK & AUTONOMOUS CONTROLS */}
-      <Card className="bg-card/40 backdrop-blur-xl border border-border/40 shadow-lg shadow-black/5 overflow-hidden transition-all duration-300">
+      <Card className="overflow-hidden transition-all duration-300">
         <CardHeader className="p-4 sm:p-5 pb-3 flex flex-row items-center justify-between gap-4">
           <div>
             <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -727,8 +727,8 @@ export function MobileCockpit() {
                     key={item.id}
                     className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 ${
                       isItemRunning
-                        ? 'bg-emerald-500/5 border-emerald-500/30 shadow-sm shadow-emerald-500/5 animate-pulse'
-                        : 'bg-muted/15 border-border/50 hover:bg-muted/30'
+                        ? 'bg-accent border-primary shadow-sm animate-pulse'
+                        : 'bg-muted border-border hover:bg-accent hover:text-accent-foreground'
                     }`}
                   >
                     <div className="min-w-0 flex-1 pr-3">
@@ -752,13 +752,13 @@ export function MobileCockpit() {
                           <span>Built: {(item.duration_ms / 1000).toFixed(1)}s</span>
                         )}
                         {item.engine && (
-                          <Badge variant="ghost" className="px-1 py-0 h-4 bg-muted/40 text-[9px] font-mono text-muted-foreground border-none">
+                          <Badge variant="ghost" className="px-1 py-0 h-4 bg-muted text-[9px] font-mono text-muted-foreground border-none">
                             {item.engine}
                           </Badge>
                         )}
                       </div>
                       {item.error && (
-                        <p className="text-[9px] text-destructive font-mono mt-1 leading-snug line-clamp-1 border-l border-destructive/30 pl-2">
+                        <p className="text-[9px] text-destructive font-mono mt-1 leading-snug line-clamp-1 border-l border-destructive pl-2">
                           Error: {item.error}
                         </p>
                       )}
@@ -816,8 +816,8 @@ export function MobileCockpit() {
           </SheetTrigger>
         </div>
 
-        <SheetContent side="bottom" showCloseButton={true} className="h-[80vh] flex flex-col p-0 gap-0 border-t border-border/80 bg-background/95 backdrop-blur-md rounded-t-2xl overflow-hidden focus:outline-hidden">
-          <SheetHeader className="px-4 py-3.5 border-b border-border/50 shrink-0 bg-muted/20">
+        <SheetContent side="bottom" showCloseButton={true} className="h-[80vh] flex flex-col p-0 gap-0 border-t border-border bg-background rounded-t-2xl overflow-hidden focus:outline-hidden">
+          <SheetHeader className="px-4 py-3.5 border-b border-border shrink-0 bg-muted">
             <SheetTitle className="text-sm font-bold flex items-center gap-2">
               <Terminal className="h-4 w-4 text-primary" />
               Live Console Output
@@ -831,7 +831,7 @@ export function MobileCockpit() {
 
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
             {/* Compile pipeline checklist (progress timeline) */}
-            <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border/50 p-4 shrink-0 overflow-y-auto bg-muted/5">
+            <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border p-4 shrink-0 overflow-y-auto bg-background">
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide mb-3 flex items-center gap-1">
                 <Activity className="h-3.5 w-3.5 text-primary" />
                 Compilation Stages
@@ -848,7 +848,7 @@ export function MobileCockpit() {
                         <Loader2 className="h-3 w-3 animate-spin stroke-[3]" />
                       </div>
                     ) : (
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted/40 border border-border/40 text-muted-foreground/30">
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted border border-border text-muted-foreground/30">
                         <Clock className="h-3 w-3" />
                       </div>
                     )}

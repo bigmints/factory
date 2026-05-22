@@ -17,6 +17,7 @@ import {
   Sliders,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Database,
   Cpu,
   Layers,
@@ -98,6 +99,13 @@ export function AppDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'running' | 'completed' | 'failed'>('all');
   const [viewMode, setViewMode] = useState<'backlog' | 'board'>('backlog');
+  const [showEpicsPanel, setShowEpicsPanel] = useState(true);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setShowEpicsPanel(false);
+    }
+  }, []);
   
   // Side drawer state (like Jira detail panel)
   const [selectedItem, setSelectedItem] = useState<{
@@ -370,7 +378,7 @@ export function AppDashboard() {
   if (error || !data) {
     return (
       <div className="space-y-6">
-        <Card className="border-dashed py-16 text-center max-w-2xl mx-auto flex flex-col items-center justify-center p-6 bg-card/40 backdrop-blur-md border-border/60">
+        <Card className="border-dashed py-16 text-center max-w-2xl mx-auto flex flex-col items-center justify-center p-6 bg-card border-border">
           <AlertCircle className="h-12 w-12 text-amber-500 mb-4 animate-bounce" />
           <CardTitle className="text-lg font-bold">Roadmap Spec Not Synced</CardTitle>
           <CardDescription className="text-sm mt-2 text-muted-foreground text-center max-w-md">
@@ -400,7 +408,7 @@ export function AppDashboard() {
     <div className="space-y-6 md:space-y-8 animate-in fade-in duration-300 relative">
       
       {/* Top Banner: Glassmorphic App details with Circular Progress gauge */}
-      <Card className="relative overflow-hidden border border-border/60 bg-gradient-to-r from-background/40 to-background/50 backdrop-blur-xl shadow-lg">
+      <Card className="relative overflow-hidden border border-border bg-card shadow-sm">
         <div className="absolute top-0 right-0 w-80 h-80 bg-primary/5 rounded-full filter blur-3xl -translate-y-12 translate-x-12 pointer-events-none" />
         <CardContent className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-8">
           
@@ -495,7 +503,7 @@ export function AppDashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs font-semibold h-8 rounded-lg shadow-sm border bg-background/50 hover:bg-muted/80 backdrop-blur-sm gap-1.5"
+                className="text-xs font-semibold h-8 rounded-lg shadow-sm border bg-background hover:bg-muted gap-1.5"
                 onClick={handleSync}
                 disabled={syncing}
               >
@@ -554,14 +562,29 @@ export function AppDashboard() {
         </div>
 
         {/* View Switcher: Backlog List vs Kanban Board */}
-        <div className="flex items-center justify-end gap-2 shrink-0">
-          <div className="flex items-center bg-muted/30 p-0.5 rounded-lg border border-border/40">
+        <div className="flex items-center justify-end gap-2.5 shrink-0">
+          {viewMode === 'backlog' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowEpicsPanel(!showEpicsPanel)}
+              className={cn(
+                "h-8 text-xs px-3 font-bold rounded-xl gap-1.5 border bg-background hover:bg-muted transition-all border-border",
+                showEpicsPanel && "bg-secondary text-secondary-foreground hover:bg-secondary"
+              )}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              <span>{showEpicsPanel ? "Hide Epics" : "Show Epics"}</span>
+            </Button>
+          )}
+
+          <div className="flex items-center bg-muted p-0.5 rounded-xl border border-border">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setViewMode('backlog')}
               className={cn(
-                "h-7 text-xs px-3 font-semibold rounded-md gap-1.5",
+                "h-7 text-xs px-3 font-semibold rounded-lg gap-1.5",
                 viewMode === 'backlog' && "bg-card text-foreground shadow-sm hover:bg-card hover:text-foreground border border-border/40"
               )}
             >
@@ -573,7 +596,7 @@ export function AppDashboard() {
               size="sm"
               onClick={() => setViewMode('board')}
               className={cn(
-                "h-7 text-xs px-3 font-semibold rounded-md gap-1.5",
+                "h-7 text-xs px-3 font-semibold rounded-lg gap-1.5",
                 viewMode === 'board' && "bg-card text-foreground shadow-sm hover:bg-card hover:text-foreground border border-border/40"
               )}
             >
@@ -589,95 +612,102 @@ export function AppDashboard() {
         <div className="flex flex-col md:flex-row gap-6 items-stretch">
           
           {/* Left Column Pane: Jira Epic Panel */}
-          <div className="w-full md:w-64 shrink-0 flex flex-col gap-4">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">EPICS (FEATURES)</span>
-              <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0">
-                {data.features.length} total
-              </Badge>
-            </div>
-
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-              {/* "All Epics" filter row */}
-              <div
-                onClick={() => setSelectedEpicId(null)}
-                className={cn(
-                  "p-3 rounded-lg border cursor-pointer select-none transition-all flex flex-col gap-1.5",
-                  selectedEpicId === null
-                    ? "bg-primary/10 border-primary/40 text-primary-foreground shadow-sm"
-                    : "bg-card/20 border-border/40 hover:border-border/80 text-foreground"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs">All Backlog Items</span>
-                  <Badge variant="secondary" className="text-[9px] px-1 bg-muted/60">
-                    {stats.totalStories} stories
-                  </Badge>
-                </div>
-                <div className="w-full h-1 bg-muted rounded-full overflow-hidden border">
-                  <div className="bg-primary h-full transition-all duration-500" style={{ width: `${data.progressPercent}%` }} />
-                </div>
+          {showEpicsPanel && (
+            <div className="w-full md:w-64 shrink-0 flex flex-col gap-4 animate-in slide-in-from-left duration-300">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">EPICS (FEATURES)</span>
+                <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0">
+                  {data.features.length} total
+                </Badge>
               </div>
 
-              {/* Individual Epic rows */}
-              {data.features.map(feature => {
-                const isSelected = selectedEpicId === feature.id;
-                const epicStyle = getEpicStatusStyle(feature.status);
-
-                return (
-                  <div
-                    key={feature.id}
-                    onClick={() => setSelectedEpicId(feature.id)}
-                    className={cn(
-                      "p-3 rounded-lg border cursor-pointer select-none transition-all flex flex-col gap-2",
-                      isSelected
-                        ? "bg-primary/10 border-primary/40 shadow-sm"
-                        : "bg-card/20 border-border/40 hover:border-border/80"
-                    )}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-bold text-xs text-foreground leading-tight line-clamp-1">{feature.name}</span>
-                        <Badge variant="outline" className={cn("text-[8px] font-bold tracking-wide uppercase px-1 shrink-0 scale-95", epicStyle.bg)}>
-                          {epicStyle.label}
-                        </Badge>
-                      </div>
-                      {feature.description && (
-                        <span className="text-[10px] text-muted-foreground/80 leading-normal line-clamp-1">
-                          {feature.description}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 pt-1">
-                      <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden border">
-                        <div
-                          className="bg-primary h-full transition-all duration-500"
-                          style={{ width: `${feature.progressPercent}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] font-mono font-bold text-foreground shrink-0">{feature.progressPercent}%</span>
-                    </div>
+              <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                {/* "All Epics" filter row */}
+                <div
+                  onClick={() => setSelectedEpicId(null)}
+                  className={cn(
+                    "relative p-4 rounded-xl border cursor-pointer select-none transition-all duration-300 flex flex-col gap-2 overflow-hidden",
+                    selectedEpicId === null
+                      ? "bg-accent border-primary shadow-sm"
+                      : "bg-card border-border hover:border-muted-foreground text-foreground"
+                  )}
+                >
+                  {selectedEpicId === null && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 rounded-r bg-primary" />
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-xs tracking-tight">All Backlog Items</span>
+                    <Badge variant="secondary" className="text-[9px] font-bold px-1.5 bg-muted/60">
+                      {stats.totalStories} stories
+                    </Badge>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  <div className="w-full h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                    <div className="bg-gradient-to-r from-primary to-indigo-500 h-full transition-all duration-500" style={{ width: `${data.progressPercent}%` }} />
+                  </div>
+                </div>
 
-          {/* Right Column Pane: Stories Tree Backlog */}
-          <div className="flex-1 min-w-0 space-y-4">
+                {/* Individual Epic rows */}
+                {data.features.map(feature => {
+                  const isSelected = selectedEpicId === feature.id;
+                  const epicStyle = getEpicStatusStyle(feature.status);
+
+                  return (
+                    <div
+                      key={feature.id}
+                      onClick={() => setSelectedEpicId(feature.id)}
+                      className={cn(
+                        "relative p-4 rounded-xl border cursor-pointer select-none transition-all duration-300 flex flex-col gap-2.5 overflow-hidden",
+                        isSelected
+                          ? "bg-accent border-primary shadow-sm"
+                          : "bg-card border-border hover:border-muted-foreground"
+                      )}
+                    >
+                      {isSelected && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 rounded-r bg-primary" />
+                      )}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-extrabold text-xs text-foreground leading-tight line-clamp-1 tracking-tight">{feature.name}</span>
+                          <Badge variant="outline" className={cn("text-[8px] font-bold tracking-wide uppercase px-1.5 shrink-0 scale-90", epicStyle.bg)}>
+                            {epicStyle.label}
+                          </Badge>
+                        </div>
+                        {feature.description && (
+                          <span className="text-[10px] text-muted-foreground/80 leading-normal line-clamp-2">
+                            {feature.description}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 pt-1.5">
+                        <div className="flex-1 h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-primary to-indigo-500 h-full transition-all duration-500"
+                            style={{ width: `${feature.progressPercent}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-foreground shrink-0">{feature.progressPercent}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          
+          <div className="flex-1 flex flex-col gap-4 min-w-0">
             <div className="flex items-center justify-between px-1">
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">ACTIVE BACKLOG TREE</span>
-              <span className="text-[10px] text-muted-foreground font-mono">
+              <span className="text-[10px] text-muted-foreground font-mono bg-muted/50 border border-border/40 px-2.5 py-0.5 rounded-lg">
                 Showing {filteredData?.features.reduce((acc, f) => acc + f.stories.length, 0)} stories
               </span>
             </div>
 
             {filteredData?.features.length === 0 ? (
-              <Card className="border-dashed py-16 text-center bg-card/20 border-border/60">
-                <AlertCircle className="h-8 w-8 text-muted-foreground/60 mx-auto mb-3 animate-pulse" />
-                <p className="text-sm font-semibold text-foreground">No matching backlog items found</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+              <Card className="border-dashed py-16 text-center bg-card border-border rounded-2xl">
+                <AlertCircle className="h-10 w-10 text-muted-foreground/60 mx-auto mb-3 animate-pulse" />
+                <p className="text-sm font-bold text-foreground">No matching backlog items found</p>
+                <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto leading-relaxed">
                   Try clearing your search query, selecting another epic on the left, or clicking Sync Spec.
                 </p>
               </Card>
@@ -692,30 +722,30 @@ export function AppDashboard() {
                       {/* Sub-Epic Group Header */}
                       <div 
                         onClick={() => toggleFeature(feature.id)}
-                        className="flex items-center justify-between gap-3 bg-muted/15 border border-border/40 p-2.5 rounded-lg cursor-pointer hover:bg-muted/20 select-none transition-colors"
+                        className="flex items-center justify-between gap-3 bg-muted border border-border p-3 rounded-xl cursor-pointer hover:bg-muted/80 select-none transition-all duration-300 shadow-sm"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           {isEpicExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <ChevronDown className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
                           ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <ChevronRight className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
                           )}
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded shrink-0">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded shrink-0">
                             EPIC
                           </span>
-                          <span className="font-bold text-xs text-foreground truncate">{feature.name}</span>
+                          <span className="font-extrabold text-xs md:text-sm text-foreground truncate tracking-tight">{feature.name}</span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-[10px] font-mono font-bold text-muted-foreground">{feature.progressPercent}%</span>
-                          <div className="w-12 h-1 bg-muted rounded-full overflow-hidden border">
-                            <div className="bg-primary h-full" style={{ width: `${feature.progressPercent}%` }} />
+                          <span className="text-[10px] font-mono font-bold text-foreground">{feature.progressPercent}%</span>
+                          <div className="w-16 h-1.5 bg-muted/40 rounded-full overflow-hidden border-0 shrink-0">
+                            <div className="bg-gradient-to-r from-primary to-indigo-500 h-full" style={{ width: `${feature.progressPercent}%` }} />
                           </div>
                         </div>
                       </div>
 
                       {/* Stories Backlog Tree under this Feature */}
                       {isEpicExpanded && (
-                        <div className="pl-2 space-y-4 border-l border-border/30 ml-4 animate-in slide-in-from-top-1 duration-200">
+                        <div className="pl-2 space-y-4 border-l border-border/25 ml-4 animate-in slide-in-from-top-1 duration-200">
                           {feature.stories.length === 0 ? (
                             <span className="text-xs text-muted-foreground italic pl-6 py-2 block">No stories match your filter in this epic.</span>
                           ) : (
@@ -724,6 +754,7 @@ export function AppDashboard() {
                               const storyStyle = getStoryStatusStyle(story.status);
                               const completedCount = story.tasks.filter(t => t.status === 'completed').length;
                               const totalTasks = story.tasks.length;
+                              const hasFailedTasks = story.tasks.some(t => t.status === 'failed');
 
                               return (
                                 <div key={story.id} className="relative group">
@@ -731,20 +762,23 @@ export function AppDashboard() {
                                   {/* Story Card Container */}
                                   <div
                                     className={cn(
-                                      "relative z-10 rounded-lg border bg-card/25 backdrop-blur-md transition-all duration-300",
-                                      isStoryExpanded ? "border-border/80 shadow-md" : "border-border/40 hover:border-border/70 hover:bg-card/30"
+                                      "relative z-10 rounded-xl border bg-card transition-all duration-300 hover:scale-[1.01] hover:-translate-y-0.5 shadow-sm",
+                                      isStoryExpanded ? "border-border shadow-md" : "border-border hover:border-muted-foreground",
+                                      story.status === 'done' && "shadow-[0_0_15px_-4px_rgba(16,185,129,0.1)] bg-emerald-500/[0.02] border-emerald-500/15 hover:border-emerald-500/30",
+                                      story.status === 'in-progress' && "shadow-[0_0_15px_-4px_rgba(59,130,246,0.1)] bg-blue-500/[0.02] border-blue-500/15 hover:border-blue-500/30",
+                                      hasFailedTasks && "shadow-[0_0_15px_-4px_rgba(239,68,68,0.1)] bg-rose-500/[0.02] border-rose-500/15 hover:border-rose-500/30"
                                     )}
                                   >
                                     <div
                                       onClick={() => toggleStory(story.id)}
-                                      className="p-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 cursor-pointer select-none"
+                                      className="p-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 cursor-pointer select-none"
                                     >
-                                      <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="flex items-center gap-3 min-w-0">
                                         <div className="flex items-center justify-center shrink-0">
                                           {isStoryExpanded ? (
-                                            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                            <ChevronDown className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
                                           ) : (
-                                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                                            <ChevronRight className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
                                           )}
                                         </div>
                                         <div className="min-w-0">
@@ -755,18 +789,18 @@ export function AppDashboard() {
                                                 e.stopPropagation();
                                                 handleOpenDrawer(story, 'story', undefined, feature);
                                               }}
-                                              className="text-[10px] font-mono font-bold tracking-tight bg-muted/80 hover:bg-primary/20 border hover:border-primary/40 px-1.5 py-0.5 rounded text-foreground hover:text-primary transition-all shrink-0 cursor-pointer"
+                                              className="text-[10px] font-mono font-bold tracking-tight bg-muted/80 hover:bg-primary/20 border hover:border-primary/40 px-2 py-0.5 rounded text-foreground hover:text-primary transition-all shrink-0 cursor-pointer"
                                             >
                                               STRY-{story.id.split(':').pop()?.substring(0, 5) || '101'}
                                             </span>
-                                            <span className="font-bold text-xs sm:text-sm text-foreground truncate">{story.name}</span>
-                                            <Badge className={cn("text-[8px] font-bold font-mono border tracking-wide uppercase px-1.5 py-0 scale-95", storyStyle.bg)}>
-                                              <span className={cn("h-1 w-1 rounded-full mr-1 shrink-0 inline-block", storyStyle.dot)} />
+                                            <span className="font-extrabold text-xs sm:text-sm text-foreground truncate tracking-tight">{story.name}</span>
+                                            <Badge className={cn("text-[8px] font-bold font-mono border tracking-wide uppercase px-1.5 py-0 scale-95 shadow-sm", storyStyle.bg)}>
+                                              <span className={cn("h-1 w-1 rounded-full mr-1 shrink-0 inline-block animate-pulse", storyStyle.dot)} />
                                               {story.status}
                                             </Badge>
                                           </div>
                                           {story.file && (
-                                            <span className="text-[10px] text-muted-foreground/80 font-mono mt-1 truncate flex items-center gap-1">
+                                            <span className="text-[10px] text-muted-foreground/80 font-mono mt-1.5 truncate flex items-center gap-1.5">
                                               <FileCode className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                                               {story.file}
                                             </span>
@@ -775,13 +809,20 @@ export function AppDashboard() {
                                       </div>
 
                                       {/* Story Progress */}
-                                      <div className="flex items-center gap-3 shrink-0 text-right">
-                                        <span className="text-[9px] font-semibold text-muted-foreground font-mono">
+                                      <div className="flex items-center gap-3.5 shrink-0 text-right">
+                                        <span className="text-[9px] font-bold text-muted-foreground font-mono bg-muted/40 border border-border/30 px-2 py-0.5 rounded">
                                           {completedCount}/{totalTasks} tasks ({story.progressPercent}%)
                                         </span>
-                                        <div className="w-12 h-1 bg-muted rounded-full overflow-hidden border shrink-0">
+                                        <div className="w-16 h-1.5 bg-muted/40 rounded-full overflow-hidden border-0 shrink-0">
                                           <div
-                                            className="bg-indigo-500 h-full transition-all duration-500"
+                                            className={cn(
+                                              "h-full transition-all duration-500 ease-out",
+                                              story.status === 'done'
+                                                ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                                                : hasFailedTasks
+                                                  ? "bg-gradient-to-r from-rose-500 to-red-400"
+                                                  : "bg-gradient-to-r from-primary to-indigo-500"
+                                            )}
                                             style={{ width: `${story.progressPercent}%` }}
                                           />
                                         </div>
@@ -791,10 +832,10 @@ export function AppDashboard() {
 
                                   {/* Indented Task Subtree with branch lines */}
                                   {isStoryExpanded && (
-                                    <div className="relative mt-2 pl-7 pr-1 pb-1 space-y-2 animate-in slide-in-from-top-1 duration-200">
+                                    <div className="relative mt-2.5 pl-7 pr-1 pb-1 space-y-2.5 animate-in slide-in-from-top-1 duration-200">
                                       
                                       {/* Continuous vertical tree trunk line down from story */}
-                                      <div className="absolute left-[13px] top-0 bottom-[18px] w-px bg-border/40 border-dashed border-l pointer-events-none" />
+                                      <div className="absolute left-[13px] top-0 bottom-[22px] w-px bg-border/30 border-dashed border-l pointer-events-none" />
 
                                       {story.tasks.length === 0 ? (
                                         <p className="text-xs text-muted-foreground italic pl-3 py-1">No actionable tasks under this story.</p>
@@ -811,15 +852,19 @@ export function AppDashboard() {
                                               className="relative flex items-center gap-3 group/task"
                                             >
                                               {/* Branch Line Connector (Story Trunk to Task Checkbox) */}
-                                              <div className="absolute left-[-14px] top-1/2 -translate-y-1/2 w-[14px] h-[1px] bg-border/40 pointer-events-none" />
+                                              <div className="absolute left-[-14px] top-1/2 -translate-y-1/2 w-[14px] h-[1px] bg-border/30 pointer-events-none" />
 
                                               {/* Task Item Box */}
                                               <div
                                                 className={cn(
-                                                  "flex-1 flex items-center justify-between gap-4 p-2.5 rounded-lg border border-border/30 bg-background/20 hover:bg-card/30 hover:border-border/60 transition-all select-none cursor-pointer",
-                                                  isCompleted && "bg-emerald-500/5 border-emerald-500/10 hover:bg-emerald-500/10",
-                                                  isRunning && "border-blue-500/30 bg-blue-500/5 shadow-inner",
-                                                  isFailed && "border-rose-500/30 bg-rose-500/5"
+                                                  "flex-1 flex items-center justify-between gap-4 p-3 rounded-xl border transition-all duration-300 select-none cursor-pointer",
+                                                  isCompleted
+                                                    ? "bg-emerald-500/[0.03] border-emerald-500/15 hover:bg-emerald-500/[0.06] hover:border-emerald-500/30 shadow-[0_0_12px_-4px_rgba(16,185,129,0.08)]"
+                                                    : isRunning
+                                                      ? "border-blue-500/30 bg-blue-500/[0.04] shadow-[0_0_12px_-2px_rgba(59,130,246,0.15)] animate-pulse"
+                                                      : isFailed
+                                                        ? "border-rose-500/30 bg-rose-500/[0.04] shadow-[0_0_12px_-2px_rgba(239,68,68,0.15)]"
+                                                        : "bg-card/20 border-border/40 hover:bg-card/35 hover:border-border/70"
                                                 )}
                                               >
                                                 <div 
@@ -908,8 +953,8 @@ export function AppDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 overflow-x-auto pb-4">
           
           {/* Column: To Do */}
-          <div className="bg-card/15 border border-border/40 rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
-            <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
+          <div className="bg-muted border border-border rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
+            <div className="flex items-center justify-between border-b border-border pb-2 px-1">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-muted-foreground" />
                 <span className="text-xs font-bold text-foreground">TO DO</span>
@@ -928,7 +973,7 @@ export function AppDashboard() {
                     <div
                       key={t.fullId}
                       onClick={() => handleOpenDrawer(t, 'task', s, f)}
-                      className="p-3 bg-card/20 border border-border/30 hover:border-border/60 hover:bg-card/30 rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none"
+                      className="p-3 bg-card border border-border hover:border-muted-foreground rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[9px] font-mono text-muted-foreground bg-muted/60 px-1 py-0.5 rounded truncate max-w-[120px]">
@@ -945,8 +990,8 @@ export function AppDashboard() {
           </div>
 
           {/* Column: In Progress */}
-          <div className="bg-card/15 border border-border/40 rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
-            <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
+          <div className="bg-muted border border-border rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
+            <div className="flex items-center justify-between border-b border-border pb-2 px-1">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
                 <span className="text-xs font-bold text-foreground">IN PROGRESS</span>
@@ -965,7 +1010,7 @@ export function AppDashboard() {
                     <div
                       key={t.fullId}
                       onClick={() => handleOpenDrawer(t, 'task', s, f)}
-                      className="p-3 bg-blue-500/5 border border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/10 rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none shadow-sm"
+                      className="p-3 bg-card border border-blue-500 hover:border-blue-600 rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none shadow-sm"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded truncate max-w-[120px] border border-blue-500/10">
@@ -982,8 +1027,8 @@ export function AppDashboard() {
           </div>
 
           {/* Column: Failed / Attention */}
-          <div className="bg-card/15 border border-border/40 rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
-            <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
+          <div className="bg-muted border border-border rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
+            <div className="flex items-center justify-between border-b border-border pb-2 px-1">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
                 <span className="text-xs font-bold text-foreground">FAILED / BLOCKED</span>
@@ -1002,7 +1047,7 @@ export function AppDashboard() {
                     <div
                       key={t.fullId}
                       onClick={() => handleOpenDrawer(t, 'task', s, f)}
-                      className="p-3 bg-rose-500/5 border border-rose-500/30 hover:border-rose-500/50 hover:bg-rose-500/10 rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none shadow-sm"
+                      className="p-3 bg-card border border-rose-500 hover:border-rose-600 rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none shadow-sm"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[9px] font-mono text-rose-400 bg-rose-500/10 px-1 py-0.5 rounded truncate max-w-[120px] border border-rose-500/10">
@@ -1019,8 +1064,8 @@ export function AppDashboard() {
           </div>
 
           {/* Column: Done */}
-          <div className="bg-card/15 border border-border/40 rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
-            <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
+          <div className="bg-muted border border-border rounded-xl p-3 flex flex-col gap-3 min-w-[250px] min-h-[500px]">
+            <div className="flex items-center justify-between border-b border-border pb-2 px-1">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500" />
                 <span className="text-xs font-bold text-foreground">DONE</span>
@@ -1039,7 +1084,7 @@ export function AppDashboard() {
                     <div
                       key={t.fullId}
                       onClick={() => handleOpenDrawer(t, 'task', s, f)}
-                      className="p-3 bg-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10 rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none opacity-85"
+                      className="p-3 bg-card border border-emerald-500 hover:border-emerald-600 rounded-lg cursor-pointer transition-all flex flex-col gap-2 select-none shadow-sm"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded truncate max-w-[120px]">
@@ -1070,12 +1115,12 @@ export function AppDashboard() {
           {/* Sliding Panel */}
           <div
             className={cn(
-              "fixed inset-y-0 right-0 w-full sm:w-[480px] bg-card/95 border-l border-border/80 shadow-2xl backdrop-blur-xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col overflow-hidden",
+              "fixed inset-y-0 right-0 w-full sm:w-[480px] bg-background border-l border-border shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col overflow-hidden",
               drawerOpen ? "translate-x-0" : "translate-x-full"
             )}
           >
             {/* Drawer Header */}
-            <div className="p-4 md:p-5 border-b border-border/60 flex items-center justify-between bg-muted/10">
+            <div className="p-4 md:p-5 border-b border-border flex items-center justify-between bg-muted">
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-xs font-mono font-bold uppercase tracking-wider text-muted-foreground">
@@ -1224,7 +1269,7 @@ export function AppDashboard() {
                       <p className="text-primary">[INFO] Loaded project configuration from projects.json</p>
                       <p className="text-primary">[INFO] Reading story specification: {selectedItem.parentStory?.file || 'specs/spec.yaml'}</p>
                       <p className="text-primary">[INFO] Task identifier: TSK-{selectedItem.data.id}</p>
-                      <p className="text-primary">[INFO] Task description: "{selectedItem.data.title}"</p>
+                      <p className="text-primary">[INFO] Task description: &quot;{selectedItem.data.title}&quot;</p>
                       
                       {selectedItem.data.status === 'completed' && (
                         <>
@@ -1248,8 +1293,8 @@ export function AppDashboard() {
                       {selectedItem.data.status === 'failed' && (
                         <>
                           <p className="text-cyan-400">[STAGE: SCAFFOLD] Scaffolding completed.</p>
-                          <p className="text-rose-400 font-bold">[FAILURE] Compilation error detected during "tsc --noEmit":</p>
-                          <p className="text-rose-500/90 font-bold">  Error: Property 'status' does not exist on type 'TaskItemSpec' in src/app-dashboard.tsx line 137</p>
+                          <p className="text-rose-400 font-bold">[FAILURE] Compilation error detected during &quot;tsc --noEmit&quot;:</p>
+                          <p className="text-rose-500/90 font-bold">  Error: Property &apos;status&apos; does not exist on type &apos;TaskItemSpec&apos; in src/app-dashboard.tsx line 137</p>
                           <p className="text-rose-400">[ITERATION] Auto-launching targeted iteration fixing loops...</p>
                           <p className="text-muted-foreground">[WARNING] Task needs immediate engineer attention.</p>
                         </>
@@ -1265,12 +1310,12 @@ export function AppDashboard() {
                   ) : (
                     <>
                       <p className="text-muted-foreground">[2026-05-22T11:27:08Z] PARSING STORY ROADMAP...</p>
-                      <p className="text-primary">[STORY] "{selectedItem.data.name}"</p>
+                      <p className="text-primary">[STORY] &quot;{selectedItem.data.name}&quot;</p>
                       <p className="text-primary">[FILE] {selectedItem.data.file}</p>
                       <p className="text-primary">[TASKS] Found {selectedItem.data.tasks.length} subtask checklists under this card.</p>
                       <p className="text-primary">[STATUS] Rollup progress is currently {selectedItem.data.progressPercent}% complete.</p>
                       <p className="text-cyan-400">[SYNC] Database synchronizer is monitoring task triggers.</p>
-                      <p className="text-emerald-400">[SYNC] Complete. Story rolling up parent stats to Epic "{selectedItem.parentFeature?.name}".</p>
+                      <p className="text-emerald-400">[SYNC] Complete. Story rolling up parent stats to Epic &quot;{selectedItem.parentFeature?.name}&quot;.</p>
                     </>
                   )}
                 </div>

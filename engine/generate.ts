@@ -1840,20 +1840,41 @@ Fix any errors found before finishing.
     log('→', `Working directory: ${targetDir}`);
     log('→', `Prompt: ${prompt.length.toLocaleString()} chars`);
 
-    const result = spawnSync(cli, ['-p', prompt, ...yoloFlags], {
-        cwd: targetDir,
-        encoding: 'utf8',
-        stdio: ['ignore', 'inherit', 'inherit'], // stdin closed, stdout/stderr live to terminal
-        maxBuffer: 50 * 1024 * 1024,
-        timeout: 20 * 60 * 1000, // 20 min — CLI does the full build in one shot
+    let exitCode: number | null = null;
+    let spawnError: any = undefined;
+
+    await new Promise<void>((resolvePromise) => {
+        const child = cpSpawn(cli, ['-p', prompt, ...yoloFlags], {
+            cwd: targetDir,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env },
+        });
+
+        child.stdout?.on('data', (data: Buffer) => {
+            process.stdout.write(data);
+        });
+
+        child.stderr?.on('data', (data: Buffer) => {
+            process.stderr.write(data);
+        });
+
+        child.on('close', (code) => {
+            exitCode = code;
+            resolvePromise();
+        });
+
+        child.on('error', (err) => {
+            spawnError = err;
+            resolvePromise();
+        });
     });
 
-    const success = result.status === 0;
+    const success = spawnError === undefined && exitCode === 0;
 
-    if (result.error) {
-        logError(`CLI error: ${result.error.message}`);
+    if (spawnError) {
+        logError(`CLI error: ${spawnError.message}`);
     } else if (!success) {
-        logError(`CLI exited with code ${result.status}`);
+        logError(`CLI exited with code ${exitCode}`);
     } else {
         log('✓', `CLI build complete`);
     }
@@ -1889,7 +1910,7 @@ Fix any errors found before finishing.
             decisions: [`engine:cli:${cli}`],
         },
         iterations: 1,
-        errors: success ? undefined : [`CLI exited with code ${result.status}`],
+        errors: success ? undefined : [spawnError ? `CLI error: ${spawnError.message}` : `CLI exited with code ${exitCode}`],
         model: 'cli',
         provider: cli,
     };

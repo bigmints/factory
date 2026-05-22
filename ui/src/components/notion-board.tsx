@@ -1126,176 +1126,131 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           {/* Divider */}
           <Separator className="bg-border/60" />
 
-          {/* Row 2: Queue metrics, Build Engine, Build Ready Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3 md:gap-5 text-xs text-muted-foreground select-none">
-              <span className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">Queue Status:</span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                <span className="font-bold text-foreground">{queueStats.pending}</span> Pending
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                <span className="font-bold text-foreground">{queueStats.running}</span> Running
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span className="font-bold text-foreground">{queueStats.completed}</span> Success
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-rose-500" />
-                <span className="font-bold text-foreground">{queueStats.failed}</span> Failed
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Build Engine Selection */}
-              <div className="flex items-center border border-border rounded-lg bg-background p-1 h-9 overflow-x-auto text-[11px] shrink-0">
-                <span className="text-[10px] text-muted-foreground font-bold px-2 uppercase tracking-wider">Engine:</span>
-                <button
-                  className={cn(
-                    "px-2.5 py-0.5 rounded-md transition-all text-[11px] font-semibold shrink-0 h-7",
-                    buildEngine === 'factory' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"
-                  )}
-                  onClick={() => setBuildEngine('factory')}
-                >
-                  Factory
-                </button>
-              </div>
-
-              {/* ROCKET BUILD READY BUTTON */}
-              <Button
-                onClick={handleBuildReadyStories}
-                disabled={queueRunning || syncing}
-                className={cn(
-                  "h-9 text-xs gap-1.5 rounded-lg font-bold shadow-md bg-gradient-to-r transition-all duration-300",
-                  queueRunning ? "from-zinc-800 to-zinc-700 text-zinc-500 cursor-not-allowed" : "from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95"
-                )}
-              >
-                <Rocket className={cn("h-3.5 w-3.5", queueRunning && "animate-bounce")} />
-                <span>Build Ready Stories</span>
-              </Button>
-            </div>
+          {/* Row 2: Build Ready Button */}
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleBuildReadyStories}
+              disabled={queueRunning || syncing}
+              className={cn(
+                "flex-1 sm:flex-none h-9 text-xs gap-1.5 rounded-lg font-bold shadow-md bg-gradient-to-r transition-all duration-300",
+                queueRunning ? "from-zinc-800 to-zinc-700 text-zinc-500 cursor-not-allowed" : "from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95"
+              )}
+            >
+              <Rocket className={cn("h-3.5 w-3.5", queueRunning && "animate-bounce")} />
+              <span>Build Ready Stories</span>
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* 2. NOTION TABS / VIEW CONTROL & FILTER BAR                            */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-3 select-none">
-        {/* Notion Style Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-muted/60 border rounded-xl w-fit">
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 2. TABS + ACTION ROW                                               */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-2 border-b border-border pb-3 select-none">
+        {/* View tabs */}
+        <div className="flex items-center gap-1 p-1 bg-muted/60 border rounded-xl">
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setViewMode('board')}
             className={cn(
-              "rounded-lg text-xs gap-1.5 h-8.5 px-3",
+              "rounded-lg text-xs gap-1.5 h-8 px-2.5",
               viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <Columns className="h-3.5 w-3.5" />
-            <span>Board</span>
+            <span className="hidden xs:inline">Board</span>
           </Button>
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setViewMode('list')}
             className={cn(
-              "rounded-lg text-xs gap-1.5 h-8.5 px-3",
+              "rounded-lg text-xs gap-1.5 h-8 px-2.5",
               viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <ListTodo className="h-3.5 w-3.5" />
-            <span>Roadmap List</span>
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setViewMode('queue')}
-            className={cn(
-              "rounded-lg text-xs gap-1.5 h-8.5 px-3",
-              viewMode === 'queue' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Terminal className="h-3.5 w-3.5" />
-            <span>Queue timeline</span>
-            {queueRunning && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-              </span>
-            )}
+            <span className="hidden xs:inline">Roadmap</span>
           </Button>
         </div>
 
-        {/* Quick Backlog Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => setShowStoryChat(true)}
-            className="h-8.5 text-xs gap-1.5 rounded-lg bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>New Story</span>
-          </Button>
-        </div>
+        {/* New Story button — always visible, right-aligned */}
+        <Button
+          size="sm"
+          onClick={() => setShowStoryChat(true)}
+          className="h-8 text-xs gap-1.5 rounded-lg bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>New Story</span>
+        </Button>
       </div>
 
-      {/* Filter and search bar */}
-      <div className="flex flex-col md:flex-row items-center gap-3 bg-muted/40 border p-3 rounded-lg">
-        {/* Search */}
-        <div className="relative w-full md:w-80">
+      {/* Filter bar */}
+      <div className="bg-muted/40 border p-3 rounded-lg space-y-2">
+        {/* Row 1: Search (full width) */}
+        <div className="relative w-full">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search stories by file or name..."
+            placeholder="Search stories..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 text-xs rounded-md bg-background"
+            className="pl-9 h-9 text-xs rounded-md bg-background w-full"
           />
         </div>
 
-        {/* Epics Filter */}
-        <div className="flex items-center gap-2 w-full md:w-auto text-xs">
-          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-muted-foreground hidden lg:inline">Epic:</span>
-          <select
-            value={epicFilter}
-            onChange={e => setEpicFilter(e.target.value)}
-            className="h-9 px-2.5 rounded-md border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary w-full md:w-44"
-          >
-            <option value="all">All Features / Epics</option>
-            {appRollup?.features?.map(f => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Status Filter */}
-        <div className="flex items-center gap-2 w-full md:w-auto text-xs">
-          <span className="text-muted-foreground hidden lg:inline">Status:</span>
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="h-9 px-2.5 rounded-md border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary w-full md:w-40"
-          >
-            <option value="all">All Statuses</option>
-            <option value="draft">Draft / Backlog</option>
-            <option value="ready">Ready to Build</option>
-            <option value="in-progress">In Progress</option>
-            <option value="failed">Failed</option>
-            <option value="done">Completed</option>
-          </select>
-        </div>
-
-        {/* Sync loading spinner */}
-        {loading && (
-          <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span>Polling state...</span>
+        {/* Row 2: Filters + Engine pill */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Epic filter */}
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <select
+              value={epicFilter}
+              onChange={e => setEpicFilter(e.target.value)}
+              className="h-9 px-2 rounded-md border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary w-full min-w-0"
+            >
+              <option value="all">All Epics</option>
+              {appRollup?.features?.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
           </div>
-        )}
+
+          {/* Status filter */}
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="h-9 px-2 rounded-md border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary w-full min-w-0"
+            >
+              <option value="all">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="ready">Ready</option>
+              <option value="in-progress">In Progress</option>
+              <option value="failed">Failed</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+
+          {/* Engine selector */}
+          <div className="flex items-center border border-border rounded-lg bg-background p-1 h-9 text-[11px] shrink-0">
+            <span className="text-[10px] text-muted-foreground font-bold px-1.5 uppercase tracking-wider">Eng:</span>
+            <button
+              className={cn(
+                "px-2 py-0.5 rounded-md transition-all text-[11px] font-semibold shrink-0 h-7",
+                buildEngine === 'factory' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"
+              )}
+              onClick={() => setBuildEngine('factory')}
+            >
+              Factory
+            </button>
+          </div>
+
+          {/* Loading indicator */}
+          {loading && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+          )}
+        </div>
       </div>
 
       <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={fetchStories} />

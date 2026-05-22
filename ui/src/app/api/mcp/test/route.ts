@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'node:child_process';
-import { loadMcpConfig } from '@engine/config';
+import { loadMcpConfig, saveMcpConfig } from '@engine/config';
 
 // Helper to run connection and capability handshake with an MCP server
 async function testMcpServer(config: any): Promise<{
@@ -207,8 +207,23 @@ export async function POST(request: Request) {
     }
 
     const testResult = await testMcpServer(config);
+
+    if (testResult.success && body.id) {
+      try {
+        const savedConfig = loadMcpConfig();
+        if (savedConfig.mcpServers && savedConfig.mcpServers[body.id]) {
+          savedConfig.mcpServers[body.id].tools = testResult.tools || [];
+          savedConfig.mcpServers[body.id].resources = testResult.resources || [];
+          saveMcpConfig(savedConfig);
+        }
+      } catch (e: any) {
+        console.error('Failed to cache tested tools:', e);
+      }
+    }
+
     return NextResponse.json(testResult);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+

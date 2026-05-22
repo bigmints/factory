@@ -319,7 +319,7 @@ export interface Skill {
     updatedAt: string;
 }
 
-export type SkillCategory = 'general' | 'layout' | 'auth' | 'api' | 'data' | 'ui' | 'integration' | 'custom';
+export type SkillCategory = 'general' | 'layout' | 'auth' | 'api' | 'data' | 'ui' | 'integration' | 'custom' | 'mcp';
 
 /** A skill with its relevance score after matching */
 export interface ScoredSkill {

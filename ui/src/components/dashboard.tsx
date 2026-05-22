@@ -12,6 +12,7 @@ import { DeployPlaceholder } from '@/components/deploy-placeholder';
 import { SettingsView } from '@/components/settings-view';
 import { SkillsView } from '@/components/skills-view';
 import { NotionBoard } from '@/components/notion-board';
+import { BuildPage } from '@/components/build-page';
 import { IntegrationsView } from '@/components/integrations-view';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -555,7 +556,7 @@ export default function Dashboard() {
             )}
 
             {activeTab === 'plan' && <NotionBoard initialView="board" />}
-            {activeTab === 'build' && <NotionBoard initialView="queue" />}
+            {activeTab === 'build' && <BuildPage />}
             {activeTab === 'test' && <TestPlaceholder />}
             {activeTab === 'deploy' && <DeployPlaceholder />}
             {/* legacy hash compat */}

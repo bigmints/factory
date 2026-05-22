@@ -33,7 +33,7 @@ import type { Skill, ScoredSkill, SkillMatchBlueprint, SkillCategory, AppStory, 
 
 // ─── Paths ───────────────────────────────────────────────
 
-import { FACTORY_ROOT } from './config.ts';
+import { FACTORY_ROOT, loadMcpConfig } from './config.ts';
 
 /** Global skills directory */
 const SKILLS_DIR = join(FACTORY_ROOT, 'skills');
@@ -129,6 +129,54 @@ export function loadAllSkills(): Skill[] {
     for (const file of files) {
         const skill = parseSkillFile(join(dir, file));
         if (skill) skills.push(skill);
+    }
+
+    // Merge active dynamic MCP skills
+    try {
+        const mcpConfig = loadMcpConfig();
+        if (mcpConfig.mcpServers) {
+            for (const [serverId, server] of Object.entries<any>(mcpConfig.mcpServers)) {
+                if (server.enabled && Array.isArray(server.tools)) {
+                    for (const tool of server.tools) {
+                        const name = `${serverId} - ${tool.name}`;
+                        const trigger = `mcp__${serverId}__${tool.name}`;
+                        
+                        let paramsDoc = '';
+                        if (tool.inputSchema && tool.inputSchema.properties) {
+                            paramsDoc = '\n\n**Parameters:**\n' + Object.entries(tool.inputSchema.properties)
+                                .map(([pName, pSchema]: [string, any]) => {
+                                    const req = tool.inputSchema.required?.includes(pName) ? ' (required)' : '';
+                                    return `- \`${pName}\`: ${pSchema.type || 'any'}${req} - ${pSchema.description || 'No description provided.'}`;
+                                }).join('\n');
+                        }
+
+                        const instructions = `Call the dynamic MCP tool "${tool.name}" on server "${serverId}".\n\n**Description:** ${tool.description || 'No description provided.'}${paramsDoc}`;
+                        
+                        const argKeys = tool.inputSchema && tool.inputSchema.properties 
+                            ? Object.keys(tool.inputSchema.properties) 
+                            : [];
+                        const templateArgs = argKeys.map(k => `  "${k}": "value"`).join(',\n');
+                        const template = `await callMcpTool("${trigger}", {\n${templateArgs}\n});`;
+
+                        skills.push({
+                            id: `mcp_${serverId}_${tool.name}`,
+                            name,
+                            description: tool.description || `Dynamic MCP tool from server "${serverId}".`,
+                            tags: ['mcp', serverId, tool.name],
+                            trigger,
+                            instructions,
+                            template,
+                            category: 'mcp',
+                            enabled: true,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                        });
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Silently ignore or log
     }
 
     return skills.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));

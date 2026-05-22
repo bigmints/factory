@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -71,8 +72,12 @@ interface FormState {
   transport: 'stdio' | 'sse';
   command: string;
   argsString: string;
+  argsJson: string;
+  argsMode: 'simple' | 'json';
   url: string;
   enabled: boolean;
+  envJson: string;
+  envMode: 'grid' | 'json';
 }
 
 const EMPTY_FORM: FormState = {
@@ -80,8 +85,12 @@ const EMPTY_FORM: FormState = {
   transport: 'stdio',
   command: '',
   argsString: '',
+  argsJson: '[]',
+  argsMode: 'simple',
   url: '',
   enabled: true,
+  envJson: '{}',
+  envMode: 'grid',
 };
 
 export function IntegrationsView() {
@@ -196,8 +205,12 @@ export function IntegrationsView() {
       transport: config.transport,
       command: config.command || '',
       argsString: config.args ? config.args.join(' ') : '',
+      argsJson: config.args ? JSON.stringify(config.args, null, 2) : '[]',
+      argsMode: 'simple',
       url: config.url || '',
       enabled: config.enabled,
+      envJson: config.env ? JSON.stringify(config.env, null, 2) : '{}',
+      envMode: 'grid',
     });
     
     // Parse environment variables into rows
@@ -231,19 +244,61 @@ export function IntegrationsView() {
     setSaving(true);
 
     try {
-      // Build env object from rows
-      const envObj: Record<string, string> = {};
-      envRows.forEach(row => {
-        if (row.key.trim()) {
-          envObj[row.key.trim()] = row.value;
+      let argsList: string[] = [];
+      if (form.transport === 'stdio') {
+        if (form.argsMode === 'json') {
+          try {
+            const parsed = JSON.parse(form.argsJson);
+            if (!Array.isArray(parsed) || !parsed.every(item => typeof item === 'string')) {
+              toast.error('Arguments JSON must be an array of strings');
+              setSaving(false);
+              return;
+            }
+            argsList = parsed;
+          } catch (e: any) {
+            toast.error('Invalid Arguments JSON syntax', { description: e.message });
+            setSaving(false);
+            return;
+          }
+        } else {
+          argsList = form.argsString
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
         }
-      });
+      }
 
-      // Split args string by spaces (honoring quotes if possible, but basic split works too)
-      const argsList = form.argsString
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
+      let envObj: Record<string, string> = {};
+      if (form.transport === 'stdio') {
+        if (form.envMode === 'json') {
+          try {
+            const parsed = JSON.parse(form.envJson);
+            if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+              toast.error('Environment variables JSON must be a non-null object');
+              setSaving(false);
+              return;
+            }
+            for (const [key, val] of Object.entries(parsed)) {
+              if (typeof val !== 'string') {
+                toast.error(`Value for environment variable "${key}" must be a string`);
+                setSaving(false);
+                return;
+              }
+              envObj[key] = val;
+            }
+          } catch (e: any) {
+            toast.error('Invalid Environment variables JSON syntax', { description: e.message });
+            setSaving(false);
+            return;
+          }
+        } else {
+          envRows.forEach(row => {
+            if (row.key.trim()) {
+              envObj[row.key.trim()] = row.value;
+            }
+          });
+        }
+      }
 
       const serverPayload = {
         id: form.id.trim(),
@@ -795,66 +850,178 @@ export function IntegrationsView() {
                     <span className="text-[10px] text-muted-foreground/60">The primary executable path or cli utility command to run.</span>
                   </div>
 
-                  {/* Arguments */}
+                  {/* Arguments with Mode Toggle */}
                   <div className="space-y-1.5">
-                    <Label htmlFor="mcp-args" className="font-semibold">Arguments (space-separated)</Label>
-                    <Input
-                      id="mcp-args"
-                      placeholder="e.g. -y @modelcontextprotocol/server-weather"
-                      value={form.argsString}
-                      onChange={e => setForm(f => ({ ...f, argsString: e.target.value }))}
-                      className="h-9 font-mono text-xs sm:text-sm"
-                    />
-                    <span className="text-[10px] text-muted-foreground/60">Execution arguments passed sequentially to the command.</span>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="mcp-args" className="font-semibold">Arguments</Label>
+                      <div className="flex gap-1 bg-muted/40 p-0.5 border rounded-md">
+                        <button
+                          type="button"
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[9px] font-semibold transition-all",
+                            form.argsMode === 'simple' ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
+                          )}
+                          onClick={() => {
+                            let syncedString = '';
+                            try {
+                              const parsed = JSON.parse(form.argsJson);
+                              if (Array.isArray(parsed)) {
+                                syncedString = parsed.join(' ');
+                              }
+                            } catch {}
+                            setForm(f => ({ ...f, argsMode: 'simple', argsString: syncedString || f.argsString }));
+                          }}
+                        >
+                          Simple List
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[9px] font-semibold transition-all",
+                            form.argsMode === 'json' ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
+                          )}
+                          onClick={() => {
+                            const parts = form.argsString.trim().split(/\s+/).filter(Boolean);
+                            setForm(f => ({ ...f, argsMode: 'json', argsJson: JSON.stringify(parts, null, 2) }));
+                          }}
+                        >
+                          JSON Array
+                        </button>
+                      </div>
+                    </div>
+
+                    {form.argsMode === 'simple' ? (
+                      <Input
+                        id="mcp-args"
+                        placeholder="e.g. -y @modelcontextprotocol/server-weather"
+                        value={form.argsString}
+                        onChange={e => setForm(f => ({ ...f, argsString: e.target.value }))}
+                        className="h-9 font-mono text-xs sm:text-sm"
+                      />
+                    ) : (
+                      <Textarea
+                        id="mcp-args-json"
+                        placeholder='e.g. ["-y", "@modelcontextprotocol/server-weather"]'
+                        value={form.argsJson}
+                        onChange={e => setForm(f => ({ ...f, argsJson: e.target.value }))}
+                        className="font-mono text-xs min-h-24 max-h-40"
+                      />
+                    )}
+                    <span className="text-[10px] text-muted-foreground/60 block">
+                      {form.argsMode === 'simple'
+                        ? "Execution arguments passed sequentially to the command."
+                        : "Strict JSON array of string arguments, e.g. [\"-y\", \"@modelcontextprotocol/server-weather\"]"}
+                    </span>
                   </div>
 
                   {/* Stdio Environment Variables Key Value Editor */}
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
                       <Label className="font-semibold">Environment Variables</Label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleAddEnvRow}
-                        className="h-7 text-[10px] gap-1 px-2 border hover:bg-muted shrink-0 text-muted-foreground hover:text-foreground"
-                      >
-                        <PlusCircle className="h-3.5 w-3.5" />
-                        Add Variable
-                      </Button>
+                      <div className="flex gap-1.5 items-center">
+                        <div className="flex gap-1 bg-muted/40 p-0.5 border rounded-md mr-1">
+                          <button
+                            type="button"
+                            className={cn(
+                              "px-2 py-0.5 rounded text-[9px] font-semibold transition-all",
+                              form.envMode === 'grid' ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
+                            )}
+                            onClick={() => {
+                              try {
+                                const parsed = JSON.parse(form.envJson);
+                                if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                                  const rows = Object.entries(parsed).map(([key, value]) => ({
+                                    key: key.toUpperCase().replace(/[^A-Z0-9_]/g, ''),
+                                    value: String(value),
+                                  }));
+                                  setEnvRows(rows);
+                                }
+                              } catch {}
+                              setForm(f => ({ ...f, envMode: 'grid' }));
+                            }}
+                          >
+                            Grid Form
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              "px-2 py-0.5 rounded text-[9px] font-semibold transition-all",
+                              form.envMode === 'json' ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
+                            )}
+                            onClick={() => {
+                              const envObj: Record<string, string> = {};
+                              envRows.forEach(row => {
+                                if (row.key.trim()) {
+                                  envObj[row.key.trim()] = row.value;
+                                }
+                              });
+                              setForm(f => ({ ...f, envMode: 'json', envJson: JSON.stringify(envObj, null, 2) }));
+                            }}
+                          >
+                            JSON Object
+                          </button>
+                        </div>
+                        {form.envMode === 'grid' && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleAddEnvRow}
+                            className="h-7 text-[10px] gap-1 px-2 border hover:bg-muted shrink-0 text-muted-foreground hover:text-foreground"
+                          >
+                            <PlusCircle className="h-3.5 w-3.5" />
+                            Add Variable
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
-                    {envRows.length === 0 ? (
-                      <div className="text-[10px] text-muted-foreground/50 italic border border-dashed rounded-lg py-2.5 text-center bg-background/20">
-                        No environment variables configured. Add API tokens or credentials if required by the server.
-                      </div>
+                    {form.envMode === 'grid' ? (
+                      envRows.length === 0 ? (
+                        <div className="text-[10px] text-muted-foreground/50 italic border border-dashed rounded-lg py-2.5 text-center bg-background/20">
+                          No environment variables configured. Add API tokens or credentials if required by the server.
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                          {envRows.map((row, index) => (
+                            <div key={index} className="flex gap-2 items-center">
+                              <Input
+                                placeholder="KEY (e.g. GITHUB_TOKEN)"
+                                value={row.key}
+                                onChange={e => handleEnvRowChange(index, 'key', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                                className="h-8 font-mono text-[10px] flex-1"
+                              />
+                              <Input
+                                placeholder="Value (e.g. ghp_xyz)"
+                                value={row.value}
+                                onChange={e => handleEnvRowChange(index, 'value', e.target.value)}
+                                className="h-8 font-mono text-[10px] flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveEnvRow(index)}
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-muted"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )
                     ) : (
-                      <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                        {envRows.map((row, index) => (
-                          <div key={index} className="flex gap-2 items-center">
-                            <Input
-                              placeholder="KEY (e.g. GITHUB_TOKEN)"
-                              value={row.key}
-                              onChange={e => handleEnvRowChange(index, 'key', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
-                              className="h-8 font-mono text-[10px] flex-1"
-                            />
-                            <Input
-                              placeholder="Value (e.g. ghp_xyz)"
-                              value={row.value}
-                              onChange={e => handleEnvRowChange(index, 'value', e.target.value)}
-                              className="h-8 font-mono text-[10px] flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleRemoveEnvRow(index)}
-                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-muted"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        ))}
+                      <div className="space-y-1">
+                        <Textarea
+                          id="mcp-env-json"
+                          placeholder='e.g. {\n  "API_KEY": "secret_value",\n  "DEBUG": "true"\n}'
+                          value={form.envJson}
+                          onChange={e => setForm(f => ({ ...f, envJson: e.target.value }))}
+                          className="font-mono text-xs min-h-24 max-h-40"
+                        />
+                        <span className="text-[10px] text-muted-foreground/60 block">
+                          Strict JSON object of key-value string pairs, e.g. {"{"} &quot;API_KEY&quot;: &quot;secret_value&quot; {"}"}
+                        </span>
                       </div>
                     )}
                   </div>

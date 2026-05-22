@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { spawn } from 'node:child_process';
+import { loadMcpConfig } from './config.ts';
 
 // ─── Constants ───────────────────────────────────────────
 
@@ -207,6 +208,9 @@ export async function executeTool(
     ctx: BuildToolBlueprint,
 ): Promise<ToolResult> {
     try {
+        if (name.startsWith('mcp__')) {
+            return await execMcpTool(name, args, ctx);
+        }
         switch (name) {
             case 'read_file':     return execReadFile(args, ctx);
             case 'write_file':    return execWriteFile(args, ctx);
@@ -520,4 +524,226 @@ function listDirRecursive(dir: string, prefix = ''): string[] {
         }
     }
     return results;
+}
+
+// ─── Dynamic MCP Server Tools Discovery & Execution ────────────────
+
+/**
+ * Returns OpenAI-format tool definitions for all enabled dynamic MCP tools.
+ */
+export function getDynamicMcpTools(): any[] {
+    const tools: any[] = [];
+    try {
+        const config = loadMcpConfig();
+        if (!config.mcpServers) return tools;
+        for (const [serverId, server] of Object.entries<any>(config.mcpServers)) {
+            if (server.enabled && Array.isArray(server.tools)) {
+                for (const tool of server.tools) {
+                    tools.push({
+                        name: `mcp__${serverId}__${tool.name}`,
+                        description: tool.description || `Dynamic MCP tool from server "${serverId}".`,
+                        parameters: tool.inputSchema || {
+                            type: 'object',
+                            properties: {},
+                        },
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Failed to get dynamic MCP tools:', e);
+    }
+    return tools;
+}
+
+/**
+ * Executes a dynamic MCP tool call over standard I/O transport.
+ */
+async function execMcpTool(
+    name: string,
+    args: Record<string, unknown>,
+    ctx: BuildToolBlueprint,
+): Promise<ToolResult> {
+    const parts = name.split('__');
+    if (parts.length < 3) {
+        return { content: `Invalid MCP tool name: ${name}`, isError: true };
+    }
+    const serverId = parts[1];
+    const toolName = parts.slice(2).join('__');
+
+    try {
+        const config = loadMcpConfig();
+        if (!config.mcpServers || !config.mcpServers[serverId]) {
+            return { content: `MCP server "${serverId}" not configured.`, isError: true };
+        }
+        const server = config.mcpServers[serverId];
+        if (!server.enabled) {
+            return { content: `MCP server "${serverId}" is disabled.`, isError: true };
+        }
+
+        const { command, args: serverArgs, env, transport } = server;
+
+        if (transport === 'sse') {
+            return { content: 'SSE transport not implemented for direct execution. Please configure standard stdio transport.', isError: true };
+        }
+
+        // STDIO execution
+        return new Promise((resolve) => {
+            try {
+                const mergedEnv = { ...process.env, ...(env || {}) };
+                const child = spawn(command, serverArgs || [], {
+                    env: mergedEnv,
+                    shell: true,
+                });
+
+                let buffer = '';
+                let resolved = false;
+
+                const cleanupAndResolve = (result: ToolResult) => {
+                    if (resolved) return;
+                    resolved = true;
+                    try {
+                        child.kill('SIGTERM');
+                    } catch {}
+                    resolve(result);
+                };
+
+                // 15-second safety timeout to avoid blocking LLM pipeline
+                const timer = setTimeout(() => {
+                    cleanupAndResolve({
+                        content: `MCP tool execution timed out after 15 seconds.`,
+                        isError: true,
+                    });
+                }, 15000);
+
+                child.on('error', (err) => {
+                    clearTimeout(timer);
+                    cleanupAndResolve({
+                        content: `Failed to spawn MCP server process: ${err.message}`,
+                        isError: true,
+                    });
+                });
+
+                child.stderr?.on('data', (data) => {
+                    console.error(`[MCP ${serverId} STDERR]: ${data.toString()}`);
+                });
+
+                child.stdout?.on('data', (chunk) => {
+                    buffer += chunk.toString();
+
+                    let newlineIndex;
+                    while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+                        const line = buffer.slice(0, newlineIndex).trim();
+                        buffer = buffer.slice(newlineIndex + 1);
+
+                        if (!line) continue;
+
+                        try {
+                            const message = JSON.parse(line);
+
+                            // Handle initialize response (id: 1)
+                            if (message.id === 1) {
+                                if (message.error) {
+                                    clearTimeout(timer);
+                                    cleanupAndResolve({
+                                        content: `Initialize failed: ${JSON.stringify(message.error)}`,
+                                        isError: true,
+                                    });
+                                    return;
+                                }
+
+                                // Send initialized notification
+                                const initializedNotification = {
+                                    jsonrpc: '2.0',
+                                    method: 'notifications/initialized',
+                                };
+                                child.stdin?.write(JSON.stringify(initializedNotification) + '\n');
+
+                                // Send actual tools/call request
+                                const callRequest = {
+                                    jsonrpc: '2.0',
+                                    id: 2,
+                                    method: 'tools/call',
+                                    params: {
+                                        name: toolName,
+                                        arguments: args,
+                                    },
+                                };
+                                child.stdin?.write(JSON.stringify(callRequest) + '\n');
+                            }
+
+                            // Handle tools/call response (id: 2)
+                            else if (message.id === 2) {
+                                clearTimeout(timer);
+                                if (message.error) {
+                                    cleanupAndResolve({
+                                        content: `Tool execution failed: ${JSON.stringify(message.error)}`,
+                                        isError: true,
+                                    });
+                                    return;
+                                }
+
+                                if (message.result) {
+                                    const isError = !!message.result.isError;
+                                    let contentText = '';
+                                    if (Array.isArray(message.result.content)) {
+                                        contentText = message.result.content
+                                            .map((c: any) => {
+                                                if (c.type === 'text') return c.text;
+                                                return JSON.stringify(c);
+                                            })
+                                            .join('\n');
+                                    } else {
+                                        contentText = JSON.stringify(message.result);
+                                    }
+                                    cleanupAndResolve({
+                                        content: contentText || 'Tool completed successfully with no output.',
+                                        isError: isError || undefined,
+                                    });
+                                } else {
+                                    cleanupAndResolve({
+                                        content: `No result returned: ${JSON.stringify(message)}`,
+                                        isError: true,
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            // Ignore JSON parsing issues for partial chunks
+                        }
+                    }
+                });
+
+                child.on('close', (code) => {
+                    clearTimeout(timer);
+                    if (!resolved) {
+                        cleanupAndResolve({
+                            content: `Server exited prematurely with exit code ${code} before response.`,
+                            isError: true,
+                        });
+                    }
+                });
+
+                // Write initial initialize request
+                const initRequest = {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'initialize',
+                    params: {
+                        protocolVersion: '2024-11-05',
+                        capabilities: {},
+                        clientInfo: {
+                            name: 'factory-client',
+                            version: '1.0.0',
+                        },
+                    },
+                };
+
+                child.stdin?.write(JSON.stringify(initRequest) + '\n');
+            } catch (e: any) {
+                resolve({ content: `Failed to execute MCP tool: ${e.message}`, isError: true });
+            }
+        });
+    } catch (err: any) {
+        return { content: `Error loading config or executing MCP tool: ${err.message}`, isError: true };
+    }
 }

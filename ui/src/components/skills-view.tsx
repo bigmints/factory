@@ -80,19 +80,21 @@ const CATEGORIES = [
   { id: 'data', label: 'Data', icon: Database },
   { id: 'ui', label: 'UI', icon: Palette },
   { id: 'integration', label: 'Integration', icon: Plug },
+  { id: 'mcp', label: 'MCP Tools', icon: Plug },
   { id: 'custom', label: 'Custom', icon: Code2 },
   { id: 'general', label: 'General', icon: Wand2 },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  layout: 'bg-muted text-muted-foreground border-border',
-  auth: 'bg-muted text-muted-foreground border-border',
-  api: 'bg-muted text-muted-foreground border-border',
-  data: 'bg-muted text-muted-foreground border-border',
-  ui: 'bg-muted text-muted-foreground border-border',
-  integration: 'bg-muted text-muted-foreground border-border',
-  custom: 'bg-muted text-muted-foreground border-border',
-  general: 'bg-muted text-muted-foreground border-border',
+  layout: 'bg-muted/40 text-muted-foreground border-border',
+  auth: 'bg-muted/40 text-muted-foreground border-border',
+  api: 'bg-muted/40 text-muted-foreground border-border',
+  data: 'bg-muted/40 text-muted-foreground border-border',
+  ui: 'bg-muted/40 text-muted-foreground border-border',
+  integration: 'bg-muted/40 text-muted-foreground border-border',
+  mcp: 'bg-violet-500/10 text-violet-400 border-violet-500/25',
+  custom: 'bg-muted/40 text-muted-foreground border-border',
+  general: 'bg-muted/40 text-muted-foreground border-border',
 };
 
 const EMPTY_FORM = {
@@ -368,7 +370,10 @@ export function SkillsView() {
                           <span className="font-semibold text-sm text-foreground truncate">{skill.name}</span>
                           <Badge
                             variant="outline"
-                            className="text-[9px] font-semibold h-4 px-2 rounded-full shrink-0 border-border bg-muted/40 uppercase"
+                            className={cn(
+                              "text-[9px] font-semibold h-4 px-2 rounded-full shrink-0 border uppercase",
+                              CATEGORY_COLORS[skill.category] || "bg-muted/40 text-muted-foreground border-border"
+                            )}
                           >
                             {skill.category}
                           </Badge>

@@ -1609,7 +1609,7 @@ export function parseGeneratedFiles(raw: string): GeneratedFile[] {
 
 // ─── Tool-Calling Loop (us_012 + us_013) ─────────────────
 
-import { TOOL_DEFINITIONS, executeTool, type BuildToolBlueprint, type ToolResult } from './build-tools.ts';
+import { TOOL_DEFINITIONS, executeTool, getDynamicMcpTools, type BuildToolBlueprint, type ToolResult } from './build-tools.ts';
 import { readToonFile, parseToonSkillIndex } from './toon.ts';
 
 /**
@@ -1791,16 +1791,111 @@ ${storyBlock}
 ${roadmapBlock}
 ${toonBlueprint}${skillsBlock}${appBlueprintBlock}
 ## Available Tools
-${TOOL_DEFINITIONS.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
+${[...TOOL_DEFINITIONS, ...getDynamicMcpTools()].map(t => `- **${t.name}**: ${t.description}`).join('\n')}
 
 Call mark_complete when the build is verified and complete.`;
 }
 
 
 /**
- * Run a tool-calling LLM session.
- * Max 30 turns. Token guard trims context at turn 20. Wall-clock timeout: 20 min.
+ * CLI single-shot build — used when provider.kind === 'cli'.
+ *
+ * These CLIs (gemini, claude, pi, agy) are AGENTIC tools with their own
+ * file-read/write/bash capabilities. We send ONE comprehensive prompt,
+ * run the CLI in the target directory, and let it build everything.
+ * No turn loop, no XML parsing — just scan the directory when it's done.
  */
+async function runCLISingleShot(
+    cli: string,
+    story: AppStory | FeatureStory,
+    blueprint: ProjectBlueprint,
+    targetDir: string,
+    storyFile: string,
+    appBlueprint?: AppIntegrationBlueprint,
+): Promise<BuildResult> {
+    const isApp = isAppStory(story);
+    const name = isApp ? (story as AppStory).appName : (story as FeatureStory).feature.name;
+
+    // Ensure target directory exists
+    const { mkdirSync: mkd } = await import('node:fs');
+    mkd(targetDir, { recursive: true });
+
+    // Build a rich, self-contained prompt the CLI can act on directly
+    const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
+    const prompt = `${systemPrompt}
+
+## Your Task
+
+You are working in: ${targetDir}
+
+Build the complete ${isApp ? 'application' : 'feature'} described above.
+Use your file tools to write ALL necessary files directly to this directory.
+Do not output file contents as text — write them to disk using your tools.
+When complete, run: npx tsc --noEmit (if TypeScript) to verify there are no errors.
+Fix any errors found before finishing.
+`;
+
+    const yoloFlags = CLI_FLAGS[cli] || [];
+    log('●', `CLI single-shot build: ${name} (${cli})`);
+    log('→', `Working directory: ${targetDir}`);
+    log('→', `Prompt: ${prompt.length.toLocaleString()} chars`);
+
+    const result = spawnSync(cli, ['-p', prompt, ...yoloFlags], {
+        cwd: targetDir,
+        encoding: 'utf8',
+        stdio: ['ignore', 'inherit', 'inherit'], // stdin closed, stdout/stderr live to terminal
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: 20 * 60 * 1000, // 20 min — CLI does the full build in one shot
+    });
+
+    const success = result.status === 0;
+
+    if (result.error) {
+        logError(`CLI error: ${result.error.message}`);
+    } else if (!success) {
+        logError(`CLI exited with code ${result.status}`);
+    } else {
+        log('✓', `CLI build complete`);
+    }
+
+    // Scan directory for all generated files
+    const { readdirSync, readFileSync: rfs } = await import('node:fs');
+    const files: GeneratedFile[] = [];
+    function scanDir(dir: string, prefix: string): void {
+        let entries: import('node:fs').Dirent[];
+        try { entries = readdirSync(dir, { withFileTypes: true, encoding: 'utf8' }) as import('node:fs').Dirent[]; } catch { return; }
+        for (const entry of entries) {
+            const eName = entry.name as string;
+            if (['node_modules', '.git', '.factory', '.DS_Store'].includes(eName)) continue;
+            const relPath = prefix ? `${prefix}/${eName}` : eName;
+            if (entry.isDirectory()) {
+                scanDir(`${dir}/${eName}`, relPath);
+            } else {
+                try { files.push({ filename: relPath, content: rfs(`${dir}/${eName}`, 'utf-8') }); }
+                catch { /* skip binary */ }
+            }
+        }
+    }
+    scanDir(targetDir, '');
+
+    log('→', `Scanned ${files.length} generated file(s)`);
+
+    return {
+        success,
+        files,
+        plan: {
+            files: files.map(f => f.filename),
+            architecture: name,
+            decisions: [`engine:cli:${cli}`],
+        },
+        iterations: 1,
+        errors: success ? undefined : [`CLI exited with code ${result.status}`],
+        model: 'cli',
+        provider: cli,
+    };
+}
+
+
 export async function runToolSession(
     story: AppStory | FeatureStory,
     blueprint: ProjectBlueprint,
@@ -1809,6 +1904,16 @@ export async function runToolSession(
     appBlueprint?: AppIntegrationBlueprint,
 ): Promise<BuildResult> {
     const { provider, model } = requireActiveProvider();
+
+    // ── CLI mode: single-shot agentic build ──────────────────────────────────
+    // CLI tools (gemini, claude, pi, agy) are agents with their own file tools.
+    // Don't try to parse XML tool calls from them — let them operate directly
+    // in the target directory and scan the results.
+    if (provider.kind === 'cli') {
+        return runCLISingleShot(provider.id, story, blueprint, targetDir, storyFile, appBlueprint);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const isNativeTools = provider && (provider.id === 'gemini' || provider.id === 'openai' || provider.kind === 'openai-compat');
     const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
 
@@ -1862,7 +1967,9 @@ export async function runToolSession(
 
         log('●', `Turn ${turn + 1}/${MAX_TURNS} — calling LLM...`);
 
-        const response = await callProviderWithTools(provider, model, messages, TOOL_DEFINITIONS);
+        const mcpTools = getDynamicMcpTools();
+        const allTools = [...TOOL_DEFINITIONS, ...mcpTools];
+        const response = await callProviderWithTools(provider, model, messages, allTools);
         totalTokensIn += response.tokensIn;
         totalTokensOut += response.tokensOut;
 
@@ -1977,7 +2084,7 @@ export async function callProviderWithTools(
     provider: LLMProvider,
     model: string,
     messages: ToolMessages,
-    tools: typeof TOOL_DEFINITIONS,
+    tools: readonly any[],
 ): Promise<ToolResponse> {
     const kind = provider.kind || 'builtin';
 
@@ -2026,7 +2133,7 @@ const CLI_FLAGS: Record<string, string[]> = {
  */
 function buildCLIConversationPrompt(
     messages: ToolMessages,
-    tools: typeof TOOL_DEFINITIONS,
+    tools: readonly any[],
 ): string {
     // Tool schema block
     const toolSchemas = tools.map(t => {
@@ -2084,12 +2191,14 @@ Continue the task. Call the appropriate tool(s) now.`;
 
 /**
  * Route a tool-calling turn through an installed CLI binary.
- * Builds a single rich prompt, spawns the CLI with -p, parses XML tool calls from stdout.
+ * NOTE: This is only called for API providers that fall through.
+ * CLI providers (kind === 'cli') are handled by runCLISingleShot above.
+ * Kept for completeness but should not normally be reached.
  */
 async function callCLIWithTools(
     cli: string,
     messages: ToolMessages,
-    tools: typeof TOOL_DEFINITIONS,
+    tools: readonly any[],
 ): Promise<ToolResponse> {
     const prompt = buildCLIConversationPrompt(messages, tools);
     const extraFlags = CLI_FLAGS[cli] || [];
@@ -2098,8 +2207,9 @@ async function callCLIWithTools(
 
     const result = spawnSync(cli, ['-p', prompt, ...extraFlags], {
         encoding: 'utf8',
-        maxBuffer: 50 * 1024 * 1024,   // 50 MB
-        timeout: 5 * 60 * 1000,         // 5 min per turn
+        stdio: ['ignore', 'pipe', 'pipe'], // close stdin to prevent hangs
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: 5 * 60 * 1000,
     });
 
     if (result.error) {
@@ -2114,21 +2224,14 @@ async function callCLIWithTools(
     const text = result.stdout || '';
     log('✓', `CLI response: ${text.length.toLocaleString()} chars`);
 
-    // Parse XML tool calls — same parser used for Qwen/local LLMs
     const toolCalls = parseXmlToolCalls(text);
     log('→', `Parsed ${toolCalls.length} tool call(s) from CLI output`);
 
-    return {
-        text,
-        tokensIn: 0,   // CLIs don't expose token counts
-        tokensOut: 0,
-        toolCalls,
-    };
+    return { text, tokensIn: 0, tokensOut: 0, toolCalls };
 }
 
 /**
- * Simple (non-tool-calling) CLI invocation — used by callProvider() for
- * legacy code paths that just want text back.
+ * Simple (non-tool-calling) CLI invocation.
  */
 async function callCLISimple(cli: string, prompt: string): Promise<LLMResponse> {
     const extraFlags = CLI_FLAGS[cli] || [];
@@ -2136,6 +2239,7 @@ async function callCLISimple(cli: string, prompt: string): Promise<LLMResponse> 
 
     const result = spawnSync(cli, ['-p', prompt, ...extraFlags], {
         encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'], // close stdin to prevent hangs
         maxBuffer: 50 * 1024 * 1024,
         timeout: 5 * 60 * 1000,
     });
@@ -2367,7 +2471,7 @@ async function callOpenAICompatWithTools(
     apiKey: string,
     model: string,
     messages: ToolMessages,
-    tools: typeof TOOL_DEFINITIONS,
+    tools: readonly any[],
     baseUrl: string,
 ): Promise<ToolResponse> {
     const MAX_RETRIES = 3;
@@ -2490,7 +2594,7 @@ async function callGeminiWithTools(
     apiKey: string,
     model: string,
     messages: ToolMessages,
-    tools: typeof TOOL_DEFINITIONS,
+    tools: readonly any[],
 ): Promise<ToolResponse> {
     const toolCallNameMap = new Map<string, string>(); // tool_call_id → function name
     let systemInstruction: string | undefined;
@@ -2589,7 +2693,7 @@ async function callOllamaWithTools(
     baseUrl: string,
     model: string,
     messages: ToolMessages,
-    tools: typeof TOOL_DEFINITIONS,
+    tools: readonly any[],
 ): Promise<ToolResponse> {
     const apiMessages = messages.map(m => ({
         role: m.role,

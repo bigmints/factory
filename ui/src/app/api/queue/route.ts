@@ -81,14 +81,50 @@ function isAppStoryQueued(targetApp: string, queue: QueueItem[]): boolean {
 }
 
 /**
- * Resolve a human-readable display name for a queue item by reading its YAML file.
- * Checks apps/, features/, and done/ directories. Falls back to the bare slug.
+ * Resolve a human-readable display name for a queue item by reading the active project's app.yaml
+ * (the absolute source of truth for the Kanban board) or falling back to the parsed name/slug from the story YAML.
  */
 function resolveDisplayName(storyFile: string, projectPath: string | null): string {
   const slug = storyFile.split('/').pop()?.replace(/\.ya?ml$/i, '') ?? storyFile;
   if (!projectPath) return slug;
 
-  // Candidate paths to check
+  // Helper to normalize paths for robust comparison
+  const normalizePath = (p: string) => {
+    return p
+      .replace(/^(done|apps|features)\//, '') // strip starting folders
+      .replace(/^\.?\//, '')                 // strip leading ./
+      .replace(/\.ya?ml$/i, '')              // strip yaml extensions
+      .toLowerCase()
+      .trim();
+  };
+
+  const normalizedStoryFile = normalizePath(storyFile);
+
+  // 1. Try to load and match from app.yaml (the absolute source of truth)
+  const appYamlPath = join(projectPath, '.factory', 'app.yaml');
+  if (existsSync(appYamlPath)) {
+    try {
+      const raw = readFileSync(appYamlPath, 'utf-8');
+      const parsed = parseYaml(raw) as any;
+      if (parsed && Array.isArray(parsed.features)) {
+        for (const feature of parsed.features) {
+          if (Array.isArray(feature.stories)) {
+            for (const story of feature.stories) {
+              if (story.file && normalizePath(story.file) === normalizedStoryFile) {
+                if (story.name && typeof story.name === 'string') {
+                  return story.name;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Fall through to physical file checks on parse failure
+    }
+  }
+
+  // 2. Fallback: check physical story YAML files
   const storiesRoot = join(projectPath, '.factory', 'stories');
   const candidates = [
     join(storiesRoot, storyFile),                                  // exact relative path
@@ -104,8 +140,8 @@ function resolveDisplayName(storyFile: string, projectPath: string | null): stri
       const parsed = parseYaml(raw) as any;
       // Feature story: feature.name / feature.title
       const featureName = parsed?.feature?.name || parsed?.feature?.title;
-      // App story: metadata.name
-      const appName = parsed?.metadata?.name;
+      // App story: appName / metadata.name
+      const appName = parsed?.appName || parsed?.metadata?.name;
       const resolved = featureName || appName;
       if (resolved && typeof resolved === 'string') return resolved;
     } catch { /* keep trying */ }

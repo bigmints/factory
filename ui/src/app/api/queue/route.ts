@@ -80,15 +80,56 @@ function isAppStoryQueued(targetApp: string, queue: QueueItem[]): boolean {
   return false;
 }
 
+/**
+ * Resolve a human-readable display name for a queue item by reading its YAML file.
+ * Checks apps/, features/, and done/ directories. Falls back to the bare slug.
+ */
+function resolveDisplayName(storyFile: string, projectPath: string | null): string {
+  const slug = storyFile.split('/').pop()?.replace(/\.ya?ml$/i, '') ?? storyFile;
+  if (!projectPath) return slug;
+
+  // Candidate paths to check
+  const storiesRoot = join(projectPath, '.factory', 'stories');
+  const candidates = [
+    join(storiesRoot, storyFile),                                  // exact relative path
+    join(storiesRoot, 'features', storyFile.replace(/^features\//, '')),
+    join(storiesRoot, 'apps', storyFile.replace(/^apps\//, '')),
+    join(storiesRoot, 'done', storyFile.replace(/^done\//, '')),
+  ];
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    try {
+      const raw = readFileSync(candidate, 'utf-8');
+      const parsed = parseYaml(raw) as any;
+      // Feature story: feature.name / feature.title
+      const featureName = parsed?.feature?.name || parsed?.feature?.title;
+      // App story: metadata.name
+      const appName = parsed?.metadata?.name;
+      const resolved = featureName || appName;
+      if (resolved && typeof resolved === 'string') return resolved;
+    } catch { /* keep trying */ }
+  }
+
+  return slug;
+}
+
 /** GET — list all queue items + stats */
 export async function GET() {
   try {
     const items = listQueue();
     const statsObj = getQueueStats();
     const isRunning = isQueueRunning();
+    const projectPath = getActiveProjectPath();
+
+    // Enrich each item with a human-readable displayName
+    const enrichedItems = items.map(item => ({
+      ...item,
+      displayName: resolveDisplayName(item.storyFile, projectPath),
+    }));
 
     return NextResponse.json({
-      items,
+      items: enrichedItems,
       stats: statsObj,
       isRunning,
     });

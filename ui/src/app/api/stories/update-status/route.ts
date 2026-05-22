@@ -14,10 +14,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const validStatuses = ['draft', 'ready', 'in-progress', 'validation', 'review', 'done'];
-    if (!validStatuses.includes(status)) {
+    const userAllowedStatuses = ['draft', 'ready'];
+    if (!userAllowedStatuses.includes(status)) {
       return NextResponse.json(
-        { error: `Invalid status: ${status}. Must be one of: ${validStatuses.join(', ')}` },
+        { error: `Status "${status}" is managed automatically by the build engine and cannot be set manually.` },
         { status: 400 }
       );
     }

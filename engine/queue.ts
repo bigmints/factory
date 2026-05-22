@@ -445,10 +445,28 @@ export function getQueueStats(): Record<string, number> {
     return stats;
 }
 
-/** Check if the queue processor is running. */
+/** Check if the queue processor is running.
+ *  Guards against stale state: if last_heartbeat_at is older than 3 minutes,
+ *  the runner has crashed and the flag is stale — treat it as not running.
+ */
 export function isQueueRunning(): boolean {
     const state = loadQueueState();
-    return state.is_running;
+    if (!state.is_running) return false;
+
+    // Stale-heartbeat guard: if no heartbeat for >3 min, the runner has died
+    if (state.last_heartbeat_at) {
+        const lastBeat = new Date(state.last_heartbeat_at).getTime();
+        const ageMs = Date.now() - lastBeat;
+        if (ageMs > 3 * 60 * 1000) {
+            // Auto-heal: reset the stale flag so the UI doesn't show "running" forever
+            try {
+                saveQueueState({ ...state, is_running: false });
+            } catch { /* ignore write errors */ }
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /** Set the queue running state. */

@@ -1798,6 +1798,150 @@ Call mark_complete when the build is verified and complete.`;
 
 
 /**
+ * Build the system prompt for a CLI agent (e.g. pi, gemini, claude, agy).
+ * Since these agents have their own native system prompts and toolchains,
+ * we do NOT provide XML tool calling formatting instructions, internal tool definitions,
+ * or loop recommended workflows. We give them a clean spec and context block.
+ */
+export function buildCLISystemPrompt(
+    story: AppStory | FeatureStory,
+    blueprint: ProjectBlueprint,
+    targetDir: string,
+    appBlueprint?: AppIntegrationBlueprint,
+    storyFile?: string,
+): string {
+    const isApp = 'appName' in story;
+    const storyBlock = isApp ? formatStory(story as AppStory) : formatFeatureStory(story as FeatureStory);
+
+    let roadmapBlock = '';
+    try {
+        const appYamlPath = resolve(blueprint.repoPath, '.factory', 'app.yaml');
+        if (existsSync(appYamlPath)) {
+            const raw = readFileSync(appYamlPath, 'utf-8');
+            const appSpec = parseYaml(raw) as any;
+            if (appSpec) {
+                let brdContent = appSpec.brd || '';
+                if (brdContent && brdContent.endsWith('.md')) {
+                    const possibleBrdPaths = [
+                        resolve(blueprint.repoPath, brdContent),
+                        resolve(blueprint.repoPath, '.factory', brdContent),
+                        resolve(blueprint.repoPath, '.factory', 'specs', brdContent)
+                    ];
+                    for (const p of possibleBrdPaths) {
+                        if (existsSync(p)) {
+                            try {
+                                brdContent = readFileSync(p, 'utf-8');
+                                break;
+                            } catch {}
+                        }
+                    }
+                }
+
+                let matchingFeature: any = null;
+                const targetStoryFile = storyFile ? basename(storyFile) : '';
+                if (targetStoryFile && appSpec.features) {
+                    for (const f of appSpec.features) {
+                        if (f.stories) {
+                            for (const s of f.stories) {
+                                if (s.file && basename(s.file) === targetStoryFile) {
+                                    matchingFeature = f;
+                                    break;
+                                }
+                            }
+                        }
+                        if (matchingFeature) break;
+                    }
+                }
+
+                if (!matchingFeature && appSpec.features) {
+                    const sName = isApp ? (story as AppStory).appName : (story as FeatureStory).feature?.name;
+                    if (sName) {
+                        for (const f of appSpec.features) {
+                            if (f.stories && f.stories.some((s: any) => s.name === sName)) {
+                                matchingFeature = f;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                roadmapBlock = `\n## Project Roadmap & Requirements (App-level Context)
+Application: ${appSpec.name} (v${appSpec.version})
+Description: ${appSpec.description}
+
+### Business Requirements Document (BRD)
+${brdContent || 'No business requirements document specified.'}
+`;
+
+                if (matchingFeature) {
+                    roadmapBlock += `
+### Active Feature Epic Context
+You are currently building a story for the Feature Epic: **${matchingFeature.name}**
+Feature Epic Description: ${matchingFeature.description || 'No description provided.'}
+`;
+                }
+            }
+        }
+    } catch (e: any) {
+        log('!', `Warning: Could not inject App Roadmap context: ${e?.message || e}`);
+    }
+
+    const toonBlueprint = blueprint.toonSnapshot
+        ? `\n## Project Blueprint (TOON)\n\`\`\`toon\n${blueprint.toonSnapshot}\n\`\`\`\n`
+        : '';
+
+    const skillsBlock = blueprint.projectSkills && blueprint.projectSkills.length > 0
+        ? `\n## Project Skills\n${blueprint.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
+        : '';
+
+    let appBlueprintBlock = '';
+    if (appBlueprint) {
+        const parts: string[] = [];
+        if (appBlueprint.packageJson) {
+            const deps = Object.keys({
+                ...appBlueprint.packageJson.dependencies,
+                ...appBlueprint.packageJson.devDependencies,
+            });
+            if (deps.length > 0) {
+                parts.push(`### Existing Dependencies (do NOT add to package.json)\n${deps.map(d => `- ${d}`).join('\n')}`);
+            }
+            if (appBlueprint.packageJson.scripts) {
+                parts.push(`### NPM Scripts\n${Object.entries(appBlueprint.packageJson.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`);
+            }
+        }
+        if (appBlueprint.tsconfigRaw) {
+            parts.push(`### tsconfig.json (use the SAME options)\n\`\`\`json\n${appBlueprint.tsconfigRaw}\n\`\`\``);
+        }
+        if (appBlueprint.fileTree.length > 0) {
+            const shown = appBlueprint.fileTree.slice(0, 80);
+            const more = appBlueprint.fileTree.length > 80 ? `\n... and ${appBlueprint.fileTree.length - 80} more` : '';
+            parts.push(`### Existing Files (do NOT recreate)\n\`\`\`\n${shown.join('\n')}${more}\n\`\`\``);
+        }
+        if (parts.length > 0) {
+            appBlueprintBlock = `\n## Existing App Integration Blueprint\n${parts.join('\n\n')}\n`;
+        }
+    }
+
+    return `You are an expert autonomous software engineer agent with complete capabilities to read/write/edit files and run terminal commands using your own built-in tools.
+You are tasked with building a feature or application story in the target directory.
+
+## Target Directory
+${targetDir}
+
+## Rules
+1. Examine the current folder structure, package.json, and tsconfig.json to orient yourself before starting.
+2. Generate production-ready code — no placeholders, no TODOs, no stubs.
+3. Every import from a package must exist in package.json. If you need to install a dependency, do so.
+4. Match the coding style and patterns from the story and existing files.
+
+${storyBlock}
+${roadmapBlock}
+${toonBlueprint}${skillsBlock}${appBlueprintBlock}
+`;
+}
+
+
+/**
  * CLI single-shot build — used when provider.kind === 'cli'.
  *
  * These CLIs (gemini, claude, pi, agy) are AGENTIC tools with their own
@@ -1821,7 +1965,7 @@ async function runCLISingleShot(
     mkd(targetDir, { recursive: true });
 
     // Build a rich, self-contained prompt the CLI can act on directly
-    const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
+    const systemPrompt = buildCLISystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
     const prompt = `${systemPrompt}
 
 ## Your Task

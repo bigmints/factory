@@ -168,6 +168,18 @@ const epicStatusMap: Record<string, { label: string; bg: string }> = {
   pending: { label: 'Pending', bg: 'bg-muted border-border text-muted-foreground' }
 };
 
+// Rotating palette of epic accent colors (border-left + badge tints)
+const EPIC_COLORS = [
+  { border: 'border-l-violet-500',  badge: 'bg-violet-500/10 text-violet-400 border-violet-500/30' },
+  { border: 'border-l-sky-500',     badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30' },
+  { border: 'border-l-amber-500',   badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  { border: 'border-l-rose-500',    badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30' },
+  { border: 'border-l-teal-500',    badge: 'bg-teal-500/10 text-teal-400 border-teal-500/30' },
+  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/30' },
+  { border: 'border-l-lime-500',    badge: 'bg-lime-500/10 text-lime-400 border-lime-500/30' },
+  { border: 'border-l-orange-500',  badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30' },
+];
+
 const taskStatusMap: Record<string, { label: string; bg: string; dot: string }> = {
   completed: { label: 'Completed', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-500' },
   running: { label: 'Running', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20', dot: 'bg-blue-500 animate-pulse' },
@@ -242,7 +254,19 @@ const getBasename = (path: string) => {
   return path.split('/').pop() || '';
 };
 
+/** Strip directory prefix + yaml extension for slug-level comparison. */
+const getSlug = (path: string) => getBasename(path).replace(/\.ya?ml$/i, '');
+
 const getEffectiveStatus = (item: any) => {
+  // Queue status is the live source of truth — drives the Kanban column
+  if (item.queueStatus === 'running') return 'running';
+  if (item.queueStatus === 'completed') return 'done';
+  if (item.queueStatus === 'failed' || item.queueStatus === 'needs-attention') return 'failed';
+
+  // Fall back to the physical YAML status
+  const activeStates = ['in-progress', 'validation', 'running', 'review'];
+  if (item.status && activeStates.includes(item.status)) return item.status;
+
   if (item.dbStatus && item.dbStatus !== 'unknown') return item.dbStatus;
   if (item.status && item.status !== 'unknown') return item.status;
   return 'unknown';
@@ -270,6 +294,11 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
     setDraggingFile(null);
 
     if (!file) return;
+
+    if (targetStatus !== 'ready' && targetStatus !== 'draft') {
+      toast.error("Stories can only be manually moved to 'Ready to Build' or 'Backlog'. Other columns are managed automatically by the Factory engine.");
+      return;
+    }
 
     const toastId = toast.loading(`Updating story status to ${targetStatus}...`);
     try {
@@ -316,8 +345,9 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const logOffsetRef = useRef(0);
 
   // Search & Filtering
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [epicFilter, setEpicFilter] = useState<string>('all');
+  const [showEpicLegend, setShowEpicLegend] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Auto-select the running item (or keep selection if user pinned one)
@@ -648,23 +678,26 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // Rocket Build Ready Action
   const handleBuildReadyStories = async () => {
     // Collect all stories from specs and roadmap that are ready, failed, or review
-    const readySpecs: Array<{ file: string; kind: string; phase?: number; dependsOn?: string[] }> = [];
+    const readySpecs: Array<{ file: string; kind: string; phase?: number; dependsOn?: string[]; epicId?: string; epicIndex: number }> = [];
 
-    // Check App Stories
-    stories.forEach(s => {
-      if (s.status === 'ready' || s.status === 'failed') {
-        readySpecs.push({ file: s.file, kind: 'AppStory' });
-      }
+    // Build an epic → stable index map so we can group by epic
+    const epicIndexMap = new Map<string, number>();
+    (appRollup?.features || []).forEach((f: any, idx: number) => {
+      epicIndexMap.set(f.id, idx);
     });
 
-    // Check Feature Stories
-    featureStories.forEach(fs => {
-      if (fs.status === 'ready' || fs.status === 'failed') {
+    mergedStories.forEach(item => {
+      const status = getEffectiveStatus(item);
+      if (status === 'ready' || status === 'failed' || status === 'review') {
+        const epicId = item.epicParent?.id;
         readySpecs.push({
-          file: fs.file,
-          kind: 'FeatureStory',
-          phase: fs.phase,
-          dependsOn: fs.dependsOn
+          file: item.file,
+          kind: item.kind,
+          phase: item.phase,
+          dependsOn: item.dependsOn,
+          epicId,
+          // Stories without an epic go last (epicIndex = 999)
+          epicIndex: epicId !== undefined ? (epicIndexMap.get(epicId) ?? 999) : 999
         });
       }
     });
@@ -673,6 +706,18 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       toast.info('All stories are fully built or clean! No pending items found.');
       return;
     }
+
+    // Sort so same-epic stories appear consecutively:
+    //   1. epicIndex ASC (group epics together)
+    //   2. phase ASC within each epic (respect build ordering)
+    //   3. file name ASC as a stable tie-breaker
+    readySpecs.sort((a, b) => {
+      if (a.epicIndex !== b.epicIndex) return a.epicIndex - b.epicIndex;
+      const phaseA = a.phase ?? 0;
+      const phaseB = b.phase ?? 0;
+      if (phaseA !== phaseB) return phaseA - phaseB;
+      return a.file.localeCompare(b.file);
+    });
 
     const toastId = toast.loading(`Enqueuing ${readySpecs.length} stories into pipeline...`);
     let enqueued = 0;
@@ -687,6 +732,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             kind: spec.kind,
             phase: spec.phase,
             dependsOn: spec.dependsOn,
+            buildAll: true, // skip individual dependency pre-check; engine handles ordering
             engine: 'factory'
           })
         });
@@ -855,8 +901,22 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       });
     }
 
+    // Merge active queue item status to resolve live swimlane states
+    if (queueItems && queueItems.length > 0) {
+      map.forEach((story, key) => {
+        const matchingQueueItem = queueItems.find(qi => {
+          const qiFile = qi.storyFile || qi.specFile || '';
+          // Compare by slug (strip path prefix + .yaml) so done/ paths still match
+          return getSlug(qiFile) === getSlug(key);
+        });
+        if (matchingQueueItem) {
+          story.queueStatus = matchingQueueItem.status;
+        }
+      });
+    }
+
     return Array.from(map.values());
-  }, [stories, featureStories, appRollup]);
+  }, [stories, featureStories, appRollup, queueItems]);
 
   // Filter and search
   const filteredStoriesList = useMemo(() => {
@@ -921,6 +981,15 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
     return filteredStoriesList.filter(item => !item.epicParent);
   }, [filteredStoriesList]);
 
+  // Map each epic id → stable EPIC_COLORS entry
+  const epicColorMap = useMemo(() => {
+    const map = new Map<string, typeof EPIC_COLORS[0]>();
+    (appRollup?.features || []).forEach((f: any, idx: number) => {
+      map.set(f.id, EPIC_COLORS[idx % EPIC_COLORS.length]);
+    });
+    return map;
+  }, [appRollup]);
+
   // Queue Item Stats
   const queueStats = useMemo<QueueStats>(() => {
     const stats = { pending: 0, running: 0, completed: 0, failed: 0, total: 0 };
@@ -971,7 +1040,10 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // ─── JSX Renders ───
 
   return (
-    <div className="space-y-4 relative pb-6">
+    <div className={cn(
+      "space-y-4 relative",
+      viewMode === 'board' ? "md:h-full md:flex md:flex-col md:overflow-hidden pb-2" : "pb-6"
+    )}>
       {/* Visual background atmospheric lights */}
       <div className="absolute -top-20 left-10 w-96 h-96 bg-primary/5 rounded-full filter blur-[120px] pointer-events-none -z-10" />
       <div className="absolute -top-30 right-20 w-80 h-80 bg-cyan-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
@@ -979,47 +1051,50 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 1. TOP HEADER CONSOLE                                                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <div className="space-y-2.5 pb-2.5 select-none shrink-0 border-b border-border/40 px-1">
+      <div className="space-y-4 pb-4 select-none shrink-0 border-b border-border/40 px-1">
         {/* Main flex-row: Project Info on Left, Actions on Right */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           
           {/* Left Column: Title, version, stack badges & description */}
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="text-sm shrink-0">🏭</span>
-            <h1 className="text-xs md:text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
-              {appRollup?.name || 'Loading Project...'}
-              <Badge variant="outline" className="text-[8.5px] font-bold px-1 py-0 border-border bg-muted/40 uppercase shrink-0">
-                v{appRollup?.version || '0.0.1'}
-              </Badge>
-              {queueRunning && (
-                <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              )}
-              {/* Stack Badges inline next to the version */}
+          <div className="flex flex-col gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="text-xl md:text-2xl shrink-0">🏭</span>
+              <h1 className="text-base md:text-2xl font-extrabold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
+                {appRollup?.name || 'Loading Project...'}
+                <Badge variant="outline" className="text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 border-border bg-muted/40 uppercase shrink-0">
+                  v{appRollup?.version || '0.0.1'}
+                </Badge>
+                {queueRunning && (
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0 ml-0.5" />
+                )}
+              </h1>
+            </div>
+
+            {/* Stack badges & Description Row */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground/80">
               {appRollup?.stack && (
-                <div className="flex flex-wrap items-center gap-1">
-                  <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 shrink-0">
                     ⚡ {appRollup.stack.framework}
                   </Badge>
                   {appRollup.stack.language && (
-                    <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 shrink-0">
                       🏷️ {appRollup.stack.language}
                     </Badge>
                   )}
                   {appRollup.stack.database && (
-                    <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 shrink-0">
                       🗄️ {appRollup.stack.database}
                     </Badge>
                   )}
                 </div>
               )}
-            </h1>
-
-            {/* Compressed inline project description (only on md+) */}
-            {appRollup?.description && (
-              <span className="hidden md:inline text-[9.5px] text-muted-foreground/50 border-l border-border/40 pl-2 truncate max-w-[200px] lg:max-w-[320px] xl:max-w-[450px]">
-                {appRollup.description}
-              </span>
-            )}
+              {appRollup?.description && (
+                <span className="text-[10.5px] text-muted-foreground/60 md:border-l border-border/40 md:pl-3 max-w-xl truncate" title={appRollup.description}>
+                  {appRollup.description}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Right Column: Unified Actions Toolbar */}
@@ -1195,6 +1270,23 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               )}
             </Button>
 
+            {/* Epic Color Legend Toggle — only shown in board view */}
+            {viewMode === 'board' && appRollup?.features && appRollup.features.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEpicLegend(v => !v)}
+                className={cn(
+                  "h-7 text-[10px] gap-1 rounded-md px-2.5 border-border bg-background hover:bg-muted/80 shrink-0 select-none",
+                  showEpicLegend && "border-primary text-primary bg-primary/5"
+                )}
+                title="Toggle epic color legend"
+              >
+                <Tag className="h-3 w-3" />
+                <span className="hidden sm:inline">Epic Colors</span>
+              </Button>
+            )}
+
             {/* Loading indicator */}
             {loading && (
               <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0 ml-1" />
@@ -1268,93 +1360,132 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       {/* 3. VIEW 1: KANBAN BOARD                                               */}
       {/* ────────────────────────────────────────────────────────────────────── */}
       {viewMode === 'board' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
-          {/* Column 1: BACKLOG / DRAFT */}
-          <KanbanColumn
-            title="Backlog"
-            description="Scaffold drafts or spec blueprints"
-            badgeColor="bg-amber-500/10 text-amber-500 border-amber-500/25"
-            stories={backlogStories}
-            onSelect={handleOpenDrawer}
-            onValidate={handleValidateStory}
-            onBuild={handleSingleBuild}
-            activeAction={activeAction}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'draft')}
-            onDragStart={handleDragStart}
-          />
+        <div className="flex-1 min-h-0 flex flex-col md:overflow-hidden overflow-y-auto space-y-6 pr-1 pb-4 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
 
-          {/* Column 2: READY TO BUILD */}
-          <KanbanColumn
-            title="Ready to Build"
-            description="Verified specifications awaiting launch"
-            badgeColor="bg-teal-500/10 text-teal-400 border-teal-500/25"
-            stories={readyStories}
-            onSelect={handleOpenDrawer}
-            onValidate={handleValidateStory}
-            onBuild={handleSingleBuild}
-            activeAction={activeAction}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'ready')}
-            onDragStart={handleDragStart}
-          />
+          {/* ── Epic Color Legend Strip ── */}
+          {showEpicLegend && appRollup?.features && appRollup.features.length > 0 && (
+            <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 bg-muted/15 border border-border/40 rounded-xl animate-in fade-in slide-in-from-top-1 duration-200 select-none">
+              <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-muted-foreground/70 shrink-0">Epic Colors:</span>
+              {appRollup.features.map((f: any, idx: number) => {
+                const color = EPIC_COLORS[idx % EPIC_COLORS.length];
+                // Extract a CSS color from the Tailwind badge class for the swatch dot
+                const swatchColors = [
+                  '#8b5cf6', // violet-500
+                  '#0ea5e9', // sky-500
+                  '#f59e0b', // amber-500
+                  '#f43f5e', // rose-500
+                  '#14b8a6', // teal-500
+                  '#d946ef', // fuchsia-500
+                  '#84cc16', // lime-500
+                  '#f97316', // orange-500
+                ];
+                return (
+                  <span key={f.id} className="flex items-center gap-1.5 text-[10px] text-foreground">
+                    <span
+                      className="h-2.5 w-2.5 rounded-sm shrink-0"
+                      style={{ backgroundColor: swatchColors[idx % swatchColors.length] }}
+                    />
+                    <span className="font-medium">{f.name}</span>
+                    <Badge variant="outline" className={cn("text-[7.5px] font-bold h-3.5 px-1 rounded border ml-0.5", color.badge)}>
+                      {f.stories?.length ?? 0} stories
+                    </Badge>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch md:h-full">
+            {/* Column 1: BACKLOG / DRAFT */}
+            <KanbanColumn
+              title="Backlog"
+              description="Scaffold drafts or spec blueprints"
+              badgeColor="bg-amber-500/10 text-amber-500 border-amber-500/25"
+              stories={backlogStories}
+              epicColorMap={epicColorMap}
+              onSelect={handleOpenDrawer}
+              onValidate={handleValidateStory}
+              onBuild={handleSingleBuild}
+              activeAction={activeAction}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, 'draft')}
+              onDragStart={handleDragStart}
+            />
 
-          {/* Column 3: BUILDING / RUNNING */}
-          <KanbanColumn
-            title="In Progress"
-            description="Actively compiling or iterating"
-            badgeColor="bg-blue-500/10 text-blue-400 border-blue-500/25"
-            stories={buildingStories}
-            onSelect={handleOpenDrawer}
-            onValidate={handleValidateStory}
-            onBuild={handleSingleBuild}
-            activeAction={activeAction}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'in-progress')}
-            onDragStart={handleDragStart}
-          />
+            {/* Column 2: READY TO BUILD */}
+            <KanbanColumn
+              title="Ready to Build"
+              description="Verified specifications awaiting launch"
+              badgeColor="bg-teal-500/10 text-teal-400 border-teal-500/25"
+              stories={readyStories}
+              epicColorMap={epicColorMap}
+              onSelect={handleOpenDrawer}
+              onValidate={handleValidateStory}
+              onBuild={handleSingleBuild}
+              activeAction={activeAction}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, 'ready')}
+              onDragStart={handleDragStart}
+            />
 
-          {/* Column 4: COMPLETED / DONE */}
-          <KanbanColumn
-            title="Completed"
-            description="Code written and tests passed"
-            badgeColor="bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-            stories={doneStories}
-            onSelect={handleOpenDrawer}
-            onValidate={handleValidateStory}
-            onBuild={handleSingleBuild}
-            activeAction={activeAction}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'done')}
-            onDragStart={handleDragStart}
-          />
-        </div>
-      )}
+            {/* Column 3: BUILDING / RUNNING */}
+            <KanbanColumn
+              title="In Progress"
+              description="Actively compiling or iterating"
+              badgeColor="bg-blue-500/10 text-blue-400 border-blue-500/25"
+              stories={buildingStories}
+              epicColorMap={epicColorMap}
+              onSelect={handleOpenDrawer}
+              onValidate={handleValidateStory}
+              onBuild={handleSingleBuild}
+              activeAction={activeAction}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, 'in-progress')}
+              onDragStart={handleDragStart}
+            />
 
-      {/* Standalone Lane if Board view */}
-      {viewMode === 'board' && unsyncedStories.length > 0 && (
-        <div className="space-y-3 mt-6 border border-border/60 bg-muted/20 p-5 rounded-xl">
-          <div className="flex items-center gap-2">
-            <Info className="h-4.5 w-4.5 text-muted-foreground" />
-            <h3 className="font-bold text-sm text-foreground">Uncategorized</h3>
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">{unsyncedStories.length}</Badge>
+            {/* Column 4: COMPLETED / DONE */}
+            <KanbanColumn
+              title="Completed"
+              description="Code written and tests passed"
+              badgeColor="bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+              stories={doneStories}
+              epicColorMap={epicColorMap}
+              onSelect={handleOpenDrawer}
+              onValidate={handleValidateStory}
+              onBuild={handleSingleBuild}
+              activeAction={activeAction}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, 'done')}
+              onDragStart={handleDragStart}
+            />
           </div>
-          <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
-            These story files are not mapped to any feature in your app roadmap. Click cards to edit or compile them.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
-            {unsyncedStories.map(item => (
-              <StoryKanbanCard
-                key={item.file}
-                item={item}
-                onSelect={handleOpenDrawer}
-                onValidate={handleValidateStory}
-                onBuild={handleSingleBuild}
-                activeAction={activeAction}
-                onDragStart={handleDragStart}
-              />
-            ))}
-          </div>
+
+          {/* Standalone Lane if Board view */}
+          {unsyncedStories.length > 0 && (
+            <div className="space-y-3 mt-6 border border-border/60 bg-muted/20 p-5 rounded-xl shrink-0">
+              <div className="flex items-center gap-2">
+                <Info className="h-4.5 w-4.5 text-muted-foreground" />
+                <h3 className="font-bold text-sm text-foreground">Uncategorized</h3>
+                <Badge variant="outline" className="text-[10px] text-muted-foreground">{unsyncedStories.length}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+                These story files are not mapped to any feature in your app roadmap. Click cards to edit or compile them.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
+                {unsyncedStories.map(item => (
+                  <StoryKanbanCard
+                    key={item.file}
+                    item={item}
+                    onSelect={handleOpenDrawer}
+                    onValidate={handleValidateStory}
+                    onBuild={handleSingleBuild}
+                    activeAction={activeAction}
+                    onDragStart={handleDragStart}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1471,13 +1602,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           ? (selectedQueueItem.status === 'running' ? (buildOutput || selectedQueueItem.output || '') : (selectedQueueItem.output || selectedQueueItem.error || ''))
           : (buildOutput || '');
         const panelLabel = selectedQueueItem
-          ? (() => {
-              const specName = selectedQueueItem.storyFile || selectedQueueItem.specFile || '';
-              const matched = mergedStories.find(s => s.file === specName || getBasename(s.file) === getBasename(specName));
-              return matched
-                ? (matched.metadata?.name || matched.feature?.name || matched.dbName || getBasename(specName))
-                : (specName ? specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') : 'Select a build');
-            })()
+          ? ((selectedQueueItem as any).displayName || selectedQueueItem.storyFile?.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || 'Select a build')
           : 'Live agent log console';
         const isSelectedRunning = selectedQueueItem?.status === 'running';
 
@@ -1507,58 +1632,59 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             </CardHeader>
             <ScrollArea className="flex-1">
               {queueItems.length > 0 ? (
-                <div className="relative py-3 px-4">
-                  {/* Vertical timeline line */}
-                  <div className="absolute left-[27px] top-0 bottom-0 w-px bg-border/60" />
-                  <div className="space-y-3">
+                <div className="p-3 space-y-2.5">
                     {queueItems.map((item, idx) => {
                       const specName = item.storyFile || item.specFile || '';
                       const isRunning = item.status === 'running';
                       const isFailed = item.status === 'failed';
                       const isDone = item.status === 'completed';
-                      const isPending = !isRunning && !isFailed && !isDone;
+                      const isBlocked = item.status === 'blocked';
                       const isSelected = item.id === selectedQueueItemId;
-                      const matchedStory = mergedStories.find(s => s.file === specName || getBasename(s.file) === getBasename(specName));
-                      const humanReadableName = matchedStory
-                        ? (matchedStory.metadata?.name || matchedStory.feature?.name || matchedStory.dbName || getBasename(specName))
-                        : (specName ? specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') : `Queue item ${idx + 1}`);
+                      const matchedStory = mergedStories.find(s => s.file === specName || getSlug(s.file) === getSlug(specName));
+                      const humanReadableName = (item as any).displayName || specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || `Queue item ${idx + 1}`;
+                      const epicParent = matchedStory?.epicParent;
+                      const epicColor = epicParent ? epicColorMap.get(epicParent.id) : undefined;
+                      const desc = matchedStory?.metadata?.description || matchedStory?.feature?.description || '';
+                      const totalTasks = matchedStory?.checklistTasks?.length || 0;
+                      const doneTasks = matchedStory?.checklistTasks?.filter((t: any) => t.status === 'completed').length || 0;
+                      const durationSec = item.durationMs ? Math.round(item.durationMs / 1000) : null;
+                      const statusCfg = isRunning ? storyStatusMap.running : isFailed ? storyStatusMap.failed : isDone ? storyStatusMap.done : isBlocked ? { label: 'Blocked', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dot: 'bg-rose-500' } : storyStatusMap.draft;
 
                       return (
                         <div
                           key={item.id}
-                          className="flex items-start gap-3 cursor-pointer group"
-                          onClick={() => {
-                            setSelectedQueueItemId(item.id);
-                            setBuildLogsOpen(true);
-                          }}
-                        >
-                          {/* Timeline dot */}
-                          <div className={cn(
-                            "relative z-10 h-7 w-7 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all",
-                            isRunning && "border-primary bg-primary/20 animate-pulse",
-                            isFailed && "border-rose-500 bg-rose-500/20",
-                            isDone && "border-emerald-500 bg-emerald-500/20",
-                            isPending && "border-border bg-muted"
-                          )}>
-                            {isRunning && <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />}
-                            {isFailed && <XCircle className="h-3.5 w-3.5 text-rose-500" />}
-                            {isDone && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
-                            {isPending && <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />}
-                          </div>
-
-                          {/* Content card */}
-                          <div className={cn(
-                            "flex-1 min-w-0 p-2.5 rounded-lg border text-xs transition-all",
-                            isRunning && "border-primary/40 bg-primary/5",
+                          className={cn(
+                            "rounded-xl border transition-all duration-150 cursor-pointer overflow-hidden",
+                            isRunning && "border-primary/40 bg-primary/5 shadow-sm",
                             isFailed && "border-rose-500/30 bg-rose-500/5",
                             isDone && "border-emerald-500/20 bg-emerald-500/5",
-                            isPending && "border-border/60 bg-background/40",
-                            // Selection ring
+                            isBlocked && "border-border/40 bg-muted/10 opacity-60",
+                            !isRunning && !isFailed && !isDone && !isBlocked && "border-border/50 bg-background/40",
                             isSelected && "ring-2 ring-primary/60 ring-offset-1 ring-offset-background",
-                            !isSelected && "group-hover:border-border"
-                          )}>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-foreground truncate" title={humanReadableName}>{humanReadableName}</span>
+                            epicColor && "border-l-2",
+                            epicColor?.border
+                          )}
+                          onClick={() => { setSelectedQueueItemId(item.id); setBuildLogsOpen(true); }}
+                        >
+                          <div className="p-3">
+                            {/* Top row: name + live dot + actions */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs text-foreground truncate" title={humanReadableName}>
+                                    {humanReadableName}
+                                  </span>
+                                  {isRunning && (
+                                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
+                                    </span>
+                                  )}
+                                </div>
+                                {desc && (
+                                  <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5 leading-normal">{desc}</p>
+                                )}
+                              </div>
                               <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                                 {isFailed && (
                                   <Button size="icon" variant="ghost" className="h-5 w-5 text-primary hover:bg-primary/10 rounded" onClick={() => handleRetryItem(item.id)}>
@@ -1570,28 +1696,39 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                                 </Button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-                              <Badge variant="outline" className={cn(
-                                "text-[8px] font-bold h-4 px-1.5 rounded uppercase border",
-                                isRunning ? "bg-blue-500/10 text-blue-400 border-blue-500/25 animate-pulse" :
-                                isFailed ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
-                                isDone ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
-                                "bg-muted border-border text-muted-foreground"
-                              )}>
-                                {item.status}
+
+                            {/* Bottom meta row */}
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <Badge variant="outline" className={cn("text-[8px] font-bold h-4 px-1.5 rounded uppercase border", statusCfg.bg)}>
+                                {statusCfg.label}
                               </Badge>
-                              <span>{item.kind.replace('Story', '')}</span>
-                              {item.addedAt && <span title={item.addedAt} className="ml-auto">{new Date(item.addedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
-                              {/* Log indicator: show dot if item has output */}
-                              {(item.output || item.error) && !isSelected && (
-                                <span title="Has logs — click to view" className="ml-auto h-1.5 w-1.5 rounded-full bg-primary/60 shrink-0" />
+                              <span className="text-[10px] text-muted-foreground">{item.kind?.replace('Story', '') || 'Story'}</span>
+                              {epicParent && epicColor && (
+                                <Badge variant="outline" className={cn("text-[8px] font-bold h-4 px-1.5 rounded border", epicColor.badge)}>
+                                  {epicParent.name}
+                                </Badge>
+                              )}
+                              {totalTasks > 0 && (
+                                <span className="text-[10px] text-muted-foreground ml-auto">
+                                  {doneTasks}/{totalTasks} tasks
+                                </span>
+                              )}
+                              {durationSec !== null && isDone && (
+                                <span className="text-[10px] text-muted-foreground ml-auto">{durationSec}s</span>
+                              )}
+                              {item.addedAt && (
+                                <span title={item.addedAt} className="text-[10px] text-muted-foreground ml-auto">
+                                  {new Date(item.addedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                              {(item.output || item.error) && (
+                                <span title="Has logs" className="h-1.5 w-1.5 rounded-full bg-primary/60 shrink-0" />
                               )}
                             </div>
                           </div>
                         </div>
                       );
                     })}
-                  </div>
                 </div>
               ) : (
                 <div className="h-64 flex flex-col items-center justify-center text-center text-muted-foreground px-4">
@@ -1602,6 +1739,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                   </p>
                 </div>
               )}
+
             </ScrollArea>
           </Card>
 
@@ -1961,11 +2099,14 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
 
 // ─── Sub-Components ───
 
+interface EpicColor { border: string; badge: string; }
+
 interface KanbanColumnProps {
   title: string;
   description: string;
   badgeColor: string;
   stories: any[];
+  epicColorMap: Map<string, typeof EPIC_COLORS[0]>;
   onSelect: (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => void;
   onValidate: (file: string, kind: string) => void;
   onBuild: (file: string, kind: string) => void;
@@ -1980,6 +2121,7 @@ function KanbanColumn({
   description,
   badgeColor,
   stories,
+  epicColorMap,
   onSelect,
   onValidate,
   onBuild,
@@ -1992,7 +2134,7 @@ function KanbanColumn({
     <div
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className="flex flex-col h-[600px] md:h-[calc(100vh-170px)] bg-muted/15 border border-border/60 rounded-xl overflow-hidden shadow-xs flex-1 transition-all duration-200 hover:bg-muted/20"
+      className="flex flex-col h-[450px] md:h-full bg-muted/15 border border-border/60 rounded-xl overflow-hidden shadow-xs flex-1 transition-all duration-200 hover:bg-muted/20"
     >
       {/* Header info */}
       <div className="p-3.5 bg-muted/20 border-b border-border/40 space-y-1 shrink-0 select-none">
@@ -2006,33 +2148,33 @@ function KanbanColumn({
       </div>
 
       {/* Cards list */}
-      <ScrollArea className="flex-1 p-3">
-        <div className="space-y-3 pb-4">
-          {stories.length > 0 ? (
-            stories.map(item => (
-              <StoryKanbanCard
-                key={item.file}
-                item={item}
-                onSelect={onSelect}
-                onValidate={onValidate}
-                onBuild={onBuild}
-                activeAction={activeAction}
-                onDragStart={onDragStart}
-              />
-            ))
-          ) : (
-            <div className="h-32 border border-dashed rounded-xl flex items-center justify-center text-center p-4 select-none">
-              <span className="text-[10px] text-muted-foreground/60 italic font-semibold">Column empty</span>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-6 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
+        {stories.length > 0 ? (
+          stories.map(item => (
+            <StoryKanbanCard
+              key={item.file}
+              item={item}
+              epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
+              onSelect={onSelect}
+              onValidate={onValidate}
+              onBuild={onBuild}
+              activeAction={activeAction}
+              onDragStart={onDragStart}
+            />
+          ))
+        ) : (
+          <div className="h-32 border border-dashed border-border/60 rounded-xl flex items-center justify-center text-center p-4 select-none">
+            <span className="text-[10px] text-muted-foreground/50 italic font-semibold">Column empty</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function StoryKanbanCard({
   item,
+  epicColor,
   onSelect,
   onValidate,
   onBuild,
@@ -2040,6 +2182,7 @@ function StoryKanbanCard({
   onDragStart
 }: {
   item: any;
+  epicColor?: EpicColor;
   onSelect: (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => void;
   onValidate: (file: string, kind: string) => void;
   onBuild: (file: string, kind: string) => void;
@@ -2047,105 +2190,52 @@ function StoryKanbanCard({
   onDragStart: (e: React.DragEvent, file: string) => void;
 }) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
-  const isFeature = item.kind === 'FeatureStory' || !!item.feature;
-  const icon = item.metadata?.icon || (isFeature ? '🧩' : '📦');
-  const desc = item.metadata?.description || item.feature?.description;
-  const progress = item.dbProgress !== undefined ? item.dbProgress : 0;
   const effectiveStatus = getEffectiveStatus(item);
   const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
-  const isActionLoading = !!(activeAction && activeAction.file === item.file);
+  const totalTasks = item.checklistTasks ? item.checklistTasks.length : 0;
+  const doneTasks = item.checklistTasks ? item.checklistTasks.filter((t: any) => t.status === 'completed').length : 0;
+  const desc = item.metadata?.description || item.feature?.description || '';
+  const isDraggable = effectiveStatus === 'draft' || effectiveStatus === 'ready';
+  const isActive = effectiveStatus === 'running' || effectiveStatus === 'validation';
 
   return (
     <Card
-      draggable={true}
-      onDragStart={(e) => onDragStart(e, item.file)}
+      draggable={isDraggable}
+      onDragStart={(e) => isDraggable && onDragStart(e, item.file)}
       onClick={() => onSelect(item, 'story')}
       className={cn(
-        "border border-border/80 bg-background/55 hover:bg-background/90 hover:border-primary/40 hover:shadow-md cursor-grab active:cursor-grabbing transition-all duration-200 group relative",
+        "border bg-background/25 hover:bg-background/60 hover:shadow-sm transition-all duration-200 group relative overflow-hidden rounded-lg cursor-pointer border-l-2",
+        isDraggable ? "cursor-grab active:cursor-grabbing" : "",
         item.placeholder && "border-dashed border-border opacity-70",
-        (effectiveStatus === 'running' || effectiveStatus === 'validation') && "border-primary bg-primary/5 animate-pulse"
+        isActive && "border-primary/40 bg-primary/5 shadow-xs",
+        !isActive && "border-border/40 hover:border-primary/20",
+        epicColor?.border || "border-l-border/40"
       )}
     >
-      <CardContent className="p-3.5 space-y-3 select-none">
-        {/* Title row */}
-        <div className="flex items-start gap-2.5 justify-between">
-          <div className="flex items-start gap-2 min-w-0 flex-1">
-            <span className="text-base shrink-0 mt-0.5">{icon}</span>
-            <div className="min-w-0 flex-1">
-              <span className="font-bold text-xs text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-1 truncate" title={name}>
-                {name.replace('features/', '')}
-              </span>
-              <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[130px] mt-0.5" title={item.file}>
-                {item.file}
-              </p>
-            </div>
-          </div>
-          <Badge variant={isFeature ? "secondary" : "outline"} className="text-[8px] font-bold h-4 px-1 rounded-sm shrink-0 border-border uppercase">
-            {isFeature ? 'Feature' : 'App'}
-          </Badge>
+      <CardContent className="p-3 space-y-1.5 select-none">
+        {/* Name row */}
+        <div className="flex items-start justify-between gap-1.5">
+          <span className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-2 flex-1" title={name}>
+            {name.replace('features/', '')}
+          </span>
+          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
         </div>
 
         {/* Description */}
         {desc && (
-          <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
-            {desc}
-          </p>
+          <p className="text-[9.5px] text-muted-foreground/70 line-clamp-1 leading-normal">{desc}</p>
         )}
 
-        {/* Progress Bar */}
-        {item.checklistTasks && item.checklistTasks.length > 0 && effectiveStatus !== 'done' && effectiveStatus !== 'completed' && (
-          <div className="space-y-1">
-            <div className="flex justify-between text-[9px] text-muted-foreground font-semibold">
-              <span>Backlog Checklist</span>
-              <span>{progress}%</span>
-            </div>
-            <div className="h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        )}
-
-        {/* Footer row */}
-        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30">
-          <Badge className={cn("text-[8px] font-extrabold h-4.5 px-1.5 py-0.5 rounded-sm border", statusCfg.bg)}>
-            {statusCfg.label}
-          </Badge>
-
-          {/* Quick Actions buttons overlay */}
-          <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={isActionLoading}
-              onClick={(e) => {
-                e.stopPropagation();
-                onValidate(item.file, item.kind);
-              }}
-              className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md"
-            >
-              {isActionLoading && activeAction?.type === 'validate' ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <ShieldCheck className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={isActionLoading}
-              onClick={(e) => {
-                e.stopPropagation();
-                onBuild(item.file, item.kind || 'AppStory');
-              }}
-              className="h-6 w-6 text-primary hover:bg-primary/10 rounded-md"
-            >
-              {isActionLoading && activeAction?.type === 'build' ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Rocket className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </div>
+        {/* Bottom meta */}
+        <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+          {item.epicParent && epicColor && (
+            <Badge variant="outline" className={cn("text-[7.5px] font-bold h-3.5 px-1 rounded border", epicColor.badge)}>
+              {item.epicParent.name}
+            </Badge>
+          )}
+          <span className="text-[9px] text-muted-foreground ml-auto">
+            {totalTasks > 0 ? `${doneTasks}/${totalTasks} tasks` : 'No tasks'}
+          </span>
         </div>
       </CardContent>
     </Card>

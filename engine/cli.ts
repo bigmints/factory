@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
 import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory, resolveStoryPath } from './story.ts';
+import { updateStoryStatusInApp } from './rollup.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherBlueprint, syncBlueprint } from './blueprint.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
@@ -426,6 +427,7 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
 
             // Archive completed story + update status
             updateStoryStatus(storyPath, 'done');
+            await updateStoryStatusInApp(storyPath, 'done');
             archiveStory(storyPath);
 
             // Git commit + push
@@ -628,6 +630,7 @@ async function handleQueueStart(): Promise<void> {
 
             // Set story status to in-progress
             updateStoryStatus(current.storyFile, 'in-progress');
+            await updateStoryStatusInApp(current.storyFile, 'in-progress');
 
             try {
                 if (current.kind === 'FeatureStory') {
@@ -663,6 +666,7 @@ async function handleQueueStart(): Promise<void> {
                                     errorCategory: categorizeError(retryMsg),
                                     });
                                 updateStoryStatus(current.storyFile, 'review');
+                                await updateStoryStatusInApp(current.storyFile, 'review');
                                 failed++;
                                 item = dequeue();
                                 continue;
@@ -678,6 +682,7 @@ async function handleQueueStart(): Promise<void> {
                                 errorCategory: categorizeError(parseErr),
                                 });
                             updateStoryStatus(current.storyFile, 'review');
+                            await updateStoryStatusInApp(current.storyFile, 'review');
                             failed++;
                             item = dequeue();
                             continue;
@@ -717,6 +722,7 @@ async function handleQueueStart(): Promise<void> {
                             tokensOut: result.tokenUsage?.completionTokens,
                         });
                         updateStoryStatus(current.storyFile, 'done');
+                        await updateStoryStatusInApp(current.storyFile, 'done');
                         archiveStory(current.storyFile);
                         gitCommit(project.path, `factory: add feature ${story.feature.name} to ${story.target.app}`);
                         succeeded++;
@@ -736,6 +742,7 @@ async function handleQueueStart(): Promise<void> {
                             errorSource: 'engine',
                         });
                         updateStoryStatus(current.storyFile, 'review');
+                        await updateStoryStatusInApp(current.storyFile, 'review');
                         failed++;
                     }
                 } else {
@@ -772,6 +779,7 @@ async function handleQueueStart(): Promise<void> {
                                         errorCategory: categorizeError(reValidation.errors),
                                         });
                                     updateStoryStatus(current.storyFile, 'review');
+                                    await updateStoryStatusInApp(current.storyFile, 'review');
                                     failed++;
                                     item = dequeue();
                                     continue;
@@ -783,6 +791,7 @@ async function handleQueueStart(): Promise<void> {
                                     errorSource: 'engine',
                                 });
                                 updateStoryStatus(current.storyFile, 'review');
+                                await updateStoryStatusInApp(current.storyFile, 'review');
                                 failed++;
                                 item = dequeue();
                                 continue;
@@ -798,6 +807,7 @@ async function handleQueueStart(): Promise<void> {
                                 errorCategory: categorizeError(validation.errors),
                                 });
                             updateStoryStatus(current.storyFile, 'review');
+                            await updateStoryStatusInApp(current.storyFile, 'review');
                             failed++;
                             item = dequeue();
                             continue;
@@ -806,6 +816,7 @@ async function handleQueueStart(): Promise<void> {
 
                     // Mark as validating
                     updateStoryStatus(current.storyFile, 'validation');
+                    await updateStoryStatusInApp(current.storyFile, 'validation');
 
                     const slug = storySlug(story);
                     const targetDir = bridge.apps_dir
@@ -843,6 +854,7 @@ async function handleQueueStart(): Promise<void> {
                             tokensOut: result.tokenUsage?.completionTokens,
                         });
                         updateStoryStatus(current.storyFile, 'done');
+                        await updateStoryStatusInApp(current.storyFile, 'done');
                         gitCommit(project.path, `factory: generate ${story.appName}`);
 
                         // Write build metadata + archive story
@@ -870,6 +882,7 @@ async function handleQueueStart(): Promise<void> {
                             errorSource: 'engine',
                         });
                         updateStoryStatus(current.storyFile, 'review');
+                        await updateStoryStatusInApp(current.storyFile, 'review');
                         failed++;
                     }
                 }
@@ -884,6 +897,7 @@ async function handleQueueStart(): Promise<void> {
                     errorCategory: category,
                 });
                 updateStoryStatus(current.storyFile, 'review');
+                await updateStoryStatusInApp(current.storyFile, 'review');
                 logError(`Failed: ${msg}`);
                 failed++;
             }

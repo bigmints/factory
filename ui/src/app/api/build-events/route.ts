@@ -1,7 +1,27 @@
 import { NextResponse } from 'next/server';
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
+import { homedir } from 'node:os';
+
+const FACTORY_ROOT = resolve(homedir(), '.factory');
+
+function getProjectPath(projectParam: string | null): string {
+    try {
+        const projectsPath = join(FACTORY_ROOT, 'projects.json');
+        if (existsSync(projectsPath)) {
+            const config = JSON.parse(readFileSync(projectsPath, 'utf-8'));
+            const targetId = projectParam || config.activeProject;
+            if (targetId) {
+                const p = config.projects?.find((p: any) => p.id === targetId);
+                if (p && existsSync(p.path)) {
+                    return p.path;
+                }
+            }
+        }
+    } catch {}
+    return process.cwd();
+}
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -11,10 +31,11 @@ export async function GET(request: Request) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
         start(controller) {
-            const bpYaml = join(process.cwd(), '.factory', 'blueprint', 'heartbeat.yaml');
-            const bpToon = join(process.cwd(), '.factory', 'blueprint', 'heartbeat.toon');
-            const ctxYaml = join(process.cwd(), '.factory', 'context', 'heartbeat.yaml');
-            const ctxToon = join(process.cwd(), '.factory', 'context', 'heartbeat.toon');
+            const projectRoot = getProjectPath(project);
+            const bpYaml = join(projectRoot, '.factory', 'blueprint', 'heartbeat.yaml');
+            const bpToon = join(projectRoot, '.factory', 'blueprint', 'heartbeat.toon');
+            const ctxYaml = join(projectRoot, '.factory', 'context', 'heartbeat.yaml');
+            const ctxToon = join(projectRoot, '.factory', 'context', 'heartbeat.toon');
 
             const getHeartbeatData = () => {
                 const candidates = [bpYaml, bpToon, ctxYaml, ctxToon];

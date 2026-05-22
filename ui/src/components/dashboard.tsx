@@ -499,7 +499,12 @@ export default function Dashboard() {
         onToggleCollapse={toggleSidebarCollapse}
       />
 
-      <main className="flex-1 overflow-auto pt-16 md:pt-0 pb-6 md:pb-0">
+      <main className={cn(
+        "flex-1 min-h-0 pt-16 md:pt-0 pb-6 md:pb-0",
+        ['plan', 'dashboard'].includes(activeTab) && !showAddProject
+          ? "h-screen flex flex-col overflow-hidden"
+          : "overflow-auto"
+      )}>
         {showAddProject ? (
           <div className="p-4 md:p-8 w-full h-full">
             <AddProject onProjectAdded={() => {
@@ -512,7 +517,12 @@ export default function Dashboard() {
             }} />
           </div>
         ) : (
-          <div className="p-3 md:px-6 md:py-4 w-full max-w-[1400px] mx-auto">
+          <div className={cn(
+            "p-3 md:px-6 md:py-4 w-full max-w-[1400px] mx-auto",
+            ['plan', 'dashboard'].includes(activeTab)
+              ? "flex-1 flex flex-col min-h-0 h-full overflow-hidden"
+              : ""
+          )}>
             {/* Page header */}
             {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
               <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">

@@ -14,16 +14,22 @@ interface QueueItem {
   id: string;
   spec_file?: string;
   story_file?: string;
+  specFile?: string;
+  storyFile?: string;
   kind: string;
   status: string;
   priority: number;
   engine?: string;
-  added_at: string;
-  started_at: string | null;
-  completed_at: string | null;
+  added_at?: string;
+  addedAt?: string;
+  started_at?: string | null;
+  startedAt?: string | null;
+  completed_at?: string | null;
+  completedAt?: string | null;
   output: string;
   error: string | null;
-  duration_ms: number | null;
+  duration_ms?: number | null;
+  durationMs?: number | null;
 }
 
 interface QueueStats {
@@ -318,6 +324,47 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
   const [isRunning, setIsRunning] = useState(false);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
+  // ── Story name resolution ──────────────────────────────────────────────
+  // Build a slug → human-readable name map from both /api/stories and /api/app-rollup
+  const [storyNameMap, setStoryNameMap] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const getSlugLocal = (path: string) => (path.split('/').pop() || '').replace(/\.ya?ml$/i, '');
+    async function loadNames() {
+      const map = new Map<string, string>();
+      try {
+        // 1. Physical story files — metadata.name / feature.name
+        const res = await fetch('/api/stories');
+        if (res.ok) {
+          const data = await res.json();
+          const allStories = [...(data.stories || []), ...(data.featureStories || [])];
+          for (const s of allStories) {
+            const slug = getSlugLocal(s.file || '');
+            const name = s.metadata?.name || s.feature?.name || s.feature?.title || '';
+            if (slug && name) map.set(slug, name);
+          }
+        }
+      } catch { /* ignore */ }
+      try {
+        // 2. App rollup DB — dbName for stories that have it
+        const res = await fetch('/api/app-rollup');
+        if (res.ok) {
+          const data = await res.json();
+          for (const feature of (data.features || [])) {
+            for (const s of (feature.stories || [])) {
+              const slug = getSlugLocal(s.file || '');
+              if (slug && s.name && !map.has(slug)) map.set(slug, s.name);
+            }
+          }
+        }
+      } catch { /* ignore */ }
+      setStoryNameMap(map);
+    }
+    loadNames();
+    const interval = setInterval(loadNames, 15_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchQueue = useCallback(async () => {
     try {
       const res = await fetch('/api/queue');
@@ -367,8 +414,20 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
     return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
   };
 
-  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const storyName = (path: string) => path.split('/').pop()?.replace('.yaml', '') || path;
+  const formatTime = (iso: string | undefined | null) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  /** Strip directory and .yaml extension to get a bare slug for matching. */
+  const getSlug = (path: string) => (path.split('/').pop() || '').replace(/\.ya?ml$/i, '');
+
+  /** Build a slug → display name map from story metadata. */
+  const resolveStoryName = useCallback((rawPath: string): string => {
+    const slug = getSlug(rawPath);
+    if (storyNameMap.has(slug)) return storyNameMap.get(slug)!;
+    return slug || rawPath;
+  }, [storyNameMap]);
 
   return (
     <div className="space-y-6 pb-20 sm:pb-8">
@@ -457,7 +516,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-sm text-foreground truncate">{storyName(item.story_file || item.spec_file || '')}</span>
+                          <span className="font-semibold text-sm text-foreground truncate">{(item as any).displayName || resolveStoryName(item.storyFile || item.story_file || item.specFile || item.spec_file || '')}</span>
                           <Badge variant="outline" className="text-[9px] shrink-0 font-medium px-1.5 rounded-md border-border bg-muted/40">
                             {item.kind === 'FeatureSpec' || item.kind === 'FeatureStory' ? 'Feature' : 'App'}
                           </Badge>
@@ -468,15 +527,15 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                           )}
                         </div>
                         <span className="text-[10px] text-muted-foreground mt-0.5 sm:hidden">
-                          {formatTime(item.added_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ''}
+                          {formatTime(item.addedAt || item.added_at)}{(item.durationMs || item.duration_ms) ? ` · ${formatDuration(item.durationMs || item.duration_ms || 0)}` : ''}
                         </span>
                       </div>
                     </button>
 
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[10px] text-muted-foreground hidden sm:inline mr-1 bg-muted/50 px-2 py-0.5 rounded-full border border-border/60">
-                        Added at {formatTime(item.added_at)}
-                        {item.duration_ms ? ` · Duration: ${formatDuration(item.duration_ms)}` : ''}
+                        Added at {formatTime(item.addedAt || item.added_at)}
+                        {(item.durationMs || item.duration_ms) ? ` · Duration: ${formatDuration(item.durationMs || item.duration_ms || 0)}` : ''}
                       </span>
                       
                       <Badge variant="outline" className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold ${

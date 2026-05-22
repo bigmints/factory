@@ -25,6 +25,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Cache API only supports GET — skip caching for all other methods
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   // API routes: network-first
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
@@ -36,6 +42,7 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
+
   // Static assets: cache-first
   event.respondWith(
     caches.match(event.request).then((cached) => {

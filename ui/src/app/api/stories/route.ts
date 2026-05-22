@@ -229,7 +229,7 @@ export async function POST(request: Request) {
     }
 
     // Use custom content or generate template
-    const storyContent = content || `metadata:
+    let storyContent = content || `metadata:
   name: "${name}"
   slug: "${slug}"
   description: "A ${name.toLowerCase()} application"
@@ -260,6 +260,15 @@ api:
           type: string
           default: active
 `;
+
+    // Force status to ready in the metadata block of the YAML
+    if (storyContent.includes('metadata:')) {
+      if (/^  status:\s*.*$/m.test(storyContent)) {
+        storyContent = storyContent.replace(/^  status:\s*.*$/m, '  status: ready');
+      } else {
+        storyContent = storyContent.replace(/(metadata:[\s\S]*?)([\r\n]+)/, '$1$2  status: ready$2');
+      }
+    }
 
     writeFileSync(filePath, storyContent, 'utf-8');
 

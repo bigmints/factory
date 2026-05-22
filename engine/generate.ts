@@ -1834,6 +1834,26 @@ export async function runToolSession(
 
         // Execute each tool call sequentially
         for (const tc of toolCalls) {
+            const toolName = tc.function.name;
+            const args = tc.function.arguments || {};
+            let details = '';
+            
+            if (toolName === 'read_file' || toolName === 'write_file' || toolName === 'patch_file') {
+                details = String(args.path || args.filename || '');
+            } else if (toolName === 'list_dir') {
+                details = `${args.path || ''}${args.recursive ? ' (recursive)' : ''}`;
+            } else if (toolName === 'run_command') {
+                details = `"${args.command || ''}"`;
+            } else if (toolName === 'read_blueprint') {
+                details = String(args.type || '');
+            } else if (toolName === 'log_step') {
+                details = `[${args.level || 'info'}] ${args.message || ''}`;
+            } else if (Object.keys(args).length > 0) {
+                details = JSON.stringify(args);
+            }
+            const displayDetails = details ? `: ${details}` : '';
+            log('→', `Calling tool: ${toolName}${displayDetails}`);
+
             const result = await executeTool(tc.function.name, tc.function.arguments, ctx);
             messages.push({
                 role: 'tool',
@@ -1842,6 +1862,7 @@ export async function runToolSession(
             });
             if (result.isError) {
                 ctx.logs.push({ level: 'error', message: `[${tc.function.name}] ${result.content}` });
+                log('✗', `Tool ${toolName} failed: ${result.content.slice(0, 200)}`);
             } else {
                 ctx.logs.push({ level: 'info', message: result.content });
             }
@@ -2206,7 +2227,10 @@ async function callOpenAICompatWithTools(
         if (!choice) throw new Error('Provider returned no choices');
 
         const text = choice.message?.content || '';
-        log('●', `LLM response text: ${JSON.stringify(text.slice(0, 200))}... tool_calls from API: ${JSON.stringify(choice.message?.tool_calls)}`);
+        if (text && text.trim().length > 0) {
+            const cleanText = text.trim().replace(/\s+/g, ' ').slice(0, 100);
+            log('  ', `Model: "${cleanText}..."`);
+        }
         let toolCalls: ToolCallResult = (choice.message?.tool_calls || []).map((tc: any) => {
             let parsedArgs: Record<string, unknown> = {};
             try {

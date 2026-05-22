@@ -284,7 +284,6 @@ function getRelatedStories(item: any, allStories: any[]) {
   // 3. Belong to the same Epic/feature group (if applicable), excluding prerequisites and dependents.
   const currentDeps = item.dependsOn || [];
   const currentEpicId = item.epicParent?.id;
-  const currentAppTarget = item.target?.app || (item.kind === 'AppStory' ? currentSlug : null);
 
   const peers = allStories.filter(s => {
     const slug = getSlug(s.file);
@@ -299,14 +298,10 @@ function getRelatedStories(item: any, allStories: any[]) {
     const sDeps = s.dependsOn || [];
     const shareDependency = sDeps.some((d: string) => currentDeps.includes(d));
 
-    // Condition 2: Target the same AppStory
-    const sAppTarget = s.target?.app || (s.kind === 'AppStory' ? slug : null);
-    const shareAppTarget = currentAppTarget && sAppTarget && currentAppTarget === sAppTarget;
-
-    // Condition 3: Belong to the same Epic
+    // Condition 2: Belong to the same Epic
     const shareEpic = currentEpicId && s.epicParent?.id === currentEpicId;
 
-    return shareDependency || shareAppTarget || shareEpic;
+    return shareDependency || shareEpic;
   });
 
   return { prerequisites, dependents, peers };
@@ -376,7 +371,33 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       return;
     }
 
-    const toastId = toast.loading(`Updating story status to ${targetStatus}...`);
+    // Identify the dropped story
+    const droppedStory = mergedStories.find(s => s.file === file || getSlug(s.file) === getSlug(file));
+    let relatedStoriesToUpdate: any[] = [];
+    if (droppedStory && targetStatus === 'ready') {
+      const { prerequisites, dependents, peers } = getRelatedStories(droppedStory, mergedStories);
+      const family = [...prerequisites, ...dependents, ...peers];
+      
+      // Filter out any stories that are already completed ('done' or 'completed') or already 'ready' or 'in-progress'
+      relatedStoriesToUpdate = family.filter(s => {
+        const status = getEffectiveStatus(s);
+        return (
+          status !== 'done' &&
+          status !== 'completed' &&
+          status !== 'ready' &&
+          status !== 'in-progress' &&
+          status !== 'running' &&
+          status !== 'validation'
+        );
+      });
+    }
+
+    const toastId = toast.loading(
+      relatedStoriesToUpdate.length > 0
+        ? `Updating "${droppedStory?.metadata?.name || file}" and ${relatedStoriesToUpdate.length} related stories...`
+        : `Updating story status to ${targetStatus}...`
+    );
+
     try {
       const res = await fetch('/api/stories/update-status', {
         method: 'POST',
@@ -389,8 +410,28 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         throw new Error(json.error || 'Failed to update status');
       }
 
-      const json = await res.json();
-      toast.success(json.message || `Successfully updated status to "${targetStatus}"`, { id: toastId });
+      // If we have related stories to update, update them as well in parallel
+      if (relatedStoriesToUpdate.length > 0) {
+        await Promise.all(relatedStoriesToUpdate.map(s =>
+          fetch('/api/stories/update-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: s.file, status: 'ready' })
+          }).then(async (r) => {
+            if (!r.ok) {
+              const body = await r.json().catch(() => ({}));
+              console.error(`Failed to update ${s.file}`, body);
+            }
+          })
+        ));
+      }
+
+      toast.success(
+        relatedStoriesToUpdate.length > 0
+          ? `Moved "${droppedStory?.metadata?.name || file}" and grouped ${relatedStoriesToUpdate.length} related stories to Ready to Build!`
+          : `Successfully updated status to "${targetStatus}"`,
+        { id: toastId }
+      );
       await Promise.all([fetchStories(), fetchRollup(true), fetchQueue()]);
     } catch (err: any) {
       toast.error(err.message || 'Failed to update status', { id: toastId });
@@ -2506,15 +2547,15 @@ function StoryKanbanCard({
 
   let relationStyles = '';
   if (relation === 'self') {
-    relationStyles = 'ring-2 ring-violet-500/80 bg-violet-950/20 border-violet-500 shadow-[0_0_15px_rgba(139,92,246,0.2)] scale-[1.01]';
+    relationStyles = 'border-violet-500/70 bg-violet-950/10 shadow-[0_0_12px_rgba(139,92,246,0.15)] border-l-violet-500 scale-[1.01] z-10';
   } else if (relation === 'prerequisite') {
-    relationStyles = 'ring-2 ring-sky-500/80 bg-sky-950/20 border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.2)] scale-[1.01]';
+    relationStyles = 'border-sky-500/50 bg-sky-950/10 shadow-[0_0_8px_rgba(14,165,233,0.1)] border-l-sky-500';
   } else if (relation === 'dependent') {
-    relationStyles = 'ring-2 ring-purple-500/80 bg-purple-950/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)] scale-[1.01]';
+    relationStyles = 'border-purple-500/50 bg-purple-950/10 shadow-[0_0_8px_rgba(168,85,247,0.1)] border-l-purple-500';
   } else if (relation === 'peer') {
-    relationStyles = 'ring-2 ring-amber-500/80 bg-amber-950/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] scale-[1.01]';
+    relationStyles = 'border-amber-500/50 bg-amber-950/10 shadow-[0_0_8px_rgba(245,158,11,0.1)] border-l-amber-500';
   } else if (isUnrelated) {
-    relationStyles = 'opacity-30 blur-[0.2px] scale-[0.99] transition-all duration-200';
+    relationStyles = 'opacity-40 transition-all duration-300';
   }
 
   return (
@@ -2525,12 +2566,12 @@ function StoryKanbanCard({
       onMouseEnter={() => onHoverChange?.(currentSlug)}
       onMouseLeave={() => onHoverChange?.(null)}
       className={cn(
-        "border bg-background/25 hover:bg-background/60 hover:shadow-sm transition-all duration-200 group relative overflow-hidden rounded-lg cursor-pointer border-l-2",
+        "border bg-background/25 hover:bg-background/60 hover:shadow-sm transition-all duration-300 group relative overflow-hidden rounded-lg cursor-pointer border-l-2",
         isDraggable ? "cursor-grab active:cursor-grabbing" : "",
         item.placeholder && "border-dashed border-border opacity-70",
         isActive && "border-primary/40 bg-primary/5 shadow-xs",
         !isActive && "border-border/40 hover:border-primary/20",
-        epicColor?.border || "border-l-border/40",
+        !relation && (epicColor?.border || "border-l-border/40"),
         relationStyles
       )}
     >
@@ -2664,15 +2705,15 @@ function ListStoryRow({
 
   let relationStyles = '';
   if (relation === 'self') {
-    relationStyles = 'ring-2 ring-violet-500/80 bg-violet-950/20 border-violet-500 shadow-[0_0_15px_rgba(139,92,246,0.2)] scale-[1.01]';
+    relationStyles = 'border-violet-500/70 bg-violet-950/10 shadow-[0_0_12px_rgba(139,92,246,0.15)] border-l-2 border-l-violet-500 scale-[1.005] z-10';
   } else if (relation === 'prerequisite') {
-    relationStyles = 'ring-2 ring-sky-500/80 bg-sky-950/20 border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.2)] scale-[1.01]';
+    relationStyles = 'border-sky-500/50 bg-sky-950/10 shadow-[0_0_8px_rgba(14,165,233,0.1)] border-l-2 border-l-sky-500';
   } else if (relation === 'dependent') {
-    relationStyles = 'ring-2 ring-purple-500/80 bg-purple-950/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)] scale-[1.01]';
+    relationStyles = 'border-purple-500/50 bg-purple-950/10 shadow-[0_0_8px_rgba(168,85,247,0.1)] border-l-2 border-l-purple-500';
   } else if (relation === 'peer') {
-    relationStyles = 'ring-2 ring-amber-500/80 bg-amber-950/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] scale-[1.01]';
+    relationStyles = 'border-amber-500/50 bg-amber-950/10 shadow-[0_0_8px_rgba(245,158,11,0.1)] border-l-2 border-l-amber-500';
   } else if (isUnrelated) {
-    relationStyles = 'opacity-30 blur-[0.2px] scale-[0.99] transition-all duration-200';
+    relationStyles = 'opacity-40 transition-all duration-300';
   }
 
   return (
@@ -2680,7 +2721,7 @@ function ListStoryRow({
       onMouseEnter={() => onHoverChange?.(currentSlug)}
       onMouseLeave={() => onHoverChange?.(null)}
       className={cn(
-        "border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-150",
+        "border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-300",
         relationStyles
       )}
     >

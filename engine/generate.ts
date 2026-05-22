@@ -20,9 +20,10 @@ import { loadSettings, getActiveProvider } from './config.ts';
 import { gatherAppBlueprint, loadQueueBlueprint } from './blueprint.ts';
 import { log, logStep, logError } from './log.ts';
 import { resolveSkillsForBuild, formatSkillsForPrompt, seedDefaultSkills } from './skills.ts';
-import { parse as parseYaml } from 'yaml';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve, basename } from 'node:path';
+import { parse as parseYaml, stringify as toYaml } from 'yaml';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, basename, join } from 'node:path';
+import { generateAppYamlFromStory } from './story.ts';
 
 const PIPELINE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes — prioritise quality over speed
 
@@ -47,7 +48,56 @@ export async function runPipeline(
     storyFile: string,
 ): Promise<BuildResult> {
     log('●', `Starting tool-calling build session for app: ${story.appName}`);
-    return runToolSession(story, blueprint, targetDir, storyFile);
+
+    // Pre-scaffold draft app.yaml in the target directory before starting build session
+    const factoryDir = join(targetDir, '.factory');
+    if (!existsSync(factoryDir)) {
+        mkdirSync(factoryDir, { recursive: true });
+    }
+    const appYamlPath = join(factoryDir, 'app.yaml');
+    let baselineAppSpec;
+    try {
+        baselineAppSpec = generateAppYamlFromStory(story, storyFile);
+        if (!existsSync(appYamlPath)) {
+            writeFileSync(appYamlPath, toYaml(baselineAppSpec));
+            log('✓', `Pre-scaffolded draft app.yaml spec at ${appYamlPath}`);
+        }
+    } catch (e) {
+        log('!', `Warning: Failed to pre-scaffold baseline app.yaml: ${e}`);
+    }
+
+    const result = await runToolSession(story, blueprint, targetDir, storyFile);
+
+    // Intercept result: ensure .factory/app.yaml is explicitly tracked in result.files
+    try {
+        let hasAppYaml = result.files.some(f => f.filename === '.factory/app.yaml');
+        if (!hasAppYaml) {
+            let appYamlContent = '';
+            if (existsSync(appYamlPath)) {
+                appYamlContent = readFileSync(appYamlPath, 'utf-8');
+            } else if (baselineAppSpec) {
+                appYamlContent = toYaml(baselineAppSpec);
+            }
+            if (appYamlContent) {
+                result.files.push({
+                    filename: '.factory/app.yaml',
+                    content: appYamlContent
+                });
+                log('✓', `Explicitly appended .factory/app.yaml to build result files checklist`);
+            }
+        }
+
+        // Also push it to result.plan.files if not present
+        if (result.plan && result.plan.files) {
+            if (!result.plan.files.includes('.factory/app.yaml')) {
+                result.plan.files.push('.factory/app.yaml');
+            }
+        }
+    } catch (e) {
+        log('!', `Warning: Failed to append .factory/app.yaml to result: ${e}`);
+    }
+
+    return result;
 }
 
 /**
@@ -378,9 +428,9 @@ function groupFilesByDirectory(files: GeneratedFile[]): Record<string, number> {
 
 // ─── Test ────────────────────────────────────────────────
 
-import { mkdtempSync, writeFileSync as fsWrite, readFileSync as fsRead, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync as fsWrite, readFileSync as fsRead } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import { execSync, spawn as cpSpawn, spawnSync } from 'node:child_process';
 import type { StackConfig } from './types.ts';
 

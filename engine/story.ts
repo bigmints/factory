@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve, join, basename, dirname } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult, AppSpec } from './types.ts';
+import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec } from './types.ts';
 import { storySlug, storyPort } from './types.ts';
 import { log } from './log.ts';
 import { execSync } from 'node:child_process';
@@ -351,6 +351,68 @@ export function restoreStory(storyPath: string): string | null {
     }
 }
 
+
+/** Generate a draft app.yaml spec from a new AppStory */
+export function generateAppYamlFromStory(story: AppStory, storyFile?: string): AppSpec {
+    const slug = storySlug(story);
+    const storyFilename = storyFile ? basename(storyFile) : `${slug}.yaml`;
+
+    // Build BRD content from story
+    const dbSection = story.stack.database ? `- **Database**: ${story.stack.database}` : '';
+    const authSection = story.auth?.provider ? `- **Authentication**: ${story.auth.provider} (${Object.keys(story.auth.methods || {}).filter(m => (story.auth?.methods as any)[m]).join(', ') || 'credentials'})` : '';
+    const pagesSection = story.pages ? `- **Pages/Routes**: Dashboard, CRUD tables` : '';
+
+    const brd = `
+# ${story.appName} (BRD)
+
+${story.description || 'No description provided.'}
+
+## Architecture & Requirements
+- **Framework**: ${story.stack.framework}
+- **Language**: ${story.stack.language || 'TypeScript'}
+${dbSection ? dbSection + '\n' : ''}${authSection ? authSection + '\n' : ''}${pagesSection ? pagesSection + '\n' : ''}
+`.trim();
+
+    // Map features/stories/tasks
+    const coreTasks: TaskItemSpec[] = [
+        { id: 'task-skeleton', title: 'Scaffold project skeleton and configurations', status: 'pending' },
+        { id: 'task-pages', title: 'Implement main pages, layout, and styling views', status: 'pending' },
+    ];
+
+    if (story.auth?.provider && story.auth.provider !== 'none') {
+        coreTasks.push({ id: 'task-auth', title: `Integrate and configure ${story.auth.provider} authentication`, status: 'pending' });
+    }
+
+    if (story.stack.database) {
+        coreTasks.push({ id: 'task-database', title: `Setup ${story.stack.database} schema, connection, and seed data`, status: 'pending' });
+    }
+
+    const appSpec: AppSpec = {
+        name: story.appName,
+        description: story.description,
+        brd,
+        version: '1.0.0',
+        stack: story.stack,
+        status: 'draft',
+        features: [
+            {
+                name: 'Core Foundation',
+                description: `Foundational scaffolding and layout styling for ${story.appName}.`,
+                status: 'pending',
+                stories: [
+                    {
+                        name: story.appName,
+                        file: `stories/apps/${storyFilename}`,
+                        status: 'draft',
+                        tasks: coreTasks,
+                    }
+                ]
+            }
+        ]
+    };
+
+    return appSpec;
+}
 
 /** Load an app spec from a YAML file */
 export function loadAppSpec(appPath: string): AppSpec {

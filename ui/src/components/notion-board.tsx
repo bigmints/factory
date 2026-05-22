@@ -16,7 +16,7 @@ import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, ChevronDown, ChevronRight, Plus,
   Search, Filter, Tag, Columns, Layers, FileCode2, Brain, FlaskConical, Wrench,
   ShieldCheck, FolderOpen, RefreshCw, Sliders, X, Check, Package, ListTodo, Info,
-  BookOpen, Code, TerminalSquare, Link2
+  BookOpen, Code, TerminalSquare, Link2, Users, Network
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
@@ -257,6 +257,81 @@ const getBasename = (path: string) => {
 /** Strip directory prefix + yaml extension for slug-level comparison. */
 const getSlug = (path: string) => getBasename(path).replace(/\.ya?ml$/i, '');
 
+/**
+ * Calculate the family of related stories for a given story.
+ * Prerequisites: Stories that the current story directly depends on.
+ * Dependents: Stories that directly depend on the current story.
+ * Peers: Stories that share at least one dependency, or target the same AppStory, or are within the same Epic/feature group.
+ */
+function getRelatedStories(item: any, allStories: any[]) {
+  if (!item) return { prerequisites: [], dependents: [], peers: [] };
+
+  const currentSlug = getSlug(item.file);
+
+  // Prerequisites: Stories in item.dependsOn
+  const prerequisites = allStories.filter(s => 
+    item.dependsOn && item.dependsOn.includes(getSlug(s.file))
+  );
+
+  // Dependents: Stories that depend on currentSlug
+  const dependents = allStories.filter(s => 
+    s.dependsOn && s.dependsOn.includes(currentSlug)
+  );
+
+  // Peers:
+  // 1. Share at least one dependency with this story.
+  // 2. Target the same AppStory (if feature stories).
+  // 3. Belong to the same Epic/feature group (if applicable), excluding prerequisites and dependents.
+  const currentDeps = item.dependsOn || [];
+  const currentEpicId = item.epicParent?.id;
+  const currentAppTarget = item.target?.app || (item.kind === 'AppStory' ? currentSlug : null);
+
+  const peers = allStories.filter(s => {
+    const slug = getSlug(s.file);
+    if (slug === currentSlug) return false;
+    
+    // Check if it's already in prerequisites or dependents
+    const isPrereq = item.dependsOn && item.dependsOn.includes(slug);
+    const isDep = s.dependsOn && s.dependsOn.includes(currentSlug);
+    if (isPrereq || isDep) return false;
+
+    // Condition 1: Share a dependency
+    const sDeps = s.dependsOn || [];
+    const shareDependency = sDeps.some((d: string) => currentDeps.includes(d));
+
+    // Condition 2: Target the same AppStory
+    const sAppTarget = s.target?.app || (s.kind === 'AppStory' ? slug : null);
+    const shareAppTarget = currentAppTarget && sAppTarget && currentAppTarget === sAppTarget;
+
+    // Condition 3: Belong to the same Epic
+    const shareEpic = currentEpicId && s.epicParent?.id === currentEpicId;
+
+    return shareDependency || shareAppTarget || shareEpic;
+  });
+
+  return { prerequisites, dependents, peers };
+}
+
+/**
+ * Determine relation of a story to the hovered story.
+ */
+function isRelatedToHovered(story: any, hoveredSlug: string | null, allStories: any[]) {
+  if (!hoveredSlug) return null;
+  const hoveredStory = allStories.find(s => getSlug(s.file) === hoveredSlug);
+  if (!hoveredStory) return null;
+
+  const currentSlug = getSlug(story.file);
+  if (currentSlug === hoveredSlug) return 'self';
+
+  const { prerequisites, dependents, peers } = getRelatedStories(hoveredStory, allStories);
+
+  if (prerequisites.some(s => getSlug(s.file) === currentSlug)) return 'prerequisite';
+  if (dependents.some(s => getSlug(s.file) === currentSlug)) return 'dependent';
+  if (peers.some(s => getSlug(s.file) === currentSlug)) return 'peer';
+
+  return null;
+}
+
 const getEffectiveStatus = (item: any) => {
   // Queue status is the live source of truth — drives the Kanban column
   if (item.queueStatus === 'running') return 'running';
@@ -275,6 +350,7 @@ const getEffectiveStatus = (item: any) => {
 export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
+  const [hoveredStorySlug, setHoveredStorySlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [draggingFile, setDraggingFile] = useState<string | null>(null);
@@ -755,6 +831,91 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       }
     } catch {
       toast.error('Error starting ready builds', { id: toastId });
+    }
+  };
+
+  const handleQueueRelatedStories = async (item: any) => {
+    if (!item) return;
+    const currentSlug = getSlug(item.file);
+    const { prerequisites, dependents, peers } = getRelatedStories(item, mergedStories);
+    
+    // Family includes current story, prerequisites, dependents, peers.
+    const family = [item, ...prerequisites, ...dependents, ...peers];
+    
+    // Filter to only incomplete stories
+    const incompleteFamily = family.filter(s => {
+      const status = getEffectiveStatus(s);
+      return status !== 'done' && status !== 'completed';
+    });
+
+    if (incompleteFamily.length === 0) {
+      toast.info('All stories in the related family are already completed!');
+      return;
+    }
+
+    // Stable sort family by Epic Index and Phase
+    const epicIndexMap = new Map<string, number>();
+    (appRollup?.features || []).forEach((f: any, idx: number) => {
+      epicIndexMap.set(f.id, idx);
+    });
+
+    const sortedSpecs = incompleteFamily.map(s => {
+      const epicId = s.epicParent?.id;
+      return {
+        file: s.file,
+        kind: s.kind || 'AppStory',
+        phase: s.phase,
+        dependsOn: s.dependsOn,
+        epicId,
+        epicIndex: epicId !== undefined ? (epicIndexMap.get(epicId) ?? 999) : 999
+      };
+    });
+
+    sortedSpecs.sort((a, b) => {
+      if (a.epicIndex !== b.epicIndex) return a.epicIndex - b.epicIndex;
+      const phaseA = a.phase ?? 0;
+      const phaseB = b.phase ?? 0;
+      if (phaseA !== phaseB) return phaseA - phaseB;
+      return a.file.localeCompare(b.file);
+    });
+
+    const toastId = toast.loading(`Enqueuing related family (${sortedSpecs.length} stories) into pipeline...`);
+    let enqueued = 0;
+    try {
+      for (const spec of sortedSpecs) {
+        const res = await fetch('/api/queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storyFile: spec.file,
+            specFile: spec.file,
+            kind: spec.kind,
+            phase: spec.phase,
+            dependsOn: spec.dependsOn,
+            buildAll: true, // skip individual dependency pre-check; engine handles ordering
+            engine: 'factory'
+          })
+        });
+        if (res.ok) enqueued++;
+      }
+
+      if (enqueued > 0) {
+        toast.loading(`Starting execution loop for ${enqueued} related items...`, { id: toastId });
+        const startRes = await fetch('/api/queue/start', { method: 'POST' });
+        if (startRes.ok) {
+          toast.success(`Success! Launched builds for ${enqueued} related stories.`, { id: toastId });
+          fetchQueue();
+          setDrawerOpen(false);
+          setViewMode('queue');
+          setBuildLogsOpen(true);
+        } else {
+          toast.error('Failed to trigger execution runner', { id: toastId });
+        }
+      } else {
+        toast.error('No stories were enqueued', { id: toastId });
+      }
+    } catch {
+      toast.error('Error starting builds', { id: toastId });
     }
   };
 
@@ -1394,6 +1555,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               })}
             </div>
           )}
+
           <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch md:h-full">
             {/* Column 1: BACKLOG / DRAFT */}
             <KanbanColumn
@@ -1410,6 +1572,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'draft')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
+              hoveredStorySlug={hoveredStorySlug}
+              onHoverChange={setHoveredStorySlug}
             />
 
             {/* Column 2: READY TO BUILD */}
@@ -1427,6 +1591,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'ready')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
+              hoveredStorySlug={hoveredStorySlug}
+              onHoverChange={setHoveredStorySlug}
             />
 
             {/* Column 3: BUILDING / RUNNING */}
@@ -1444,6 +1610,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'in-progress')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
+              hoveredStorySlug={hoveredStorySlug}
+              onHoverChange={setHoveredStorySlug}
             />
 
             {/* Column 4: COMPLETED / DONE */}
@@ -1461,10 +1629,11 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'done')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
+              hoveredStorySlug={hoveredStorySlug}
+              onHoverChange={setHoveredStorySlug}
             />
           </div>
 
-          {/* Standalone Lane if Board view */}
           {unsyncedStories.length > 0 && (
             <div className="space-y-3 mt-6 border border-border/60 bg-muted/20 p-5 rounded-xl shrink-0">
               <div className="flex items-center gap-2">
@@ -1486,6 +1655,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                     activeAction={activeAction}
                     onDragStart={handleDragStart}
                     allStories={mergedStories}
+                    hoveredStorySlug={hoveredStorySlug}
+                    onHoverChange={setHoveredStorySlug}
                   />
                 ))}
               </div>
@@ -1578,6 +1749,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                                   updatingTaskId={updatingTaskId}
                                   activeAction={activeAction}
                                   allStories={mergedStories}
+                                  hoveredStorySlug={hoveredStorySlug}
+                                  onHoverChange={setHoveredStorySlug}
                                 />
                               ))
                             ) : (
@@ -1895,6 +2068,27 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                       </Button>
                     </div>
 
+                    {(() => {
+                      const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
+                      const family = [selectedItem.data, ...prerequisites, ...dependents, ...peers];
+                      const incompleteFamilyCount = family.filter(s => {
+                        const status = getEffectiveStatus(s);
+                        return status !== 'done' && status !== 'completed';
+                      }).length;
+                      
+                      return incompleteFamilyCount > 0 ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleQueueRelatedStories(selectedItem.data)}
+                          className="w-full h-8.5 text-xs font-bold gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white shadow-xs select-none"
+                        >
+                          <Layers className="h-3.5 w-3.5" />
+                          Queue Related Family ({incompleteFamilyCount})
+                        </Button>
+                      ) : null;
+                    })()}
+
                     {/* Quick Specs View */}
                     <div className="border border-border/60 bg-muted/15 rounded-lg p-3 space-y-2 text-xs select-none">
                       <div className="flex justify-between">
@@ -1983,106 +2177,91 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                       </div>
                     )}
 
-                    {/* Dependencies and Dependents Section */}
+                    {/* Related Family Group (Prerequisites, Dependents, Peers) */}
                     <div className="space-y-4 pt-2 border-t border-border/40 select-none">
-                      {/* Depends On */}
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                          <Link2 className="h-4 w-4 text-indigo-500" />
-                          Depends On (Dependencies)
-                        </h4>
-                        {selectedItem.data.dependsOn && selectedItem.data.dependsOn.length > 0 ? (
-                          <div className="flex flex-wrap gap-2 p-2.5 rounded-lg border bg-background">
-                            {selectedItem.data.dependsOn.map((depSlug: string) => {
-                              const depStory = mergedStories.find(s => getSlug(s.file) === depSlug);
-                              const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
-                              let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
-                              if (status === 'done' || status === 'completed') {
-                                statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-                              } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
-                                statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/30 animate-pulse';
-                              }
+                      <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                        <Network className="h-4 w-4 text-violet-500" />
+                        Related Family Group
+                      </h4>
+                      
+                      {(() => {
+                        const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
+                        const hasRelations = prerequisites.length > 0 || dependents.length > 0 || peers.length > 0;
+                        
+                        if (!hasRelations) {
+                          return (
+                            <div className="text-xs text-muted-foreground italic py-3 text-center border rounded-lg bg-muted/5 select-none">
+                              No related stories (prerequisites, dependents, or peers) found.
+                            </div>
+                          );
+                        }
 
-                              return (
-                                <Badge
-                                  key={depSlug}
-                                  variant="outline"
-                                  className={cn(
-                                    "text-[10px] font-medium py-1 px-2.5 rounded-md cursor-pointer select-none transition-all hover:bg-muted/80 flex items-center gap-1.5",
-                                    statusBadgeColor
-                                  )}
-                                  onClick={() => {
-                                    if (depStory) {
-                                      handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent);
-                                    }
-                                  }}
-                                  title={depStory ? `Dependency: ${depSlug} (${status})` : `Dependency: ${depSlug} (not found)`}
-                                >
-                                  <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", storyStatusMap[status]?.dot || 'bg-muted-foreground')} />
-                                  <span>{depSlug}</span>
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-muted-foreground italic py-2.5 text-center border rounded-lg bg-muted/5 select-none">
-                            No dependencies. This story can be built at any time.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Required By */}
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                          <Layers className="h-4 w-4 text-purple-500" />
-                          Required By (Dependents)
-                        </h4>
-                        {(() => {
-                          const currentSlug = getSlug(selectedItem.data.file);
-                          const dependents = mergedStories.filter(s => s.dependsOn && s.dependsOn.includes(currentSlug));
-                          
-                          if (dependents.length > 0) {
-                            return (
-                              <div className="flex flex-wrap gap-2 p-2.5 rounded-lg border bg-background">
-                                {dependents.map((depStory) => {
-                                  const depSlug = getSlug(depStory.file);
-                                  const status = getEffectiveStatus(depStory);
+                        const renderBadgeList = (storiesList: any[], title: string, badgeIcon: React.ReactNode, activeGlow: string) => {
+                          if (storiesList.length === 0) return null;
+                          return (
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                                {title} ({storiesList.length})
+                              </span>
+                              <div className="flex flex-wrap gap-2 p-2 rounded-lg border bg-background/50">
+                                {storiesList.map((story) => {
+                                  const slug = getSlug(story.file);
+                                  const status = getEffectiveStatus(story);
                                   let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
                                   if (status === 'done' || status === 'completed') {
-                                    statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                                    statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/35';
                                   } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
-                                    statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/30 animate-pulse';
+                                    statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/35 animate-pulse';
                                   }
-
+                                  
                                   return (
                                     <Badge
-                                      key={depSlug}
+                                      key={slug}
                                       variant="outline"
                                       className={cn(
-                                        "text-[10px] font-medium py-1 px-2.5 rounded-md cursor-pointer select-none transition-all hover:bg-muted/80 flex items-center gap-1.5",
-                                        statusBadgeColor
+                                        "text-[10px] font-medium py-1 px-2.5 rounded-md cursor-pointer select-none transition-all hover:bg-muted flex items-center gap-1.5",
+                                        statusBadgeColor,
+                                        activeGlow
                                       )}
                                       onClick={() => {
-                                        handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent);
+                                        handleOpenDrawer(story, 'story', undefined, story.epicParent);
                                       }}
-                                      title={`Dependent: ${depSlug} (${status})`}
+                                      title={`${title}: ${slug} (${status})`}
                                     >
-                                      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", storyStatusMap[status]?.dot || 'bg-muted-foreground')} />
-                                      <span>{depSlug}</span>
+                                      {badgeIcon}
+                                      <span>{slug}</span>
+                                      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 ml-1", storyStatusMap[status]?.dot || 'bg-muted-foreground')} />
                                     </Badge>
                                   );
                                 })}
                               </div>
-                            );
-                          } else {
-                            return (
-                              <div className="text-xs text-muted-foreground italic py-2.5 text-center border rounded-lg bg-muted/5 select-none">
-                                No other stories depend on this one.
-                              </div>
-                            );
-                          }
-                        })()}
-                      </div>
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <div className="space-y-4">
+                            {renderBadgeList(
+                              prerequisites,
+                              "Prerequisites (Depends On)",
+                              <Link2 className="h-3 w-3 text-sky-400 shrink-0" />,
+                              "hover:border-sky-500/50 hover:shadow-[0_0_10px_rgba(14,165,233,0.15)]"
+                            )}
+                            {renderBadgeList(
+                              dependents,
+                              "Dependents (Required By)",
+                              <Layers className="h-3 w-3 text-purple-400 shrink-0" />,
+                              "hover:border-purple-500/50 hover:shadow-[0_0_10px_rgba(168,85,247,0.15)]"
+                            )}
+                            {renderBadgeList(
+                              peers,
+                              "Peers (Shared Context / Target App)",
+                              <Users className="h-3 w-3 text-amber-400 shrink-0" />,
+                              "hover:border-amber-500/50 hover:shadow-[0_0_10px_rgba(245,158,11,0.15)]"
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -2223,6 +2402,8 @@ interface KanbanColumnProps {
   onDrop: (e: React.DragEvent) => void;
   onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
+  hoveredStorySlug?: string | null;
+  onHoverChange?: (slug: string | null) => void;
 }
 
 function KanbanColumn({
@@ -2238,7 +2419,9 @@ function KanbanColumn({
   onDragOver,
   onDrop,
   onDragStart,
-  allStories
+  allStories,
+  hoveredStorySlug,
+  onHoverChange
 }: KanbanColumnProps) {
   return (
     <div
@@ -2271,6 +2454,8 @@ function KanbanColumn({
               activeAction={activeAction}
               onDragStart={onDragStart}
               allStories={allStories}
+              hoveredStorySlug={hoveredStorySlug}
+              onHoverChange={onHoverChange}
             />
           ))
         ) : (
@@ -2291,7 +2476,9 @@ function StoryKanbanCard({
   onBuild,
   activeAction,
   onDragStart,
-  allStories
+  allStories,
+  hoveredStorySlug,
+  onHoverChange
 }: {
   item: any;
   epicColor?: EpicColor;
@@ -2301,6 +2488,8 @@ function StoryKanbanCard({
   activeAction: { type: string; file: string } | null;
   onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
+  hoveredStorySlug?: string | null;
+  onHoverChange?: (slug: string | null) => void;
 }) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const effectiveStatus = getEffectiveStatus(item);
@@ -2311,18 +2500,38 @@ function StoryKanbanCard({
   const isDraggable = effectiveStatus === 'draft' || effectiveStatus === 'ready';
   const isActive = effectiveStatus === 'running' || effectiveStatus === 'validation';
 
+  const currentSlug = getSlug(item.file);
+  const relation = (hoveredStorySlug && allStories) ? isRelatedToHovered(item, hoveredStorySlug, allStories) : null;
+  const isUnrelated = !!hoveredStorySlug && relation === null;
+
+  let relationStyles = '';
+  if (relation === 'self') {
+    relationStyles = 'ring-2 ring-violet-500/80 bg-violet-950/20 border-violet-500 shadow-[0_0_15px_rgba(139,92,246,0.2)] scale-[1.01]';
+  } else if (relation === 'prerequisite') {
+    relationStyles = 'ring-2 ring-sky-500/80 bg-sky-950/20 border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.2)] scale-[1.01]';
+  } else if (relation === 'dependent') {
+    relationStyles = 'ring-2 ring-purple-500/80 bg-purple-950/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)] scale-[1.01]';
+  } else if (relation === 'peer') {
+    relationStyles = 'ring-2 ring-amber-500/80 bg-amber-950/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] scale-[1.01]';
+  } else if (isUnrelated) {
+    relationStyles = 'opacity-30 blur-[0.2px] scale-[0.99] transition-all duration-200';
+  }
+
   return (
     <Card
       draggable={isDraggable}
       onDragStart={(e) => isDraggable && onDragStart(e, item.file)}
       onClick={() => onSelect(item, 'story')}
+      onMouseEnter={() => onHoverChange?.(currentSlug)}
+      onMouseLeave={() => onHoverChange?.(null)}
       className={cn(
         "border bg-background/25 hover:bg-background/60 hover:shadow-sm transition-all duration-200 group relative overflow-hidden rounded-lg cursor-pointer border-l-2",
         isDraggable ? "cursor-grab active:cursor-grabbing" : "",
         item.placeholder && "border-dashed border-border opacity-70",
         isActive && "border-primary/40 bg-primary/5 shadow-xs",
         !isActive && "border-border/40 hover:border-primary/20",
-        epicColor?.border || "border-l-border/40"
+        epicColor?.border || "border-l-border/40",
+        relationStyles
       )}
     >
       <CardContent className="p-3 space-y-1.5 select-none">
@@ -2331,7 +2540,24 @@ function StoryKanbanCard({
           <span className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-2 flex-1" title={name}>
             {name.replace('features/', '')}
           </span>
-          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
+          <div className="flex items-center gap-1.5 shrink-0">
+            {relation && relation !== 'self' && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[8px] font-extrabold px-1.5 h-4.5 rounded-sm border shrink-0 select-none tracking-wider",
+                  relation === 'prerequisite' && "bg-sky-500/20 text-sky-400 border-sky-500/35",
+                  relation === 'dependent' && "bg-purple-500/20 text-purple-400 border-purple-500/35",
+                  relation === 'peer' && "bg-amber-500/20 text-amber-400 border-amber-500/35"
+                )}
+              >
+                {relation === 'prerequisite' && 'Prereq'}
+                {relation === 'dependent' && 'Dependent'}
+                {relation === 'peer' && 'Peer'}
+              </Badge>
+            )}
+            <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
+          </div>
         </div>
 
         {/* Description */}
@@ -2405,6 +2631,8 @@ interface ListStoryRowProps {
   updatingTaskId: string | null;
   activeAction: { type: string; file: string } | null;
   allStories?: any[];
+  hoveredStorySlug?: string | null;
+  onHoverChange?: (slug: string | null) => void;
 }
 
 function ListStoryRow({
@@ -2417,7 +2645,9 @@ function ListStoryRow({
   onToggleTask,
   updatingTaskId,
   activeAction,
-  allStories
+  allStories,
+  hoveredStorySlug,
+  onHoverChange
 }: ListStoryRowProps) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
@@ -2428,8 +2658,32 @@ function ListStoryRow({
   const hasTasks = item.checklistTasks && item.checklistTasks.length > 0;
   const isActionLoading = !!(activeAction && activeAction.file === item.file);
 
+  const currentSlug = getSlug(item.file);
+  const relation = (hoveredStorySlug && allStories) ? isRelatedToHovered(item, hoveredStorySlug, allStories) : null;
+  const isUnrelated = !!hoveredStorySlug && relation === null;
+
+  let relationStyles = '';
+  if (relation === 'self') {
+    relationStyles = 'ring-2 ring-violet-500/80 bg-violet-950/20 border-violet-500 shadow-[0_0_15px_rgba(139,92,246,0.2)] scale-[1.01]';
+  } else if (relation === 'prerequisite') {
+    relationStyles = 'ring-2 ring-sky-500/80 bg-sky-950/20 border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.2)] scale-[1.01]';
+  } else if (relation === 'dependent') {
+    relationStyles = 'ring-2 ring-purple-500/80 bg-purple-950/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)] scale-[1.01]';
+  } else if (relation === 'peer') {
+    relationStyles = 'ring-2 ring-amber-500/80 bg-amber-950/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] scale-[1.01]';
+  } else if (isUnrelated) {
+    relationStyles = 'opacity-30 blur-[0.2px] scale-[0.99] transition-all duration-200';
+  }
+
   return (
-    <div className="border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-150">
+    <div
+      onMouseEnter={() => onHoverChange?.(currentSlug)}
+      onMouseLeave={() => onHoverChange?.(null)}
+      className={cn(
+        "border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-150",
+        relationStyles
+      )}
+    >
       {/* Row Header */}
       <div className="flex items-center justify-between p-3 gap-3 flex-wrap sm:flex-nowrap">
         {/* Story Title & File */}
@@ -2507,10 +2761,28 @@ function ListStoryRow({
           </div>
         )}
 
-        {/* Status indicator */}
-        <Badge className={cn("text-[8px] font-extrabold h-4.5 px-1.5 py-0.5 rounded-sm border shrink-0 select-none", statusCfg.bg)}>
-          {statusCfg.label}
-        </Badge>
+        <div className="flex items-center gap-1.5 shrink-0 select-none">
+          {relation && relation !== 'self' && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-[8px] font-extrabold h-4.5 px-1.5 py-0.5 rounded-sm border shrink-0 select-none tracking-wider",
+                relation === 'prerequisite' && "bg-sky-500/20 text-sky-400 border-sky-500/35",
+                relation === 'dependent' && "bg-purple-500/20 text-purple-400 border-purple-500/35",
+                relation === 'peer' && "bg-amber-500/20 text-amber-400 border-amber-500/35"
+              )}
+            >
+              {relation === 'prerequisite' && 'Prereq'}
+              {relation === 'dependent' && 'Dependent'}
+              {relation === 'peer' && 'Peer'}
+            </Badge>
+          )}
+
+          {/* Status indicator */}
+          <Badge className={cn("text-[8px] font-extrabold h-4.5 px-1.5 py-0.5 rounded-sm border shrink-0 select-none", statusCfg.bg)}>
+            {statusCfg.label}
+          </Badge>
+        </div>
 
         {/* Row Actions */}
         <div className="flex items-center gap-1 shrink-0 ml-2 select-none">

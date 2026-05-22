@@ -23,7 +23,7 @@ import {
 import { resolve, join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as toYaml } from 'yaml';
-import type { BridgeConfig, ProjectStack } from './types.ts';
+import type { BridgeConfig, ProjectStack, AppSpec, FeatureEpicSpec, StoryReferenceSpec, TaskItemSpec } from './types.ts';
 import { log, logError } from './log.ts';
 
 // ─── Resolve factory root from this file's location ──────
@@ -292,6 +292,175 @@ function copyManageSh(factoryRoot: string, factoryDir: string): { path: string; 
     return { path: '.factory/task-manager/manage.sh', action: 'skipped' };
 }
 
+
+/** Generate a completed app.yaml spec from an existing codebase */
+export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
+    const name = basename(repoPath);
+    let description = `Existing codebase for ${name}`;
+    let version = '1.0.0';
+
+    const pkgPath = join(repoPath, 'package.json');
+    if (existsSync(pkgPath)) {
+        try {
+            const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+            if (pkg.description) description = pkg.description;
+            if (pkg.version) version = pkg.version;
+        } catch {}
+    }
+
+    const stack = detectStack(repoPath) || { framework: 'node', packageManager: 'npm' };
+
+    // Detect routes/pages
+    const possibleRoutes: string[] = [];
+    const appDirs = [
+        join(repoPath, 'src', 'app'),
+        join(repoPath, 'app'),
+        join(repoPath, 'src', 'pages'),
+        join(repoPath, 'pages')
+    ];
+
+    for (const appDir of appDirs) {
+        if (existsSync(appDir)) {
+            try {
+                const entries = readdirSync(appDir, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (
+                        entry.isDirectory() &&
+                        !entry.name.startsWith('_') &&
+                        !entry.name.startsWith('.') &&
+                        entry.name !== 'api' &&
+                        entry.name !== 'components'
+                    ) {
+                        possibleRoutes.push(entry.name);
+                    }
+                }
+            } catch {}
+        }
+    }
+
+    const features: FeatureEpicSpec[] = [];
+
+    // 1. Foundational Scaffold Feature
+    features.push({
+        name: 'Project Foundation',
+        description: 'Scaffold and baseline project setup.',
+        status: 'completed',
+        stories: [
+            {
+                name: 'Scaffold Environment',
+                file: `stories/apps/${name}.yaml`,
+                status: 'done',
+                tasks: [
+                    { id: 'task-init-setup', title: 'Initialize project, configurations, and environment dependencies', status: 'completed' }
+                ]
+            }
+        ]
+    });
+
+    // 2. Database Feature (if Prisma or Drizzle ORM detected)
+    const hasPrisma = existsSync(join(repoPath, 'prisma'));
+    const hasDrizzle = existsSync(join(repoPath, 'drizzle.config.ts')) || existsSync(join(repoPath, 'drizzle.config.js')) || existsSync(join(repoPath, 'drizzle'));
+
+    if (hasPrisma || hasDrizzle) {
+        const dbTech = hasPrisma ? 'Prisma' : 'Drizzle';
+        features.push({
+            name: 'Database Layer',
+            description: `Database connectivity, schema validation, and ORM layer configuration using ${dbTech}.`,
+            status: 'completed',
+            stories: [
+                {
+                    name: `${dbTech} Configuration`,
+                    status: 'done',
+                    tasks: [
+                        { id: 'task-db-setup', title: `Setup ${dbTech} ORM, configure database credentials, and seed initial schemas`, status: 'completed' }
+                    ]
+                }
+            ]
+        });
+    }
+
+    // 3. Page Routes Feature
+    if (possibleRoutes.length > 0) {
+        const routeStories: StoryReferenceSpec[] = possibleRoutes.map(route => {
+            const routeName = route.charAt(0).toUpperCase() + route.slice(1);
+            return {
+                name: `${routeName} Page`,
+                status: 'done',
+                tasks: [
+                    { id: `task-route-${route}`, title: `Implement ${route} page layout and visual route components`, status: 'completed' }
+                ]
+            };
+        });
+
+        features.push({
+            name: 'Application Pages & Routing',
+            description: 'Core user-facing layout views and page route handlers.',
+            status: 'completed',
+            stories: routeStories
+        });
+    } else {
+        // Fallback main page feature
+        features.push({
+            name: 'Core Application Pages',
+            description: 'Main user-facing layouts and pages.',
+            status: 'completed',
+            stories: [
+                {
+                    name: 'Root Application Page',
+                    status: 'done',
+                    tasks: [
+                        { id: 'task-root-page', title: 'Scaffold application root homepage view and components', status: 'completed' }
+                    ]
+                }
+            ]
+        });
+    }
+
+    // 4. UI Components Feature (if components dir exists)
+    if (existsSync(join(repoPath, 'src', 'components')) || existsSync(join(repoPath, 'components'))) {
+        features.push({
+            name: 'UI Components Library',
+            description: 'Reusable structural layout components and design tokens.',
+            status: 'completed',
+            stories: [
+                {
+                    name: 'Common Design System',
+                    status: 'done',
+                    tasks: [
+                        { id: 'task-common-ui', title: 'Scaffold responsive common layout component wrappers and UI elements', status: 'completed' }
+                    ]
+                }
+            ]
+        });
+    }
+
+    // Formulate a beautiful BRD section
+    const frameworkName = stack.framework || 'Node.js';
+    const brd = `
+# ${name} (BRD)
+
+${description}
+
+## Core Requirements & Integrations
+- **Framework**: ${frameworkName}
+- **Package Manager**: ${stack.packageManager || 'npm'}
+- **Detected Routes**: ${possibleRoutes.join(', ') || 'None (Single landing page)'}
+`.trim();
+
+    return {
+        apiVersion: 'factory.com/v1alpha1' as any,
+        kind: 'App' as any,
+        name,
+        description,
+        brd,
+        version,
+        stack: stack as any,
+        features,
+        status: 'done',
+        progressPercent: 100
+    } as any;
+}
+
 // ─── initBridge ──────────────────────────────────────────
 
 export function initBridge(repoPath: string): InitResult {
@@ -437,6 +606,20 @@ export function initBridge(repoPath: string): InitResult {
         files.push(agentsResult);
     } catch (e) {
         logError(`agents.md patch failed: ${e}`);
+    }
+
+    // 10. app.yaml — generate completed spec if not exists
+    const appYamlPath = join(factoryDir, 'app.yaml');
+    if (!existsSync(appYamlPath)) {
+        try {
+            const appSpec = generateAppYamlFromExistingCodebase(repoPath);
+            writeFileSync(appYamlPath, toYaml(appSpec));
+            files.push({ path: '.factory/app.yaml', action: 'created' });
+        } catch (e) {
+            logError(`app.yaml generation failed: ${e}`);
+        }
+    } else {
+        files.push({ path: '.factory/app.yaml', action: 'skipped' });
     }
 
     log('✓', `Initialized .factory/ bridge in ${repoPath} (${files.filter(f => f.action === 'created').length} created, ${files.filter(f => f.action === 'skipped').length} skipped)`);

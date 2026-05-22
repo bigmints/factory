@@ -95,7 +95,9 @@ export function calculateRollups(app: any, appSlug: string): any {
                         if (allCompleted) {
                             story.status = 'done';
                         } else if (anyStarted) {
-                            story.status = 'in-progress';
+                            if (!['validation', 'review', 'done'].includes(story.status)) {
+                                story.status = 'in-progress';
+                            }
                         }
                         // Otherwise keep the original status (e.g. draft, ready)
                     }
@@ -177,6 +179,45 @@ export async function syncAppRoadmap(appYamlPath: string): Promise<void> {
     }
 
     const appSlug = slugify(app.name);
+
+    // Sync physical story statuses first
+    if (app.features) {
+        for (const feature of app.features) {
+            if (feature.stories) {
+                for (const story of feature.stories) {
+                    if (story.file) {
+                        try {
+                            const { resolveStoryPath } = await import('./story.ts');
+                            const storyAbsPath = resolveStoryPath(story.file);
+                            if (existsSync(storyAbsPath)) {
+                                const rawStory = readFileSync(storyAbsPath, 'utf-8');
+                                const parsedStory = parseYaml(rawStory) as any;
+                                const physicalStatus = parsedStory?.status;
+                                if (physicalStatus) {
+                                    story.status = physicalStatus;
+                                    
+                                    // If story is physically done, ensure all tasks are marked completed
+                                    if (physicalStatus === 'done' && story.tasks) {
+                                        for (const task of story.tasks) {
+                                            task.status = 'completed';
+                                        }
+                                    } else if (['in-progress', 'validation', 'review'].includes(physicalStatus) && story.tasks) {
+                                        // Ensure at least one task is started to support the rollup logic
+                                        const hasStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                                        if (!hasStarted && story.tasks.length > 0) {
+                                            story.tasks[0].status = physicalStatus === 'review' ? 'failed' : 'running';
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: any) {
+                            logError(`Failed to sync physical story file "${story.file}": ${e?.message || e}`);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Perform rollup computations directly in memory
     const updatedApp = calculateRollups(app, appSlug);
@@ -337,6 +378,16 @@ export async function updateStoryStatusInApp(storyFile: string, newStatus: strin
                     const storyBasename = (story.file || '').split('/').pop();
                     if (story.file === storyFile || storyBasename === basenameOfFile) {
                         story.status = newStatus;
+                        if (newStatus === 'done' && story.tasks) {
+                            for (const task of story.tasks) {
+                                task.status = 'completed';
+                            }
+                        } else if (['in-progress', 'validation', 'review'].includes(newStatus) && story.tasks) {
+                            const hasStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                            if (!hasStarted && story.tasks.length > 0) {
+                                story.tasks[0].status = newStatus === 'review' ? 'failed' : 'running';
+                            }
+                        }
                         found = true;
                         break;
                     }

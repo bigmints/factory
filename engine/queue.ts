@@ -6,7 +6,7 @@
 import { writeHeartbeat } from './toon.ts';
 import { log, logError } from './log.ts';
 import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 
@@ -177,10 +177,59 @@ export function enqueue(
     return newItem;
 }
 
+/** Extract exact story slug from a story file path. */
+export function getSlugFromPath(storyFile: string): string {
+    return basename(storyFile).replace(/\.ya?ml$/, '');
+}
+
+/** Get the latest queued item matching a dependency slug by sorting by addedAt descending. */
+export function getLatestDependencyItem(depSlug: string): QueueItem | null {
+    const queue = loadQueue();
+    const matchingItems = queue.filter(
+        item => getSlugFromPath(item.storyFile) === depSlug
+    );
+    if (matchingItems.length === 0) return null;
+    return matchingItems.sort((a, b) => b.addedAt.localeCompare(a.addedAt))[0];
+}
+
+/** Check if a queue item is ready to build based on explicit and implicit dependencies. */
+export function isItemReady(item: QueueItem): { ready: boolean; reason: string | null } {
+    // 1. Implicit parent AppStory dependency check for FeatureStories
+    if (item.kind === 'FeatureStory' && item.targetApp) {
+        const latestApp = getLatestDependencyItem(item.targetApp);
+        if (latestApp) {
+            if (latestApp.status === 'failed' || latestApp.status === 'blocked') {
+                return { ready: false, reason: `App story "${latestApp.storyFile}" ${latestApp.status}. Cannot build feature on a broken app.` };
+            }
+            if (latestApp.status === 'pending' || latestApp.status === 'running') {
+                return { ready: false, reason: `App story "${latestApp.storyFile}" has not completed yet.` };
+            }
+        }
+    }
+
+    // 2. Explicit dependsOn check
+    const dependsOn = item.dependsOn || [];
+    for (const depSlug of dependsOn) {
+        const latestDep = getLatestDependencyItem(depSlug);
+        if (!latestDep) {
+            return { ready: false, reason: `Dependency "${depSlug}" is missing from the queue.` };
+        }
+        if (latestDep.status === 'failed' || latestDep.status === 'blocked') {
+            return { ready: false, reason: `Dependency "${depSlug}" (${latestDep.storyFile}) ${latestDep.status}. Cannot proceed.` };
+        }
+        if (latestDep.status === 'pending' || latestDep.status === 'running') {
+            return { ready: false, reason: `Dependency "${depSlug}" has not completed yet.` };
+        }
+    }
+
+    return { ready: true, reason: null };
+}
+
 /**
  * Get the next pending item whose dependencies are all met.
  * Order: phase ASC, priority DESC, added_at ASC.
  * Skips items whose dependsOn stories are not all 'completed'.
+ * Auto-blocks items whose dependencies have failed.
  */
 export function dequeue(): QueueItem | null {
     const queue = loadQueue();
@@ -193,8 +242,16 @@ export function dequeue(): QueueItem | null {
         });
 
     for (const item of pendingItems) {
-        if (areDependenciesMet(item.dependsOn)) {
+        const status = isItemReady(item);
+        if (status.ready) {
             return item;
+        } else if (status.reason && (status.reason.includes('failed') || status.reason.includes('blocked') || status.reason.includes('missing'))) {
+            // Permanently block item with failed prerequisites
+            updateItem(item.id, {
+                status: 'blocked',
+                error: status.reason,
+                completedAt: timestamp()
+            });
         }
     }
 
@@ -208,14 +265,11 @@ export function dequeue(): QueueItem | null {
 export function areDependenciesMet(dependsOn: string[]): boolean {
     if (!dependsOn || dependsOn.length === 0) return true;
 
-    const queue = loadQueue();
     for (const depSlug of dependsOn) {
-        // Match by storyFile containing the slug
-        const completed = queue.some(
-            item => item.storyFile.includes(depSlug) && item.status === 'completed'
-        );
-
-        if (!completed) return false;
+        const latestDep = getLatestDependencyItem(depSlug);
+        if (!latestDep || latestDep.status !== 'completed') {
+            return false;
+        }
     }
 
     return true;

@@ -299,7 +299,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [queueRunning, setQueueRunning] = useState(false);
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string | null>(null);
-  const [buildEngine, setBuildEngine] = useState<'factory' | 'gemini-cli' | 'pi-cli'>('factory');
+  const [buildLogsOpen, setBuildLogsOpen] = useState(false);
 
   // Dev Server Controls
   const [runStatus, setRunStatus] = useState<'stopped' | 'starting' | 'running'>('stopped');
@@ -308,6 +308,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const [runLogs, setRunLogs] = useState<string>('');
   const [serverLogsOpen, setServerLogsOpen] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [showDesktopFilters, setShowDesktopFilters] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   // Build Pipeline Logs
@@ -610,7 +611,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           kind,
           phase: extra?.phase,
           dependsOn: extra?.dependsOn,
-          engine: buildEngine
+          engine: 'factory'
         }),
       });
       if (res.ok) {
@@ -634,6 +635,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         toast.success('Build pipeline running...');
         fetchQueue();
         setViewMode('queue');
+        setBuildLogsOpen(true);
       } else {
         const err = await res.json();
         toast.error('Failed to launch pipeline', { description: err.error });
@@ -685,7 +687,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             kind: spec.kind,
             phase: spec.phase,
             dependsOn: spec.dependsOn,
-            engine: buildEngine
+            engine: 'factory'
           })
         });
         if (res.ok) enqueued++;
@@ -698,6 +700,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           toast.success(`Success! Launched build for ${enqueued} stories.`, { id: toastId });
           fetchQueue();
           setViewMode('queue');
+          setBuildLogsOpen(true);
         } else {
           toast.error('Failed to trigger execution runner', { id: toastId });
         }
@@ -776,7 +779,10 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         toast.success('Retrying item');
         fetchQueue();
         const startRes = await fetch('/api/queue/start', { method: 'POST' });
-        if (startRes.ok) setViewMode('queue');
+        if (startRes.ok) {
+          setViewMode('queue');
+          setBuildLogsOpen(true);
+        }
       }
     } catch {
       toast.error('Failed to retry queue item');
@@ -1016,20 +1022,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             </div>
 
             {/* Right Column: Unified Actions Toolbar */}
-            <div className="flex flex-wrap items-center gap-1 shrink-0 w-full lg:w-auto">
-              {/* Build Ready Stories button */}
-              <Button
-                onClick={handleBuildReadyStories}
-                disabled={queueRunning || syncing}
-                className={cn(
-                  "h-7 text-[10px] gap-1 rounded-md font-bold transition-all duration-200 flex-1 sm:flex-none justify-center px-2.5",
-                  queueRunning ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-sm active:scale-95"
-                )}
-              >
-                <Rocket className={cn("h-3 w-3", queueRunning && "animate-bounce")} />
-                <span>Build Ready</span>
-              </Button>
-
+            <div className="flex items-center gap-1.5 shrink-0 w-full lg:w-auto justify-end">
               {/* Dev App Server Controls Pill */}
               <div className="flex items-center border rounded-md bg-background p-0.5 h-7 text-[10px] select-none shrink-0">
                 <div className="flex items-center gap-1 px-1">
@@ -1094,26 +1087,16 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                 </Button>
               </div>
 
-              {/* New Story button */}
-              <Button
-                size="sm"
-                onClick={() => setShowStoryChat(true)}
-                className="h-7 text-[10px] gap-1 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0 px-2.5 flex-1 sm:flex-none"
-              >
-                <Plus className="h-3 w-3" />
-                <span>New Story</span>
-              </Button>
-
               {/* Refresh data button */}
               <Button
                 variant="outline"
-                size="sm"
+                size="icon"
                 onClick={handleSyncRoadmap}
                 disabled={syncing}
-                className="h-7 text-[10px] rounded-md gap-1 px-2 text-muted-foreground hover:text-foreground shrink-0 flex-1 sm:flex-none"
+                className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground shrink-0"
+                title="Refresh project data"
               >
-                <RefreshCw className={cn("h-2.5 w-2.5", syncing && "animate-spin")} />
-                <span>Refresh</span>
+                <RefreshCw className={cn("h-3 w-3", syncing && "animate-spin")} />
               </Button>
             </div>
           </div>
@@ -1122,8 +1105,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
 
           {/* Controls & Filter Bar inside the Card */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 select-none">
-            {/* Left side: View tabs & Mobile Filters Toggle Button */}
-            <div className="flex items-center gap-1 shrink-0 self-start md:self-auto w-full md:w-auto">
+            {/* Left side: View tabs, New Story, and Build Ready buttons */}
+            <div className="flex items-center gap-1.5 shrink-0 self-start md:self-auto w-full md:w-auto">
               <div className="flex items-center gap-1 p-0.5 bg-muted/60 border rounded-md h-7.5 shrink-0">
                 <Button
                   size="sm"
@@ -1151,62 +1134,67 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                 </Button>
               </div>
 
-              {/* Optional mobile filters button */}
+              {/* New Story button next to tabs (Responsive) */}
               <Button
-                variant="outline"
                 size="sm"
-                onClick={() => setShowMobileFilters(true)}
-                className={cn(
-                  "h-7.5 text-[10px] gap-1 rounded-md px-2.5 md:hidden border-border bg-background hover:bg-muted/80 ml-auto",
-                  (searchQuery || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary"
-                )}
+                onClick={() => setShowStoryChat(true)}
+                className="h-7.5 w-7.5 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0 flex items-center justify-center ml-0.5"
+                title="New Story"
               >
-                <Filter className="h-3 w-3" />
-                <span>Filters</span>
-                {(searchQuery || epicFilter !== 'all' || statusFilter !== 'all') && (
-                  <span className="flex h-1.5 w-1.5 rounded-full bg-primary" />
+                <Plus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">New Story</span>
+              </Button>
+
+              {/* Build Ready Stories button grouped side-by-side (Responsive) */}
+              <Button
+                onClick={handleBuildReadyStories}
+                disabled={queueRunning || syncing}
+                className={cn(
+                  "h-7.5 w-7.5 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md font-bold transition-all duration-200 shrink-0 flex items-center justify-center",
+                  queueRunning ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-sm active:scale-95"
                 )}
+                title="Build Ready Stories"
+              >
+                <Rocket className={cn("h-3 w-3", queueRunning && "animate-bounce")} />
+                <span className="hidden sm:inline">Build Ready</span>
               </Button>
             </div>
 
-            {/* Right side: Search, Dropdowns (Desktop only) */}
-            <div className="hidden md:flex items-center gap-1.5 w-auto">
+            {/* Right side: Search, Filters toggle */}
+            <div className="flex items-center gap-1.5 w-full md:w-auto justify-end">
               {/* Search box */}
-              <div className="relative w-40 md:w-44 shrink-0">
-                <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground/75" />
+              <div className="relative flex-1 md:flex-initial w-full md:w-44 shrink-0">
+                <Search className="absolute left-2.5 top-2.5 h-3 w-3 text-muted-foreground/75" />
                 <Input
                   placeholder="Search stories..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-6.5 h-7 text-[10px] rounded-md bg-muted/30 w-full"
+                  className="pl-7 h-7.5 text-[10px] rounded-md bg-muted/30 w-full"
                 />
               </div>
 
-              {/* Epic Filter */}
-              <select
-                value={epicFilter}
-                onChange={e => setEpicFilter(e.target.value)}
-                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-32 cursor-pointer"
+              {/* Universal Filters Toggle Button (Desktop collapsible toggle / Mobile bottom sheet) */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (window.innerWidth < 768) {
+                    setShowMobileFilters(true);
+                  } else {
+                    setShowDesktopFilters(!showDesktopFilters);
+                  }
+                }}
+                className={cn(
+                  "h-7.5 text-[10px] gap-1 rounded-md px-2.5 border-border bg-background hover:bg-muted/80 shrink-0 select-none",
+                  (showDesktopFilters || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary bg-primary/5"
+                )}
               >
-                <option value="all">All Epics</option>
-                {appRollup?.features?.map(f => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
-
-              {/* Status Filter */}
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-28 cursor-pointer"
-              >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="ready">Ready</option>
-                <option value="in-progress">In Progress</option>
-                <option value="failed">Failed</option>
-                <option value="done">Done</option>
-              </select>
+                <Filter className="h-3 w-3" />
+                <span>Filters</span>
+                {(epicFilter !== 'all' || statusFilter !== 'all') && (
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                )}
+              </Button>
 
               {/* Loading indicator */}
               {loading && (
@@ -1214,6 +1202,56 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               )}
             </div>
           </div>
+
+          {/* Desktop Collapsible Inline Filters Sub-row */}
+          {showDesktopFilters && (
+            <div className="hidden md:flex items-center gap-4 px-3 py-2 bg-muted/15 border border-border/40 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200 mt-2 select-none">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Epic:</span>
+                <select
+                  value={epicFilter}
+                  onChange={e => setEpicFilter(e.target.value)}
+                  className="h-7 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-40 cursor-pointer"
+                >
+                  <option value="all">All Epics</option>
+                  {appRollup?.features?.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Status:</span>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  className="h-7 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-32 cursor-pointer"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="ready">Ready</option>
+                  <option value="in-progress">In Progress</option>
+                  <option value="failed">Failed</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+
+              {(epicFilter !== 'all' || statusFilter !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEpicFilter('all');
+                    setStatusFilter('all');
+                  }}
+                  className="h-7 text-[10px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1 px-2 ml-auto rounded-md"
+                >
+                  <X className="h-3 w-3" />
+                  <span>Reset Filters</span>
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1446,9 +1484,9 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         const isSelectedRunning = selectedQueueItem?.status === 'running';
 
         return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="max-w-3xl mx-auto w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
           {/* Queue Timeline — chronological list of items */}
-          <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg overflow-hidden lg:col-span-4 h-[500px] md:h-[calc(100vh-170px)] flex flex-col">
+          <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg overflow-hidden w-full h-[500px] md:h-[calc(100vh-170px)] flex flex-col">
             <CardHeader className="border-b border-border/50 p-4 shrink-0 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-sm font-bold text-foreground">Build Timeline</CardTitle>
@@ -1491,7 +1529,10 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                         <div
                           key={item.id}
                           className="flex items-start gap-3 cursor-pointer group"
-                          onClick={() => setSelectedQueueItemId(item.id)}
+                          onClick={() => {
+                            setSelectedQueueItemId(item.id);
+                            setBuildLogsOpen(true);
+                          }}
                         >
                           {/* Timeline dot */}
                           <div className={cn(
@@ -1566,48 +1607,55 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             </ScrollArea>
           </Card>
 
-          {/* Per-item Log Console */}
-          <Card className="border border-border/80 bg-zinc-950 shadow-2xl lg:col-span-8 h-[500px] md:h-[calc(100vh-170px)] flex flex-col overflow-hidden">
-            <div className="bg-zinc-900 border-b border-border/40 px-4 py-3 shrink-0 flex items-center justify-between select-none">
-              <span className="flex items-center gap-2 text-zinc-300 text-xs font-bold font-mono min-w-0">
-                <Terminal className="h-4 w-4 text-primary shrink-0" />
-                <span className="truncate" title={panelLabel}>{panelLabel}</span>
-                {isSelectedRunning && (
-                  <span className="relative flex h-2 w-2 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          {/* Build Queue Logs Sliding Drawer */}
+          <Sheet open={buildLogsOpen} onOpenChange={setBuildLogsOpen}>
+            <SheetContent side="right" className="w-full sm:max-w-2xl bg-zinc-950 border-l border-border/40 shadow-2xl flex flex-col p-0 overflow-hidden text-zinc-300 font-mono focus:outline-none select-none">
+              <div className="bg-zinc-900 border-b border-border/40 px-4 py-3 shrink-0 flex items-center justify-between">
+                <span className="flex items-center gap-2 text-zinc-300 text-xs font-bold font-mono min-w-0">
+                  <Terminal className="h-4 w-4 text-primary shrink-0" />
+                  <span className="truncate" title={panelLabel}>{panelLabel}</span>
+                  {isSelectedRunning && (
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    </span>
+                  )}
+                  {selectedQueueItem && !isSelectedRunning && (
+                    <Badge variant="outline" className={cn(
+                      "text-[8px] font-bold h-4 px-1.5 rounded uppercase border ml-1 shrink-0",
+                      selectedQueueItem.status === 'failed' ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
+                      selectedQueueItem.status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
+                      "bg-muted border-border text-muted-foreground"
+                    )}>
+                      {selectedQueueItem.status}
+                    </Badge>
+                  )}
+                </span>
+                <div className="flex items-center gap-3 shrink-0 ml-2">
+                  <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
+                    {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
                   </span>
-                )}
-                {selectedQueueItem && !isSelectedRunning && (
-                  <Badge variant="outline" className={cn(
-                    "text-[8px] font-bold h-4 px-1.5 rounded uppercase border ml-1 shrink-0",
-                    selectedQueueItem.status === 'failed' ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
-                    selectedQueueItem.status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
-                    "bg-muted border-border text-muted-foreground"
-                  )}>
-                    {selectedQueueItem.status}
-                  </Badge>
-                )}
-              </span>
-              <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider shrink-0 ml-2">
-                {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
-              </span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
-              {panelLog ? (
-                panelLog.split('\n').map((l, i) => (
-                  <div key={i} className="leading-5 whitespace-pre-wrap">{l || '\u00A0'}</div>
-                ))
-              ) : (
-                <div className="text-zinc-500 italic py-6 text-center">
-                  {selectedQueueItem
-                    ? `No logs captured for this ${selectedQueueItem.kind.replace('Story', '')} build yet.`
-                    : 'Select a build item from the timeline to view its logs.'}
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md shrink-0 focus:outline-none" onClick={() => setBuildLogsOpen(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-              )}
-              <div ref={terminalEndRef} />
-            </div>
-          </Card>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
+                {panelLog ? (
+                  panelLog.split('\n').map((l, i) => (
+                    <div key={i} className="leading-5 whitespace-pre-wrap">{l || '\u00A0'}</div>
+                  ))
+                ) : (
+                  <div className="text-zinc-500 italic py-6 text-center">
+                    {selectedQueueItem
+                      ? `No logs captured for this ${selectedQueueItem.kind.replace('Story', '')} build yet.`
+                      : 'Select a build item from the timeline to view its logs.'}
+                  </div>
+                )}
+                <div ref={terminalEndRef} />
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
         );
       })()}

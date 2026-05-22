@@ -268,7 +268,7 @@ export function IntegrationsView() {
         }
       }
 
-      let envObj: Record<string, string> = {};
+      const envObj: Record<string, string> = {};
       if (form.transport === 'stdio') {
         if (form.envMode === 'json') {
           try {

@@ -124,7 +124,7 @@ export async function GET(request: Request) {
         const category = searchParams.get('category');
         const search = searchParams.get('search');
 
-        let mcpSkills: Skill[] = [];
+        const mcpSkills: Skill[] = [];
         try {
             const mcpConfig = loadMcpConfig();
             if (mcpConfig.mcpServers) {

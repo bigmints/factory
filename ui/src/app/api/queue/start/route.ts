@@ -17,7 +17,9 @@ import {
   loadQueue,
   updateItem,
   getQueueStats,
-  QueueItem
+  QueueItem,
+  isItemReady,
+  getSlugFromPath
 } from '@engine/queue';
 import { getActiveProject } from '@engine/config';
 import { logBuild } from '@engine/db';
@@ -70,49 +72,6 @@ function resolveStoryPath(storyFile: string, kind: string): string {
   return storyFile;
 }
 
-/**
- * Check if an item should be blocked because its dependencies failed.
- * Returns the reason string if blocked, or null if OK to proceed.
- */
-function checkDependencyBlock(item: QueueItem): string | null {
-  const queue = loadQueue();
-  const file = item.storyFile;
-
-  // 1. For FeatureStories: implicit dependency on the app story
-  if (item.kind === 'FeatureStory' && item.targetApp) {
-    const appItems = queue.filter(a => a.kind === 'AppStory');
-
-    const matchingApp = appItems.find(a => {
-      const slug = a.storyFile.replace(/\.ya?ml$/, '').replace(/^apps\//, '');
-      return slug === item.targetApp;
-    });
-
-    if (matchingApp) {
-      if (matchingApp.status === 'failed' || matchingApp.status === 'blocked') {
-        return `App story "${matchingApp.storyFile}" ${matchingApp.status}. Cannot build feature on a broken app.`;
-      }
-      if (matchingApp.status === 'pending' || matchingApp.status === 'running') {
-        return `App story "${matchingApp.storyFile}" has not completed yet.`;
-      }
-    }
-  }
-
-  // 2. Explicit dependsOn check
-  const dependsOn = item.dependsOn || [];
-  if (dependsOn.length > 0) {
-    for (const dep of dependsOn) {
-      const depItem = queue
-        .filter(i => i.storyFile.includes(dep))
-        .sort((a, b) => b.addedAt.localeCompare(a.addedAt))[0];
-
-      if (depItem && (depItem.status === 'failed' || depItem.status === 'blocked')) {
-        return `Dependency "${dep}" (${depItem.storyFile}) ${depItem.status}. Cannot proceed.`;
-      }
-    }
-  }
-
-  return null;
-}
 
 /**
  * Write queue blueprint for feature builds — what has been completed so far.
@@ -260,19 +219,25 @@ function processQueueInBackground() {
     index++;
 
     // ── Dependency cascade check ──
-    const blockReason = checkDependencyBlock(item);
-    if (blockReason) {
-      updateItem(item.id, {
-        status: 'blocked',
-        error: blockReason,
-        completedAt: new Date().toISOString()
-      });
-
-      try {
-        appendFileSync(LOG_FILE, `\n[blocked] ${item.storyFile}: ${blockReason}\n`);
-      } catch {}
-
-      processNext(); // Skip to next item
+    const status = isItemReady(item);
+    if (!status.ready) {
+      if (status.reason && (status.reason.includes('failed') || status.reason.includes('blocked') || status.reason.includes('missing'))) {
+        // Permanent blocker
+        updateItem(item.id, {
+          status: 'blocked',
+          error: status.reason,
+          completedAt: new Date().toISOString()
+        });
+        try {
+          appendFileSync(LOG_FILE, `\n[blocked] ${item.storyFile}: ${status.reason}\n`);
+        } catch {}
+      } else {
+        // Temporary skip (prerequisite pending or running)
+        try {
+          appendFileSync(LOG_FILE, `\n[skipped] ${item.storyFile}: ${status.reason || 'Prerequisite pending'}\n`);
+        } catch {}
+      }
+      processNext(); // Skip to next item or wait
       return;
     }
 

@@ -108,7 +108,6 @@ export default function Dashboard() {
   const [isBuildingAll, setIsBuildingAll] = useState(false);
   const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
   const [queueRunning, setQueueRunning] = useState(false);
-  const [buildEngine, setBuildEngine] = useState<'factory' | 'gemini-cli' | 'pi-cli'>('factory');
 
   const logOffsetRef = useRef(0);
 
@@ -247,7 +246,7 @@ export default function Dashboard() {
       const enqueueRes = await fetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyFile: file, specFile: file, kind: 'AppStory', engine: buildEngine }),
+        body: JSON.stringify({ storyFile: file, specFile: file, kind: 'AppStory', engine: 'factory' }),
       });
       const enqueueData = await enqueueRes.json();
       if (!enqueueRes.ok) {
@@ -294,7 +293,7 @@ export default function Dashboard() {
         const enqueueRes = await fetch('/api/queue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storyFile: file, specFile: file, kind: 'FeatureStory', engine: buildEngine }),
+          body: JSON.stringify({ storyFile: file, specFile: file, kind: 'FeatureStory', engine: 'factory' }),
         });
         const enqueueData = await enqueueRes.json();
         if (!enqueueRes.ok) {
@@ -349,7 +348,7 @@ export default function Dashboard() {
       const res = await fetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyFile, specFile: storyFile, kind, phase: opts?.phase, dependsOn: opts?.dependsOn, engine: buildEngine }),
+        body: JSON.stringify({ storyFile, specFile: storyFile, kind, phase: opts?.phase, dependsOn: opts?.dependsOn, engine: 'factory' }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -391,7 +390,7 @@ export default function Dashboard() {
           const res = await fetch('/api/queue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storyFile: story.file, specFile: story.file, kind: 'AppStory', phase: 0, dependsOn: [], buildAll: true, engine: buildEngine }),
+            body: JSON.stringify({ storyFile: story.file, specFile: story.file, kind: 'AppStory', phase: 0, dependsOn: [], buildAll: true, engine: 'factory' }),
           });
           if (res.ok) enqueued++;
           else {
@@ -426,7 +425,7 @@ export default function Dashboard() {
               phase: fs.phase ?? 0,
               dependsOn: fs.dependsOn ?? [],
               buildAll: true,
-              engine: buildEngine,
+              engine: 'factory',
             }),
           });
           if (res.ok) enqueued++;

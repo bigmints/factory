@@ -1842,6 +1842,121 @@ Fix any errors found before finishing.
 
     let exitCode: number | null = null;
     let spawnError: any = undefined;
+    let activeFilePath: string | null = null;
+    let currentOffset = 0;
+    let lineBuffer = '';
+    let pollingInterval: NodeJS.Timeout | null = null;
+
+    if (cli === 'pi') {
+        const { homedir } = await import('node:os');
+        const { join, basename } = await import('node:path');
+        const { existsSync, readdirSync, statSync, openSync, readSync, closeSync } = await import('node:fs');
+
+        const cleanDir = targetDir.endsWith('/') ? targetDir.slice(0, -1) : targetDir;
+        const slug = '--' + cleanDir.replace(/^\//, '').replace(/\//g, '-').replace(/--/g, '-') + '--';
+        const sessionDir = join(homedir(), '.pi', 'agent', 'sessions', slug);
+        const startTime = Date.now();
+
+        pollingInterval = setInterval(() => {
+            try {
+                if (!activeFilePath) {
+                    if (!existsSync(sessionDir)) return;
+                    const files = readdirSync(sessionDir);
+                    const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+                    if (jsonlFiles.length === 0) return;
+
+                    let newestFile: string | null = null;
+                    let newestMtime = 0;
+
+                    for (const file of jsonlFiles) {
+                        const filePath = join(sessionDir, file);
+                        const stat = statSync(filePath);
+                        if (stat.mtimeMs > newestMtime && stat.mtimeMs > startTime - 10000) {
+                            newestMtime = stat.mtimeMs;
+                            newestFile = filePath;
+                        }
+                    }
+
+                    if (newestFile) {
+                        activeFilePath = newestFile;
+                        log('→', `Discovered active CLI session log: ${basename(activeFilePath)}`);
+                    }
+                }
+
+                if (activeFilePath) {
+                    const stat = statSync(activeFilePath);
+                    if (stat.size > currentOffset) {
+                        const fd = openSync(activeFilePath, 'r');
+                        const buffer = Buffer.alloc(stat.size - currentOffset);
+                        readSync(fd, buffer, 0, buffer.length, currentOffset);
+                        closeSync(fd);
+                        currentOffset = stat.size;
+
+                        const text = buffer.toString('utf8');
+                        const lines = (lineBuffer + text).split('\n');
+                        lineBuffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (!line.trim()) continue;
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.type === 'message' && data.message) {
+                                    const role = data.message.role;
+                                    if (role === 'assistant') {
+                                        const content = data.message.content;
+                                        if (Array.isArray(content)) {
+                                            for (const item of content) {
+                                                if (item.type === 'thinking' && item.thinking) {
+                                                    const thinkingText = item.thinking.trim();
+                                                    if (thinkingText) {
+                                                        log('  ', `🤔 ${thinkingText.replace(/\n/g, '\n     ')}`);
+                                                    }
+                                                } else if (item.type === 'toolCall') {
+                                                    log('→', `🛠️  [Tool Call] ${item.name || ''} ${JSON.stringify(item.arguments || {})}`);
+                                                } else if (item.type === 'text' && item.text) {
+                                                    const chatText = item.text.trim();
+                                                    if (chatText) {
+                                                        log('  ', `💬 ${chatText.replace(/\n/g, '\n     ')}`);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (role === 'toolResult') {
+                                        const toolName = data.message.toolName || '';
+                                        const isError = data.message.isError || false;
+                                        let resultText = '';
+                                        if (Array.isArray(data.message.content)) {
+                                            const firstText = data.message.content.find((c: any) => c.type === 'text');
+                                            if (firstText && typeof firstText.text === 'string') {
+                                                resultText = firstText.text.trim();
+                                            }
+                                        }
+                                        if (isError) {
+                                            log('✗', `Tool ${toolName} failed.`);
+                                            if (resultText) {
+                                                log('  ', `Error: ${resultText.replace(/\n/g, '\n     ')}`);
+                                            }
+                                        } else {
+                                            log('✓', `Tool ${toolName} completed successfully.`);
+                                            if (resultText && toolName === 'bash') {
+                                                const lines = resultText.split('\n');
+                                                const snippet = lines.length > 5 ? lines.slice(0, 5).join('\n') + '\n     ... (truncated)' : resultText;
+                                                log('  ', `Output:\n     ${snippet.replace(/\n/g, '\n     ')}`);
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch {
+                                // Ignore partial line parse errors
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // Ignore tailing errors to keep engine running
+            }
+        }, 1000);
+    }
 
     await new Promise<void>((resolvePromise) => {
         const child = cpSpawn(cli, ['-p', prompt, ...yoloFlags], {
@@ -1860,14 +1975,88 @@ Fix any errors found before finishing.
 
         child.on('close', (code) => {
             exitCode = code;
+            if (pollingInterval) clearInterval(pollingInterval);
             resolvePromise();
         });
 
         child.on('error', (err) => {
             spawnError = err;
+            if (pollingInterval) clearInterval(pollingInterval);
             resolvePromise();
         });
     });
+
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+
+    // Flush any remaining logs in the active file
+    if (activeFilePath) {
+        try {
+            const { statSync, openSync, readSync, closeSync } = await import('node:fs');
+            const stat = statSync(activeFilePath);
+            if (stat.size > currentOffset) {
+                const fd = openSync(activeFilePath, 'r');
+                const buffer = Buffer.alloc(stat.size - currentOffset);
+                readSync(fd, buffer, 0, buffer.length, currentOffset);
+                closeSync(fd);
+                const text = buffer.toString('utf8');
+                const lines = (lineBuffer + text).split('\n');
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.type === 'message' && data.message) {
+                            const role = data.message.role;
+                            if (role === 'assistant') {
+                                const content = data.message.content;
+                                if (Array.isArray(content)) {
+                                    for (const item of content) {
+                                        if (item.type === 'thinking' && item.thinking) {
+                                            const thinkingText = item.thinking.trim();
+                                            if (thinkingText) {
+                                                log('  ', `🤔 ${thinkingText.replace(/\n/g, '\n     ')}`);
+                                            }
+                                        } else if (item.type === 'toolCall') {
+                                            log('→', `🛠️  [Tool Call] ${item.name || ''} ${JSON.stringify(item.arguments || {})}`);
+                                        } else if (item.type === 'text' && item.text) {
+                                            const chatText = item.text.trim();
+                                            if (chatText) {
+                                                log('  ', `💬 ${chatText.replace(/\n/g, '\n     ')}`);
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (role === 'toolResult') {
+                                const toolName = data.message.toolName || '';
+                                const isError = data.message.isError || false;
+                                let resultText = '';
+                                if (Array.isArray(data.message.content)) {
+                                    const firstText = data.message.content.find((c: any) => c.type === 'text');
+                                    if (firstText && typeof firstText.text === 'string') {
+                                        resultText = firstText.text.trim();
+                                    }
+                                }
+                                if (isError) {
+                                    log('✗', `Tool ${toolName} failed.`);
+                                    if (resultText) {
+                                        log('  ', `Error: ${resultText.replace(/\n/g, '\n     ')}`);
+                                    }
+                                } else {
+                                    log('✓', `Tool ${toolName} completed successfully.`);
+                                    if (resultText && toolName === 'bash') {
+                                        const lines = resultText.split('\n');
+                                        const snippet = lines.length > 5 ? lines.slice(0, 5).join('\n') + '\n     ... (truncated)' : resultText;
+                                        log('  ', `Output:\n     ${snippet.replace(/\n/g, '\n     ')}`);
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
+                }
+            }
+        } catch {}
+    }
 
     const success = spawnError === undefined && exitCode === 0;
 

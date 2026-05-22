@@ -306,7 +306,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const [runPid, setRunPid] = useState<number | null>(null);
   const [runPort, setRunPort] = useState<number | null>(null);
   const [runLogs, setRunLogs] = useState<string>('');
-  const [showServerLogs, setShowServerLogs] = useState(false);
+  const [serverLogsOpen, setServerLogsOpen] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   // Build Pipeline Logs
@@ -491,7 +492,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       toast.success('Local dev server started successfully');
       setRunStatus('running');
       if (json.pid) setRunPid(json.pid);
-      setShowServerLogs(true);
+      setServerLogsOpen(true);
       fetchRunStatus();
     } catch (err: any) {
       toast.error(err.message || 'Failed to start server');
@@ -1081,13 +1082,13 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                   </>
                 )}
 
-                {/* Terminal dropdown button */}
+                {/* Terminal sidebar button */}
                 <Separator orientation="vertical" className="h-3.5 mx-0.5" />
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => setShowServerLogs(!showServerLogs)}
-                  className={cn("h-5.5 w-5.5 rounded-sm", showServerLogs ? "bg-muted text-foreground" : "text-muted-foreground")}
+                  onClick={() => setServerLogsOpen(!serverLogsOpen)}
+                  className={cn("h-5.5 w-5.5 rounded-sm", serverLogsOpen ? "bg-muted text-foreground" : "text-muted-foreground")}
                 >
                   <Terminal className="h-3 w-3" />
                 </Button>
@@ -1120,39 +1121,58 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           <Separator className="opacity-40" />
 
           {/* Controls & Filter Bar inside the Card */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-            {/* Left side: View tabs */}
-            <div className="flex items-center gap-1 p-0.5 bg-muted/60 border rounded-md h-7.5 shrink-0 self-start md:self-auto">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 select-none">
+            {/* Left side: View tabs & Mobile Filters Toggle Button */}
+            <div className="flex items-center gap-1 shrink-0 self-start md:self-auto w-full md:w-auto">
+              <div className="flex items-center gap-1 p-0.5 bg-muted/60 border rounded-md h-7.5 shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setViewMode('board')}
+                  className={cn(
+                    "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
+                    viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Columns className="h-3 w-3" />
+                  <span>Board</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
+                    viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <ListTodo className="h-3 w-3" />
+                  <span>Roadmap</span>
+                </Button>
+              </div>
+
+              {/* Optional mobile filters button */}
               <Button
+                variant="outline"
                 size="sm"
-                variant="ghost"
-                onClick={() => setViewMode('board')}
+                onClick={() => setShowMobileFilters(true)}
                 className={cn(
-                  "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
-                  viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                  "h-7.5 text-[10px] gap-1 rounded-md px-2.5 md:hidden border-border bg-background hover:bg-muted/80 ml-auto",
+                  (searchQuery || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary"
                 )}
               >
-                <Columns className="h-3 w-3" />
-                <span>Board</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setViewMode('list')}
-                className={cn(
-                  "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
-                  viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                <Filter className="h-3 w-3" />
+                <span>Filters</span>
+                {(searchQuery || epicFilter !== 'all' || statusFilter !== 'all') && (
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-primary" />
                 )}
-              >
-                <ListTodo className="h-3 w-3" />
-                <span>Roadmap</span>
               </Button>
             </div>
 
-            {/* Right side: Search, Dropdowns, Engine */}
-            <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
+            {/* Right side: Search, Dropdowns (Desktop only) */}
+            <div className="hidden md:flex items-center gap-1.5 w-auto">
               {/* Search box */}
-              <div className="relative w-full sm:w-40 md:w-44 shrink-0">
+              <div className="relative w-40 md:w-44 shrink-0">
                 <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground/75" />
                 <Input
                   placeholder="Search stories..."
@@ -1166,7 +1186,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               <select
                 value={epicFilter}
                 onChange={e => setEpicFilter(e.target.value)}
-                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-full sm:w-32 cursor-pointer"
+                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-32 cursor-pointer"
               >
                 <option value="all">All Epics</option>
                 {appRollup?.features?.map(f => (
@@ -1178,7 +1198,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-full sm:w-28 cursor-pointer"
+                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-28 cursor-pointer"
               >
                 <option value="all">All Statuses</option>
                 <option value="draft">Draft</option>
@@ -1188,50 +1208,12 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                 <option value="done">Done</option>
               </select>
 
-              {/* Engine Selector */}
-              <div className="flex items-center border border-border rounded-md bg-background p-0.5 h-7 text-[9px] shrink-0">
-                <span className="text-[8px] text-muted-foreground font-bold px-1 uppercase tracking-wider">Eng:</span>
-                <button
-                  className={cn(
-                    "px-1 py-0.5 rounded-sm transition-all text-[9.5px] font-semibold shrink-0 h-5.5",
-                    buildEngine === 'factory' ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
-                  )}
-                  onClick={() => setBuildEngine('factory')}
-                >
-                  Factory
-                </button>
-              </div>
-
               {/* Loading indicator */}
               {loading && (
                 <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0 ml-1" />
               )}
             </div>
           </div>
-
-          {/* Collapsible Local Server Console Logs */}
-          {showServerLogs && (
-            <div className="border border-border/80 rounded-lg overflow-hidden bg-zinc-950 font-mono text-[11px] text-zinc-300 mt-2">
-              <div className="bg-zinc-900 border-b border-border/40 px-3 py-1.5 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-bold uppercase tracking-wider">
-                  <TerminalSquare className="h-3.5 w-3.5 text-emerald-500" />
-                  Local server console output
-                </span>
-                <Button variant="ghost" size="icon" className="h-5 w-5 text-zinc-400 hover:text-zinc-200" onClick={() => setShowServerLogs(false)}>
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="p-3 max-h-48 overflow-y-auto space-y-1 select-text scrollbar-thin">
-                {runLogs ? (
-                  runLogs.split('\n').map((l, i) => (
-                    <div key={i} className="leading-5 truncate">{l}</div>
-                  ))
-                ) : (
-                  <div className="text-zinc-500 italic py-2">No server outputs yet. Click Play to start the app.</div>
-                )}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -1815,6 +1797,116 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               </ScrollArea>
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 6. MOBILE FILTERS SHEET                                                */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      <Sheet open={showMobileFilters} onOpenChange={setShowMobileFilters}>
+        <SheetContent side="bottom" className="h-[auto] max-h-[85vh] p-4 bg-background/95 backdrop-blur-md rounded-t-xl border-t border-border focus:outline-none select-none">
+          <SheetHeader className="pb-3 border-b border-border/40 shrink-0">
+            <SheetTitle className="text-sm font-bold text-foreground">Filter Stories</SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground">
+              Apply search queries or status filters to narrow down the stories.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="py-4 space-y-4">
+            {/* Search box */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Search Query</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/75" />
+                <Input
+                  placeholder="Search stories..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-9.5 h-10 text-xs rounded-md bg-muted/30 w-full"
+                />
+              </div>
+            </div>
+
+            {/* Epic Filter */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Epic / Feature</label>
+              <select
+                value={epicFilter}
+                onChange={e => setEpicFilter(e.target.value)}
+                className="h-10 w-full px-2.5 rounded-md border border-border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value="all">All Epics</option>
+                {appRollup?.features?.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Status</label>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="h-10 w-full px-2.5 rounded-md border border-border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
+              >
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="ready">Ready</option>
+                <option value="in-progress">In Progress</option>
+                <option value="failed">Failed</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2.5 pt-4 border-t border-border/40">
+            {(searchQuery || epicFilter !== 'all' || statusFilter !== 'all') && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchQuery('');
+                  setEpicFilter('all');
+                  setStatusFilter('all');
+                }}
+                className="flex-1 h-9 text-xs rounded-md"
+              >
+                Reset
+              </Button>
+            )}
+            <Button
+              onClick={() => setShowMobileFilters(false)}
+              className="flex-1 h-9 text-xs rounded-md bg-primary text-primary-foreground font-semibold"
+            >
+              Apply
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 7. LOCAL SERVER LOGS DRAWER (SIDEBAR)                                 */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      <Sheet open={serverLogsOpen} onOpenChange={setServerLogsOpen}>
+        <SheetContent className="w-[90%] sm:w-[480px] p-0 flex flex-col bg-zinc-950 border-l border-border/40 select-text focus:outline-none">
+          <SheetHeader className="p-4 border-b border-border/40 shrink-0">
+            <SheetTitle className="flex items-center gap-2 text-zinc-300 text-xs font-bold font-mono">
+              <TerminalSquare className="h-4 w-4 text-emerald-500" />
+              <span>LOCAL SERVER CONSOLE OUTPUT</span>
+            </SheetTitle>
+            <SheetDescription className="text-[10px] text-zinc-500 font-mono">
+              Real-time terminal logs from modern Next.js development server.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 scrollbar-thin">
+            {runLogs ? (
+              runLogs.split('\n').map((l, i) => (
+                <div key={i} className="leading-5 whitespace-pre-wrap">{l || '\u00A0'}</div>
+              ))
+            ) : (
+              <div className="text-zinc-500 italic py-6 text-center">
+                No server outputs yet. Click Play button in project header to start.
+              </div>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
     </div>

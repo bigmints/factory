@@ -16,7 +16,7 @@ import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, ChevronDown, ChevronRight, Plus,
   Search, Filter, Tag, Columns, Layers, FileCode2, Brain, FlaskConical, Wrench,
   ShieldCheck, FolderOpen, RefreshCw, Sliders, X, Check, Package, ListTodo, Info,
-  BookOpen, Code, TerminalSquare
+  BookOpen, Code, TerminalSquare, Link2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
@@ -1409,6 +1409,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, 'draft')}
               onDragStart={handleDragStart}
+              allStories={mergedStories}
             />
 
             {/* Column 2: READY TO BUILD */}
@@ -1425,6 +1426,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, 'ready')}
               onDragStart={handleDragStart}
+              allStories={mergedStories}
             />
 
             {/* Column 3: BUILDING / RUNNING */}
@@ -1441,6 +1443,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, 'in-progress')}
               onDragStart={handleDragStart}
+              allStories={mergedStories}
             />
 
             {/* Column 4: COMPLETED / DONE */}
@@ -1457,6 +1460,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, 'done')}
               onDragStart={handleDragStart}
+              allStories={mergedStories}
             />
           </div>
 
@@ -1481,6 +1485,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                     onBuild={handleSingleBuild}
                     activeAction={activeAction}
                     onDragStart={handleDragStart}
+                    allStories={mergedStories}
                   />
                 ))}
               </div>
@@ -1572,6 +1577,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                                   onToggleTask={handleUpdateTaskStatus}
                                   updatingTaskId={updatingTaskId}
                                   activeAction={activeAction}
+                                  allStories={mergedStories}
                                 />
                               ))
                             ) : (
@@ -1976,6 +1982,108 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                         </div>
                       </div>
                     )}
+
+                    {/* Dependencies and Dependents Section */}
+                    <div className="space-y-4 pt-2 border-t border-border/40 select-none">
+                      {/* Depends On */}
+                      <div className="space-y-2">
+                        <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                          <Link2 className="h-4 w-4 text-indigo-500" />
+                          Depends On (Dependencies)
+                        </h4>
+                        {selectedItem.data.dependsOn && selectedItem.data.dependsOn.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 p-2.5 rounded-lg border bg-background">
+                            {selectedItem.data.dependsOn.map((depSlug: string) => {
+                              const depStory = mergedStories.find(s => getSlug(s.file) === depSlug);
+                              const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
+                              let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
+                              if (status === 'done' || status === 'completed') {
+                                statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                              } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
+                                statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/30 animate-pulse';
+                              }
+
+                              return (
+                                <Badge
+                                  key={depSlug}
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] font-medium py-1 px-2.5 rounded-md cursor-pointer select-none transition-all hover:bg-muted/80 flex items-center gap-1.5",
+                                    statusBadgeColor
+                                  )}
+                                  onClick={() => {
+                                    if (depStory) {
+                                      handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent);
+                                    }
+                                  }}
+                                  title={depStory ? `Dependency: ${depSlug} (${status})` : `Dependency: ${depSlug} (not found)`}
+                                >
+                                  <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", storyStatusMap[status]?.dot || 'bg-muted-foreground')} />
+                                  <span>{depSlug}</span>
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground italic py-2.5 text-center border rounded-lg bg-muted/5 select-none">
+                            No dependencies. This story can be built at any time.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Required By */}
+                      <div className="space-y-2">
+                        <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                          <Layers className="h-4 w-4 text-purple-500" />
+                          Required By (Dependents)
+                        </h4>
+                        {(() => {
+                          const currentSlug = getSlug(selectedItem.data.file);
+                          const dependents = mergedStories.filter(s => s.dependsOn && s.dependsOn.includes(currentSlug));
+                          
+                          if (dependents.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-2 p-2.5 rounded-lg border bg-background">
+                                {dependents.map((depStory) => {
+                                  const depSlug = getSlug(depStory.file);
+                                  const status = getEffectiveStatus(depStory);
+                                  let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
+                                  if (status === 'done' || status === 'completed') {
+                                    statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                                  } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
+                                    statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/30 animate-pulse';
+                                  }
+
+                                  return (
+                                    <Badge
+                                      key={depSlug}
+                                      variant="outline"
+                                      className={cn(
+                                        "text-[10px] font-medium py-1 px-2.5 rounded-md cursor-pointer select-none transition-all hover:bg-muted/80 flex items-center gap-1.5",
+                                        statusBadgeColor
+                                      )}
+                                      onClick={() => {
+                                        handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent);
+                                      }}
+                                      title={`Dependent: ${depSlug} (${status})`}
+                                    >
+                                      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", storyStatusMap[status]?.dot || 'bg-muted-foreground')} />
+                                      <span>{depSlug}</span>
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="text-xs text-muted-foreground italic py-2.5 text-center border rounded-lg bg-muted/5 select-none">
+                                No other stories depend on this one.
+                              </div>
+                            );
+                          }
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 )}
               </ScrollArea>
@@ -2114,6 +2222,7 @@ interface KanbanColumnProps {
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragStart: (e: React.DragEvent, file: string) => void;
+  allStories?: any[];
 }
 
 function KanbanColumn({
@@ -2128,7 +2237,8 @@ function KanbanColumn({
   activeAction,
   onDragOver,
   onDrop,
-  onDragStart
+  onDragStart,
+  allStories
 }: KanbanColumnProps) {
   return (
     <div
@@ -2160,6 +2270,7 @@ function KanbanColumn({
               onBuild={onBuild}
               activeAction={activeAction}
               onDragStart={onDragStart}
+              allStories={allStories}
             />
           ))
         ) : (
@@ -2179,7 +2290,8 @@ function StoryKanbanCard({
   onValidate,
   onBuild,
   activeAction,
-  onDragStart
+  onDragStart,
+  allStories
 }: {
   item: any;
   epicColor?: EpicColor;
@@ -2188,6 +2300,7 @@ function StoryKanbanCard({
   onBuild: (file: string, kind: string) => void;
   activeAction: { type: string; file: string } | null;
   onDragStart: (e: React.DragEvent, file: string) => void;
+  allStories?: any[];
 }) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const effectiveStatus = getEffectiveStatus(item);
@@ -2237,6 +2350,45 @@ function StoryKanbanCard({
             {totalTasks > 0 ? `${doneTasks}/${totalTasks} tasks` : 'No tasks'}
           </span>
         </div>
+
+        {/* Dependencies */}
+        {item.dependsOn && item.dependsOn.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-border/30 overflow-hidden">
+            <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+            <div className="flex flex-wrap gap-1 min-w-0">
+              {item.dependsOn.map((depSlug: string) => {
+                const depStory = allStories?.find(s => getSlug(s.file) === depSlug);
+                const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
+                let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
+                if (status === 'done' || status === 'completed') {
+                  statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/35';
+                } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
+                  statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/35 animate-pulse';
+                }
+
+                return (
+                  <Badge
+                    key={depSlug}
+                    variant="outline"
+                    className={cn(
+                      "text-[8px] font-medium h-4 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/80 max-w-[100px] truncate",
+                      statusBadgeColor
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (depStory) {
+                        onSelect(depStory, 'story');
+                      }
+                    }}
+                    title={depStory ? `Dependency: ${depSlug} (${status})` : `Dependency: ${depSlug} (not found)`}
+                  >
+                    {depSlug}
+                  </Badge>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -2252,6 +2404,7 @@ interface ListStoryRowProps {
   onToggleTask: (taskId: string, nextStatus: Task['status']) => void;
   updatingTaskId: string | null;
   activeAction: { type: string; file: string } | null;
+  allStories?: any[];
 }
 
 function ListStoryRow({
@@ -2263,7 +2416,8 @@ function ListStoryRow({
   onBuild,
   onToggleTask,
   updatingTaskId,
-  activeAction
+  activeAction,
+  allStories
 }: ListStoryRowProps) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
@@ -2303,6 +2457,43 @@ function ListStoryRow({
             <span className="text-[10px] text-muted-foreground font-mono block truncate max-w-[180px]" title={item.file}>
               {item.file}
             </span>
+
+            {/* Dependencies in List View */}
+            {item.dependsOn && item.dependsOn.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                {item.dependsOn.map((depSlug: string) => {
+                  const depStory = allStories?.find(s => getSlug(s.file) === depSlug);
+                  const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
+                  let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
+                  if (status === 'done' || status === 'completed') {
+                    statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/35';
+                  } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
+                    statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/35 animate-pulse';
+                  }
+
+                  return (
+                    <Badge
+                      key={depSlug}
+                      variant="outline"
+                      className={cn(
+                        "text-[8px] font-medium h-4 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/80 truncate max-w-[120px]",
+                        statusBadgeColor
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (depStory) {
+                          onSelect(depStory, 'story');
+                        }
+                      }}
+                      title={depStory ? `Dependency: ${depSlug} (${status})` : `Dependency: ${depSlug} (not found)`}
+                    >
+                      {depSlug}
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

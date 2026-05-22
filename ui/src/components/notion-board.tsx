@@ -1148,19 +1148,61 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
 
   // Backlog specs (Draft/Unknown)
   const backlogStories = useMemo(() => {
-    return filteredStoriesList.filter(item => {
+    const list = filteredStoriesList.filter(item => {
       const status = getEffectiveStatus(item);
       return status === 'draft' || status === 'unknown';
     });
-  }, [filteredStoriesList]);
+
+    const epicIndexMap = new Map<string, number>();
+    if (appRollup?.features) {
+      appRollup.features.forEach((f: any, idx: number) => {
+        epicIndexMap.set(f.id, idx);
+      });
+    }
+
+    return [...list].sort((a, b) => {
+      const epicIdA = a.epicParent?.id;
+      const epicIdB = b.epicParent?.id;
+      const epicIndexA = epicIdA !== undefined ? (epicIndexMap.get(epicIdA) ?? 999) : 999;
+      const epicIndexB = epicIdB !== undefined ? (epicIndexMap.get(epicIdB) ?? 999) : 999;
+      if (epicIndexA !== epicIndexB) return epicIndexA - epicIndexB;
+      
+      const phaseA = a.phase ?? 0;
+      const phaseB = b.phase ?? 0;
+      if (phaseA !== phaseB) return phaseA - phaseB;
+      
+      return a.file.localeCompare(b.file);
+    });
+  }, [filteredStoriesList, appRollup]);
 
   // Ready specs (Ready/Failed/Review)
   const readyStories = useMemo(() => {
-    return filteredStoriesList.filter(item => {
+    const list = filteredStoriesList.filter(item => {
       const status = getEffectiveStatus(item);
       return status === 'ready' || status === 'failed' || status === 'review';
     });
-  }, [filteredStoriesList]);
+
+    const epicIndexMap = new Map<string, number>();
+    if (appRollup?.features) {
+      appRollup.features.forEach((f: any, idx: number) => {
+        epicIndexMap.set(f.id, idx);
+      });
+    }
+
+    return [...list].sort((a, b) => {
+      const epicIdA = a.epicParent?.id;
+      const epicIdB = b.epicParent?.id;
+      const epicIndexA = epicIdA !== undefined ? (epicIndexMap.get(epicIdA) ?? 999) : 999;
+      const epicIndexB = epicIdB !== undefined ? (epicIndexMap.get(epicIdB) ?? 999) : 999;
+      if (epicIndexA !== epicIndexB) return epicIndexA - epicIndexB;
+      
+      const phaseA = a.phase ?? 0;
+      const phaseB = b.phase ?? 0;
+      if (phaseA !== phaseB) return phaseA - phaseB;
+      
+      return a.file.localeCompare(b.file);
+    });
+  }, [filteredStoriesList, appRollup]);
 
   // In-Progress/Building specs
   const buildingStories = useMemo(() => {

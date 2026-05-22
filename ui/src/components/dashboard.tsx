@@ -109,7 +109,6 @@ export default function Dashboard() {
   const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
   const [queueRunning, setQueueRunning] = useState(false);
   const [buildEngine, setBuildEngine] = useState<'factory' | 'gemini-cli' | 'pi-cli'>('factory');
-  const [dashboardSubTab, setDashboardSubTab] = useState<'overview' | 'backlog'>('overview');
 
   const logOffsetRef = useRef(0);
 
@@ -171,7 +170,6 @@ export default function Dashboard() {
       const hash = window.location.hash.replace('#', '');
       if (hash === 'roadmap') {
         setActiveTab('dashboard');
-        setDashboardSubTab('backlog');
       } else if (VALID_TABS.includes(hash)) {
         if (hash === 'projects') {
           setShowAddProject(true);
@@ -530,170 +528,9 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Segmented Sub-Tab Switcher */}
-      <div className="flex justify-center sm:justify-start items-center border-b border-border/50 pb-4">
-        <div className="inline-flex p-1 rounded-xl bg-muted/80 border border-border shadow-inner relative gap-1">
-          <button
-            onClick={() => setDashboardSubTab('overview')}
-            className={cn(
-              "relative flex items-center gap-2 px-4 py-2 text-xs md:text-sm font-semibold rounded-lg transition-all duration-200 tap-shrink",
-              dashboardSubTab === 'overview'
-                ? "bg-background text-foreground shadow-sm font-bold border border-border/20"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            <span>Stories Overview</span>
-          </button>
-          <button
-            onClick={() => setDashboardSubTab('backlog')}
-            className={cn(
-              "relative flex items-center gap-2 px-4 py-2 text-xs md:text-sm font-semibold rounded-lg transition-all duration-200 tap-shrink",
-              dashboardSubTab === 'backlog'
-                ? "bg-background text-foreground shadow-sm font-bold border border-border/20"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Compass className="h-4 w-4" />
-            <span>Interactive Backlog</span>
-          </button>
-        </div>
+      <div className="animate-in fade-in duration-300">
+        <AppDashboard />
       </div>
-
-      {dashboardSubTab === 'overview' ? (
-        <>
-          {/* App Stories Section */}
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="space-y-1">
-                <h2 className="text-base md:text-lg font-bold tracking-tight flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  App Stories
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Core application stories queued for direct compilation and validation.
-                </p>
-              </div>
-              {stories.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] md:text-xs font-semibold w-fit shrink-0">
-                  {stories.length} Apps Active
-                </Badge>
-              )}
-            </div>
-
-            {stories.length === 0 ? (
-              <Card className="border-dashed py-8 md:py-12 text-center flex flex-col items-center justify-center">
-                <p className="text-sm text-muted-foreground">
-                  No app stories found. Create one using the &apos;New Story&apos; button.
-                </p>
-              </Card>
-            ) : (
-              <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
-                {stories.map((story) => (
-                  <StoryCard
-                    key={story.file}
-                    story={story}
-                    onValidate={handleValidate}
-                    onBuild={handleBuild}
-                    onEnqueue={handleEnqueue}
-                    onView={(file, name) => setEditingStory({ file, name })}
-                    isValidating={activeAction?.type === 'validate' && activeAction?.file === story.file}
-                    isBuilding={activeAction?.type === 'build' && activeAction?.file === story.file}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Feature Stories Section */}
-          {featureStories.length > 0 && (
-            <div className="space-y-4 mt-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <div className="space-y-1">
-                  <h2 className="text-base md:text-lg font-bold tracking-tight flex items-center gap-2">
-                    <Puzzle className="h-4 w-4 text-muted-foreground" />
-                    Feature Stories
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Sequenced features, UI pages, and model logic flows.
-                  </p>
-                </div>
-                <Badge variant="secondary" className="text-[10px] md:text-xs font-semibold w-fit shrink-0">
-                  {featureStories.length} Features Active
-                </Badge>
-              </div>
-
-              <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
-                {featureStories.map((fs) => (
-                  <StoryCard
-                    key={fs.file}
-                    story={{ ...fs, kind: 'FeatureStory' }}
-                    onValidate={(file) => handleFeatureAction(file, 'validate')}
-                    onBuild={(file) => handleFeatureAction(file, 'build')}
-                    onEnqueue={handleEnqueue}
-                    onView={(file, name) => setEditingStory({ file, name })}
-                    isValidating={activeAction?.type === 'feature-validate' && activeAction?.file === fs.file}
-                    isBuilding={activeAction?.type === 'feature-build' && activeAction?.file === fs.file}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Validation output */}
-          {validationResult && (
-            <Card className="bg-card border-border">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <div className="flex items-center gap-2">
-                  {validationResult.passed ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
-                  )}
-                  <CardTitle className="text-sm font-bold">
-                    Validation {validationResult.passed ? 'Passed' : 'Failed'}
-                  </CardTitle>
-                </div>
-                <Badge variant={validationResult.passed ? 'default' : 'destructive'} className="text-[10px] font-bold">
-                  {validationResult.checks.filter((c) => c.passed).length}/{validationResult.checks.length}
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8"></TableHead>
-                        <TableHead className="text-xs">Check</TableHead>
-                        <TableHead className="text-xs">Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {validationResult.checks.map((check, i) => (
-                        <TableRow key={i}>
-                          <TableCell>
-                            {check.passed ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                            ) : (
-                              <AlertCircle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs font-medium">{check.name}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      ) : (
-        <div className="animate-in fade-in duration-300">
-          <AppDashboard />
-        </div>
-      )}
     </div>
   );
 

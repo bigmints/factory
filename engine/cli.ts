@@ -20,7 +20,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
-import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from './story.ts';
+import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory, resolveStoryPath } from './story.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherBlueprint, syncBlueprint } from './blueprint.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
@@ -152,7 +152,7 @@ async function handleBuild(storyPath?: string): Promise<void> {
     let result;
     if (useWorker) {
         logStep(3, 7, 'Generating with worker engine...');
-        result = await runWorkerBuild(story, blueprint);
+        result = await runWorkerBuild(story, blueprint, targetDir);
     } else {
         result = await runPipeline(story, blueprint, targetDir, storyPath!);
     }
@@ -640,7 +640,7 @@ async function handleQueueStart(): Promise<void> {
                         log('⚠', `YAML parse error in ${current.storyFile}: ${errMsg}`);
 
                         // Try LLM auto-fix
-                        const storyAbsPath = resolve(current.storyFile);
+                        const storyAbsPath = resolveStoryPath(current.storyFile);
                         const fixResult = await withRetry(
                             () => autoFixStory(storyAbsPath, errMsg),
                             { maxAttempts: 3, delayMs: 2000, name: 'Auto-fix' }
@@ -746,7 +746,7 @@ async function handleQueueStart(): Promise<void> {
                     if (!validation.passed) {
                         // Try LLM auto-fix on the story
                         log('⚠', `AppStory validation failed: ${validation.errors.join(', ')}`);
-                        const storyAbsPath = resolve(current.storyFile);
+                        const storyAbsPath = resolveStoryPath(current.storyFile);
                         const fixResult = await withRetry(
                             () => autoFixStory(storyAbsPath, `Validation errors: ${validation.errors.join('; ')}`),
                             { maxAttempts: 3, delayMs: 2000, name: 'Auto-fix' }

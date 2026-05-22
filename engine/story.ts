@@ -6,12 +6,55 @@ import { storySlug, storyPort } from './types.ts';
 import { log } from './log.ts';
 import { execSync } from 'node:child_process';
 
+import { getActiveProject } from './config.ts';
+
+export function resolveStoryPath(storyPath: string): string {
+    const directPath = resolve(storyPath);
+    if (existsSync(directPath)) {
+        return directPath;
+    }
+
+    try {
+        const project = getActiveProject();
+        if (project && project.path) {
+            const projectDirect = resolve(project.path, storyPath);
+            if (existsSync(projectDirect)) {
+                return projectDirect;
+            }
+
+            const possibleDirs = [
+                join(project.path, '.factory', 'stories', 'features'),
+                join(project.path, '.factory', 'stories', 'apps'),
+                join(project.path, '.factory', 'stories', 'done'),
+                join(project.path, '.factory', 'stories'),
+                join(project.path, '.factory')
+            ];
+
+            const filename = basename(storyPath);
+            for (const dir of possibleDirs) {
+                const target = join(dir, filename);
+                if (existsSync(target)) {
+                    return target;
+                }
+                const nestedTarget = resolve(dir, storyPath);
+                if (existsSync(nestedTarget)) {
+                    return nestedTarget;
+                }
+            }
+        }
+    } catch {
+        // ignore and fall back
+    }
+
+    return directPath;
+}
+
 // ─── Load ────────────────────────────────────────────────
 
 
 /** Load an app story from a YAML file */
 export function loadStory(storyPath: string): AppStory {
-    const absPath = resolve(storyPath);
+    const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) {
         throw new Error(`Story file not found: ${absPath}`);
     }
@@ -21,7 +64,7 @@ export function loadStory(storyPath: string): AppStory {
 
 /** Load a feature story from a YAML file */
 export function loadFeatureStory(storyPath: string): FeatureStory {
-    const absPath = resolve(storyPath);
+    const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) {
         throw new Error(`Feature story not found: ${absPath}`);
     }
@@ -156,7 +199,7 @@ export function validateFeatureStory(story: FeatureStory): ValidationResult {
  * Preserves all other content — only changes the `status:` line.
  */
 export function updateStoryStatus(storyPath: string, status: StoryStatus): void {
-    const absPath = resolve(storyPath);
+    const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) return;
 
     const raw = readFileSync(absPath, 'utf-8');
@@ -176,7 +219,7 @@ export function updateStoryBuildMeta(
     meta: Omit<BuildMeta, 'buildCount' | 'lastBuiltAt'>,
     repoPath?: string,
 ): void {
-    const absPath = resolve(storyPath);
+    const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) return;
 
     const raw = readFileSync(absPath, 'utf-8');
@@ -220,7 +263,7 @@ export function updateStoryBuildMeta(
  * Returns the new path, or null if the story couldn't be moved.
  */
 export function archiveStory(storyPath: string): string | null {
-    const absPath = resolve(storyPath);
+    const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) return null;
 
     const storiesDir = dirname(absPath);

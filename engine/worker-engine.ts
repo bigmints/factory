@@ -207,7 +207,7 @@ export async function runQueueTasks(
         const start = Date.now();
         const result = spawnSync(cli, cliArgs, {
             cwd: taskWorkdir,
-            stdio: quiet ? 'ignore' : 'inherit',
+            stdio: quiet ? 'ignore' : [ 'ignore', 'inherit', 'inherit' ],
             encoding: 'utf8',
         });
         const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -375,10 +375,11 @@ function scanDir(dir: string, prefix: string, files: GeneratedFile[]): void {
 export async function runWorkerBuild(
     story: AppStory,
     blueprint: ProjectBlueprint,
+    targetDir?: string,
 ): Promise<BuildResult> {
     const slug = storySlug(story);
-    const targetDir = resolve(process.cwd(), slug);
-    return runWorkerEngine(story, blueprint, targetDir);
+    const finalTargetDir = targetDir || resolve(process.cwd(), slug);
+    return runWorkerEngine(story, blueprint, finalTargetDir);
 }
 
 /** Feature build using worker engine */

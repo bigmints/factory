@@ -436,28 +436,31 @@ async function runBuild(item: QueueItem): Promise<boolean> {
         const { runPipeline, runFeaturePipeline } = await import('./generate.ts');
         const { loadStory, loadFeatureStory } = await import('./story.ts');
         const { gatherBlueprint } = await import('./blueprint.ts');
-        const { loadBridgeConfig } = await import('./config.ts');
+        const { loadBridgeConfig, getActiveProject } = await import('./config.ts');
         const { writeFiles, setupProject, writeKnowledgeEntry, writeAppAgentsMd } = await import('./writer.ts');
         const { resolve } = await import('node:path');
         const { storySlug } = await import('./types.ts');
 
-        const bridge = loadBridgeConfig(process.cwd());
-        const blueprint = gatherBlueprint(process.cwd(), bridge);
+        const project = getActiveProject();
+        const projectPath = project.path;
+
+        const bridge = loadBridgeConfig(projectPath);
+        const blueprint = gatherBlueprint(projectPath, bridge);
 
         let result;
         let targetDir: string;
         if (item.kind === 'FeatureStory') {
             const story = loadFeatureStory(item.storyFile);
             targetDir = bridge.apps_dir
-                ? resolve(process.cwd(), bridge.apps_dir, story.target.app)
-                : resolve(process.cwd(), story.target.app);
+                ? resolve(projectPath, bridge.apps_dir, story.target.app)
+                : resolve(projectPath, story.target.app);
             result = await runFeaturePipeline(story, blueprint, targetDir, item.storyFile);
         } else {
             const story = loadStory(item.storyFile);
             const slug = storySlug(story);
             targetDir = bridge.apps_dir
-                ? resolve(process.cwd(), bridge.apps_dir, slug)
-                : resolve(process.cwd(), slug);
+                ? resolve(projectPath, bridge.apps_dir, slug)
+                : resolve(projectPath, slug);
             result = await runPipeline(story, blueprint, targetDir, item.storyFile);
         }
 
@@ -468,7 +471,7 @@ async function runBuild(item: QueueItem): Promise<boolean> {
         // Knowledge feedback
         const story = item.kind === 'FeatureStory' ? loadFeatureStory(item.storyFile) : loadStory(item.storyFile);
         const appName = 'appName' in story ? story.appName : story.feature.name;
-        writeKnowledgeEntry(process.cwd(), appName, result, (story as any).stack || {}, item.storyFile);
+        writeKnowledgeEntry(projectPath, appName, result, (story as any).stack || {}, item.storyFile);
         writeAppAgentsMd(targetDir, appName, (story as any).stack || {}, result.files);
 
         return result.success;

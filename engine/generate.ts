@@ -1685,12 +1685,19 @@ Feature Epic Description: ${matchingFeature.description || 'No description provi
         }
     }
 
-    return `You are an autonomous code generation engine with access to tools for reading, writing, and executing commands.
+    let isNativeTools = false;
+    try {
+        const { provider } = requireActiveProvider();
+        if (provider) {
+            isNativeTools = provider.id === 'gemini' || provider.id === 'openai' || provider.kind === 'openai-compat';
+        }
+    } catch {}
 
-## Target Directory
-${targetDir}
-
-## Tool Calling Format
+    const toolCallingBlock = isNativeTools
+        ? `## Tool Calling Format
+You MUST invoke tools using the native function-calling interface provided by the model environment. Do NOT wrap tool calls in XML tags, markdown code blocks, or custom text format.
+Always provide the exact arguments required by each tool's schema, such as "path" and "content" for write_file/patch_file (do NOT use "filename", use "path").`
+        : `## Tool Calling Format
 You MUST invoke tools using this XML format:
 <tool_call>{"name": "tool_name", "arguments": {"arg1": "val1"}}</tool_call>
 
@@ -1701,9 +1708,16 @@ To list directory contents:
 <tool_call>{"name": "list_dir", "arguments": {"recursive": true}}</tool_call>
 
 To write a file:
-<tool_call>{"name": "write_file", "arguments": {"filename": "src/app.ts", "content": "console.log('hello');"}}</tool_call>
+<tool_call>{"name": "write_file", "arguments": {"path": "src/app.ts", "content": "console.log('hello');"}}</tool_call>
 
-Make sure to format all your tool calls exactly like this inside your response. Do not use plain text or standard markdown code blocks for calling tools.
+Make sure to format all your tool calls exactly like this inside your response. Do not use plain text or standard markdown code blocks for calling tools.`;
+
+    return `You are an autonomous code generation engine with access to tools for reading, writing, and executing commands.
+
+## Target Directory
+${targetDir}
+
+${toolCallingBlock}
 
 ## Recommended Workflow
 1. Call read_story to fully understand the build requirements.
@@ -1744,6 +1758,7 @@ export async function runToolSession(
     appBlueprint?: AppIntegrationBlueprint,
 ): Promise<BuildResult> {
     const { provider, model } = requireActiveProvider();
+    const isNativeTools = provider && (provider.id === 'gemini' || provider.id === 'openai' || provider.kind === 'openai-compat');
     const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
 
     const ctx: BuildToolBlueprint = {
@@ -1805,9 +1820,12 @@ export async function runToolSession(
         if (toolCalls.length === 0) {
             messages.push({ role: 'assistant', content: response.text });
             log('!', 'LLM returned no tool calls — prompting to invoke a tool');
+            const promptContent = isNativeTools
+                ? 'Please proceed by calling one or more tools natively (e.g. read_story, list_dir, write_file, or run_command) via the native tool-calling interface. Ensure you provide all required arguments (such as "path" and "content" for write_file/patch_file).'
+                : 'Please proceed by invoking one or more tools (e.g. read_story, list_dir, write_file, or run_command) in the required XML tool-calling format:\n<tool_call>{"name": "tool_name", "arguments": {...}}</tool_call>';
             messages.push({
                 role: 'user',
-                content: 'Please proceed by invoking one or more tools (e.g. read_story, list_dir, write_file, or run_command) in the required XML tool-calling format:\n<tool_call>{"name": "tool_name", "arguments": {...}}</tool_call>'
+                content: promptContent
             });
             continue;
         }
@@ -1998,6 +2016,15 @@ function parseXmlToolCalls(content: string): ToolCallResult {
                         } catch {}
                     }
                 }
+                // Fallback / Enrichment: parse key-value properties or XML parameter tags directly from block!
+                const parsedParams = parseArgsFromBody(block);
+                const parsedProperties = extractJsonProperties(block);
+                args = { ...args, ...parsedParams, ...parsedProperties };
+                // Delete fields that accidentally got parsed as arguments
+                delete args.name;
+                delete args.arguments;
+                delete args.args;
+
                 toolCalls.push({
                     id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                     function: { name, arguments: args }
@@ -2082,11 +2109,19 @@ function parseArgsFromBody(body: string): Record<string, unknown> {
         }
     } catch {}
 
+    let foundParams = false;
+
     // Check for <parameter name="param_name">value</parameter>
     const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
     let match;
-    let foundParams = false;
     while ((match = paramRegex.exec(body)) !== null) {
+        args[match[1]] = match[2].trim();
+        foundParams = true;
+    }
+
+    // Check for <parameter=param_name>value</parameter>
+    const paramEqualRegex = /<parameter=([a-zA-Z_][a-zA-Z0-9_]*)>([\s\S]*?)<\/parameter>/g;
+    while ((match = paramEqualRegex.exec(body)) !== null) {
         args[match[1]] = match[2].trim();
         foundParams = true;
     }
@@ -2429,4 +2464,46 @@ function formatFeatureStory(story: FeatureStory): string {
 - **Phase**: ${story.phase || 'unspecified'}
 ${story.dependsOn?.length ? `- **Depends on**: ${story.dependsOn.join(', ')}` : ''}
 ${story.dependencies?.length ? `\n### Required Packages\n${story.dependencies.map(d => `- ${d}`).join('\n')}` : ''}`;
+}
+
+export function extractJsonProperties(str: string): Record<string, any> {
+    const obj: Record<string, any> = {};
+    
+    // 1. First, let's extract standard string properties like "path": "value" or "content": "value"
+    // Handles multi-line strings, escaped characters, and ignores potential following properties.
+    const stringRegex = /"([a-zA-Z0-9_-]+)"\s*:\s*"([\s\S]*?)"(?=\s*(?:,|\}|"|[a-zA-Z_-]|$))/g;
+    let match;
+    while ((match = stringRegex.exec(str)) !== null) {
+        const key = match[1];
+        let val = match[2];
+        // Clean up escaped characters
+        val = val.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        obj[key] = val;
+    }
+
+    // 2. Extract boolean, number, and null values
+    const scalarRegex = /"([a-zA-Z0-9_-]+)"\s*:\s*(true|false|null|[0-9.-]+)/g;
+    while ((match = scalarRegex.exec(str)) !== null) {
+        const key = match[1];
+        if (!(key in obj)) {
+            const val = match[2];
+            if (val === 'true') obj[key] = true;
+            else if (val === 'false') obj[key] = false;
+            else if (val === 'null') obj[key] = null;
+            else obj[key] = Number(val);
+        }
+    }
+
+    // 3. Extract parameters of format 'key': 'value' (single quotes)
+    const singleQuoteStringRegex = /'([a-zA-Z0-9_-]+)'\s*:\s*'([\s\S]*?)'(?=\s*(?:,|\}|'|[a-zA-Z_-]|$))/g;
+    while ((match = singleQuoteStringRegex.exec(str)) !== null) {
+        const key = match[1];
+        if (!(key in obj)) {
+            let val = match[2];
+            val = val.replace(/\\n/g, '\n').replace(/\\"/g, "'").replace(/\\\\/g, '\\');
+            obj[key] = val;
+        }
+    }
+
+    return obj;
 }

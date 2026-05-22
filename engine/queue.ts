@@ -204,6 +204,22 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
             if (latestApp.status === 'pending' || latestApp.status === 'running') {
                 return { ready: false, reason: `App story "${latestApp.storyFile}" has not completed yet.` };
             }
+        } else {
+            // No app story in queue. Check if parent app story is physically built (in done/ directory)
+            try {
+                const { getActiveProject } = require('./config.ts');
+                const project = getActiveProject();
+                if (project && project.path) {
+                    const doneAppPath1 = join(project.path, '.factory', 'stories', 'done', `${item.targetApp}.yaml`);
+                    const doneAppPath2 = join(project.path, '.factory', 'stories', 'done', `${item.targetApp}.yml`);
+                    const appExists = existsSync(doneAppPath1) || existsSync(doneAppPath2);
+                    if (!appExists) {
+                        return { ready: false, reason: `App scaffold "${item.targetApp}" is missing. The base app scaffold must be built before feature stories can compile.` };
+                    }
+                }
+            } catch {
+                // fall through
+            }
         }
     }
 

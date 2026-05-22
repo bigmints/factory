@@ -177,118 +177,232 @@ export async function GET() {
 }
 
 /** POST — enqueue a new story */
+/**
+ * Helper to normalize story file paths and kinds
+ */
+function normalizeStoryFilePath(fileRaw: string, projectPath: string): { file: string; kind: 'AppStory' | 'FeatureStory' } {
+  const filename = fileRaw.replace(/^(features|apps|done)\//, '');
+  const featuresPath = join(projectPath, '.factory', 'stories', 'features', filename);
+  const appsPath = join(projectPath, '.factory', 'stories', 'apps', filename);
+  const donePath = join(projectPath, '.factory', 'stories', 'done', filename);
+
+  if (existsSync(featuresPath)) {
+    return { file: `features/${filename}`, kind: 'FeatureStory' };
+  } else if (existsSync(appsPath)) {
+    return { file: filename, kind: 'AppStory' };
+  } else if (existsSync(donePath)) {
+    try {
+      const raw = readFileSync(donePath, 'utf-8');
+      const parsed = parseYaml(raw) as any;
+      const isFeature = parsed && (parsed.feature || parsed.target || 'phase' in parsed);
+      return { file: `done/${filename}`, kind: isFeature ? 'FeatureStory' : 'AppStory' };
+    } catch {}
+  }
+  return { file: fileRaw, kind: fileRaw.startsWith('features/') ? 'FeatureStory' : 'AppStory' };
+}
+
+interface EnqueueItemDescriptor {
+  file: string;
+  kind: 'AppStory' | 'FeatureStory';
+  phase: number;
+  dependsOn: string[];
+  displayName: string;
+}
+
+/**
+ * Recursively resolves all missing app and feature dependencies for a given story
+ * to establish a complete and valid chronological queue.
+ */
+function resolveAllDependencies(
+  storyFile: string,
+  kind: 'AppStory' | 'FeatureStory',
+  projectPath: string,
+  queue: QueueItem[]
+): EnqueueItemDescriptor[] {
+  const toEnqueue: EnqueueItemDescriptor[] = [];
+  const visitedFiles = new Set<string>();
+
+  // Map slug -> story details for all physical story files in the project
+  const slugToStory = new Map<string, EnqueueItemDescriptor>();
+
+  const scanDir = (dir: string, defaultKind: 'AppStory' | 'FeatureStory') => {
+    if (!existsSync(dir)) return;
+    const files = readdirSync(dir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+    for (const f of files) {
+      try {
+        const fullPath = join(dir, f);
+        const raw = readFileSync(fullPath, 'utf-8');
+        const parsed = parseYaml(raw) as any;
+        const relativeFile = dir.endsWith('done') ? `done/${f}` : (defaultKind === 'FeatureStory' ? `features/${f}` : f);
+        
+        const isFeature = defaultKind === 'FeatureStory' || (dir.endsWith('done') && parsed && (parsed.feature || parsed.target || 'phase' in parsed));
+        const storyKind = isFeature ? 'FeatureStory' : 'AppStory';
+        
+        const slug = parsed.feature?.slug || parsed.metadata?.slug || f.replace(/\.ya?ml$/, '');
+        const displayName = parsed.feature?.name || parsed.metadata?.name || parsed.appName || slug;
+        const phase = parsed.phase ?? (storyKind === 'AppStory' ? 0 : 1);
+        const dependsOn = parsed.dependsOn || [];
+        
+        slugToStory.set(slug, {
+          file: relativeFile,
+          kind: storyKind,
+          phase,
+          dependsOn,
+          displayName
+        });
+      } catch {}
+    }
+  };
+
+  const storiesRoot = join(projectPath, '.factory', 'stories');
+  scanDir(join(storiesRoot, 'apps'), 'AppStory');
+  scanDir(join(storiesRoot, 'features'), 'FeatureStory');
+  scanDir(join(storiesRoot, 'done'), 'FeatureStory');
+
+  // Helper to check if already in queue or completed
+  const isAlreadyQueuedOrBuilt = (file: string, slug: string) => {
+    return queue.some(
+      item => (item.storyFile === file || item.storyFile.split('/').pop()?.replace(/\.ya?ml$/i, '') === slug) &&
+        ['pending', 'running', 'completed'].includes(item.status)
+    );
+  };
+
+  // Walk dependency graph recursively
+  const visit = (file: string, itemKind: 'AppStory' | 'FeatureStory') => {
+    if (visitedFiles.has(file)) return;
+    visitedFiles.add(file);
+
+    try {
+      const fullPath = join(projectPath, '.factory', 'stories', file);
+      if (!existsSync(fullPath)) return;
+      const raw = readFileSync(fullPath, 'utf-8');
+      const parsed = parseYaml(raw) as any;
+
+      const slug = parsed.feature?.slug || parsed.metadata?.slug || file.split('/').pop()?.replace(/\.ya?ml$/i, '') || '';
+      const displayName = parsed.feature?.name || parsed.metadata?.name || parsed.appName || slug;
+      const phase = parsed.phase ?? (itemKind === 'AppStory' ? 0 : 1);
+      const dependsOn: string[] = parsed.dependsOn || [];
+
+      // 1. Visit parent AppStory if it is a FeatureStory and not yet queued or built
+      if (itemKind === 'FeatureStory') {
+        const targetApp = parsed.target?.app;
+        if (targetApp) {
+          const parentStory = slugToStory.get(targetApp);
+          if (parentStory && !isAlreadyQueuedOrBuilt(parentStory.file, targetApp)) {
+            visit(parentStory.file, parentStory.kind);
+          }
+        }
+      }
+
+      // 2. Visit defined dependsOn features that are not yet queued or built
+      for (const depSlug of dependsOn) {
+        const depStory = slugToStory.get(depSlug);
+        if (depStory && !isAlreadyQueuedOrBuilt(depStory.file, depSlug)) {
+          visit(depStory.file, depStory.kind);
+        }
+      }
+
+      // Add self to the list if not queued/built
+      if (!isAlreadyQueuedOrBuilt(file, slug)) {
+        toEnqueue.push({
+          file,
+          kind: itemKind,
+          phase,
+          dependsOn,
+          displayName
+        });
+      }
+    } catch {}
+  };
+
+  visit(storyFile, kind);
+  return toEnqueue;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const storyFileRaw = body.storyFile || body.specFile;
     const kindRaw = body.kind === 'AppSpec' ? 'AppStory' : body.kind === 'FeatureSpec' ? 'FeatureStory' : body.kind;
-    const { phase, dependsOn, buildAll, engine } = body;
+    const { buildAll, engine } = body;
 
     if (!storyFileRaw || !kindRaw) {
       return NextResponse.json({ error: 'storyFile and kind are required' }, { status: 400 });
     }
 
-    let storyFile = storyFileRaw;
-    let kind = kindRaw;
-
     const projectPath = getActiveProjectPath();
-    if (projectPath) {
-      const filename = storyFileRaw.replace(/^(features|apps|done)\//, '');
-      const featuresPath = join(projectPath, '.factory', 'stories', 'features', filename);
-      const appsPath = join(projectPath, '.factory', 'stories', 'apps', filename);
-      const donePath = join(projectPath, '.factory', 'stories', 'done', filename);
-
-      if (existsSync(featuresPath)) {
-        kind = 'FeatureStory';
-        storyFile = `features/${filename}`;
-      } else if (existsSync(appsPath)) {
-        kind = 'AppStory';
-        storyFile = filename;
-      } else if (existsSync(donePath)) {
-        try {
-          const raw = readFileSync(donePath, 'utf-8');
-          const parsed = parseYaml(raw) as any;
-          const isFeature = parsed && (parsed.feature || parsed.target || 'phase' in parsed);
-          kind = isFeature ? 'FeatureStory' : 'AppStory';
-          storyFile = `done/${filename}`;
-        } catch {}
-      }
+    if (!projectPath) {
+      return NextResponse.json({ error: 'No active project' }, { status: 400 });
     }
 
+    const { file: storyFile, kind } = normalizeStoryFilePath(storyFileRaw, projectPath);
     const queue = loadQueue();
 
-    // For FeatureStories, validate that the target app is already in the queue
-    // Skip this check during Build All — ordering is handled by the caller
-    if (kind === 'FeatureStory' && !buildAll) {
-      const projectPath = getActiveProjectPath();
-      if (projectPath) {
-        try {
-          const storyPath = join(projectPath, '.factory', 'stories', storyFile);
-          if (existsSync(storyPath)) {
-            const raw = readFileSync(storyPath, 'utf-8');
-            const parsed = parseYaml(raw) as any;
-            const targetApp = parsed.target?.app;
-            if (targetApp && !isAppStoryQueued(targetApp, queue)) {
-              return NextResponse.json(
-                { error: `App "${targetApp}" must be in the queue first. Queue the app story before adding features.` },
-                { status: 400 }
-              );
-            }
+    let enqueuedItem: any = null;
+    const autoEnqueued: EnqueueItemDescriptor[] = [];
 
-            // Validate all dependsOn stories are already in the queue
-            const storyDeps: string[] = parsed.dependsOn ?? dependsOn ?? [];
-            if (storyDeps.length > 0) {
-              const featuresDir = join(projectPath, '.factory', 'stories', 'features');
-              const featureFiles = existsSync(featuresDir)
-                ? readdirSync(featuresDir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
-                : [];
-
-              // Build a slug → filename map
-              const slugToFile: Record<string, string> = {};
-              for (const f of featureFiles) {
-                try {
-                  const fRaw = readFileSync(join(featuresDir, f), 'utf-8');
-                  const fParsed = parseYaml(fRaw) as any;
-                  const fSlug = fParsed.feature?.slug || f.replace(/\.ya?ml$/, '');
-                  slugToFile[fSlug] = `features/${f}`;
-                } catch {}
-              }
-
-              const missingDeps: string[] = [];
-              for (const dep of storyDeps) {
-                const depFile = slugToFile[dep];
-                if (depFile) {
-                  const depQueued = queue.some(
-                    item => item.storyFile === depFile && ['pending', 'running', 'completed'].includes(item.status)
-                  );
-                  if (!depQueued) missingDeps.push(dep);
-                }
-              }
-
-              if (missingDeps.length > 0) {
-                return NextResponse.json(
-                  { error: `Missing dependencies in queue: ${missingDeps.join(', ')}. Use Build All to queue in correct order.` },
-                  { status: 400 }
-                );
-              }
-            }
-          }
-        } catch {}
+    if (!buildAll) {
+      const resolved = resolveAllDependencies(storyFile, kind, projectPath, queue);
+      if (resolved.length === 0) {
+        return NextResponse.json({ error: 'Story and all dependencies are already in the queue or built' }, { status: 409 });
       }
+
+      // Enqueue resolved missing items in correct topological order!
+      for (let i = 0; i < resolved.length; i++) {
+        const spec = resolved[i];
+        const item = enqueue(spec.file, spec.kind, { 
+          phase: spec.phase, 
+          dependsOn: spec.dependsOn, 
+          engine: engine || 'factory' 
+        });
+
+        // The last item in the resolved list is the main story requested
+        if (i === resolved.length - 1) {
+          enqueuedItem = item;
+        } else {
+          autoEnqueued.push(spec);
+        }
+      }
+    } else {
+      // Check if already in queue
+      const existing = queue.some(
+        item => item.storyFile === storyFile && ['pending', 'running'].includes(item.status)
+      );
+
+      if (existing) {
+        return NextResponse.json({ error: 'Story is already in the queue' }, { status: 409 });
+      }
+
+      const bodyPhase = body.phase;
+      const bodyDependsOn = body.dependsOn;
+      
+      let resolvedPhase = bodyPhase;
+      let resolvedDeps = bodyDependsOn;
+      try {
+        const fullPath = join(projectPath, '.factory', 'stories', storyFile);
+        if (existsSync(fullPath)) {
+          const raw = readFileSync(fullPath, 'utf-8');
+          const parsed = parseYaml(raw) as any;
+          if (resolvedPhase === undefined) {
+            resolvedPhase = parsed.phase ?? (kind === 'AppStory' ? 0 : 1);
+          }
+          if (resolvedDeps === undefined) {
+            resolvedDeps = parsed.dependsOn || [];
+          }
+        }
+      } catch {}
+
+      enqueuedItem = enqueue(storyFile, kind, { 
+        phase: resolvedPhase ?? (kind === 'AppStory' ? 0 : 1), 
+        dependsOn: resolvedDeps ?? [], 
+        engine: engine || 'factory' 
+      });
     }
 
-    // Check if already in queue
-    const existing = queue.some(
-      item => item.storyFile === storyFile && ['pending', 'running'].includes(item.status)
-    );
-
-    if (existing) {
-      return NextResponse.json({ error: 'Story is already in the queue' }, { status: 409 });
-    }
-
-    const item = enqueue(storyFile, kind, { phase, dependsOn, engine });
-
-    return NextResponse.json({ item });
+    return NextResponse.json({ 
+      item: enqueuedItem,
+      autoEnqueued 
+    });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }

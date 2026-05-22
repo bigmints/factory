@@ -766,22 +766,36 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           engine: 'factory'
         }),
       });
+      const data = await res.json();
       if (res.ok) {
-        toast.success(`Enqueued build for ${file}`);
+        const baseName = getBasename(file);
+        if (data.autoEnqueued && data.autoEnqueued.length > 0) {
+          const names = data.autoEnqueued.map((x: any) => getBasename(x.file)).join(', ');
+          toast.success(`Enqueued ${baseName}!`, {
+            description: `Auto-enqueued ${data.autoEnqueued.length} prerequisite dependencies: ${names} to guarantee correct topological order.`,
+            duration: 8000
+          });
+        } else {
+          toast.success(`Enqueued build for ${baseName}`);
+        }
         fetchQueue();
+        return true;
       } else {
-        const data = await res.json();
         toast.error('Failed to enqueue', { description: data.error });
+        return false;
       }
     } catch {
       toast.error('Network error enqueuing story');
+      return false;
     }
   };
 
   const handleSingleBuild = async (file: string, kind: string) => {
-    toast.info(`Preparing build for ${file}...`);
+    const baseName = getBasename(file);
+    toast.info(`Preparing build for ${baseName}...`);
     try {
-      await handleEnqueue(file, kind);
+      const enqueued = await handleEnqueue(file, kind);
+      if (!enqueued) return;
       const res = await fetch('/api/queue/start', { method: 'POST' });
       if (res.ok) {
         toast.success('Build pipeline running...');
@@ -2194,6 +2208,285 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                       )}
                     </div>
 
+                    {/* LLM Pipeline & Gating Panel */}
+                    <div className="space-y-3 pt-2 border-t border-border/40 select-none">
+                      <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                        <Brain className="h-4 w-4 text-violet-500" />
+                        LLM Pipeline & Gating
+                      </h4>
+                      <div className="border border-border/60 bg-muted/15 rounded-lg p-3.5 space-y-4 text-xs">
+                        {/* Auto-Priority Phase */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                            <span>Auto-Priority Level</span>
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                              selectedItem.data.kind === 'AppStory' 
+                                ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
+                                : (selectedItem.data.phase === 1 
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
+                                  : (selectedItem.data.phase === 2 
+                                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/25"
+                                    : "bg-amber-500/10 text-amber-400 border border-amber-500/25"))
+                            )}>
+                              {selectedItem.data.kind === 'AppStory' 
+                                ? 'Phase 0: Scaffold (Priority 100)' 
+                                : `Phase ${selectedItem.data.phase ?? 1}: ${
+                                    selectedItem.data.phase === 1 
+                                      ? 'Foundation (Priority 80)' 
+                                      : (selectedItem.data.phase === 2 
+                                        ? 'Core (Priority 60)' 
+                                        : 'Polish (Priority 40)')
+                                  }`}
+                            </span>
+                          </div>
+                          
+                          {/* Horizontal mini timeline of phases */}
+                          <div className="flex items-center gap-1 pt-1">
+                            {[0, 1, 2, 3].map((p) => {
+                              const currentPhase = selectedItem.data.kind === 'AppStory' ? 0 : (selectedItem.data.phase ?? 1);
+                              const isActive = currentPhase === p;
+                              const isCompleted = currentPhase > p;
+                              
+                              let color = "bg-muted";
+                              if (isActive) {
+                                color = p === 0 ? "bg-indigo-500" : (p === 1 ? "bg-emerald-500" : (p === 2 ? "bg-blue-500" : "bg-amber-500"));
+                              } else if (isCompleted) {
+                                color = "bg-foreground/45";
+                              }
+                              
+                              return (
+                                <div key={p} className="flex-1 space-y-1">
+                                  <div className={cn("h-1 rounded-full transition-all duration-300", color)} />
+                                  <div className="flex items-center justify-between text-[8px] text-muted-foreground px-0.5">
+                                    <span className={cn("font-medium", isActive && "text-foreground font-bold")}>
+                                      {p === 0 ? 'Scaffold' : p === 1 ? 'Found.' : p === 2 ? 'Core' : 'Polish'}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Scaffold & Prerequisite Gates */}
+                        <div className="space-y-2.5">
+                          {/* Scaffold Baseline Gate */}
+                          {(() => {
+                            const targetApp = selectedItem.data.target?.app;
+                            const isAppStory = selectedItem.data.kind === 'AppStory';
+                            
+                            if (isAppStory) {
+                              return (
+                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-[11px] font-bold text-emerald-400">Scaffold Baseline: Ready</span>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      App spec story. Acts as the baseline scaffold. No scaffolding prerequisites required.
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            if (!targetApp) {
+                              return (
+                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-[11px] font-bold text-emerald-400">Scaffold Baseline: Ready (Unbound)</span>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      No parent app specified. Features will be integrated in-place.
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            // Look up parent app status
+                            const parentApp = mergedStories.find(s => 
+                              s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
+                            );
+                            const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
+                            const isAppBuilt = parentStatus === 'done' || parentStatus === 'completed';
+                            
+                            if (isAppBuilt) {
+                              return (
+                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-[11px] font-bold text-emerald-400">Scaffold Baseline: Ready</span>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      Base app scaffold <span className="font-semibold text-foreground">&quot;{targetApp}&quot;</span> is implemented. Ready to compile feature onto it.
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-rose-500/5 border border-rose-500/20">
+                                  <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-[11px] font-bold text-rose-400">Scaffold Baseline: Gated / Blocked</span>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      Requires base app scaffold <span className="font-semibold text-rose-300">&quot;{targetApp}&quot;</span> to be built first. LLM cannot write features to a non-existent app!
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          })()}
+
+                          {/* Prerequisite Dependencies Gate */}
+                          {(() => {
+                            const { prerequisites } = getRelatedStories(selectedItem.data, mergedStories);
+                            const pendingPrereqs = prerequisites.filter(p => {
+                              const s = getEffectiveStatus(p);
+                              return s !== 'done' && s !== 'completed';
+                            });
+                            const isGated = pendingPrereqs.length > 0;
+                            
+                            if (prerequisites.length === 0) {
+                              return (
+                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-[11px] font-bold text-emerald-400">Prerequisites Gate: Ready</span>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      No feature dependencies declared in YAML spec. Ready to queue.
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            if (!isGated) {
+                              return (
+                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-[11px] font-bold text-emerald-400">Prerequisites Gate: Ready</span>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      All {prerequisites.length} prerequisite features are already built and integrated.
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                                  <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-[11px] font-bold text-amber-400">Prerequisites Gate: Blocked</span>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      Blocked by {pendingPrereqs.length} prerequisite(s): <span className="font-mono text-amber-300">{pendingPrereqs.map(p => getSlug(p.file)).join(', ')}</span>.
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </div>
+
+                        {/* LLM Context Payload Visualizer */}
+                        <div className="space-y-2 pt-1 border-t border-border/40">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Active LLM Context Payload</span>
+                            <Badge variant="outline" className="text-[9px] font-mono bg-violet-500/5 text-violet-400 border-violet-500/20 px-1 rounded select-none">
+                              Injected on build
+                            </Badge>
+                          </div>
+                          
+                          <div className="font-mono text-[10px] rounded-lg bg-black/60 border border-border/50 text-muted-foreground overflow-hidden p-3.5 space-y-3.5 leading-relaxed">
+                            {/* 1. Target Stack */}
+                            <div className="space-y-1">
+                              <span className="text-foreground font-bold flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 shrink-0" />
+                                1. Stack Config Context
+                              </span>
+                              {(() => {
+                                const getAppStack = () => {
+                                  const story = selectedItem.data;
+                                  if (story.kind === 'AppStory' && story.stack) {
+                                    return story.stack;
+                                  }
+                                  const targetApp = story.target?.app;
+                                  const parentApp = mergedStories.find(s => 
+                                    s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
+                                  );
+                                  if (parentApp?.stack) return parentApp.stack;
+                                  if (appRollup?.stack) return appRollup.stack;
+                                  return null;
+                                };
+                                const stack = getAppStack();
+                                if (!stack) return <span className="text-[9px] text-muted-foreground italic pl-3.5">No stack config detected.</span>;
+                                
+                                return (
+                                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 pl-3.5 text-[9px]">
+                                    <div><span className="text-muted-foreground/75">Framework:</span> <span className="text-violet-300 font-bold">{stack.framework || 'Next.js 15'}</span></div>
+                                    <div><span className="text-muted-foreground/75">Language:</span> <span className="text-sky-300 font-bold">{stack.language || 'TypeScript'}</span></div>
+                                    <div><span className="text-muted-foreground/75">Database:</span> <span className="text-amber-300 font-bold">{stack.database || 'SQLite'}</span></div>
+                                    <div><span className="text-muted-foreground/75">Styling:</span> <span className="text-emerald-300 font-bold">Tailwind CSS</span></div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
+                            {/* 2. Conventions & Rules */}
+                            <div className="space-y-1">
+                              <span className="text-foreground font-bold flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" />
+                                2. TOON & Conventions Rules
+                              </span>
+                              <div className="pl-3.5 text-[9px] text-muted-foreground/85 space-y-0.5">
+                                <div>✓ <span className="text-foreground/90 font-semibold">AGENTS.md</span> specifications guidelines injected.</div>
+                                <div>✓ <span className="text-foreground/90 font-semibold">@toon-format/toon</span> semantic file structure.</div>
+                                <div>✓ <span className="text-foreground/90 font-semibold">factory/scripts</span> heartbeat & auto-context scripts.</div>
+                              </div>
+                            </div>
+
+                            {/* 3. Knowledge Base Memory */}
+                            <div className="space-y-1">
+                              <span className="text-foreground font-bold flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                3. Knowledge Graph Memory
+                              </span>
+                              {(() => {
+                                const completedStories = mergedStories.filter(s => {
+                                  const st = getEffectiveStatus(s);
+                                  return st === 'done' || st === 'completed';
+                                });
+                                
+                                if (completedStories.length === 0) {
+                                  return (
+                                    <div className="pl-3.5 text-[9px] text-muted-foreground italic leading-normal">
+                                      No past builds. First compile (cold start).
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <div className="pl-3.5 space-y-1">
+                                    <div className="text-[9px] text-muted-foreground leading-normal">
+                                      Auto-injects details of {completedStories.length} past builds from <span className="text-emerald-300 font-mono">.factory/knowledge/</span>:
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 pt-0.5 max-h-[60px] overflow-y-auto">
+                                      {completedStories.map(cs => (
+                                        <span key={cs.file} className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/40 font-mono">
+                                          {getSlug(cs.file)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Checklist Subtasks */}
                     <div className="space-y-2.5">
                       <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
@@ -2683,6 +2976,25 @@ function StoryKanbanCard({
   const isDraggable = effectiveStatus === 'draft' || effectiveStatus === 'ready';
   const isActive = effectiveStatus === 'running' || effectiveStatus === 'validation';
 
+  // Architect-level Gating Visualizer: Check if base app scaffold exists and if there are pending prerequisites
+  const targetApp = item.target?.app || item.targetApp;
+  const isFeature = item.kind === 'FeatureStory' || !!item.feature;
+  let isScaffoldGated = false;
+  if (isFeature && targetApp) {
+    const parentApp = allStories?.find(s => 
+      s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
+    );
+    const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
+    isScaffoldGated = parentStatus !== 'done' && parentStatus !== 'completed';
+  }
+
+  const { prerequisites } = getRelatedStories(item, allStories || []);
+  const pendingPrereqs = prerequisites.filter(p => {
+    const s = getEffectiveStatus(p);
+    return s !== 'done' && s !== 'completed';
+  });
+  const isPrereqGated = pendingPrereqs.length > 0;
+
   return (
     <Card
       draggable={isDraggable}
@@ -2707,6 +3019,22 @@ function StoryKanbanCard({
             <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
           </div>
         </div>
+
+        {/* Architect Gating Warnings */}
+        {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
+          <div className="flex flex-wrap items-center gap-1 pt-0.5">
+            {isScaffoldGated && (
+              <Badge variant="outline" className="text-[7.5px] font-extrabold bg-rose-500/10 text-rose-400 border-rose-500/25 px-1 h-4 rounded-xs shrink-0 select-none flex items-center gap-0.5">
+                <AlertTriangle className="h-2 w-2" /> Scaffold Gated
+              </Badge>
+            )}
+            {isPrereqGated && (
+              <Badge variant="outline" className="text-[7.5px] font-extrabold bg-amber-500/10 text-amber-400 border-amber-500/25 px-1 h-4 rounded-xs shrink-0 select-none flex items-center gap-0.5">
+                <AlertTriangle className="h-2 w-2" /> Deps Pending ({pendingPrereqs.length})
+              </Badge>
+            )}
+          </div>
+        )}
 
         {/* Description */}
         {desc && (
@@ -2802,6 +3130,24 @@ function ListStoryRow({
   const hasTasks = item.checklistTasks && item.checklistTasks.length > 0;
   const isActionLoading = !!(activeAction && activeAction.file === item.file);
 
+  // Architect-level Gating Visualizer: Check if base app scaffold exists and if there are pending prerequisites
+  const targetApp = item.target?.app || item.targetApp;
+  let isScaffoldGated = false;
+  if (isFeature && targetApp) {
+    const parentApp = allStories?.find(s => 
+      s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
+    );
+    const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
+    isScaffoldGated = parentStatus !== 'done' && parentStatus !== 'completed';
+  }
+
+  const { prerequisites } = getRelatedStories(item, allStories || []);
+  const pendingPrereqs = prerequisites.filter(p => {
+    const s = getEffectiveStatus(p);
+    return s !== 'done' && s !== 'completed';
+  });
+  const isPrereqGated = pendingPrereqs.length > 0;
+
   return (
     <div
       className="border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-300"
@@ -2833,6 +3179,22 @@ function ListStoryRow({
             <span className="text-[10px] text-muted-foreground font-mono block truncate max-w-[180px]" title={item.file}>
               {item.file}
             </span>
+
+            {/* Architect Gating Warnings */}
+            {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                {isScaffoldGated && (
+                  <Badge variant="outline" className="text-[7.5px] font-extrabold bg-rose-500/10 text-rose-400 border-rose-500/25 px-1.5 h-4.5 rounded-sm shrink-0 select-none flex items-center gap-0.5">
+                    <AlertTriangle className="h-2.5 w-2.5" /> Scaffold Baseline Missing
+                  </Badge>
+                )}
+                {isPrereqGated && (
+                  <Badge variant="outline" className="text-[7.5px] font-extrabold bg-amber-500/10 text-amber-400 border-amber-500/25 px-1.5 h-4.5 rounded-sm shrink-0 select-none flex items-center gap-0.5">
+                    <AlertTriangle className="h-2.5 w-2.5" /> Prerequisite Dependencies Pending ({pendingPrereqs.length})
+                  </Badge>
+                )}
+              </div>
+            )}
 
             {/* Dependencies in List View */}
             {item.dependsOn && item.dependsOn.length > 0 && (

@@ -26,6 +26,18 @@ fi
 cp -R ui/.next/static "$FACTORY_DIR/ui/.next/"
 cp -R ui/public "$FACTORY_DIR/ui/" 2>/dev/null || true
 
+# Remove "type": "module" from the copied package.json so server.js executes as CommonJS
+echo "🔧 Configuring package.json type for standalone server..."
+node -e "
+const fs = require('fs');
+const file = '$FACTORY_DIR/ui/package.json';
+if (fs.existsSync(file)) {
+  const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  pkg.type = 'commonjs';
+  fs.writeFileSync(file, JSON.stringify(pkg, null, 2), 'utf8');
+}
+"
+
 # Fix Turbopack mangled external package names
 # Turbopack appends content hashes to external package names (e.g. better-sqlite3-bb6a0d79d57cc59a)
 # We need to create symlinks so require() can resolve them at runtime

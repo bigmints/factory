@@ -984,8 +984,15 @@ export default function Dashboard() {
 
       {/* Mobile bottom navigation */}
       <MobileNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+        activeTab={showAddProject ? 'projects' : activeTab}
+        onTabChange={(tab) => {
+          if (tab === 'projects') {
+            setShowAddProject(true);
+          } else {
+            setShowAddProject(false);
+            setActiveTab(tab);
+          }
+        }}
         onAddProject={() => setShowAddProject(true)}
         projectRefreshKey={projectRefreshKey}
       />

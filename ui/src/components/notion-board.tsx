@@ -964,7 +964,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // ─── JSX Renders ───
 
   return (
-    <div className="space-y-6 relative pb-10">
+    <div className="space-y-4 relative pb-6">
       {/* Visual background atmospheric lights */}
       <div className="absolute -top-20 left-10 w-96 h-96 bg-primary/5 rounded-full filter blur-[120px] pointer-events-none -z-10" />
       <div className="absolute -top-30 right-20 w-80 h-80 bg-cyan-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
@@ -972,62 +972,70 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 1. TOP HEADER CONSOLE                                                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg overflow-hidden">
-        <CardContent className="p-5 md:p-6 space-y-5">
-          {/* Row 1: App Info, Badges and Sync */}
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-3xl">🏭</span>
-                <div>
-                  <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-                    {appRollup?.name || 'Loading Project...'}
-                    <Badge variant="outline" className="text-[10px] font-bold tracking-wider px-2 py-0.5 border-border bg-muted/40 uppercase">
-                      v{appRollup?.version || '0.0.1'}
-                    </Badge>
-                    {queueRunning && (
-                      <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    )}
-                  </h1>
-                  <p className="text-xs md:text-sm text-muted-foreground mt-0.5 max-w-xl">
-                    {appRollup?.description || 'Scaffolding and developing your application automatically.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Stack badging */}
-              {appRollup?.stack && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                  <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
-                    ⚡ {appRollup.stack.framework}
+      <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-sm overflow-hidden select-none shrink-0">
+        <CardContent className="p-2 md:px-3 md:py-2 space-y-2">
+          {/* Main flex-row: Project Info on Left, Actions on Right */}
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-2.5">
+            
+            {/* Left Column: Title, version, stack badges & description */}
+            <div className="space-y-0.5 min-w-0 flex-1 w-full lg:w-auto">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-sm">🏭</span>
+                <h1 className="text-xs md:text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
+                  {appRollup?.name || 'Loading Project...'}
+                  <Badge variant="outline" className="text-[8.5px] font-bold px-1 py-0 border-border bg-muted/40 uppercase shrink-0">
+                    v{appRollup?.version || '0.0.1'}
                   </Badge>
-                  {appRollup.stack.language && (
-                    <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
-                      🏷️ {appRollup.stack.language}
-                    </Badge>
+                  {queueRunning && (
+                    <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   )}
-                  {appRollup.stack.database && (
-                    <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
-                      🗄️ {appRollup.stack.database}
-                    </Badge>
+                  {/* Stack Badges inline next to the version */}
+                  {appRollup?.stack && (
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                        ⚡ {appRollup.stack.framework}
+                      </Badge>
+                      {appRollup.stack.language && (
+                        <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                          🏷️ {appRollup.stack.language}
+                        </Badge>
+                      )}
+                      {appRollup.stack.database && (
+                        <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                          🗄️ {appRollup.stack.database}
+                        </Badge>
+                      )}
+                    </div>
                   )}
-                  {appRollup.stack.cloud && (
-                    <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
-                      ☁️ {appRollup.stack.cloud}
-                    </Badge>
-                  )}
-                </div>
-              )}
+                </h1>
+              </div>
+              <p className="text-[10px] text-muted-foreground line-clamp-1 max-w-2xl leading-relaxed">
+                {appRollup?.description || 'Scaffolding and developing your application automatically.'}
+              </p>
             </div>
 
-            {/* Dev App Server Controls */}
-            <div className="flex flex-wrap items-center gap-2 lg:self-center">
-              <div className="flex items-center border rounded-lg bg-background p-1 text-xs select-none">
-                <div className="flex items-center gap-1.5 px-2">
-                  <Activity className={cn("h-3.5 w-3.5", runStatus === 'running' ? "text-emerald-500" : "text-muted-foreground")} />
-                  <span className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Server:</span>
+            {/* Right Column: Unified Actions Toolbar */}
+            <div className="flex flex-wrap items-center gap-1 shrink-0 w-full lg:w-auto">
+              {/* Build Ready Stories button */}
+              <Button
+                onClick={handleBuildReadyStories}
+                disabled={queueRunning || syncing}
+                className={cn(
+                  "h-7 text-[10px] gap-1 rounded-md font-bold transition-all duration-200 flex-1 sm:flex-none justify-center px-2.5",
+                  queueRunning ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-sm active:scale-95"
+                )}
+              >
+                <Rocket className={cn("h-3 w-3", queueRunning && "animate-bounce")} />
+                <span>Build Ready</span>
+              </Button>
+
+              {/* Dev App Server Controls Pill */}
+              <div className="flex items-center border rounded-md bg-background p-0.5 h-7 text-[10px] select-none shrink-0">
+                <div className="flex items-center gap-1 px-1">
+                  <Activity className={cn("h-2.5 w-2.5", runStatus === 'running' ? "text-emerald-500" : "text-muted-foreground")} />
+                  <span className="font-bold text-[8.5px] uppercase tracking-wider text-muted-foreground hidden xl:inline">Server:</span>
                   <Badge className={cn(
-                    "text-[10px] font-bold px-1.5 h-4.5 rounded-md",
+                    "text-[8px] font-bold px-1 h-4 rounded-sm flex items-center justify-center",
                     runStatus === 'running' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
                     runStatus === 'starting' ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse" :
                     "bg-muted text-muted-foreground border border-border"
@@ -1035,16 +1043,16 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                     {runStatus === 'running' ? `Active (:${runPort || 3000})` : runStatus}
                   </Badge>
                 </div>
-                <Separator orientation="vertical" className="h-4 mx-1" />
+                <Separator orientation="vertical" className="h-3.5 mx-0.5" />
                 {runStatus === 'stopped' ? (
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={handleStartApp}
                     disabled={isActionLoading}
-                    className="h-7 w-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
+                    className="h-5.5 w-5.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-sm"
                   >
-                    <Play className="h-3.5 w-3.5 fill-emerald-500/20" />
+                    <Play className="h-2.5 w-2.5 fill-emerald-500/20" />
                   </Button>
                 ) : (
                   <Button
@@ -1052,38 +1060,48 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                     variant="ghost"
                     onClick={handleStopApp}
                     disabled={isActionLoading}
-                    className="h-7 w-7 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md"
+                    className="h-5.5 w-5.5 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-sm"
                   >
-                    <Square className="h-3.5 w-3.5 fill-rose-500/20" />
+                    <Square className="h-2.5 w-2.5 fill-rose-500/20" />
                   </Button>
                 )}
 
                 {/* View server URL if active */}
                 {runStatus === 'running' && runPort && (
                   <>
-                    <Separator orientation="vertical" className="h-4 mx-1" />
+                    <Separator orientation="vertical" className="h-3.5 mx-0.5" />
                     <Button
                       size="icon"
                       variant="ghost"
                       onClick={() => window.open(`http://localhost:${runPort}`, '_blank')}
-                      className="h-7 w-7 text-primary hover:bg-primary/10 rounded-md"
+                      className="h-5.5 w-5.5 text-primary hover:bg-primary/10 rounded-sm"
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <ExternalLink className="h-2.5 w-2.5" />
                     </Button>
                   </>
                 )}
 
                 {/* Terminal dropdown button */}
-                <Separator orientation="vertical" className="h-4 mx-1" />
+                <Separator orientation="vertical" className="h-3.5 mx-0.5" />
                 <Button
                   size="icon"
                   variant="ghost"
                   onClick={() => setShowServerLogs(!showServerLogs)}
-                  className={cn("h-7 w-7 rounded-md", showServerLogs ? "bg-muted text-foreground" : "text-muted-foreground")}
+                  className={cn("h-5.5 w-5.5 rounded-sm", showServerLogs ? "bg-muted text-foreground" : "text-muted-foreground")}
                 >
-                  <Terminal className="h-3.5 w-3.5" />
+                  <Terminal className="h-3 w-3" />
                 </Button>
               </div>
+
+              {/* New Story button */}
+              <Button
+                size="sm"
+                onClick={() => setShowStoryChat(true)}
+                className="h-7 text-[10px] gap-1 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0 px-2.5 flex-1 sm:flex-none"
+              >
+                <Plus className="h-3 w-3" />
+                <span>New Story</span>
+              </Button>
 
               {/* Refresh data button */}
               <Button
@@ -1091,18 +1109,110 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                 size="sm"
                 onClick={handleSyncRoadmap}
                 disabled={syncing}
-                className="h-9 text-xs rounded-lg gap-1.5"
+                className="h-7 text-[10px] rounded-md gap-1 px-2 text-muted-foreground hover:text-foreground shrink-0 flex-1 sm:flex-none"
               >
-                <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
+                <RefreshCw className={cn("h-2.5 w-2.5", syncing && "animate-spin")} />
                 <span>Refresh</span>
               </Button>
             </div>
           </div>
 
+          <Separator className="opacity-40" />
+
+          {/* Controls & Filter Bar inside the Card */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            {/* Left side: View tabs */}
+            <div className="flex items-center gap-1 p-0.5 bg-muted/60 border rounded-md h-7.5 shrink-0 self-start md:self-auto">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setViewMode('board')}
+                className={cn(
+                  "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
+                  viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Columns className="h-3 w-3" />
+                <span>Board</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
+                  viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <ListTodo className="h-3 w-3" />
+                <span>Roadmap</span>
+              </Button>
+            </div>
+
+            {/* Right side: Search, Dropdowns, Engine */}
+            <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
+              {/* Search box */}
+              <div className="relative w-full sm:w-40 md:w-44 shrink-0">
+                <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground/75" />
+                <Input
+                  placeholder="Search stories..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-6.5 h-7 text-[10px] rounded-md bg-muted/30 w-full"
+                />
+              </div>
+
+              {/* Epic Filter */}
+              <select
+                value={epicFilter}
+                onChange={e => setEpicFilter(e.target.value)}
+                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-full sm:w-32 cursor-pointer"
+              >
+                <option value="all">All Epics</option>
+                {appRollup?.features?.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="h-7 px-1.5 rounded-md border border-border bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-full sm:w-28 cursor-pointer"
+              >
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="ready">Ready</option>
+                <option value="in-progress">In Progress</option>
+                <option value="failed">Failed</option>
+                <option value="done">Done</option>
+              </select>
+
+              {/* Engine Selector */}
+              <div className="flex items-center border border-border rounded-md bg-background p-0.5 h-7 text-[9px] shrink-0">
+                <span className="text-[8px] text-muted-foreground font-bold px-1 uppercase tracking-wider">Eng:</span>
+                <button
+                  className={cn(
+                    "px-1 py-0.5 rounded-sm transition-all text-[9.5px] font-semibold shrink-0 h-5.5",
+                    buildEngine === 'factory' ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+                  )}
+                  onClick={() => setBuildEngine('factory')}
+                >
+                  Factory
+                </button>
+              </div>
+
+              {/* Loading indicator */}
+              {loading && (
+                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0 ml-1" />
+              )}
+            </div>
+          </div>
+
           {/* Collapsible Local Server Console Logs */}
           {showServerLogs && (
-            <div className="border border-border/80 rounded-lg overflow-hidden bg-zinc-950 font-mono text-[11px] text-zinc-300">
-              <div className="bg-zinc-900 border-b border-border/40 px-3 py-2 flex items-center justify-between">
+            <div className="border border-border/80 rounded-lg overflow-hidden bg-zinc-950 font-mono text-[11px] text-zinc-300 mt-2">
+              <div className="bg-zinc-900 border-b border-border/40 px-3 py-1.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-bold uppercase tracking-wider">
                   <TerminalSquare className="h-3.5 w-3.5 text-emerald-500" />
                   Local server console output
@@ -1122,136 +1232,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               </div>
             </div>
           )}
-
-          {/* Divider */}
-          <Separator className="bg-border/60" />
-
-          {/* Row 2: Build Ready Button */}
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleBuildReadyStories}
-              disabled={queueRunning || syncing}
-              className={cn(
-                "flex-1 sm:flex-none h-9 text-xs gap-1.5 rounded-lg font-bold shadow-md bg-gradient-to-r transition-all duration-300",
-                queueRunning ? "from-zinc-800 to-zinc-700 text-zinc-500 cursor-not-allowed" : "from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95"
-              )}
-            >
-              <Rocket className={cn("h-3.5 w-3.5", queueRunning && "animate-bounce")} />
-              <span>Build Ready Stories</span>
-            </Button>
-          </div>
         </CardContent>
       </Card>
-
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 2. TABS + ACTION ROW                                               */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-2 border-b border-border pb-3 select-none">
-        {/* View tabs */}
-        <div className="flex items-center gap-1 p-1 bg-muted/60 border rounded-xl">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setViewMode('board')}
-            className={cn(
-              "rounded-lg text-xs gap-1.5 h-8 px-2.5",
-              viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Columns className="h-3.5 w-3.5" />
-            <span className="hidden xs:inline">Board</span>
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setViewMode('list')}
-            className={cn(
-              "rounded-lg text-xs gap-1.5 h-8 px-2.5",
-              viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ListTodo className="h-3.5 w-3.5" />
-            <span className="hidden xs:inline">Roadmap</span>
-          </Button>
-        </div>
-
-        {/* New Story button — always visible, right-aligned */}
-        <Button
-          size="sm"
-          onClick={() => setShowStoryChat(true)}
-          className="h-8 text-xs gap-1.5 rounded-lg bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>New Story</span>
-        </Button>
-      </div>
-
-      {/* Filter bar */}
-      <div className="bg-muted/40 border p-3 rounded-lg space-y-2">
-        {/* Row 1: Search (full width) */}
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search stories..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 text-xs rounded-md bg-background w-full"
-          />
-        </div>
-
-        {/* Row 2: Filters + Engine pill */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Epic filter */}
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <select
-              value={epicFilter}
-              onChange={e => setEpicFilter(e.target.value)}
-              className="h-9 px-2 rounded-md border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary w-full min-w-0"
-            >
-              <option value="all">All Epics</option>
-              {appRollup?.features?.map(f => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status filter */}
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="h-9 px-2 rounded-md border bg-background text-xs text-foreground focus:ring-1 focus:ring-primary w-full min-w-0"
-            >
-              <option value="all">All Statuses</option>
-              <option value="draft">Draft</option>
-              <option value="ready">Ready</option>
-              <option value="in-progress">In Progress</option>
-              <option value="failed">Failed</option>
-              <option value="done">Done</option>
-            </select>
-          </div>
-
-          {/* Engine selector */}
-          <div className="flex items-center border border-border rounded-lg bg-background p-1 h-9 text-[11px] shrink-0">
-            <span className="text-[10px] text-muted-foreground font-bold px-1.5 uppercase tracking-wider">Eng:</span>
-            <button
-              className={cn(
-                "px-2 py-0.5 rounded-md transition-all text-[11px] font-semibold shrink-0 h-7",
-                buildEngine === 'factory' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"
-              )}
-              onClick={() => setBuildEngine('factory')}
-            >
-              Factory
-            </button>
-          </div>
-
-          {/* Loading indicator */}
-          {loading && (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
-          )}
-        </div>
-      </div>
 
       <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={fetchStories} />
 
@@ -1484,7 +1466,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Queue Timeline — chronological list of items */}
-          <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg overflow-hidden lg:col-span-4 h-[620px] flex flex-col">
+          <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg overflow-hidden lg:col-span-4 h-[500px] md:h-[calc(100vh-170px)] flex flex-col">
             <CardHeader className="border-b border-border/50 p-4 shrink-0 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-sm font-bold text-foreground">Build Timeline</CardTitle>
@@ -1603,7 +1585,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           </Card>
 
           {/* Per-item Log Console */}
-          <Card className="border border-border/80 bg-zinc-950 shadow-2xl lg:col-span-8 h-[620px] flex flex-col overflow-hidden">
+          <Card className="border border-border/80 bg-zinc-950 shadow-2xl lg:col-span-8 h-[500px] md:h-[calc(100vh-170px)] flex flex-col overflow-hidden">
             <div className="bg-zinc-900 border-b border-border/40 px-4 py-3 shrink-0 flex items-center justify-between select-none">
               <span className="flex items-center gap-2 text-zinc-300 text-xs font-bold font-mono min-w-0">
                 <Terminal className="h-4 w-4 text-primary shrink-0" />
@@ -1872,7 +1854,7 @@ function KanbanColumn({
     <div
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className="flex flex-col h-[650px] bg-muted/15 border border-border/60 rounded-xl overflow-hidden shadow-xs flex-1 transition-all duration-200 hover:bg-muted/20"
+      className="flex flex-col h-[600px] md:h-[calc(100vh-170px)] bg-muted/15 border border-border/60 rounded-xl overflow-hidden shadow-xs flex-1 transition-all duration-200 hover:bg-muted/20"
     >
       {/* Header info */}
       <div className="p-3.5 bg-muted/20 border-b border-border/40 space-y-1 shrink-0 select-none">

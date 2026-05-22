@@ -513,7 +513,7 @@ export default function Dashboard() {
             }} />
           </div>
         ) : (
-          <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto">
+          <div className="p-3 md:px-6 md:py-4 w-full max-w-[1400px] mx-auto">
             {/* Page header */}
             {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
               <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">

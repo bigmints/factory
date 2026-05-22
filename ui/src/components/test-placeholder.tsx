@@ -28,7 +28,7 @@ export function TestPlaceholder() {
       <div className="space-y-2 max-w-lg">
         <h1 className="text-2xl font-bold tracking-tight">Test Suite</h1>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Automated testing is built into the engine's iteration loop — type checks, lint gates, integration tests, and live smoke runs happen on every build. A dedicated test dashboard is coming soon.
+          Automated testing is built into the engine&apos;s iteration loop — type checks, lint gates, integration tests, and live smoke runs happen on every build. A dedicated test dashboard is coming soon.
         </p>
       </div>
 

@@ -564,12 +564,12 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'plan' && <NotionBoard initialView="board" />}
+            {activeTab === 'plan' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} />}
             {activeTab === 'build' && <BuildPage />}
             {activeTab === 'test' && <TestPlaceholder />}
             {activeTab === 'deploy' && <DeployPlaceholder />}
             {/* legacy hash compat */}
-            {activeTab === 'dashboard' && <NotionBoard initialView="board" />}
+            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} />}
             {activeTab === 'skills' && <SkillsView />}
             {activeTab === 'reports' && renderReports()}
             {activeTab === 'knowledge' && <KnowledgeView />}

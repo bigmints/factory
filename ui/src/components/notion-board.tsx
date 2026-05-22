@@ -16,7 +16,8 @@ import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, ChevronDown, ChevronRight, Plus,
   Search, Filter, Tag, Columns, Layers, FileCode2, Brain, FlaskConical, Wrench,
   ShieldCheck, FolderOpen, RefreshCw, Sliders, X, Check, Package, ListTodo, Info,
-  BookOpen, Code, TerminalSquare, Link2, Users, Network, Lock, Clock
+  BookOpen, Code, TerminalSquare, Link2, Users, Network, Lock, Clock,
+  Pencil, Trash2, Eye, FileText, Save, Copy
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
@@ -144,6 +145,7 @@ interface ActivityStep {
 
 interface NotionBoardProps {
   initialView?: 'board' | 'list' | 'queue';
+  onNavigateToBuild?: () => void;
 }
 
 // ─── Constants & Configurations ───
@@ -348,7 +350,7 @@ const getEffectiveStatus = (item: any) => {
   return 'unknown';
 };
 
-export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
+export function NotionBoard({ initialView = 'board', onNavigateToBuild }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
   const [loading, setLoading] = useState(true);
@@ -503,6 +505,16 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
     parentFeature?: any;
   } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // YAML viewer/editor state for story drawer
+  const [yamlContent, setYamlContent] = useState<string | null>(null);
+  const [loadingYaml, setLoadingYaml] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editedYaml, setEditedYaml] = useState('');
+  const [savingYaml, setSavingYaml] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [storyTab, setStoryTab] = useState<'spec' | 'raw' | 'tasks'>('spec');
+  const [copiedYaml, setCopiedYaml] = useState(false);
 
   // Story Creation & Editing overlays
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
@@ -800,8 +812,12 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       if (res.ok) {
         toast.success('Build pipeline running...');
         fetchQueue();
-        setViewMode('queue');
-        setBuildLogsOpen(true);
+        if (onNavigateToBuild) {
+          onNavigateToBuild();
+        } else {
+          setViewMode('queue');
+          setBuildLogsOpen(true);
+        }
       } else {
         const err = await res.json();
         toast.error('Failed to launch pipeline', { description: err.error });
@@ -881,8 +897,12 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         if (startRes.ok) {
           toast.success(`Success! Launched build for ${enqueued} stories.`, { id: toastId });
           fetchQueue();
-          setViewMode('queue');
-          setBuildLogsOpen(true);
+          if (onNavigateToBuild) {
+            onNavigateToBuild();
+          } else {
+            setViewMode('queue');
+            setBuildLogsOpen(true);
+          }
         } else {
           toast.error('Failed to trigger execution runner', { id: toastId });
         }
@@ -966,8 +986,12 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           toast.success(`Success! Launched builds for ${enqueued} related stories.`, { id: toastId });
           fetchQueue();
           setDrawerOpen(false);
-          setViewMode('queue');
-          setBuildLogsOpen(true);
+          if (onNavigateToBuild) {
+            onNavigateToBuild();
+          } else {
+            setViewMode('queue');
+            setBuildLogsOpen(true);
+          }
         } else {
           toast.error('Failed to trigger execution runner', { id: toastId });
         }
@@ -1047,8 +1071,12 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         fetchQueue();
         const startRes = await fetch('/api/queue/start', { method: 'POST' });
         if (startRes.ok) {
-          setViewMode('queue');
-          setBuildLogsOpen(true);
+          if (onNavigateToBuild) {
+            onNavigateToBuild();
+          } else {
+            setViewMode('queue');
+            setBuildLogsOpen(true);
+          }
         }
       }
     } catch {
@@ -1275,6 +1303,63 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const handleOpenDrawer = (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => {
     setSelectedItem({ type, data: item, parentStory, parentFeature });
     setDrawerOpen(true);
+    setEditMode(false);
+    setDeleteConfirm(false);
+    setStoryTab('spec');
+    setYamlContent(null);
+    if (type === 'story' && item.file) {
+      fetchStoryYaml(item.file);
+    }
+  };
+
+  const fetchStoryYaml = async (file: string) => {
+    setLoadingYaml(true);
+    setYamlContent(null);
+    try {
+      const res = await fetch(`/api/stories/${encodeURIComponent(file)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setYamlContent(data.content);
+        setEditedYaml(data.content);
+      }
+    } catch {}
+    finally { setLoadingYaml(false); }
+  };
+
+  const handleSaveYaml = async (file: string) => {
+    setSavingYaml(true);
+    try {
+      const res = await fetch(`/api/stories/${encodeURIComponent(file)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editedYaml }),
+      });
+      if (res.ok) {
+        toast.success('Story saved');
+        setYamlContent(editedYaml);
+        setEditMode(false);
+        fetchStories();
+      } else {
+        const d = await res.json();
+        toast.error(d.error || 'Failed to save');
+      }
+    } catch { toast.error('Failed to save story'); }
+    finally { setSavingYaml(false); }
+  };
+
+  const handleDeleteStory = async (file: string) => {
+    try {
+      const res = await fetch(`/api/stories/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Story deleted');
+        setDrawerOpen(false);
+        setDeleteConfirm(false);
+        fetchStories();
+      } else {
+        const d = await res.json();
+        toast.error(d.error || 'Failed to delete story');
+      }
+    } catch { toast.error('Failed to delete story'); }
   };
 
   // ─── Rendering Helpers ───
@@ -2070,10 +2155,353 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 6. SLIDING DETAILS DRAWER                                             */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-md bg-background/95 backdrop-blur-md border-l border-border/60 shadow-2xl flex flex-col p-0 overflow-hidden">
+      <Sheet open={drawerOpen} onOpenChange={(open) => { setDrawerOpen(open); if (!open) { setEditMode(false); setDeleteConfirm(false); } }}>
+        <SheetContent className="w-full sm:max-w-lg bg-zinc-950 border-l border-zinc-800/60 shadow-2xl flex flex-col p-0 overflow-hidden focus:outline-none">
           {selectedItem && (
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full min-h-0">
+
+              {/* ── Header ── */}
+              <div className="shrink-0 border-b border-zinc-800/70 bg-zinc-900/50 px-5 py-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn(
+                      'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border',
+                      selectedItem.type === 'task'
+                        ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/25'
+                        : selectedItem.data.kind === 'FeatureStory'
+                          ? 'bg-violet-500/10 text-violet-400 border-violet-500/25'
+                          : 'bg-sky-500/10 text-sky-400 border-sky-500/25'
+                    )}>
+                      {selectedItem.type === 'task' ? 'Task' : selectedItem.data.kind === 'FeatureStory' ? 'Feature Story' : 'App Story'}
+                    </span>
+                    {selectedItem.type === 'story' && (
+                      <span className={cn(
+                        'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border',
+                        (storyStatusMap[getEffectiveStatus(selectedItem.data)] || storyStatusMap.unknown).bg
+                      )}>
+                        {getEffectiveStatus(selectedItem.data)}
+                      </span>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 rounded-md shrink-0" onClick={() => setDrawerOpen(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <SheetTitle className="text-base font-bold text-white leading-snug pr-2">
+                  {selectedItem.type === 'task' ? selectedItem.data.title : getStoryTitle(selectedItem.data)}
+                </SheetTitle>
+                <SheetDescription className="text-xs text-zinc-500 leading-relaxed line-clamp-2 pr-2">
+                  {selectedItem.type === 'task'
+                    ? `Part of story: ${selectedItem.parentStory?.name || 'App Spec'}`
+                    : getStoryDesc(selectedItem.data)}
+                </SheetDescription>
+                {selectedItem.type === 'story' && (
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600">
+                    <FileText className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{selectedItem.data.file}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Action Bar ── */}
+              {selectedItem.type === 'story' && (
+                <div className="shrink-0 border-b border-zinc-800/70 bg-zinc-900/30 px-4 py-2.5 flex items-center gap-1.5 flex-wrap">
+                  {!editMode ? (
+                    <>
+                      <Button size="sm" variant="ghost" disabled={!!activeAction}
+                        onClick={() => handleValidateStory(selectedItem.data.file, selectedItem.data.kind)}
+                        className="h-7 px-3 gap-1.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">
+                        <ShieldCheck className="h-3.5 w-3.5" /> Validate
+                      </Button>
+                      <Button size="sm"
+                        onClick={() => { setDrawerOpen(false); handleSingleBuild(selectedItem.data.file, selectedItem.data.kind || 'AppStory'); }}
+                        className="h-7 px-3 gap-1.5 text-[11px] bg-violet-600 hover:bg-violet-500 text-white font-semibold font-sans shadow-sm shadow-violet-900/30">
+                        <Rocket className="h-3.5 w-3.5" /> Compile
+                      </Button>
+                      <div className="flex-1" />
+                      <Button size="sm" variant="ghost" disabled={loadingYaml}
+                        onClick={() => { setEditMode(true); setStoryTab('raw'); }}
+                        className="h-7 px-3 gap-1.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">
+                        <Pencil className="h-3.5 w-3.5" /> Edit
+                      </Button>
+                      {!deleteConfirm ? (
+                        <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(true)}
+                          className="h-7 px-3 gap-1.5 text-[11px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 font-sans">
+                          <Trash2 className="h-3.5 w-3.5" /> Delete
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-rose-400 font-semibold font-sans">Delete?</span>
+                          <Button size="sm" onClick={() => handleDeleteStory(selectedItem.data.file)}
+                            className="h-7 px-2.5 text-[11px] bg-rose-600 hover:bg-rose-500 text-white font-semibold font-sans">Yes</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(false)}
+                            className="h-7 px-2.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">No</Button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Button size="sm" disabled={savingYaml} onClick={() => handleSaveYaml(selectedItem.data.file)}
+                        className="h-7 px-3 gap-1.5 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-semibold font-sans">
+                        {savingYaml ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                        Save changes
+                      </Button>
+                      <Button size="sm" variant="ghost"
+                        onClick={() => { setEditMode(false); setEditedYaml(yamlContent || ''); setStoryTab('raw'); }}
+                        className="h-7 px-3 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">
+                        Cancel
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Queue Related Family ── */}
+              {selectedItem.type === 'story' && (() => {
+                const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
+                const family = [selectedItem.data, ...prerequisites, ...dependents, ...peers];
+                const incompleteCount = family.filter(s => { const st = getEffectiveStatus(s); return st !== 'done' && st !== 'completed'; }).length;
+                return incompleteCount > 0 ? (
+                  <div className="shrink-0 border-b border-zinc-800/70 px-4 py-2">
+                    <Button size="sm" onClick={() => handleQueueRelatedStories(selectedItem.data)}
+                      className="w-full h-8 text-[11px] font-bold gap-2 bg-violet-700/80 hover:bg-violet-600 text-white rounded-lg font-sans">
+                      <Layers className="h-3.5 w-3.5" />
+                      Queue Related Family ({incompleteCount})
+                    </Button>
+                  </div>
+                ) : null;
+              })()}
+
+              {/* ── Tabs ── */}
+              {selectedItem.type === 'story' && (
+                <div className="shrink-0 border-b border-zinc-800/70 bg-zinc-900/20 px-4 flex items-end">
+                  {([{ key: 'spec', label: 'Spec' }, { key: 'raw', label: 'YAML' }, { key: 'tasks', label: 'Tasks' }] as const).map(({ key, label }) => (
+                    <button key={key} onClick={() => setStoryTab(key)}
+                      className={cn('px-3 py-2.5 text-[11px] font-semibold border-b-2 transition-all font-sans',
+                        storyTab === key ? 'border-violet-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                      )}>
+                      {label}
+                      {key === 'tasks' && (selectedItem.data.checklistTasks?.length ?? 0) > 0 && (
+                        <span className="ml-1.5 text-[9px] bg-zinc-700 text-zinc-300 rounded-full px-1.5 font-mono">{selectedItem.data.checklistTasks.length}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Content Body ── */}
+              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800">
+
+                {/* TASK DETAIL */}
+                {selectedItem.type === 'task' && (
+                  <div className="p-5 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Status</label>
+                      <select value={selectedItem.data.status}
+                        onChange={e => handleUpdateTaskStatus(selectedItem.data.fullId, e.target.value as any)}
+                        className="w-full h-9 rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-100 px-3 focus:outline-none focus:ring-1 focus:ring-violet-500">
+                        <option value="pending">Pending</option>
+                        <option value="running">Running</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                      </select>
+                    </div>
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-2 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-zinc-500">Task ID</span>
+                        <span className="font-mono text-zinc-200 font-bold">{selectedItem.data.fullId}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-zinc-500">Feature parent</span>
+                        <span className="font-semibold text-zinc-200">{selectedItem.parentFeature?.name || 'General Core'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* STORY — SPEC TAB */}
+                {selectedItem.type === 'story' && storyTab === 'spec' && (
+                  <div className="p-5 space-y-5">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-zinc-800/60 bg-zinc-800/30">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Identity</span>
+                      </div>
+                      <div className="divide-y divide-zinc-800/50">
+                        {[
+                          { label: 'File', value: selectedItem.data.file, mono: true },
+                          { label: 'Kind', value: selectedItem.data.kind === 'FeatureStory' ? 'Feature Story' : 'App Story', mono: false },
+                          { label: 'Status', value: getEffectiveStatus(selectedItem.data), mono: false },
+                          ...(selectedItem.data.phase ? [{ label: 'Phase', value: `Phase ${selectedItem.data.phase}`, mono: false }] : []),
+                          ...(selectedItem.data.target?.app ? [{ label: 'Target App', value: selectedItem.data.target.app, mono: true }] : []),
+                        ].map(({ label, value, mono }) => (
+                          <div key={label} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                            <span className="text-[11px] text-zinc-500 shrink-0">{label}</span>
+                            <span className={cn('text-[11px] text-right truncate max-w-[220px]', mono ? 'font-mono text-zinc-300' : 'font-semibold text-zinc-200')}>
+                              {value}
+                            </span>
+                          </div>
+                        ))}
+                        {selectedItem.data.dbProgress !== undefined && (
+                          <div className="px-4 py-3 space-y-1.5">
+                            <div className="flex justify-between text-[11px]">
+                              <span className="text-zinc-500">Task progress</span>
+                              <span className="font-semibold text-zinc-200 font-mono">{selectedItem.data.dbProgress}%</span>
+                            </div>
+                            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-violet-500 transition-all" style={{ width: `${selectedItem.data.dbProgress}%` }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {selectedItem.data.dependsOn && selectedItem.data.dependsOn.length > 0 && (
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                          <Link2 className="h-3 w-3" /> Depends On
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedItem.data.dependsOn.map((dep: string) => {
+                            const depStory = mergedStories.find((s: any) => getSlug(s.file) === dep || s.file === dep);
+                            const depStatus = depStory ? getEffectiveStatus(depStory) : 'unknown';
+                            const isDone = depStatus === 'done' || depStatus === 'completed';
+                            return (
+                              <span key={dep} onClick={() => depStory && handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent)}
+                                className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-mono font-medium cursor-pointer transition-all',
+                                  isDone ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                                )}>
+                                {isDone ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3 text-zinc-500" />}
+                                {dep}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {(() => {
+                      const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
+                      const sections = [
+                        { title: 'Prerequisites', items: prerequisites },
+                        { title: 'Dependents', items: dependents },
+                        { title: 'Peers', items: peers },
+                      ].filter(s => s.items.length > 0);
+                      if (!sections.length) return null;
+                      return (
+                        <div className="space-y-3">
+                          {sections.map(({ title, items }) => (
+                            <div key={title} className="space-y-1.5">
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                                <Network className="h-3 w-3" /> {title} ({items.length})
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {items.map((s: any) => {
+                                  const st = getEffectiveStatus(s);
+                                  const isDone = st === 'done' || st === 'completed';
+                                  return (
+                                    <span key={s.file} onClick={() => handleOpenDrawer(s, 'story', undefined, s.epicParent)}
+                                      className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-mono cursor-pointer transition-all',
+                                        isDone ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:border-emerald-600/60' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                                      )}>
+                                      {isDone ? <CheckCircle2 className="h-3 w-3" /> : <span className={cn('h-1.5 w-1.5 rounded-full', storyStatusMap[st]?.dot || 'bg-zinc-600')} />}
+                                      {getSlug(s.file)}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {selectedItem.data.deployment && Object.keys(selectedItem.data.deployment).length > 0 && (
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-zinc-800/60 bg-zinc-800/30">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Deployment</span>
+                        </div>
+                        <div className="divide-y divide-zinc-800/50">
+                          {Object.entries(selectedItem.data.deployment).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => (
+                            <div key={k} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                              <span className="text-[11px] text-zinc-500 capitalize">{k}</span>
+                              <span className="font-mono text-[11px] text-zinc-300">{String(v)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* STORY — RAW YAML TAB */}
+                {selectedItem.type === 'story' && storyTab === 'raw' && (
+                  <div className="flex flex-col" style={{ minHeight: '400px' }}>
+                    <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-zinc-800/60 bg-zinc-900/20">
+                      <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider font-semibold">
+                        {editMode ? '● editing' : selectedItem.data.file}
+                      </span>
+                      {!editMode && yamlContent && (
+                        <button onClick={() => { navigator.clipboard.writeText(yamlContent); setCopiedYaml(true); setTimeout(() => setCopiedYaml(false), 1500); }}
+                          className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-200 transition-colors">
+                          <Copy className="h-3 w-3" />{copiedYaml ? 'Copied!' : 'Copy'}
+                        </button>
+                      )}
+                    </div>
+                    {loadingYaml ? (
+                      <div className="flex-1 flex items-center justify-center py-16">
+                        <Loader2 className="h-5 w-5 text-zinc-600 animate-spin" />
+                      </div>
+                    ) : editMode ? (
+                      <textarea value={editedYaml} onChange={e => setEditedYaml(e.target.value)} spellCheck={false}
+                        className="w-full bg-zinc-950 text-zinc-200 font-mono text-[11px] leading-6 p-4 resize-none focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                        style={{ minHeight: '400px' }}
+                        placeholder="# YAML content..." />
+                    ) : yamlContent ? (
+                      <YamlViewer content={yamlContent} />
+                    ) : (
+                      <div className="flex-1 flex items-center justify-center py-16">
+                        <p className="text-xs text-zinc-600 italic">Failed to load YAML</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* STORY — TASKS TAB */}
+                {selectedItem.type === 'story' && storyTab === 'tasks' && (
+                  <div className="p-5 space-y-2">
+                    {selectedItem.data.checklistTasks && selectedItem.data.checklistTasks.length > 0 ? (
+                      selectedItem.data.checklistTasks.map((task: Task) => {
+                        const isDone = task.status === 'completed';
+                        return (
+                          <div key={task.fullId} className={cn('flex items-start gap-3 px-3 py-2.5 rounded-lg border transition-all',
+                            isDone ? 'border-zinc-800/40 bg-zinc-900/20' : 'border-zinc-800 bg-zinc-900/50')}>
+                            <button disabled={updatingTaskId !== null}
+                              onClick={() => handleUpdateTaskStatus(task.fullId, isDone ? 'pending' : 'completed')}
+                              className={cn('h-5 w-5 rounded-md border flex items-center justify-center transition-all shrink-0 mt-0.5',
+                                isDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-600 hover:border-zinc-400')}>
+                              {isDone && <Check className="h-3 w-3 stroke-[3]" />}
+                            </button>
+                            <span className={cn('text-[11px] leading-snug font-sans', isDone ? 'text-zinc-500 line-through' : 'text-zinc-200')}>
+                              <span className="font-mono text-[9px] text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded border border-zinc-700/50 mr-2">{task.id}</span>
+                              {task.title}
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-40 text-center">
+                        <ListTodo className="h-7 w-7 text-zinc-700 mb-2" />
+                        <p className="text-xs text-zinc-500 font-sans">No checklist tasks defined.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
               {/* Header */}
               <div className="border-b border-border/50 p-4 shrink-0 bg-muted/10 space-y-2">
                 <div className="flex items-center justify-between">

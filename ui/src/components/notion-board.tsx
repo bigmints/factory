@@ -1866,12 +1866,14 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {viewMode === 'queue' && (() => {
         const selectedQueueItem = queueItems.find(i => i.id === selectedQueueItemId) ?? null;
+        const selectedSpecName = selectedQueueItem?.storyFile || selectedQueueItem?.specFile || '';
+        const selectedMatchedStory = mergedStories.find(s => s.file === selectedSpecName || getSlug(s.file) === getSlug(selectedSpecName));
         // For running items: use live streamed log. For others: use stored output from the item.
         const panelLog = selectedQueueItem
           ? (selectedQueueItem.status === 'running' ? (buildOutput || selectedQueueItem.output || '') : (selectedQueueItem.output || selectedQueueItem.error || ''))
           : (buildOutput || '');
         const panelLabel = selectedQueueItem
-          ? ((selectedQueueItem as any).displayName || selectedQueueItem.storyFile?.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || 'Select a build')
+          ? (selectedMatchedStory?.metadata?.name || selectedMatchedStory?.feature?.name || selectedMatchedStory?.dbName || (selectedQueueItem as any).displayName || selectedQueueItem.storyFile?.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || 'Select a build')
           : 'Live agent log console';
         const isSelectedRunning = selectedQueueItem?.status === 'running';
 
@@ -1910,7 +1912,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                       const isBlocked = item.status === 'blocked';
                       const isSelected = item.id === selectedQueueItemId;
                       const matchedStory = mergedStories.find(s => s.file === specName || getSlug(s.file) === getSlug(specName));
-                      const humanReadableName = (item as any).displayName || specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || `Queue item ${idx + 1}`;
+                      const humanReadableName = matchedStory?.metadata?.name || matchedStory?.feature?.name || matchedStory?.dbName || (item as any).displayName || specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || `Queue item ${idx + 1}`;
                       const epicParent = matchedStory?.epicParent;
                       const epicColor = epicParent ? epicColorMap.get(epicParent.id) : undefined;
                       const desc = matchedStory?.metadata?.description || matchedStory?.feature?.description || '';

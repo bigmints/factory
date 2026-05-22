@@ -384,11 +384,17 @@ async function execRunCommand(args: Record<string, unknown>, ctx: BuildToolBluep
         const cwd = resolvePath((args.cwd as string) || '.', ctx);
         const timeout = (args.timeout as number) || 120_000;
 
+        const cleanEnv = { ...process.env };
+        if (cleanEnv.NODE_ENV === 'development') {
+            cleanEnv.NODE_ENV = 'production';
+        }
+
         const child = spawn(command, [], {
             cwd,
             shell: true,
             timeout,
             stdio: ['pipe', 'pipe', 'pipe'],
+            env: cleanEnv,
         });
 
         let stdout = '';

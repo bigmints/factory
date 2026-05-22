@@ -2,7 +2,8 @@ import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync, openSync, writeFileSync, unlinkSync, readdirSync, statSync, mkdirSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
+import { createConnection } from 'node:net';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 const PROJECTS_FILE = join(FACTORY_ROOT, 'projects.json');
@@ -27,12 +28,10 @@ function getActiveProject() {
 }
 
 function resolveAppDir(projectPath: string): string {
-  // Check if package.json exists in projectPath directly
   if (existsSync(join(projectPath, 'package.json'))) {
     return projectPath;
   }
 
-  // If not, search first-level subdirectories for a package.json
   try {
     const entries = readdirSync(projectPath);
     for (const entry of entries) {
@@ -50,7 +49,6 @@ function resolveAppDir(projectPath: string): string {
     console.error('Error scanning subdirectories for package.json:', err);
   }
 
-  // Default fallback
   return projectPath;
 }
 
@@ -64,12 +62,70 @@ function checkPidAlive(pid: number): boolean {
 }
 
 function extractPortFromLogs(log: string): number | null {
-  // Matches localhost:XXXX or 127.0.0.1:XXXX or 0.0.0.0:XXXX
   const match = log.match(/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d+)/i);
   if (match) {
     return parseInt(match[1]);
   }
   return null;
+}
+
+function checkPortActive(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ port, host: '127.0.0.1' });
+    socket.setTimeout(250);
+    socket.on('connect', () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.on('error', () => {
+      resolve(false);
+    });
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+function getPidOnPort(port: number): number | null {
+  try {
+    const output = execSync(`lsof -t -i :${port}`, { encoding: 'utf8' }).trim();
+    if (output) {
+      const pids = output.split('\n').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+      return pids[0] || null;
+    }
+  } catch {}
+  return null;
+}
+
+function killPid(pid: number): boolean {
+  try {
+    process.kill(pid, 'SIGKILL');
+    return true;
+  } catch {
+    try {
+      execSync(`kill -9 ${pid}`);
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
+function killPidsOnPort(port: number): boolean {
+  try {
+    const output = execSync(`lsof -t -i :${port}`, { encoding: 'utf8' }).trim();
+    if (output) {
+      const pids = output.split('\n').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+      let killedAny = false;
+      for (const pid of pids) {
+        if (killPid(pid)) {
+          killedAny = true;
+        }
+      }
+      return killedAny;
+    }
+  } catch {}
+  return false;
 }
 
 export async function GET() {
@@ -83,40 +139,51 @@ export async function GET() {
     const pidFile = join(factoryDir, 'run-app.pid');
     const logFile = join(factoryDir, 'run-app.log');
 
-    let isRunning = false;
     let pid: number | null = null;
     let logContent = '';
     let port: number | null = null;
 
-    if (existsSync(pidFile)) {
-      try {
-        pid = parseInt(readFileSync(pidFile, 'utf-8').trim());
-        if (pid && checkPidAlive(pid)) {
-          isRunning = true;
-        } else {
-          // Process is dead, clean up pid file
-          try { unlinkSync(pidFile); } catch {}
-          pid = null;
-        }
-      } catch {
-        pid = null;
-      }
-    }
-
     if (existsSync(logFile)) {
       try {
         logContent = readFileSync(logFile, 'utf-8');
-        // Get last 100 lines
         const lines = logContent.split('\n');
         logContent = lines.slice(-100).join('\n');
         port = extractPortFromLogs(logContent);
       } catch {}
     }
 
+    const checkPort = port || 3000;
+    const isPortActive = await checkPortActive(checkPort);
+
+    // Read stored PID if it exists
+    if (existsSync(pidFile)) {
+      try {
+        pid = parseInt(readFileSync(pidFile, 'utf-8').trim());
+      } catch {
+        pid = null;
+      }
+    }
+
+    let status = 'stopped';
+    if (isPortActive) {
+      status = 'running';
+      if (!pid) {
+        pid = getPidOnPort(checkPort);
+      }
+    } else if (pid && checkPidAlive(pid)) {
+      status = 'starting';
+    } else {
+      // Process is dead and port is inactive, clean up pid file
+      if (existsSync(pidFile)) {
+        try { unlinkSync(pidFile); } catch {}
+      }
+      pid = null;
+    }
+
     return NextResponse.json({
-      status: isRunning ? 'running' : 'stopped',
+      status,
       pid,
-      port,
+      port: isPortActive ? checkPort : null,
       command: globalProcesses.runAppProcesses[project.id]?.command || null,
       logs: logContent,
     });
@@ -144,23 +211,38 @@ export async function POST(request: Request) {
     // --- STOP ACTION ---
     if (action === 'stop') {
       let stopped = false;
+
+      // 1. Try to kill stored process and its group
       if (existsSync(pidFile)) {
         try {
           const pid = parseInt(readFileSync(pidFile, 'utf-8').trim());
           if (pid) {
-            // Kill entire process group by passing negative PID (since detached: true was used)
             try {
-              process.kill(-pid, 'SIGINT');
+              process.kill(-pid, 'SIGKILL');
               stopped = true;
             } catch {
               try {
-                process.kill(pid, 'SIGINT');
+                process.kill(pid, 'SIGKILL');
                 stopped = true;
               } catch {}
             }
           }
         } catch {}
       }
+
+      // 2. Also locate process by active port and kill it to clean up runaway grandchild Next.js processes
+      try {
+        let port: number | null = null;
+        if (existsSync(logFile)) {
+          const logContent = readFileSync(logFile, 'utf-8');
+          port = extractPortFromLogs(logContent);
+        }
+        const activePort = port || 3000;
+        const killedOnPort = killPidsOnPort(activePort);
+        if (killedOnPort) {
+          stopped = true;
+        }
+      } catch {}
 
       // Cleanup
       try { unlinkSync(pidFile); } catch {}
@@ -171,13 +253,29 @@ export async function POST(request: Request) {
 
     // --- START ACTION ---
     if (action === 'start') {
-      // Check if already running
+      // 1. Clear any existing process on target port (default 3000) to avoid EADDRINUSE conflicts
+      let port: number | null = null;
+      if (existsSync(logFile)) {
+        try {
+          const logContent = readFileSync(logFile, 'utf-8');
+          port = extractPortFromLogs(logContent);
+        } catch {}
+      }
+      const targetPort = port || 3000;
+      
+      const killedOnPort = killPidsOnPort(targetPort);
+      if (killedOnPort) {
+        await new Promise(resolve => setTimeout(resolve, 500)); // Delay to let OS free the port
+      }
+
+      // 2. Clear any lingering pid file processes
       if (existsSync(pidFile)) {
         try {
-          const pid = parseInt(readFileSync(pidFile, 'utf-8').trim());
-          if (pid && checkPidAlive(pid)) {
-            return NextResponse.json({ error: 'Application is already running' }, { status: 400 });
+          const oldPid = parseInt(readFileSync(pidFile, 'utf-8').trim());
+          if (oldPid) {
+            try { process.kill(oldPid, 'SIGKILL'); } catch {}
           }
+          try { unlinkSync(pidFile); } catch {}
         } catch {}
       }
 
@@ -229,7 +327,7 @@ export async function POST(request: Request) {
         shell: true,
         env: {
           ...process.env,
-          PORT: '3000', // Standard default port
+          PORT: String(targetPort),
           FORCE_COLOR: '1',
         },
       });
@@ -253,7 +351,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        status: 'running',
+        status: 'starting',
         pid: child.pid,
         command,
       });

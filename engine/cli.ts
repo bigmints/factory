@@ -15,7 +15,7 @@
  *   factory feature validate <spec.yaml>     Validate a feature spec
  */
 
-import { resolve, dirname, join } from 'node:path';
+import { resolve, dirname, join, isAbsolute } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -35,6 +35,7 @@ import {
     markRunning, markCompleted, markFailed,
     removeItem, clearCompleted, retryItem,
     isQueueRunning, setQueueRunning, areDependenciesMet,
+    loadQueue, saveQueue,
 } from './queue.ts';
 import { closeDb, logBuild } from './db.ts';
 import { performStateAudit, updateHeartbeat, withRetry, categorizeError } from './health.ts';
@@ -309,9 +310,9 @@ function handleInitBridge(repoPath?: string): void {
 
 // ─── Project ─────────────────────────────────────────────
 
-function handleProject(subcommand?: string, arg?: string): void {
+async function handleProject(subcommand?: string, arg?: string): Promise<void> {
     if (!subcommand) {
-        console.error('Usage: factory project <add|list|switch|remove> [argument]');
+        console.error('Usage: factory project <add|list|switch|remove|reset> [argument]');
         process.exit(1);
     }
 
@@ -361,10 +362,180 @@ function handleProject(subcommand?: string, arg?: string): void {
             removeProject(arg);
             break;
         }
+        case 'reset': {
+            const repoPath = arg ? resolve(arg) : undefined;
+            await handleProjectReset(repoPath);
+            break;
+        }
         default:
             console.error(`Unknown project command: ${subcommand}`);
             process.exit(1);
     }
+}
+
+async function handleProjectReset(repoPathInput?: string): Promise<void> {
+    logHeader('Resetting Project Stories & Queue');
+    
+    let targetRepoPath = repoPathInput;
+    if (!targetRepoPath) {
+        try {
+            const project = getActiveProject();
+            targetRepoPath = project.path;
+        } catch {
+            logError('Error: No active project found and no repo path provided.');
+            process.exit(1);
+        }
+    }
+    
+    const resolvedPath = resolve(targetRepoPath);
+    log('→', `Target repository: ${resolvedPath}`);
+    
+    // 1. Clear queue items for this repository (or clear entirely)
+    const queue = loadQueue();
+    const filteredQueue = queue.filter(item => {
+        let belongsToProject = false;
+        if (isAbsolute(item.storyFile)) {
+            belongsToProject = item.storyFile.startsWith(resolvedPath);
+        } else {
+            const candidates = [
+                join(resolvedPath, item.storyFile),
+                join(resolvedPath, '.factory', 'stories', item.storyFile),
+                join(resolvedPath, '.factory', 'stories', 'apps', item.storyFile.replace(/^(apps|features|done)\//, '')),
+                join(resolvedPath, '.factory', 'stories', 'features', item.storyFile.replace(/^(apps|features|done)\//, '')),
+                join(resolvedPath, '.factory', 'stories', 'done', item.storyFile.replace(/^(apps|features|done)\//, ''))
+            ];
+            belongsToProject = candidates.some(p => existsSync(p));
+        }
+        return !belongsToProject;
+    });
+    const clearedCount = queue.length - filteredQueue.length;
+    saveQueue(filteredQueue);
+    log('✓', `Cleared ${clearedCount} queue item(s) associated with this project.`);
+    
+    // 2. Scan stories directory
+    const storiesDir = join(resolvedPath, '.factory', 'stories');
+    if (!existsSync(storiesDir)) {
+        log('!', `No stories folder found at ${storiesDir}. Skipping story resetting.`);
+        return;
+    }
+    
+    const doneDir = join(storiesDir, 'done');
+    const appsDir = join(storiesDir, 'apps');
+    const featuresDir = join(storiesDir, 'features');
+    
+    const { existsSync: ex, mkdirSync: mk, readdirSync: rd, unlinkSync: rm, writeFileSync: wr } = await import('node:fs');
+    const { parse: parseYaml, stringify: stringifyYaml } = await import('yaml');
+    
+    if (!ex(appsDir)) mk(appsDir, { recursive: true });
+    if (!ex(featuresDir)) mk(featuresDir, { recursive: true });
+    
+    let storiesReset = 0;
+    
+    // Move and reset 'done' stories
+    if (ex(doneDir)) {
+        const doneFiles = rd(doneDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+        for (const file of doneFiles) {
+            const filePath = join(doneDir, file);
+            try {
+                const raw = readFileSync(filePath, 'utf-8');
+                const doc = parseYaml(raw) as any;
+                if (doc) {
+                    doc.status = 'draft';
+                    const isFeature = !!(doc.feature || doc.target || 'phase' in doc);
+                    const targetDir = isFeature ? featuresDir : appsDir;
+                    const destPath = join(targetDir, file);
+                    wr(destPath, stringifyYaml(doc, { lineWidth: 120 }), 'utf-8');
+                    rm(filePath);
+                    storiesReset++;
+                    log('✓', `Restored archived story to draft: ${file} → ${isFeature ? 'features' : 'apps'}`);
+                }
+            } catch (err: any) {
+                logError(`Failed to restore archived story ${file}: ${err?.message || err}`);
+            }
+        }
+    }
+    
+    // Reset stories in 'apps'
+    if (ex(appsDir)) {
+        const appFiles = rd(appsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+        for (const file of appFiles) {
+            const filePath = join(appsDir, file);
+            try {
+                const raw = readFileSync(filePath, 'utf-8');
+                const doc = parseYaml(raw) as any;
+                if (doc && doc.status !== 'draft') {
+                    doc.status = 'draft';
+                    wr(filePath, stringifyYaml(doc, { lineWidth: 120 }), 'utf-8');
+                    storiesReset++;
+                    log('✓', `Reset app story status to draft: ${file}`);
+                }
+            } catch (err: any) {
+                logError(`Failed to reset app story ${file}: ${err?.message || err}`);
+            }
+        }
+    }
+    
+    // Reset stories in 'features'
+    if (ex(featuresDir)) {
+        const featureFiles = rd(featuresDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+        for (const file of featureFiles) {
+            const filePath = join(featuresDir, file);
+            try {
+                const raw = readFileSync(filePath, 'utf-8');
+                const doc = parseYaml(raw) as any;
+                if (doc && doc.status !== 'draft') {
+                    doc.status = 'draft';
+                    wr(filePath, stringifyYaml(doc, { lineWidth: 120 }), 'utf-8');
+                    storiesReset++;
+                    log('✓', `Reset feature story status to draft: ${file}`);
+                }
+            } catch (err: any) {
+                logError(`Failed to reset feature story ${file}: ${err?.message || err}`);
+            }
+        }
+    }
+    
+    // 3. Reset app.yaml (App Roadmap Spec)
+    const appYamlPath = join(resolvedPath, '.factory', 'app.yaml');
+    if (ex(appYamlPath)) {
+        try {
+            const raw = readFileSync(appYamlPath, 'utf-8');
+            const app = parseYaml(raw) as any;
+            if (app) {
+                app.status = 'draft';
+                app.progressPercent = 0;
+                if (app.features) {
+                    for (const feature of app.features) {
+                        feature.status = 'pending';
+                        feature.progressPercent = 0;
+                        if (feature.stories) {
+                            for (const story of feature.stories) {
+                                story.status = 'draft';
+                                story.progressPercent = 0;
+                                if (story.tasks) {
+                                    for (const task of story.tasks) {
+                                        task.status = 'pending';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Save initial structure
+                wr(appYamlPath, stringifyYaml(app, { lineWidth: 120 }), 'utf-8');
+                log('✓', `Reset app.yaml roadmap progress and tasks to draft/pending.`);
+                
+                // Now run a rollup calculation to be absolutely robust and consistent
+                const { syncAppRoadmap } = await import('./rollup.ts');
+                await syncAppRoadmap(appYamlPath);
+            }
+        } catch (err: any) {
+            logError(`Failed to reset app.yaml roadmap: ${err?.message || err}`);
+        }
+    }
+    
+    log('✓', `Project stories reset successfully. Total stories reset/restored: ${storiesReset}`);
 }
 
 // ─── Feature ─────────────────────────────────────────────
@@ -502,10 +673,16 @@ async function handleQueue(subcommand?: string, arg?: string): Promise<void> {
             let storyEngine: 'factory' | 'worker' | undefined;
             try {
                 const fStory = loadFeatureStory(storyPath);
-                kind = 'FeatureStory';
-                phase = fStory.phase;
-                dependsOn = fStory.dependsOn;
-                storyEngine = fStory.engine;
+                if (fStory.feature) {
+                    kind = 'FeatureStory';
+                    phase = fStory.phase;
+                    dependsOn = fStory.dependsOn;
+                    storyEngine = fStory.engine;
+                } else {
+                    const aStory = loadStory(storyPath);
+                    kind = 'AppStory';
+                    storyEngine = aStory.engine;
+                }
             } catch {
                 try {
                     const aStory = loadStory(storyPath);
@@ -980,6 +1157,7 @@ Commands:
   project list               List connected repos
   project switch <id>        Switch active project
   project remove <id>        Disconnect a repo
+  project reset [repo-path]  Reset project stories to draft & clear queue
 
   feature build <story.yaml> [--engine worker]  Build a feature
   feature validate <story.yaml>  Validate a feature story

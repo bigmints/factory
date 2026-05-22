@@ -1813,6 +1813,10 @@ To write a file:
 
 Make sure to format all your tool calls exactly like this inside your response. Do not use plain text or standard markdown code blocks for calling tools.`;
 
+    const appYamlRule = isApp
+        ? '\n7. You MUST create a comprehensive roadmap and status specification file at `.factory/app.yaml` inside the application directory. This file must be added to your implementation plan/files checklist, and successfully written to disk before calling mark_complete.'
+        : '';
+
     return `You are an autonomous code generation engine with access to tools for reading, writing, and executing commands.
 
 ## Target Directory
@@ -1836,7 +1840,7 @@ ${toolCallingBlock}
 3. Every import from a package must exist in package.json.
 4. Match the coding style and patterns from the story and existing code.
 5. Use log_step(info/warn/error) to track progress.
-6. Only call mark_failed after genuinely exhausting all remediation options.
+6. Only call mark_failed after genuinely exhausting all remediation options.${appYamlRule}
 ${storyBlock}
 ${roadmapBlock}
 ${toonBlueprint}${skillsBlock}${appBlueprintBlock}
@@ -1972,6 +1976,10 @@ Feature Epic Description: ${matchingFeature.description || 'No description provi
         }
     }
 
+    const appYamlRule = isApp
+        ? '\n5. You MUST create a comprehensive roadmap and status specification file at `.factory/app.yaml` inside the application directory. This file must be added to your implementation plan and files checklist, and successfully written to disk before completion.'
+        : '';
+
     return `You are an expert autonomous software engineer agent with complete capabilities to read/write/edit files and run terminal commands using your own built-in tools.
 You are tasked with building a feature or application story in the target directory.
 
@@ -1982,7 +1990,7 @@ ${targetDir}
 1. Examine the current folder structure, package.json, and tsconfig.json to orient yourself before starting.
 2. Generate production-ready code — no placeholders, no TODOs, no stubs.
 3. Every import from a package must exist in package.json. If you need to install a dependency, do so.
-4. Match the coding style and patterns from the story and existing files.
+4. Match the coding style and patterns from the story and existing files.${appYamlRule}
 
 ${storyBlock}
 ${roadmapBlock}
@@ -2016,13 +2024,16 @@ async function runCLISingleShot(
 
     // Build a rich, self-contained prompt the CLI can act on directly
     const systemPrompt = buildCLISystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
+    const appYamlReminder = isApp
+        ? '\nMake sure that `.factory/app.yaml` is created/updated, added to your implementation plan, and written to disk as required.\n'
+        : '';
     const prompt = `${systemPrompt}
 
 ## Your Task
 
 You are working in: ${targetDir}
 
-Build the complete ${isApp ? 'application' : 'feature'} described above.
+Build the complete ${isApp ? 'application' : 'feature'} described above.${appYamlReminder}
 Use your file tools to write ALL necessary files directly to this directory.
 Do not output file contents as text — write them to disk using your tools.
 When complete, run: npx tsc --noEmit (if TypeScript) to verify there are no errors.
@@ -2119,8 +2130,9 @@ Fix any errors found before finishing.
                     for (const file of jsonlFiles) {
                         const filePath = join(sessionDir, file);
                         const stat = statSync(filePath);
-                        if (stat.mtimeMs > newestMtime && stat.mtimeMs > startTime - 10000) {
-                            newestMtime = stat.mtimeMs;
+                        const fileTime = stat.birthtimeMs || stat.mtimeMs;
+                        if (fileTime > newestMtime && fileTime >= startTime - 1000) {
+                            newestMtime = fileTime;
                             newestFile = filePath;
                         }
                     }
@@ -2156,10 +2168,14 @@ Fix any errors found before finishing.
     }
 
     await new Promise<void>((resolvePromise) => {
+        const cleanEnv = { ...process.env };
+        if (cleanEnv.NODE_ENV === 'development') {
+            cleanEnv.NODE_ENV = 'production';
+        }
         const child = cpSpawn(cli, ['-p', prompt, ...yoloFlags], {
             cwd: targetDir,
             stdio: ['ignore', 'pipe', 'pipe'],
-            env: { ...process.env },
+            env: cleanEnv,
         });
 
         child.stdout?.on('data', (data: Buffer) => {
@@ -2608,11 +2624,17 @@ async function callCLIWithTools(
 
     log('→', `CLI turn → ${cli} (${prompt.length.toLocaleString()} chars)`);
 
+    const cleanEnv = { ...process.env };
+    if (cleanEnv.NODE_ENV === 'development') {
+        cleanEnv.NODE_ENV = 'production';
+    }
+
     const result = spawnSync(cli, ['-p', prompt, ...extraFlags], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'], // close stdin to prevent hangs
         maxBuffer: 50 * 1024 * 1024,
         timeout: 5 * 60 * 1000,
+        env: cleanEnv,
     });
 
     if (result.error) {
@@ -2640,11 +2662,17 @@ async function callCLISimple(cli: string, prompt: string): Promise<LLMResponse> 
     const extraFlags = CLI_FLAGS[cli] || [];
     log('→', `CLI simple → ${cli} (${prompt.length.toLocaleString()} chars)`);
 
+    const cleanEnv = { ...process.env };
+    if (cleanEnv.NODE_ENV === 'development') {
+        cleanEnv.NODE_ENV = 'production';
+    }
+
     const result = spawnSync(cli, ['-p', prompt, ...extraFlags], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'], // close stdin to prevent hangs
         maxBuffer: 50 * 1024 * 1024,
         timeout: 5 * 60 * 1000,
+        env: cleanEnv,
     });
 
     if (result.error) throw new Error(`CLI spawn error (${cli}): ${result.error.message}`);

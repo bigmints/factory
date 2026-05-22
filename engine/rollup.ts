@@ -201,6 +201,10 @@ export async function syncAppRoadmap(appYamlPath: string): Promise<void> {
                                         for (const task of story.tasks) {
                                             task.status = 'completed';
                                         }
+                                    } else if (physicalStatus === 'draft' && story.tasks) {
+                                        for (const task of story.tasks) {
+                                            task.status = 'pending';
+                                        }
                                     } else if (['in-progress', 'validation', 'review'].includes(physicalStatus) && story.tasks) {
                                         // Ensure at least one task is started to support the rollup logic
                                         const hasStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));

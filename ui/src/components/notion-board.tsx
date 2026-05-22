@@ -643,7 +643,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to start dev server');
       toast.success('Local dev server started successfully');
-      setRunStatus('running');
+      setRunStatus(json.status || 'starting');
       if (json.pid) setRunPid(json.pid);
       setServerLogsOpen(true);
       fetchRunStatus();
@@ -1400,13 +1400,13 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               )}
 
               {/* View server URL if active */}
-              {runStatus === 'running' && runPort && (
+              {runStatus === 'running' && (
                 <>
                   <Separator orientation="vertical" className="h-3.5 mx-0.5" />
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => window.open(`http://localhost:${runPort}`, '_blank')}
+                    onClick={() => window.open(`http://localhost:${runPort || 3000}`, '_blank')}
                     className="h-5 w-5 text-primary hover:bg-primary/10 rounded-sm"
                   >
                     <ExternalLink className="h-2.5 w-2.5" />

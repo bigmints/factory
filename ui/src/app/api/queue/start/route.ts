@@ -18,8 +18,7 @@ import {
   updateItem,
   getQueueStats,
   QueueItem,
-  isItemReady,
-  getSlugFromPath
+  dequeue
 } from '@engine/queue';
 import { getActiveProject } from '@engine/config';
 import { logBuild } from '@engine/db';
@@ -184,23 +183,10 @@ Built in ${(durationMs / 1000).toFixed(1)}s.
  * Process queue items sequentially in the background.
  */
 function processQueueInBackground() {
-  const pending = loadQueue()
-    .filter(row => row.status === 'pending')
-    .sort((a, b) => {
-      if (a.phase !== b.phase) return a.phase - b.phase;
-      if (a.priority !== b.priority) return b.priority - a.priority;
-      return a.addedAt.localeCompare(b.addedAt);
-    });
-
-  if (pending.length === 0) {
-    setQueueRunning(false);
-    return;
-  }
-
-  let index = 0;
-
   function processNext() {
-    if (index >= pending.length) {
+    const item = dequeue();
+
+    if (!item) {
       setQueueRunning(false);
       try {
         const bpPath = join(FACTORY_ROOT, 'queue-blueprint.json');
@@ -212,32 +198,6 @@ function processQueueInBackground() {
           writeFileSync(ctxPath, '{}');
         }
       } catch {}
-      return;
-    }
-
-    const item = pending[index];
-    index++;
-
-    // ── Dependency cascade check ──
-    const status = isItemReady(item);
-    if (!status.ready) {
-      if (status.reason && (status.reason.includes('failed') || status.reason.includes('blocked') || status.reason.includes('missing'))) {
-        // Permanent blocker
-        updateItem(item.id, {
-          status: 'blocked',
-          error: status.reason,
-          completedAt: new Date().toISOString()
-        });
-        try {
-          appendFileSync(LOG_FILE, `\n[blocked] ${item.storyFile}: ${status.reason}\n`);
-        } catch {}
-      } else {
-        // Temporary skip (prerequisite pending or running)
-        try {
-          appendFileSync(LOG_FILE, `\n[skipped] ${item.storyFile}: ${status.reason || 'Prerequisite pending'}\n`);
-        } catch {}
-      }
-      processNext(); // Skip to next item or wait
       return;
     }
 
@@ -346,7 +306,14 @@ export async function POST() {
   try {
     // Check if already running
     if (isQueueRunning()) {
-      return NextResponse.json({ error: 'Queue is already running' }, { status: 409 });
+      const statsObj = getQueueStats();
+      const pendingCount = statsObj.pending || 0;
+      return NextResponse.json({
+        success: true,
+        message: 'Queue is already running. New items will be processed automatically.',
+        alreadyRunning: true,
+        pending: pendingCount,
+      });
     }
 
     // Check for pending items

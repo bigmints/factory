@@ -12,15 +12,39 @@ export function PWARegister() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    // Register service worker
+    // Unregister service worker and purge caches in development mode to prevent stale assets
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((reg) => {
-          console.log('SW registered', reg.scope);
-          setInterval(() => reg.update(), 60_000);
-        })
-        .catch((err) => console.warn('SW registration failed:', err));
+      if (process.env.NODE_ENV === 'development') {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister().then((success) => {
+              if (success) {
+                console.log('⚡ [PWA] Stale development service worker unregistered successfully.');
+              }
+            });
+          }
+        });
+
+        // Also clear all cache storage to ensure hot module reloading works perfectly
+        if ('caches' in window) {
+          window.caches.keys().then((keys) => {
+            return Promise.all(keys.map((key) => window.caches.delete(key)));
+          }).then(() => {
+            console.log('⚡ [PWA] Development caches purged successfully.');
+          }).catch((err) => {
+            console.warn('[PWA] Failed to clear caches:', err);
+          });
+        }
+      } else {
+        // Register service worker in production
+        navigator.serviceWorker
+          .register('/sw.js')
+          .then((reg) => {
+            console.log('SW registered', reg.scope);
+            setInterval(() => reg.update(), 60_000);
+          })
+          .catch((err) => console.warn('SW registration failed:', err));
+      }
     }
 
     const handler = (e: Event) => {

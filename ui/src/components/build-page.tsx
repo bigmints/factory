@@ -18,6 +18,7 @@ interface QueueItem {
   id: string;
   specFile?: string;
   storyFile?: string;
+  displayName?: string;
   kind: string;
   status: string;
   priority: number;
@@ -45,6 +46,7 @@ function getBasename(p: string) {
 }
 
 function humanName(item: QueueItem, idx: number): string {
+  if (item.displayName) return item.displayName;
   const specName = item.storyFile || item.specFile || '';
   if (!specName) return `Build item ${idx + 1}`;
   return specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '');

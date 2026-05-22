@@ -14,7 +14,6 @@ import { KnowledgeView } from '@/components/knowledge-view';
 import { SettingsView } from '@/components/settings-view';
 import { SkillsView } from '@/components/skills-view';
 import { AppDashboard } from '@/components/app-dashboard';
-import { MobileCockpit } from '@/components/MobileCockpit';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import {
@@ -61,7 +60,7 @@ interface ValidationCheck {
   message: string;
 }
 
-const VALID_TABS = ['cockpit', 'dashboard', 'roadmap', 'queue', 'stories', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
+const VALID_TABS = ['dashboard', 'roadmap', 'queue', 'stories', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -179,8 +178,6 @@ export default function Dashboard() {
         } else {
           setActiveTab(hash);
         }
-      } else if (window.innerWidth < 768) {
-        setActiveTab('cockpit');
       }
     }
   }, [fetchProjects, fetchStories, fetchReports, fetchQueueStatus]);
@@ -936,7 +933,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'cockpit' && <MobileCockpit />}
             {activeTab === 'dashboard' && renderDashboard()}
             {activeTab === 'queue' && (
               <QueueView

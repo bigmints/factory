@@ -17,7 +17,6 @@ import {
   ChevronRight,
   Terminal,
   Compass,
-  Smartphone,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import {
@@ -38,7 +37,6 @@ interface SidebarProps {
 }
 
 const mainNav = [
-  { id: 'cockpit', label: 'Cockpit', icon: Smartphone },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'stories', label: 'Stories', icon: FileText },
   { id: 'queue', label: 'Queue', icon: ListOrdered },

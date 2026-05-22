@@ -258,6 +258,30 @@ const getBasename = (path: string) => {
 const getSlug = (path: string) => getBasename(path).replace(/\.ya?ml$/i, '');
 
 /**
+ * Resolves all possible identifier slugs for a given story.
+ * Handles file paths (stripping directories and extensions), metadata slugs, and feature slugs.
+ */
+function getStorySlugs(story: any): string[] {
+  if (!story) return [];
+  const slugs = new Set<string>();
+  
+  if (story.file) {
+    slugs.add(getSlug(story.file));
+  }
+  if (story.metadata?.slug) {
+    slugs.add(story.metadata.slug);
+  }
+  if (story.feature?.slug) {
+    slugs.add(story.feature.slug);
+  }
+  if (story.slug) {
+    slugs.add(story.slug);
+  }
+  
+  return Array.from(slugs);
+}
+
+/**
  * Calculate the family of related stories for a given story.
  * Prerequisites: Stories that the current story directly depends on.
  * Dependents: Stories that directly depend on the current story.
@@ -266,32 +290,34 @@ const getSlug = (path: string) => getBasename(path).replace(/\.ya?ml$/i, '');
 function getRelatedStories(item: any, allStories: any[]) {
   if (!item) return { prerequisites: [], dependents: [], peers: [] };
 
-  const currentSlug = getSlug(item.file);
+  const itemSlugs = getStorySlugs(item);
 
-  // Prerequisites: Stories in item.dependsOn
-  const prerequisites = allStories.filter(s => 
-    item.dependsOn && item.dependsOn.includes(getSlug(s.file))
-  );
+  // Prerequisites: Stories in item.dependsOn (matching any of s's slugs)
+  const prerequisites = allStories.filter(s => {
+    const sSlugs = getStorySlugs(s);
+    return item.dependsOn && item.dependsOn.some((dep: string) => sSlugs.includes(dep));
+  });
 
-  // Dependents: Stories that depend on currentSlug
+  // Dependents: Stories that depend on any of item's slugs
   const dependents = allStories.filter(s => 
-    s.dependsOn && s.dependsOn.includes(currentSlug)
+    s.dependsOn && s.dependsOn.some((dep: string) => itemSlugs.includes(dep))
   );
 
   // Peers:
   // 1. Share at least one dependency with this story.
-  // 2. Target the same AppStory (if feature stories).
-  // 3. Belong to the same Epic/feature group (if applicable), excluding prerequisites and dependents.
+  // 2. Belong to the same Epic/feature group (excluding prerequisites and dependents).
   const currentDeps = item.dependsOn || [];
   const currentEpicId = item.epicParent?.id;
 
   const peers = allStories.filter(s => {
-    const slug = getSlug(s.file);
-    if (slug === currentSlug) return false;
+    const sSlugs = getStorySlugs(s);
+    
+    // Exclude self (if any slugs overlap)
+    if (sSlugs.some(slug => itemSlugs.includes(slug))) return false;
     
     // Check if it's already in prerequisites or dependents
-    const isPrereq = item.dependsOn && item.dependsOn.includes(slug);
-    const isDep = s.dependsOn && s.dependsOn.includes(currentSlug);
+    const isPrereq = item.dependsOn && item.dependsOn.some((dep: string) => sSlugs.includes(dep));
+    const isDep = s.dependsOn && s.dependsOn.some((dep: string) => itemSlugs.includes(dep));
     if (isPrereq || isDep) return false;
 
     // Condition 1: Share a dependency
@@ -305,26 +331,6 @@ function getRelatedStories(item: any, allStories: any[]) {
   });
 
   return { prerequisites, dependents, peers };
-}
-
-/**
- * Determine relation of a story to the hovered story.
- */
-function isRelatedToHovered(story: any, hoveredSlug: string | null, allStories: any[]) {
-  if (!hoveredSlug) return null;
-  const hoveredStory = allStories.find(s => getSlug(s.file) === hoveredSlug);
-  if (!hoveredStory) return null;
-
-  const currentSlug = getSlug(story.file);
-  if (currentSlug === hoveredSlug) return 'self';
-
-  const { prerequisites, dependents, peers } = getRelatedStories(hoveredStory, allStories);
-
-  if (prerequisites.some(s => getSlug(s.file) === currentSlug)) return 'prerequisite';
-  if (dependents.some(s => getSlug(s.file) === currentSlug)) return 'dependent';
-  if (peers.some(s => getSlug(s.file) === currentSlug)) return 'peer';
-
-  return null;
 }
 
 const getEffectiveStatus = (item: any) => {
@@ -345,7 +351,6 @@ const getEffectiveStatus = (item: any) => {
 export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
-  const [hoveredStorySlug, setHoveredStorySlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [draggingFile, setDraggingFile] = useState<string | null>(null);
@@ -1655,8 +1660,6 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'draft')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
-              hoveredStorySlug={hoveredStorySlug}
-              onHoverChange={setHoveredStorySlug}
             />
 
             {/* Column 2: READY TO BUILD */}
@@ -1674,8 +1677,6 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'ready')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
-              hoveredStorySlug={hoveredStorySlug}
-              onHoverChange={setHoveredStorySlug}
             />
 
             {/* Column 3: BUILDING / RUNNING */}
@@ -1693,8 +1694,6 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'in-progress')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
-              hoveredStorySlug={hoveredStorySlug}
-              onHoverChange={setHoveredStorySlug}
             />
 
             {/* Column 4: COMPLETED / DONE */}
@@ -1712,8 +1711,6 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
               onDrop={(e) => handleDrop(e, 'done')}
               onDragStart={handleDragStart}
               allStories={mergedStories}
-              hoveredStorySlug={hoveredStorySlug}
-              onHoverChange={setHoveredStorySlug}
             />
           </div>
 
@@ -1738,8 +1735,6 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                     activeAction={activeAction}
                     onDragStart={handleDragStart}
                     allStories={mergedStories}
-                    hoveredStorySlug={hoveredStorySlug}
-                    onHoverChange={setHoveredStorySlug}
                   />
                 ))}
               </div>
@@ -1832,8 +1827,6 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                                   updatingTaskId={updatingTaskId}
                                   activeAction={activeAction}
                                   allStories={mergedStories}
-                                  hoveredStorySlug={hoveredStorySlug}
-                                  onHoverChange={setHoveredStorySlug}
                                 />
                               ))
                             ) : (
@@ -2485,8 +2478,6 @@ interface KanbanColumnProps {
   onDrop: (e: React.DragEvent) => void;
   onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
-  hoveredStorySlug?: string | null;
-  onHoverChange?: (slug: string | null) => void;
 }
 
 function KanbanColumn({
@@ -2502,13 +2493,17 @@ function KanbanColumn({
   onDragOver,
   onDrop,
   onDragStart,
-  allStories,
-  hoveredStorySlug,
-  onHoverChange
+  allStories
 }: KanbanColumnProps) {
   // Group stories into clusters of related items using their prerequisite, dependent, and peer links
   const clusters = useMemo(() => {
     if (!stories || stories.length === 0) return [];
+    
+    // Drafts/Backlog should be a normal flat list of backlog items, no grouping.
+    if (title === 'Backlog') {
+      return stories.map(s => [s]);
+    }
+    
     const pool = allStories || stories;
     
     const visited = new Set<string>();
@@ -2560,7 +2555,7 @@ function KanbanColumn({
       const idxB = stories.findIndex(s => getSlug(s.file) === getSlug(b[0].file));
       return idxA - idxB;
     });
-  }, [stories, allStories]);
+  }, [stories, allStories, title]);
 
   return (
     <div
@@ -2596,8 +2591,6 @@ function KanbanColumn({
                   activeAction={activeAction}
                   onDragStart={onDragStart}
                   allStories={allStories}
-                  hoveredStorySlug={hoveredStorySlug}
-                  onHoverChange={onHoverChange}
                 />
               );
             }
@@ -2645,8 +2638,6 @@ function KanbanColumn({
                         activeAction={activeAction}
                         onDragStart={onDragStart}
                         allStories={allStories}
-                        hoveredStorySlug={hoveredStorySlug}
-                        onHoverChange={onHoverChange}
                       />
                     </div>
                   ))}
@@ -2672,9 +2663,7 @@ function StoryKanbanCard({
   onBuild,
   activeAction,
   onDragStart,
-  allStories,
-  hoveredStorySlug,
-  onHoverChange
+  allStories
 }: {
   item: any;
   epicColor?: EpicColor;
@@ -2684,8 +2673,6 @@ function StoryKanbanCard({
   activeAction: { type: string; file: string } | null;
   onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
-  hoveredStorySlug?: string | null;
-  onHoverChange?: (slug: string | null) => void;
 }) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const effectiveStatus = getEffectiveStatus(item);
@@ -2696,38 +2683,18 @@ function StoryKanbanCard({
   const isDraggable = effectiveStatus === 'draft' || effectiveStatus === 'ready';
   const isActive = effectiveStatus === 'running' || effectiveStatus === 'validation';
 
-  const currentSlug = getSlug(item.file);
-  const relation = (hoveredStorySlug && allStories) ? isRelatedToHovered(item, hoveredStorySlug, allStories) : null;
-  const isUnrelated = !!hoveredStorySlug && relation === null;
-
-  let relationStyles = '';
-  if (relation === 'self') {
-    relationStyles = 'border-violet-500/70 bg-violet-950/10 shadow-[0_0_12px_rgba(139,92,246,0.15)] border-l-violet-500 scale-[1.01] z-10';
-  } else if (relation === 'prerequisite') {
-    relationStyles = 'border-sky-500/50 bg-sky-950/10 shadow-[0_0_8px_rgba(14,165,233,0.1)] border-l-sky-500';
-  } else if (relation === 'dependent') {
-    relationStyles = 'border-purple-500/50 bg-purple-950/10 shadow-[0_0_8px_rgba(168,85,247,0.1)] border-l-purple-500';
-  } else if (relation === 'peer') {
-    relationStyles = 'border-amber-500/50 bg-amber-950/10 shadow-[0_0_8px_rgba(245,158,11,0.1)] border-l-amber-500';
-  } else if (isUnrelated) {
-    relationStyles = 'opacity-40 transition-all duration-300';
-  }
-
   return (
     <Card
       draggable={isDraggable}
       onDragStart={(e) => isDraggable && onDragStart(e, item.file)}
       onClick={() => onSelect(item, 'story')}
-      onMouseEnter={() => onHoverChange?.(currentSlug)}
-      onMouseLeave={() => onHoverChange?.(null)}
       className={cn(
         "border bg-background/25 hover:bg-background/60 hover:shadow-sm transition-all duration-300 group relative overflow-hidden rounded-lg cursor-pointer border-l-2",
         isDraggable ? "cursor-grab active:cursor-grabbing" : "",
         item.placeholder && "border-dashed border-border opacity-70",
         isActive && "border-primary/40 bg-primary/5 shadow-xs",
         !isActive && "border-border/40 hover:border-primary/20",
-        !relation && (epicColor?.border || "border-l-border/40"),
-        relationStyles
+        epicColor?.border || "border-l-border/40"
       )}
     >
       <CardContent className="p-3 space-y-1.5 select-none">
@@ -2737,21 +2704,6 @@ function StoryKanbanCard({
             {name.replace('features/', '')}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
-            {relation && relation !== 'self' && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[8px] font-extrabold px-1.5 h-4.5 rounded-sm border shrink-0 select-none tracking-wider",
-                  relation === 'prerequisite' && "bg-sky-500/20 text-sky-400 border-sky-500/35",
-                  relation === 'dependent' && "bg-purple-500/20 text-purple-400 border-purple-500/35",
-                  relation === 'peer' && "bg-amber-500/20 text-amber-400 border-amber-500/35"
-                )}
-              >
-                {relation === 'prerequisite' && 'Prereq'}
-                {relation === 'dependent' && 'Dependent'}
-                {relation === 'peer' && 'Peer'}
-              </Badge>
-            )}
             <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
           </div>
         </div>
@@ -2779,7 +2731,7 @@ function StoryKanbanCard({
             <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
             <div className="flex flex-wrap gap-1 min-w-0">
               {item.dependsOn.map((depSlug: string) => {
-                const depStory = allStories?.find(s => getSlug(s.file) === depSlug);
+                const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
                 const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
                 let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
                 if (status === 'done' || status === 'completed') {
@@ -2827,8 +2779,6 @@ interface ListStoryRowProps {
   updatingTaskId: string | null;
   activeAction: { type: string; file: string } | null;
   allStories?: any[];
-  hoveredStorySlug?: string | null;
-  onHoverChange?: (slug: string | null) => void;
 }
 
 function ListStoryRow({
@@ -2841,9 +2791,7 @@ function ListStoryRow({
   onToggleTask,
   updatingTaskId,
   activeAction,
-  allStories,
-  hoveredStorySlug,
-  onHoverChange
+  allStories
 }: ListStoryRowProps) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
@@ -2854,31 +2802,9 @@ function ListStoryRow({
   const hasTasks = item.checklistTasks && item.checklistTasks.length > 0;
   const isActionLoading = !!(activeAction && activeAction.file === item.file);
 
-  const currentSlug = getSlug(item.file);
-  const relation = (hoveredStorySlug && allStories) ? isRelatedToHovered(item, hoveredStorySlug, allStories) : null;
-  const isUnrelated = !!hoveredStorySlug && relation === null;
-
-  let relationStyles = '';
-  if (relation === 'self') {
-    relationStyles = 'border-violet-500/70 bg-violet-950/10 shadow-[0_0_12px_rgba(139,92,246,0.15)] border-l-2 border-l-violet-500 scale-[1.005] z-10';
-  } else if (relation === 'prerequisite') {
-    relationStyles = 'border-sky-500/50 bg-sky-950/10 shadow-[0_0_8px_rgba(14,165,233,0.1)] border-l-2 border-l-sky-500';
-  } else if (relation === 'dependent') {
-    relationStyles = 'border-purple-500/50 bg-purple-950/10 shadow-[0_0_8px_rgba(168,85,247,0.1)] border-l-2 border-l-purple-500';
-  } else if (relation === 'peer') {
-    relationStyles = 'border-amber-500/50 bg-amber-950/10 shadow-[0_0_8px_rgba(245,158,11,0.1)] border-l-2 border-l-amber-500';
-  } else if (isUnrelated) {
-    relationStyles = 'opacity-40 transition-all duration-300';
-  }
-
   return (
     <div
-      onMouseEnter={() => onHoverChange?.(currentSlug)}
-      onMouseLeave={() => onHoverChange?.(null)}
-      className={cn(
-        "border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-300",
-        relationStyles
-      )}
+      className="border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-300"
     >
       {/* Row Header */}
       <div className="flex items-center justify-between p-3 gap-3 flex-wrap sm:flex-nowrap">
@@ -2913,7 +2839,7 @@ function ListStoryRow({
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
                 {item.dependsOn.map((depSlug: string) => {
-                  const depStory = allStories?.find(s => getSlug(s.file) === depSlug);
+                  const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
                   const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
                   let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
                   if (status === 'done' || status === 'completed') {
@@ -2958,22 +2884,6 @@ function ListStoryRow({
         )}
 
         <div className="flex items-center gap-1.5 shrink-0 select-none">
-          {relation && relation !== 'self' && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[8px] font-extrabold h-4.5 px-1.5 py-0.5 rounded-sm border shrink-0 select-none tracking-wider",
-                relation === 'prerequisite' && "bg-sky-500/20 text-sky-400 border-sky-500/35",
-                relation === 'dependent' && "bg-purple-500/20 text-purple-400 border-purple-500/35",
-                relation === 'peer' && "bg-amber-500/20 text-amber-400 border-amber-500/35"
-              )}
-            >
-              {relation === 'prerequisite' && 'Prereq'}
-              {relation === 'dependent' && 'Dependent'}
-              {relation === 'peer' && 'Peer'}
-            </Badge>
-          )}
-
           {/* Status indicator */}
           <Badge className={cn("text-[8px] font-extrabold h-4.5 px-1.5 py-0.5 rounded-sm border shrink-0 select-none", statusCfg.bg)}>
             {statusCfg.label}

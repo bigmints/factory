@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
-import { existsSync, readFileSync, openSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, openSync, writeFileSync, unlinkSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
@@ -24,6 +24,34 @@ function getActiveProject() {
   const config = loadProjectsConfig();
   if (!config.activeProject) return null;
   return config.projects.find((p: any) => p.id === config.activeProject) || null;
+}
+
+function resolveAppDir(projectPath: string): string {
+  // Check if package.json exists in projectPath directly
+  if (existsSync(join(projectPath, 'package.json'))) {
+    return projectPath;
+  }
+
+  // If not, search first-level subdirectories for a package.json
+  try {
+    const entries = readdirSync(projectPath);
+    for (const entry of entries) {
+      if (entry === 'node_modules' || entry.startsWith('.')) continue;
+      const fullPath = join(projectPath, entry);
+      try {
+        if (statSync(fullPath).isDirectory()) {
+          if (existsSync(join(fullPath, 'package.json'))) {
+            return fullPath;
+          }
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.error('Error scanning subdirectories for package.json:', err);
+  }
+
+  // Default fallback
+  return projectPath;
 }
 
 function checkPidAlive(pid: number): boolean {
@@ -110,7 +138,7 @@ export async function POST(request: Request) {
     const logFile = join(factoryDir, 'run-app.log');
 
     if (!existsSync(factoryDir)) {
-      writeFileSync(pidFile, ''); // creates dir / file
+      mkdirSync(factoryDir, { recursive: true });
     }
 
     // --- STOP ACTION ---
@@ -153,8 +181,10 @@ export async function POST(request: Request) {
         } catch {}
       }
 
+      const appDir = resolveAppDir(project.path);
+
       // Auto-detect script and package manager from package.json
-      const pkgPath = join(project.path, 'package.json');
+      const pkgPath = join(appDir, 'package.json');
       if (!existsSync(pkgPath)) {
         return NextResponse.json({ error: 'No package.json found in active project' }, { status: 400 });
       }
@@ -181,9 +211,9 @@ export async function POST(request: Request) {
       if (stackPm) {
         pm = stackPm.toLowerCase();
       } else {
-        if (existsSync(join(project.path, 'pnpm-lock.yaml'))) pm = 'pnpm';
-        else if (existsSync(join(project.path, 'yarn.lock'))) pm = 'yarn';
-        else if (existsSync(join(project.path, 'bun.lockb')) || existsSync(join(project.path, 'bun.lock'))) pm = 'bun';
+        if (existsSync(join(appDir, 'pnpm-lock.yaml'))) pm = 'pnpm';
+        else if (existsSync(join(appDir, 'yarn.lock'))) pm = 'yarn';
+        else if (existsSync(join(appDir, 'bun.lockb')) || existsSync(join(appDir, 'bun.lock'))) pm = 'bun';
       }
 
       const command = `${pm} run ${devScript}`;
@@ -193,7 +223,7 @@ export async function POST(request: Request) {
 
       // Spawn background process detached
       const child = spawn(command, [], {
-        cwd: project.path,
+        cwd: appDir,
         detached: true,
         stdio: ['ignore', logFd, logFd],
         shell: true,

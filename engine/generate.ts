@@ -1691,7 +1691,7 @@ export async function runToolSession(
         },
     ];
 
-    const MAX_TURNS = 30;
+    const MAX_TURNS = 50;
     const TOKEN_GUARD_AT = 20;
     const KEEP_LAST = 15;
     const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
@@ -1831,12 +1831,19 @@ export async function callProviderWithTools(
 function parseXmlToolCalls(content: string): ToolCallResult {
     const toolCalls: ToolCallResult = [];
 
-    // Pattern 1: <tool_call>JSON</tool_call>
-    const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-    let match;
-    while ((match = toolCallRegex.exec(content)) !== null) {
+    // Split the content by `<tool_call>` to handle each block individually
+    const blocks = content.split('<tool_call>');
+    // The first block is content before the first <tool_call>, so we skip it
+    for (let i = 1; i < blocks.length; i++) {
+        let block = blocks[i].trim();
+        // Remove closing tag if present
+        const closeIdx = block.indexOf('</tool_call>');
+        if (closeIdx !== -1) {
+            block = block.slice(0, closeIdx).trim();
+        }
+
         try {
-            const parsed = JSON.parse(match[1].trim());
+            const parsed = JSON.parse(block);
             if (parsed.name) {
                 toolCalls.push({
                     id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1853,15 +1860,46 @@ function parseXmlToolCalls(content: string): ToolCallResult {
                         arguments: parsed.function.arguments || {}
                     }
                 });
+            } else {
+                // If it's a flat JSON object like {"run_command": {"command": "ls -la"}} or {"write_file": {...}}
+                // where the key is the tool name
+                const keys = Object.keys(parsed);
+                if (keys.length === 1 && typeof parsed[keys[0]] === 'object' && parsed[keys[0]] !== null) {
+                    const toolName = keys[0];
+                    const args = parsed[toolName];
+                    toolCalls.push({
+                        id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        function: {
+                            name: toolName,
+                            arguments: args
+                        }
+                    });
+                }
             }
         } catch {
-            // Not valid JSON, ignore
+            // Not valid JSON. Let's try to extract JSON-like structure or extract name/arguments manually if possible.
+            const nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
+            const argsMatch = block.match(/"arguments"\s*:\s*(\{[\s\S]*\})/);
+            if (nameMatch) {
+                const name = nameMatch[1];
+                let args = {};
+                if (argsMatch) {
+                    try {
+                        args = JSON.parse(argsMatch[1]);
+                    } catch {}
+                }
+                toolCalls.push({
+                    id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    function: { name, arguments: args }
+                });
+            }
         }
     }
     if (toolCalls.length > 0) return toolCalls;
 
     // Pattern 2: <invoke name="tool_name">...params...</invoke> or <invoke>tool_name</invoke>
     const invokeRegex = /<invoke(?:\s+name="([^"]+)")?>([\s\S]*?)<\/invoke>/g;
+    let match;
     while ((match = invokeRegex.exec(content)) !== null) {
         let name = match[1]?.trim() || '';
         const body = match[2]?.trim() || '';

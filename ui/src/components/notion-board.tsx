@@ -979,281 +979,279 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 1. TOP HEADER CONSOLE                                                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-sm overflow-hidden select-none shrink-0">
-        <CardContent className="p-2 md:px-3 md:py-2 space-y-2">
-          {/* Main flex-row: Project Info on Left, Actions on Right */}
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-2.5">
-            
-            {/* Left Column: Title, version, stack badges & description */}
-            <div className="space-y-0.5 min-w-0 flex-1 w-full lg:w-auto">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-sm">🏭</span>
-                <h1 className="text-xs md:text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
-                  {appRollup?.name || 'Loading Project...'}
-                  <Badge variant="outline" className="text-[8.5px] font-bold px-1 py-0 border-border bg-muted/40 uppercase shrink-0">
-                    v{appRollup?.version || '0.0.1'}
+      <div className="space-y-2.5 pb-2.5 select-none shrink-0 border-b border-border/40 px-1">
+        {/* Main flex-row: Project Info on Left, Actions on Right */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          
+          {/* Left Column: Title, version, stack badges & description */}
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <span className="text-sm shrink-0">🏭</span>
+            <h1 className="text-xs md:text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
+              {appRollup?.name || 'Loading Project...'}
+              <Badge variant="outline" className="text-[8.5px] font-bold px-1 py-0 border-border bg-muted/40 uppercase shrink-0">
+                v{appRollup?.version || '0.0.1'}
+              </Badge>
+              {queueRunning && (
+                <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              )}
+              {/* Stack Badges inline next to the version */}
+              {appRollup?.stack && (
+                <div className="flex flex-wrap items-center gap-1">
+                  <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                    ⚡ {appRollup.stack.framework}
                   </Badge>
-                  {queueRunning && (
-                    <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  {appRollup.stack.language && (
+                    <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                      🏷️ {appRollup.stack.language}
+                    </Badge>
                   )}
-                  {/* Stack Badges inline next to the version */}
-                  {appRollup?.stack && (
-                    <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
-                        ⚡ {appRollup.stack.framework}
-                      </Badge>
-                      {appRollup.stack.language && (
-                        <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
-                          🏷️ {appRollup.stack.language}
-                        </Badge>
-                      )}
-                      {appRollup.stack.database && (
-                        <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
-                          🗄️ {appRollup.stack.database}
-                        </Badge>
-                      )}
-                    </div>
+                  {appRollup.stack.database && (
+                    <Badge variant="outline" className="text-[8px] font-semibold text-muted-foreground/80 py-0 px-1 bg-muted/20 shrink-0">
+                      🗄️ {appRollup.stack.database}
+                    </Badge>
                   )}
-                </h1>
-              </div>
-              <p className="text-[10px] text-muted-foreground line-clamp-1 max-w-2xl leading-relaxed">
-                {appRollup?.description || 'Scaffolding and developing your application automatically.'}
-              </p>
-            </div>
-
-            {/* Right Column: Unified Actions Toolbar */}
-            <div className="flex items-center gap-1.5 shrink-0 w-full lg:w-auto justify-end">
-              {/* Dev App Server Controls Pill */}
-              <div className="flex items-center border rounded-md bg-background p-0.5 h-7 text-[10px] select-none shrink-0">
-                <div className="flex items-center gap-1 px-1">
-                  <Activity className={cn("h-2.5 w-2.5", runStatus === 'running' ? "text-emerald-500" : "text-muted-foreground")} />
-                  <span className="font-bold text-[8.5px] uppercase tracking-wider text-muted-foreground hidden xl:inline">Server:</span>
-                  <Badge className={cn(
-                    "text-[8px] font-bold px-1 h-4 rounded-sm flex items-center justify-center",
-                    runStatus === 'running' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                    runStatus === 'starting' ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse" :
-                    "bg-muted text-muted-foreground border border-border"
-                  )}>
-                    {runStatus === 'running' ? `Active (:${runPort || 3000})` : runStatus}
-                  </Badge>
                 </div>
-                <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-                {runStatus === 'stopped' ? (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleStartApp}
-                    disabled={isActionLoading}
-                    className="h-5.5 w-5.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-sm"
-                  >
-                    <Play className="h-2.5 w-2.5 fill-emerald-500/20" />
-                  </Button>
-                ) : (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={handleStopApp}
-                    disabled={isActionLoading}
-                    className="h-5.5 w-5.5 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-sm"
-                  >
-                    <Square className="h-2.5 w-2.5 fill-rose-500/20" />
-                  </Button>
-                )}
+              )}
+            </h1>
 
-                {/* View server URL if active */}
-                {runStatus === 'running' && runPort && (
-                  <>
-                    <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => window.open(`http://localhost:${runPort}`, '_blank')}
-                      className="h-5.5 w-5.5 text-primary hover:bg-primary/10 rounded-sm"
-                    >
-                      <ExternalLink className="h-2.5 w-2.5" />
-                    </Button>
-                  </>
-                )}
+            {/* Compressed inline project description (only on md+) */}
+            {appRollup?.description && (
+              <span className="hidden md:inline text-[9.5px] text-muted-foreground/50 border-l border-border/40 pl-2 truncate max-w-[200px] lg:max-w-[320px] xl:max-w-[450px]">
+                {appRollup.description}
+              </span>
+            )}
+          </div>
 
-                {/* Terminal sidebar button */}
-                <Separator orientation="vertical" className="h-3.5 mx-0.5" />
+          {/* Right Column: Unified Actions Toolbar */}
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+            {/* Dev App Server Controls Pill */}
+            <div className="flex items-center border border-border/60 rounded-md bg-background/40 backdrop-blur-xs p-0.5 h-6.5 text-[10px] select-none shrink-0">
+              <div className="flex items-center gap-1 px-1">
+                <Activity className={cn("h-2.5 w-2.5", runStatus === 'running' ? "text-emerald-500" : "text-muted-foreground")} />
+                <span className="font-bold text-[8.5px] uppercase tracking-wider text-muted-foreground hidden lg:inline">Server:</span>
+                <Badge className={cn(
+                  "text-[8px] font-bold px-1 h-3.5 rounded-sm flex items-center justify-center",
+                  runStatus === 'running' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                  runStatus === 'starting' ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse" :
+                  "bg-muted text-muted-foreground border border-border"
+                )}>
+                  {runStatus === 'running' ? `Active (:${runPort || 3000})` : runStatus}
+                </Badge>
+              </div>
+              <Separator orientation="vertical" className="h-3.5 mx-0.5" />
+              {runStatus === 'stopped' ? (
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => setServerLogsOpen(!serverLogsOpen)}
-                  className={cn("h-5.5 w-5.5 rounded-sm", serverLogsOpen ? "bg-muted text-foreground" : "text-muted-foreground")}
+                  onClick={handleStartApp}
+                  disabled={isActionLoading}
+                  className="h-5 w-5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-sm"
                 >
-                  <Terminal className="h-3 w-3" />
+                  <Play className="h-2.5 w-2.5 fill-emerald-500/20" />
                 </Button>
-              </div>
+              ) : (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleStopApp}
+                  disabled={isActionLoading}
+                  className="h-5 w-5 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-sm"
+                >
+                  <Square className="h-2.5 w-2.5 fill-rose-500/20" />
+                </Button>
+              )}
 
-              {/* Refresh data button */}
+              {/* View server URL if active */}
+              {runStatus === 'running' && runPort && (
+                <>
+                  <Separator orientation="vertical" className="h-3.5 mx-0.5" />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => window.open(`http://localhost:${runPort}`, '_blank')}
+                    className="h-5 w-5 text-primary hover:bg-primary/10 rounded-sm"
+                  >
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </Button>
+                </>
+              )}
+
+              {/* Terminal sidebar button */}
+              <Separator orientation="vertical" className="h-3.5 mx-0.5" />
               <Button
-                variant="outline"
                 size="icon"
-                onClick={handleSyncRoadmap}
-                disabled={syncing}
-                className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground shrink-0"
-                title="Refresh project data"
+                variant="ghost"
+                onClick={() => setServerLogsOpen(!serverLogsOpen)}
+                className={cn("h-5 w-5 rounded-sm", serverLogsOpen ? "bg-muted text-foreground" : "text-muted-foreground")}
               >
-                <RefreshCw className={cn("h-3 w-3", syncing && "animate-spin")} />
+                <Terminal className="h-3 w-3" />
               </Button>
             </div>
+
+            {/* Refresh data button */}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleSyncRoadmap}
+              disabled={syncing}
+              className="h-6.5 w-6.5 rounded-md text-muted-foreground hover:text-foreground shrink-0"
+              title="Refresh project data"
+            >
+              <RefreshCw className={cn("h-3 w-3", syncing && "animate-spin")} />
+            </Button>
           </div>
+        </div>
 
-          <Separator className="opacity-40" />
-
-          {/* Controls & Filter Bar inside the Card */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 select-none">
-            {/* Left side: View tabs, New Story, and Build Ready buttons */}
-            <div className="flex items-center gap-1.5 shrink-0 self-start md:self-auto w-full md:w-auto">
-              <div className="flex items-center gap-1 p-0.5 bg-muted/60 border rounded-md h-7.5 shrink-0">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setViewMode('board')}
-                  className={cn(
-                    "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
-                    viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Columns className="h-3 w-3" />
-                  <span>Board</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setViewMode('list')}
-                  className={cn(
-                    "rounded-sm text-[10px] gap-1 h-6.5 px-2.5",
-                    viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <ListTodo className="h-3 w-3" />
-                  <span>Roadmap</span>
-                </Button>
-              </div>
-
-              {/* New Story button next to tabs (Responsive) */}
+        {/* Controls & Filter Bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 select-none">
+          {/* Left side: View tabs, New Story, and Build Ready buttons */}
+          <div className="flex items-center gap-1.5 shrink-0 self-start md:self-auto w-full md:w-auto">
+            <div className="flex items-center gap-1 p-0.5 bg-muted/60 border rounded-md h-7 shrink-0">
               <Button
                 size="sm"
-                onClick={() => setShowStoryChat(true)}
-                className="h-7.5 w-7.5 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0 flex items-center justify-center ml-0.5"
-                title="New Story"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">New Story</span>
-              </Button>
-
-              {/* Build Ready Stories button grouped side-by-side (Responsive) */}
-              <Button
-                onClick={handleBuildReadyStories}
-                disabled={queueRunning || syncing}
+                variant="ghost"
+                onClick={() => setViewMode('board')}
                 className={cn(
-                  "h-7.5 w-7.5 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md font-bold transition-all duration-200 shrink-0 flex items-center justify-center",
-                  queueRunning ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-sm active:scale-95"
+                  "rounded-sm text-[10px] gap-1 h-6 px-2.5",
+                  viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
-                title="Build Ready Stories"
               >
-                <Rocket className={cn("h-3 w-3", queueRunning && "animate-bounce")} />
-                <span className="hidden sm:inline">Build Ready</span>
+                <Columns className="h-3 w-3" />
+                <span>Board</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  "rounded-sm text-[10px] gap-1 h-6 px-2.5",
+                  viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <ListTodo className="h-3 w-3" />
+                <span>Roadmap</span>
               </Button>
             </div>
 
-            {/* Right side: Search, Filters toggle */}
-            <div className="flex items-center gap-1.5 w-full md:w-auto justify-end">
-              {/* Search box */}
-              <div className="relative flex-1 md:flex-initial w-full md:w-44 shrink-0">
-                <Search className="absolute left-2.5 top-2.5 h-3 w-3 text-muted-foreground/75" />
-                <Input
-                  placeholder="Search stories..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-7 h-7.5 text-[10px] rounded-md bg-muted/30 w-full"
-                />
-              </div>
+            {/* New Story button next to tabs (Responsive) */}
+            <Button
+              size="sm"
+              onClick={() => setShowStoryChat(true)}
+              className="h-7 w-7 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0 flex items-center justify-center ml-0.5"
+              title="New Story"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">New Story</span>
+            </Button>
 
-              {/* Universal Filters Toggle Button (Desktop collapsible toggle / Mobile bottom sheet) */}
+            {/* Build Ready Stories button grouped side-by-side (Responsive) */}
+            <Button
+              onClick={handleBuildReadyStories}
+              disabled={queueRunning || syncing}
+              className={cn(
+                "h-7 w-7 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md font-bold transition-all duration-200 shrink-0 flex items-center justify-center",
+                queueRunning ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-sm active:scale-95"
+              )}
+              title="Build Ready Stories"
+            >
+              <Rocket className={cn("h-3 w-3", queueRunning && "animate-bounce")} />
+              <span className="hidden sm:inline">Build Ready</span>
+            </Button>
+          </div>
+
+          {/* Right side: Search, Filters toggle */}
+          <div className="flex items-center gap-1.5 w-full md:w-auto justify-end">
+            {/* Search box */}
+            <div className="relative flex-1 md:flex-initial w-full md:w-44 shrink-0">
+              <Search className="absolute left-2.5 top-2 h-3 w-3 text-muted-foreground/75" />
+              <Input
+                placeholder="Search stories..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-7 h-7 text-[10px] rounded-md bg-muted/30 w-full border-border/80"
+              />
+            </div>
+
+            {/* Universal Filters Toggle Button (Desktop collapsible toggle / Mobile bottom sheet) */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (window.innerWidth < 768) {
+                  setShowMobileFilters(true);
+                } else {
+                  setShowDesktopFilters(!showDesktopFilters);
+                }
+              }}
+              className={cn(
+                "h-7 text-[10px] gap-1 rounded-md px-2.5 border-border bg-background hover:bg-muted/80 shrink-0 select-none",
+                (showDesktopFilters || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary bg-primary/5"
+              )}
+            >
+              <Filter className="h-3 w-3" />
+              <span>Filters</span>
+              {(epicFilter !== 'all' || statusFilter !== 'all') && (
+                <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              )}
+            </Button>
+
+            {/* Loading indicator */}
+            {loading && (
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0 ml-1" />
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Collapsible Inline Filters Sub-row */}
+        {showDesktopFilters && (
+          <div className="hidden md:flex items-center gap-4 px-3 py-1.5 bg-muted/15 border border-border/40 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200 mt-1 select-none">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Epic:</span>
+              <select
+                value={epicFilter}
+                onChange={e => setEpicFilter(e.target.value)}
+                className="h-6.5 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-40 cursor-pointer"
+              >
+                <option value="all">All Epics</option>
+                {appRollup?.features?.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Status:</span>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="h-6.5 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-32 cursor-pointer"
+              >
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="ready">Ready</option>
+                <option value="in-progress">In Progress</option>
+                <option value="failed">Failed</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+
+            {(epicFilter !== 'all' || statusFilter !== 'all') && (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => {
-                  if (window.innerWidth < 768) {
-                    setShowMobileFilters(true);
-                  } else {
-                    setShowDesktopFilters(!showDesktopFilters);
-                  }
+                  setEpicFilter('all');
+                  setStatusFilter('all');
                 }}
-                className={cn(
-                  "h-7.5 text-[10px] gap-1 rounded-md px-2.5 border-border bg-background hover:bg-muted/80 shrink-0 select-none",
-                  (showDesktopFilters || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary bg-primary/5"
-                )}
+                className="h-6.5 text-[10px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1 px-2 ml-auto rounded-md"
               >
-                <Filter className="h-3 w-3" />
-                <span>Filters</span>
-                {(epicFilter !== 'all' || statusFilter !== 'all') && (
-                  <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                )}
+                <X className="h-3 w-3" />
+                <span>Reset Filters</span>
               </Button>
-
-              {/* Loading indicator */}
-              {loading && (
-                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0 ml-1" />
-              )}
-            </div>
+            )}
           </div>
-
-          {/* Desktop Collapsible Inline Filters Sub-row */}
-          {showDesktopFilters && (
-            <div className="hidden md:flex items-center gap-4 px-3 py-2 bg-muted/15 border border-border/40 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200 mt-2 select-none">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Epic:</span>
-                <select
-                  value={epicFilter}
-                  onChange={e => setEpicFilter(e.target.value)}
-                  className="h-7 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-40 cursor-pointer"
-                >
-                  <option value="all">All Epics</option>
-                  {appRollup?.features?.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Status:</span>
-                <select
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
-                  className="h-7 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-32 cursor-pointer"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="ready">Ready</option>
-                  <option value="in-progress">In Progress</option>
-                  <option value="failed">Failed</option>
-                  <option value="done">Done</option>
-                </select>
-              </div>
-
-              {(epicFilter !== 'all' || statusFilter !== 'all') && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEpicFilter('all');
-                    setStatusFilter('all');
-                  }}
-                  className="h-7 text-[10px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1 px-2 ml-auto rounded-md"
-                >
-                  <X className="h-3 w-3" />
-                  <span>Reset Filters</span>
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={fetchStories} />
 

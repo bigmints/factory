@@ -436,44 +436,50 @@ export default function Dashboard() {
 
   // ─── Render: Dashboard ──────────────────────────────────
   const renderDashboard = () => (
-    <div className="space-y-6 md:space-y-10">
+    <div className="space-y-6 md:space-y-10 relative">
+      {/* Decorative subtle background glows */}
+      <div className="absolute -top-10 left-10 w-96 h-96 bg-primary/5 rounded-full filter blur-[120px] pointer-events-none -z-10" />
+      <div className="absolute -top-20 right-20 w-80 h-80 bg-indigo-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
+
       {activeProject && (
-        <Card>
-          <CardContent className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3 md:gap-4">
-              <div className="relative flex h-10 w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-lg bg-secondary border border-border">
-                <FolderOpen className="h-5 w-5 md:h-6 md:w-6 text-foreground" />
-                <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+        <Card className="bg-card border-border hover:shadow-sm transition-all duration-300 overflow-hidden relative group">
+          <CardContent className="p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
+            <div className="flex items-center gap-4 md:gap-5 min-w-0">
+              <div className="relative flex h-12 w-12 md:h-14 md:w-14 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border shadow-sm group-hover:scale-105 transition-transform duration-300">
+                <FolderOpen className="h-6 w-6 md:h-7 md:w-7 text-foreground" />
+                <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                 </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm md:text-base font-bold truncate flex items-center gap-1.5">
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="text-base md:text-lg font-black tracking-tight text-foreground truncate flex items-center gap-2 select-none">
                   {activeProject.name}
+                  <Badge variant="outline" className="text-[10px] font-bold text-emerald-500 bg-emerald-500/5 border-emerald-500/20 uppercase px-2 tracking-wide scale-90">
+                    Active
+                  </Badge>
                 </p>
-                <p className="text-[10px] md:text-xs text-muted-foreground font-mono truncate">{activeProject.path}</p>
+                <p className="text-xs text-muted-foreground font-mono truncate">{activeProject.path}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 mt-2 sm:mt-0 flex-wrap">
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleBuildAll()}
                 disabled={isBuildingAll}
-                className="text-xs font-semibold h-8 px-3 gap-1.5"
+                className="text-xs font-semibold h-8 px-3 gap-1.5 shadow-sm border bg-background hover:bg-muted transition-all"
               >
-                {isBuildingAll ? <Spinner className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
-                Build All
+                {isBuildingAll ? <Spinner className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+                <span>Build All</span>
               </Button>
               <Button
-                variant="outline"
                 size="sm"
                 onClick={() => setShowStoryChat(true)}
-                className="text-xs font-semibold h-8 px-3 gap-1.5"
+                className="text-xs font-semibold h-8 px-3 gap-1.5 shadow-sm transition-all"
               >
-                <Sparkles className="h-3 w-3 text-purple-500" />
-                New Story
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>New Story</span>
               </Button>
             </div>
           </CardContent>
@@ -481,22 +487,22 @@ export default function Dashboard() {
       )}
 
       {/* Stats row — 2 cols mobile, 4 cols desktop with premium spacing & larger cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { icon: FileText, value: stories.length, label: 'App Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
-          { icon: Activity, value: featureStories.length, label: 'Features', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
-          { icon: CheckCircle2, value: stories.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
-          { icon: Package, value: reportStats?.totalBuilds || 0, label: 'Total Builds', iconColor: 'text-muted-foreground', bgColor: 'bg-muted' },
+          { icon: FileText, value: stories.length, label: 'App Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
+          { icon: Activity, value: featureStories.length, label: 'Features', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
+          { icon: CheckCircle2, value: stories.filter((s) => s.status === 'ready' || s.status === 'done').length, label: 'Ready Stories', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
+          { icon: Package, value: reportStats?.totalBuilds || 0, label: 'Total Builds', iconColor: 'text-muted-foreground', bgColor: 'bg-muted border-border' },
         ].map((stat, i) => (
-          <Card key={i}>
+          <Card key={i} className="group bg-card border-border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg", stat.bgColor)}>
-                  <stat.icon className={cn("h-5 w-5", stat.iconColor)} />
+                <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border group-hover:scale-105 transition-transform duration-300", stat.bgColor)}>
+                  <stat.icon className={cn("h-6 w-6", stat.iconColor)} />
                 </div>
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-xl md:text-2xl font-bold tracking-tight leading-none">{stat.value}</p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground font-bold truncate uppercase tracking-wider">{stat.label}</p>
+                <div className="min-w-0 space-y-1">
+                  <p className="text-2xl md:text-3xl font-black tracking-tight leading-none text-foreground font-mono">{stat.value}</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground font-extrabold truncate uppercase tracking-widest">{stat.label}</p>
                 </div>
               </div>
             </CardContent>
@@ -982,7 +988,7 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* Mobile bottom navigation */}
+      {/* Mobile top header & left side drawer navigation */}
       <MobileNav
         activeTab={showAddProject ? 'projects' : activeTab}
         onTabChange={(tab) => {

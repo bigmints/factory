@@ -407,118 +407,173 @@ export function AppDashboard() {
   return (
     <div className="space-y-6 md:space-y-8 animate-in fade-in duration-300 relative">
       
-      {/* Top Banner: Glassmorphic App details with Circular Progress gauge */}
-      <Card className="relative overflow-hidden border border-border bg-card shadow-sm">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-primary/5 rounded-full filter blur-3xl -translate-y-12 translate-x-12 pointer-events-none" />
-        <CardContent className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-8">
-          
-          <div className="flex-1 space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="outline" className={cn("text-xs font-semibold uppercase tracking-wider px-2.5 py-0.5 border shadow-sm", appStatus.bg)}>
-                <span className="relative flex h-1.5 w-1.5 mr-1.5">
-                  <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", appStatus.pulse)}></span>
-                  <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appStatus.pulse)}></span>
-                </span>
-                {appStatus.label}
-              </Badge>
-              <span className="text-xs font-mono text-muted-foreground font-semibold bg-muted/60 px-2 py-0.5 rounded border">v{data.version}</span>
-            </div>
-
-            <div>
-              <h2 className="text-xl md:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
-                <Compass className="h-6 w-6 text-primary animate-pulse" />
-                {data.name}
-              </h2>
-              <p className="text-xs md:text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-xl">
-                {data.description}
-              </p>
-            </div>
-
-            {/* Stack badges */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {Object.entries(data.stack).map(([key, val]) => {
-                if (!val) return null;
-                return (
-                  <Badge key={key} variant="secondary" className="text-[10px] font-semibold font-mono bg-muted/40 hover:bg-muted/60 border text-foreground/80 px-2 py-0.5 capitalize">
-                    {key}: {val}
-                  </Badge>
-                );
-              })}
-            </div>
+      {/* Un-boxed Header Section */}
+      <div className="relative pb-2 space-y-4">
+        {/* Subtle glowing radial background rings */}
+        <div className="absolute -top-10 left-10 w-96 h-96 bg-primary/10 rounded-full filter blur-[120px] pointer-events-none -z-10" />
+        <div className="absolute -top-20 right-20 w-80 h-80 bg-indigo-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
+        
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="outline" className={cn("text-xs font-semibold uppercase tracking-wider px-2.5 py-0.5 border shadow-sm backdrop-blur-xs", appStatus.bg)}>
+              <span className="relative flex h-1.5 w-1.5 mr-1.5">
+                <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", appStatus.pulse)}></span>
+                <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appStatus.pulse)}></span>
+              </span>
+              {appStatus.label}
+            </Badge>
+            <span className="text-xs font-mono text-muted-foreground font-semibold bg-muted/40 backdrop-blur-xs px-2.5 py-0.5 rounded border border-border/40">v{data.version}</span>
           </div>
 
-          {/* Metrics Overview Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
-            <div className="bg-card/30 border border-border/40 p-3 rounded-lg text-center flex flex-col justify-center min-w-[80px]">
-              <span className="text-lg font-black text-foreground font-mono">{stats.totalStories}</span>
-              <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">Stories</span>
-            </div>
-            <div className="bg-card/30 border border-border/40 p-3 rounded-lg text-center flex flex-col justify-center min-w-[80px]">
-              <span className="text-lg font-black text-emerald-400 font-mono">{stats.completedTasks}</span>
-              <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">Done Tasks</span>
-            </div>
-            <div className="bg-card/30 border border-border/40 p-3 rounded-lg text-center flex flex-col justify-center min-w-[80px]">
-              <span className={cn("text-lg font-black font-mono", stats.runningTasks > 0 ? "text-blue-400 animate-pulse" : "text-foreground")}>{stats.runningTasks}</span>
-              <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">Running</span>
-            </div>
-            <div className="bg-card/30 border border-border/40 p-3 rounded-lg text-center flex flex-col justify-center min-w-[80px]">
-              <span className={cn("text-lg font-black font-mono", stats.failedTasks > 0 ? "text-rose-400" : "text-foreground")}>{stats.failedTasks}</span>
-              <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">Failed</span>
-            </div>
+          <div>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight text-foreground flex items-center gap-3 select-none">
+              <Compass className="h-8 w-8 md:h-10 md:w-10 text-primary animate-pulse shrink-0" />
+              <span className="bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">{data.name}</span>
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground mt-2 leading-relaxed max-w-4xl font-medium">
+              {data.description}
+            </p>
           </div>
 
-          {/* Large Glassmorphic Circular Gauge */}
-          <div className="flex items-center gap-6 self-center md:self-auto pr-2 md:pr-4">
-            <div className="relative flex items-center justify-center">
-              <svg className="w-28 h-28 transform -rotate-90">
-                {/* Track circle */}
+          {/* Stack badges styled as glowing tags */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {Object.entries(data.stack).map(([key, val]) => {
+              if (!val) return null;
+              return (
+                <Badge 
+                  key={key} 
+                  variant="outline" 
+                  className="text-[10px] md:text-xs font-bold font-mono bg-muted border-border text-foreground/80 px-2.5 py-1 transition-colors hover:bg-muted"
+                >
+                  <span className="text-primary/70 font-semibold mr-1 uppercase text-[9px] tracking-wider">{key}:</span>
+                  <span>{val}</span>
+                </Badge>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Premium 4-Column Metric Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Card 1: App Health & Progress */}
+        <Card className="group relative overflow-hidden bg-card border-border hover:shadow-sm transition-all duration-300">
+          <CardContent className="p-6 flex items-center justify-between gap-4">
+            <div className="relative flex items-center justify-center shrink-0">
+              <svg className="w-20 h-20 transform -rotate-90">
                 <circle
-                  cx="56"
-                  cy="56"
-                  r={radius - 6}
+                  cx="40"
+                  cy="40"
+                  r="32"
                   className="stroke-muted"
-                  strokeWidth="7"
+                  strokeWidth="6"
                   fill="transparent"
                 />
-                {/* Glowing progress circle */}
                 <circle
-                  cx="56"
-                  cy="56"
-                  r={radius - 6}
+                  cx="40"
+                  cy="40"
+                  r="32"
                   className="stroke-primary transition-all duration-1000 ease-out"
-                  strokeWidth="7"
+                  strokeWidth="6"
                   fill="transparent"
-                  strokeDasharray={2 * Math.PI * (radius - 6)}
-                  strokeDashoffset={2 * Math.PI * (radius - 6) - (data.progressPercent / 100) * 2 * Math.PI * (radius - 6)}
+                  strokeDasharray={2 * Math.PI * 32}
+                  strokeDashoffset={2 * Math.PI * 32 - (data.progressPercent / 100) * 2 * Math.PI * 32}
                   strokeLinecap="round"
                 />
               </svg>
               <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-xl font-black text-foreground tracking-tighter">{data.progressPercent}%</span>
-                <span className="text-[8px] text-muted-foreground font-bold uppercase tracking-widest mt-0.5">App done</span>
+                <span className="text-sm font-black text-foreground tracking-tighter">{data.progressPercent}%</span>
+                <span className="text-[7px] text-muted-foreground font-black uppercase tracking-widest">Done</span>
               </div>
             </div>
-            
-            <div className="flex flex-col gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs font-semibold h-8 rounded-lg shadow-sm border bg-background hover:bg-muted gap-1.5"
-                onClick={handleSync}
-                disabled={syncing}
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
-                Sync Spec
-              </Button>
-              <div className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
-                <Terminal className="h-3 w-3 text-muted-foreground/60" />
-                <span>Source: app.yaml</span>
-              </div>
-            </div>
-          </div>
 
-        </CardContent>
-      </Card>
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="space-y-0.5">
+                <h3 className="text-xs text-muted-foreground font-bold uppercase tracking-widest">Build Progress</h3>
+                <p className="text-sm font-bold text-foreground truncate">Overall Spec Done</p>
+              </div>
+              
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-[10px] font-semibold h-7 rounded-lg shadow-sm border bg-background hover:bg-muted gap-1 px-2.5 w-fit"
+                  onClick={handleSync}
+                  disabled={syncing}
+                >
+                  <RefreshCw className={cn("h-3 w-3 shrink-0", syncing && "animate-spin")} />
+                  <span>Sync Spec</span>
+                </Button>
+                <div className="text-[9px] text-muted-foreground font-semibold flex items-center gap-1">
+                  <Terminal className="h-2.5 w-2.5 text-muted-foreground/60" />
+                  <span>Source: app.yaml</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Feature Backlog */}
+        <Card className="group relative overflow-hidden bg-card border-border hover:shadow-sm transition-all duration-300">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border text-foreground group-hover:scale-105 transition-transform duration-300">
+              <Layers className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 space-y-1 flex-1">
+              <h3 className="text-xs text-muted-foreground font-bold uppercase tracking-widest leading-none">Feature Backlog</h3>
+              <p className="text-2xl font-black text-foreground leading-none font-mono">{stats.totalStories}</p>
+              <p className="text-[10px] text-muted-foreground font-medium truncate">Total planned stories</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 3: Complete & Verified */}
+        <Card className="group relative overflow-hidden bg-card border-border hover:shadow-sm transition-all duration-300">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-emerald-500 group-hover:scale-105 transition-transform duration-300">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 space-y-1 flex-1">
+              <h3 className="text-xs text-muted-foreground font-bold uppercase tracking-widest leading-none">Done Tasks</h3>
+              <p className="text-2xl font-black text-emerald-500 leading-none font-mono">{stats.completedTasks}</p>
+              <p className="text-[10px] text-muted-foreground font-medium truncate">Verified out of {stats.totalTasks} tasks</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 4: Live Engine Workload */}
+        <Card className="group relative overflow-hidden bg-card border-border hover:shadow-sm transition-all duration-300">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className={cn(
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border group-hover:scale-105 transition-transform duration-300",
+              stats.runningTasks > 0
+                ? "bg-blue-500/5 border-blue-500/25 text-blue-500 animate-pulse"
+                : stats.failedTasks > 0
+                  ? "bg-rose-500/5 border-rose-500/25 text-rose-500"
+                  : "bg-muted border-border text-muted-foreground"
+            )}>
+              <Activity className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1 flex flex-col gap-1.5 justify-center">
+              <h3 className="text-xs text-muted-foreground font-bold uppercase tracking-widest leading-none">Live Activity</h3>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-muted-foreground text-[10px] tracking-wide">Running:</span>
+                  <span className={cn("font-mono font-bold text-[10px]", stats.runningTasks > 0 ? "text-blue-400 animate-pulse" : "text-foreground")}>
+                    {stats.runningTasks}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-muted-foreground text-[10px] tracking-wide">Failed:</span>
+                  <span className={cn("font-mono font-bold text-[10px]", stats.failedTasks > 0 ? "text-rose-400" : "text-foreground")}>
+                    {stats.failedTasks}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Main Backlog Toolbar: Search, Filters, View Modes */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-2 border-b border-border/40">

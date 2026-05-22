@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import {
-  Rocket, Sparkles, Play, Square, ExternalLink, Terminal, Settings, Activity,
+  Rocket, Play, Square, ExternalLink, Terminal, Settings, Activity,
   CheckCircle2, XCircle, Loader2, AlertTriangle, ChevronDown, ChevronRight, Plus,
   Search, Filter, Tag, Columns, Layers, FileCode2, Brain, FlaskConical, Wrench,
   ShieldCheck, FolderOpen, RefreshCw, Sliders, X, Check, Package, ListTodo, Info,
@@ -111,18 +111,18 @@ interface PhysicalStory {
 
 interface QueueItem {
   id: string;
-  spec_file?: string;
-  story_file?: string;
+  specFile?: string;
+  storyFile?: string;
   kind: string;
   status: string;
   priority: number;
   engine?: string;
-  added_at: string;
-  started_at: string | null;
-  completed_at: string | null;
+  addedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
   output: string;
   error: string | null;
-  duration_ms: number | null;
+  durationMs: number | null;
 }
 
 interface QueueStats {
@@ -237,11 +237,60 @@ function parseActivities(output: string): ActivityStep[] {
   return steps;
 }
 
+const getBasename = (path: string) => {
+  if (!path) return '';
+  return path.split('/').pop() || '';
+};
+
+const getEffectiveStatus = (item: any) => {
+  if (item.dbStatus && item.dbStatus !== 'unknown') return item.dbStatus;
+  if (item.status && item.status !== 'unknown') return item.status;
+  return 'unknown';
+};
+
 export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [draggingFile, setDraggingFile] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, file: string) => {
+    e.dataTransfer.setData('text/plain', file);
+    setDraggingFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetStatus: string) => {
+    e.preventDefault();
+    const file = e.dataTransfer.getData('text/plain') || draggingFile;
+    setDraggingFile(null);
+
+    if (!file) return;
+
+    const toastId = toast.loading(`Updating story status to ${targetStatus}...`);
+    try {
+      const res = await fetch('/api/stories/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file, status: targetStatus })
+      });
+
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || 'Failed to update status');
+      }
+
+      const json = await res.json();
+      toast.success(json.message || `Successfully updated status to "${targetStatus}"`, { id: toastId });
+      await Promise.all([fetchStories(), fetchRollup(true), fetchQueue()]);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update status', { id: toastId });
+    }
+  };
 
   // Core Data
   const [stories, setStories] = useState<PhysicalStory[]>([]);
@@ -249,6 +298,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const [appRollup, setAppRollup] = useState<AppRollupData | null>(null);
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [queueRunning, setQueueRunning] = useState(false);
+  const [selectedQueueItemId, setSelectedQueueItemId] = useState<string | null>(null);
   const [buildEngine, setBuildEngine] = useState<'factory' | 'gemini-cli' | 'pi-cli'>('factory');
 
   // Dev Server Controls
@@ -267,6 +317,22 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [epicFilter, setEpicFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Auto-select the running item (or keep selection if user pinned one)
+  useEffect(() => {
+    const runningItem = queueItems.find(i => i.status === 'running');
+    if (runningItem) {
+      // Only auto-select if nothing is selected, or current selection is no longer in the list
+      setSelectedQueueItemId(prev => {
+        const prevStillExists = prev && queueItems.some(i => i.id === prev);
+        return prevStillExists ? prev : runningItem.id;
+      });
+    } else if (!selectedQueueItemId || !queueItems.some(i => i.id === selectedQueueItemId)) {
+      // Fall back to most recent item
+      const latest = queueItems[0] ?? null;
+      setSelectedQueueItemId(latest?.id ?? null);
+    }
+  }, [queueItems]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Interactive Checklist Toggling
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
@@ -740,17 +806,17 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
 
     // Load physical details
     stories.forEach(s => {
-      map.set(s.file, { ...s, checklistTasks: [] });
+      map.set(getBasename(s.file), { ...s, checklistTasks: [] });
     });
     featureStories.forEach(fs => {
-      map.set(fs.file, { ...fs, checklistTasks: [] });
+      map.set(getBasename(fs.file), { ...fs, checklistTasks: [] });
     });
 
     // Merge SQLite checklist data
     if (appRollup && appRollup.features) {
       appRollup.features.forEach(f => {
         f.stories.forEach(s => {
-          const key = s.file;
+          const key = getBasename(s.file);
           const existing = map.get(key);
           if (existing) {
             map.set(key, {
@@ -765,8 +831,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
           } else {
             // Found in DB but no physical file yet! (Unscaffolded placeholders)
             map.set(key, {
-              file: key,
-              kind: key.startsWith('features/') ? 'FeatureStory' : 'AppStory',
+              file: s.file,
+              kind: s.file.startsWith('features/') ? 'FeatureStory' : 'AppStory',
               valid: false,
               status: s.status || 'draft',
               dbId: s.id,
@@ -803,7 +869,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
 
     if (statusFilter !== 'all') {
       list = list.filter(item => {
-        const status = item.status || item.dbStatus || 'unknown';
+        const status = getEffectiveStatus(item);
         return status === statusFilter;
       });
     }
@@ -814,7 +880,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // Backlog specs (Draft/Unknown)
   const backlogStories = useMemo(() => {
     return filteredStoriesList.filter(item => {
-      const status = item.status || item.dbStatus || 'unknown';
+      const status = getEffectiveStatus(item);
       return status === 'draft' || status === 'unknown';
     });
   }, [filteredStoriesList]);
@@ -822,7 +888,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // Ready specs (Ready/Failed/Review)
   const readyStories = useMemo(() => {
     return filteredStoriesList.filter(item => {
-      const status = item.status || item.dbStatus || 'unknown';
+      const status = getEffectiveStatus(item);
       return status === 'ready' || status === 'failed' || status === 'review';
     });
   }, [filteredStoriesList]);
@@ -830,7 +896,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // In-Progress/Building specs
   const buildingStories = useMemo(() => {
     return filteredStoriesList.filter(item => {
-      const status = item.status || item.dbStatus || 'unknown';
+      const status = getEffectiveStatus(item);
       return status === 'in-progress' || status === 'validation' || status === 'running';
     });
   }, [filteredStoriesList]);
@@ -838,7 +904,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   // Done specs
   const doneStories = useMemo(() => {
     return filteredStoriesList.filter(item => {
-      const status = item.status || item.dbStatus || 'unknown';
+      const status = getEffectiveStatus(item);
       return status === 'done' || status === 'completed';
     });
   }, [filteredStoriesList]);
@@ -864,15 +930,6 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
   const activeQueueLogs = useMemo(() => {
     const runningItem = queueItems.find(i => i.status === 'running');
     return runningItem?.output || '';
-  }, [queueItems]);
-
-  const pipelineSteps = useMemo<ActivityStep[]>(() => {
-    // Attempt to parse running or latest item output
-    const runningItem = queueItems.find(i => i.status === 'running') || queueItems.find(i => i.status === 'failed') || queueItems[0];
-    if (runningItem) {
-      return parseActivities(runningItem.output);
-    }
-    return [];
   }, [queueItems]);
 
   // Trigger Drawer View
@@ -1028,7 +1085,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                 </Button>
               </div>
 
-              {/* Sync roadmap model */}
+              {/* Refresh data button */}
               <Button
                 variant="outline"
                 size="sm"
@@ -1037,7 +1094,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                 className="h-9 text-xs rounded-lg gap-1.5"
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
-                <span>Sync Roadmap</span>
+                <span>Refresh</span>
               </Button>
             </div>
           </div>
@@ -1267,6 +1324,9 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             onValidate={handleValidateStory}
             onBuild={handleSingleBuild}
             activeAction={activeAction}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, 'draft')}
+            onDragStart={handleDragStart}
           />
 
           {/* Column 2: READY TO BUILD */}
@@ -1279,6 +1339,9 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             onValidate={handleValidateStory}
             onBuild={handleSingleBuild}
             activeAction={activeAction}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, 'ready')}
+            onDragStart={handleDragStart}
           />
 
           {/* Column 3: BUILDING / RUNNING */}
@@ -1291,6 +1354,9 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             onValidate={handleValidateStory}
             onBuild={handleSingleBuild}
             activeAction={activeAction}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, 'in-progress')}
+            onDragStart={handleDragStart}
           />
 
           {/* Column 4: COMPLETED / DONE */}
@@ -1303,6 +1369,9 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
             onValidate={handleValidateStory}
             onBuild={handleSingleBuild}
             activeAction={activeAction}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, 'done')}
+            onDragStart={handleDragStart}
           />
         </div>
       )}
@@ -1312,11 +1381,11 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
         <div className="space-y-3 mt-6 border border-border/60 bg-muted/20 p-5 rounded-xl">
           <div className="flex items-center gap-2">
             <Info className="h-4.5 w-4.5 text-muted-foreground" />
-            <h3 className="font-bold text-sm text-foreground">Standalone / Unsynced Spec Stories</h3>
+            <h3 className="font-bold text-sm text-foreground">Uncategorized</h3>
             <Badge variant="outline" className="text-[10px] text-muted-foreground">{unsyncedStories.length}</Badge>
           </div>
           <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
-            These physical story files in `.factory/stories/` are not declared in `app.yaml`. Click cards to edit or compile them individually.
+            These story files are not mapped to any feature in your app roadmap. Click cards to edit or compile them.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
             {unsyncedStories.map(item => (
@@ -1327,6 +1396,7 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                 onValidate={handleValidateStory}
                 onBuild={handleSingleBuild}
                 activeAction={activeAction}
+                onDragStart={handleDragStart}
               />
             ))}
           </div>
@@ -1439,180 +1509,189 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 5. VIEW 3: PIPELINE EXECUTION / QUEUE VIEW                             */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {viewMode === 'queue' && (
+      {viewMode === 'queue' && (() => {
+        const selectedQueueItem = queueItems.find(i => i.id === selectedQueueItemId) ?? null;
+        // For running items: use live streamed log. For others: use stored output from the item.
+        const panelLog = selectedQueueItem
+          ? (selectedQueueItem.status === 'running' ? (buildOutput || selectedQueueItem.output || '') : (selectedQueueItem.output || selectedQueueItem.error || ''))
+          : (buildOutput || '');
+        const panelLabel = selectedQueueItem
+          ? (() => {
+              const specName = selectedQueueItem.storyFile || selectedQueueItem.specFile || '';
+              const matched = mergedStories.find(s => s.file === specName || getBasename(s.file) === getBasename(specName));
+              return matched
+                ? (matched.metadata?.name || matched.feature?.name || matched.dbName || getBasename(specName))
+                : (specName ? specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') : 'Select a build');
+            })()
+          : 'Live agent log console';
+        const isSelectedRunning = selectedQueueItem?.status === 'running';
+
+        return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Queue Timeline Checklist */}
+          {/* Queue Timeline — chronological list of items */}
           <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg overflow-hidden lg:col-span-4 h-[620px] flex flex-col">
             <CardHeader className="border-b border-border/50 p-4 shrink-0 flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-sm font-bold text-foreground">Build Timeline Queue</CardTitle>
-                <CardDescription className="text-[11px] text-muted-foreground mt-0.5">Backlog of queued stories</CardDescription>
+                <CardTitle className="text-sm font-bold text-foreground">Build Timeline</CardTitle>
+                <CardDescription className="text-[11px] text-muted-foreground mt-0.5">
+                  {queueStats.total} total · {queueStats.pending} pending · {queueStats.running} running · {queueStats.completed} done · {queueStats.failed} failed
+                </CardDescription>
               </div>
               <div className="flex items-center gap-1.5">
-                <Button variant="outline" size="sm" onClick={handleClearQueue} className="h-7.5 text-[10px] gap-1 px-2.5 border-border rounded-md hover:bg-muted/80">
+                <Button variant="outline" size="sm" onClick={handleClearQueue} className="h-7 text-[10px] gap-1 px-2.5 border-border rounded-md hover:bg-muted/80">
                   <XCircle className="h-3 w-3" />
                   Clear
                 </Button>
                 {queueRunning && (
-                  <Button variant="destructive" size="sm" onClick={handleStopQueue} className="h-7.5 text-[10px] gap-1 px-2.5 rounded-md">
+                  <Button variant="destructive" size="sm" onClick={handleStopQueue} className="h-7 text-[10px] gap-1 px-2.5 rounded-md">
                     <Square className="h-3 w-3" />
                     Stop
                   </Button>
                 )}
               </div>
             </CardHeader>
-            <ScrollArea className="flex-1 p-3">
+            <ScrollArea className="flex-1">
               {queueItems.length > 0 ? (
-                <div className="space-y-2.5 pr-2.5">
-                  {queueItems.map(item => {
-                    const specName = item.story_file || item.spec_file || 'Unknown';
-                    const isRunning = item.status === 'running';
-                    const isFailed = item.status === 'failed';
-                    const isDone = item.status === 'completed';
+                <div className="relative py-3 px-4">
+                  {/* Vertical timeline line */}
+                  <div className="absolute left-[27px] top-0 bottom-0 w-px bg-border/60" />
+                  <div className="space-y-3">
+                    {queueItems.map((item, idx) => {
+                      const specName = item.storyFile || item.specFile || '';
+                      const isRunning = item.status === 'running';
+                      const isFailed = item.status === 'failed';
+                      const isDone = item.status === 'completed';
+                      const isPending = !isRunning && !isFailed && !isDone;
+                      const isSelected = item.id === selectedQueueItemId;
+                      const matchedStory = mergedStories.find(s => s.file === specName || getBasename(s.file) === getBasename(specName));
+                      const humanReadableName = matchedStory
+                        ? (matchedStory.metadata?.name || matchedStory.feature?.name || matchedStory.dbName || getBasename(specName))
+                        : (specName ? specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') : `Queue item ${idx + 1}`);
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={cn(
-                          "p-3 rounded-lg border flex items-center justify-between gap-3 text-xs bg-background/45 hover:bg-background/80 transition-all",
-                          isRunning && "border-primary bg-primary/5 shadow-xs shadow-primary/5",
-                          isFailed && "border-rose-500/30 bg-rose-500/5",
-                          isDone && "border-emerald-500/20 bg-emerald-500/5"
-                        )}
-                      >
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold truncate text-foreground">{specName.replace('features/', '')}</span>
-                            <Badge variant="outline" className={cn(
-                              "text-[9px] font-bold h-4.5 px-1.5 rounded-md uppercase border",
-                              isRunning ? "bg-blue-500/10 text-blue-400 border-blue-500/25 animate-pulse" :
-                              isFailed ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
-                              isDone ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
-                              "bg-muted border-border text-muted-foreground"
-                            )}>
-                              {item.status}
-                            </Badge>
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-start gap-3 cursor-pointer group"
+                          onClick={() => setSelectedQueueItemId(item.id)}
+                        >
+                          {/* Timeline dot */}
+                          <div className={cn(
+                            "relative z-10 h-7 w-7 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all",
+                            isRunning && "border-primary bg-primary/20 animate-pulse",
+                            isFailed && "border-rose-500 bg-rose-500/20",
+                            isDone && "border-emerald-500 bg-emerald-500/20",
+                            isPending && "border-border bg-muted"
+                          )}>
+                            {isRunning && <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />}
+                            {isFailed && <XCircle className="h-3.5 w-3.5 text-rose-500" />}
+                            {isDone && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                            {isPending && <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />}
                           </div>
-                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground select-none">
-                            <span>Kind: {item.kind.replace('Story', '')}</span>
-                            <span>•</span>
-                            <span>Priority: {item.priority}</span>
+
+                          {/* Content card */}
+                          <div className={cn(
+                            "flex-1 min-w-0 p-2.5 rounded-lg border text-xs transition-all",
+                            isRunning && "border-primary/40 bg-primary/5",
+                            isFailed && "border-rose-500/30 bg-rose-500/5",
+                            isDone && "border-emerald-500/20 bg-emerald-500/5",
+                            isPending && "border-border/60 bg-background/40",
+                            // Selection ring
+                            isSelected && "ring-2 ring-primary/60 ring-offset-1 ring-offset-background",
+                            !isSelected && "group-hover:border-border"
+                          )}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-foreground truncate" title={humanReadableName}>{humanReadableName}</span>
+                              <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                                {isFailed && (
+                                  <Button size="icon" variant="ghost" className="h-5 w-5 text-primary hover:bg-primary/10 rounded" onClick={() => handleRetryItem(item.id)}>
+                                    <RefreshCw className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                <Button size="icon" variant="ghost" className="h-5 w-5 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded" onClick={() => handleRemoveQueueItem(item.id)}>
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+                              <Badge variant="outline" className={cn(
+                                "text-[8px] font-bold h-4 px-1.5 rounded uppercase border",
+                                isRunning ? "bg-blue-500/10 text-blue-400 border-blue-500/25 animate-pulse" :
+                                isFailed ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
+                                isDone ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
+                                "bg-muted border-border text-muted-foreground"
+                              )}>
+                                {item.status}
+                              </Badge>
+                              <span>{item.kind.replace('Story', '')}</span>
+                              {item.addedAt && <span title={item.addedAt} className="ml-auto">{new Date(item.addedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                              {/* Log indicator: show dot if item has output */}
+                              {(item.output || item.error) && !isSelected && (
+                                <span title="Has logs — click to view" className="ml-auto h-1.5 w-1.5 rounded-full bg-primary/60 shrink-0" />
+                              )}
+                            </div>
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          {isFailed && (
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-primary hover:bg-primary/10 rounded-md" onClick={() => handleRetryItem(item.id)}>
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-500 hover:bg-rose-500/10 rounded-md" onClick={() => handleRemoveQueueItem(item.id)}>
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
-                <div className="h-64 flex flex-col items-center justify-center text-center text-muted-foreground">
+                <div className="h-64 flex flex-col items-center justify-center text-center text-muted-foreground px-4">
                   <Package className="h-10 w-10 text-muted-foreground/30 mb-2" />
-                  <p className="text-xs font-semibold text-foreground">Queue is completely empty</p>
+                  <p className="text-xs font-semibold text-foreground">Queue is empty</p>
                   <p className="text-[11px] text-muted-foreground max-w-xs mt-1">
-                    Select a spec story card or hit **&quot;Build Ready Stories&quot;** to launch the pipeline!
+                    Click <strong>Build Ready Stories</strong> on the board or hit the rocket icon on any story card.
                   </p>
                 </div>
               )}
             </ScrollArea>
           </Card>
 
-          {/* Running Pipeline Visual Console Output */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
-            {/* Real-time Step Timeline */}
-            <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg p-5 shrink-0 select-none">
-              <h3 className="font-bold text-sm text-foreground mb-4 flex items-center gap-2">
-                <Sparkles className="h-4.5 w-4.5 text-indigo-500" />
-                Pipeline Active Stage Status
-              </h3>
-              {pipelineSteps.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
-                  {pipelineSteps.map((step, idx) => {
-                    const Icon = step.icon;
-                    const isSuccess = step.status === 'success';
-                    const isError = step.status === 'error';
-                    const isRunning = step.status === 'running';
-
-                    return (
-                      <div
-                        key={step.id}
-                        className={cn(
-                          "p-3 rounded-lg border flex flex-col items-center justify-center text-center gap-1.5 transition-all bg-background/45",
-                          isSuccess && "border-emerald-500/20 bg-emerald-500/5",
-                          isError && "border-rose-500/20 bg-rose-500/5",
-                          isRunning && "border-primary bg-primary/5 animate-pulse"
-                        )}
-                      >
-                        <div className={cn(
-                          "h-8 w-8 rounded-full flex items-center justify-center border",
-                          isSuccess ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
-                          isError ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
-                          isRunning ? "bg-primary/20 text-primary border-primary" :
-                          "bg-muted border-border text-muted-foreground"
-                        )}>
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="space-y-0.5">
-                          <p className="text-[10px] font-bold text-foreground line-clamp-1">{step.label}</p>
-                          <span className={cn(
-                            "text-[8px] font-extrabold uppercase tracking-wider",
-                            isSuccess ? "text-emerald-400" :
-                            isError ? "text-rose-400" :
-                            isRunning ? "text-primary animate-pulse" :
-                            "text-muted-foreground"
-                          )}>
-                            {step.status}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+          {/* Per-item Log Console */}
+          <Card className="border border-border/80 bg-zinc-950 shadow-2xl lg:col-span-8 h-[620px] flex flex-col overflow-hidden">
+            <div className="bg-zinc-900 border-b border-border/40 px-4 py-3 shrink-0 flex items-center justify-between select-none">
+              <span className="flex items-center gap-2 text-zinc-300 text-xs font-bold font-mono min-w-0">
+                <Terminal className="h-4 w-4 text-primary shrink-0" />
+                <span className="truncate" title={panelLabel}>{panelLabel}</span>
+                {isSelectedRunning && (
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                )}
+                {selectedQueueItem && !isSelectedRunning && (
+                  <Badge variant="outline" className={cn(
+                    "text-[8px] font-bold h-4 px-1.5 rounded uppercase border ml-1 shrink-0",
+                    selectedQueueItem.status === 'failed' ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
+                    selectedQueueItem.status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
+                    "bg-muted border-border text-muted-foreground"
+                  )}>
+                    {selectedQueueItem.status}
+                  </Badge>
+                )}
+              </span>
+              <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider shrink-0 ml-2">
+                {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
+              {panelLog ? (
+                panelLog.split('\n').map((l, i) => (
+                  <div key={i} className="leading-5 whitespace-pre-wrap">{l || '\u00A0'}</div>
+                ))
               ) : (
-                <div className="py-6 text-center text-xs text-muted-foreground italic bg-muted/20 border rounded-lg">
-                  {queueRunning ? 'Analysing log steps...' : 'Timeline will reflect active agent builds.'}
+                <div className="text-zinc-500 italic py-6 text-center">
+                  {selectedQueueItem
+                    ? `No logs captured for this ${selectedQueueItem.kind.replace('Story', '')} build yet.`
+                    : 'Select a build item from the timeline to view its logs.'}
                 </div>
               )}
-            </Card>
-
-            {/* Premium Terminal Terminal Console Output */}
-            <Card className="border border-border/80 bg-zinc-950 shadow-2xl flex-1 h-[450px] flex flex-col overflow-hidden">
-              <div className="bg-zinc-900 border-b border-border/40 px-4 py-3 shrink-0 flex items-center justify-between select-none">
-                <span className="flex items-center gap-2 text-zinc-300 text-xs font-bold font-mono">
-                  <Terminal className="h-4 w-4 text-primary" />
-                  Live target agent logs console
-                  {queueRunning && (
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                    </span>
-                  )}
-                </span>
-                <span className="text-[10px] text-zinc-500 font-mono">AUTO-SCROLL ENABLED</span>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
-                {buildOutput ? (
-                  buildOutput.split('\n').map((l, i) => (
-                    <div key={i} className="leading-5 whitespace-pre-wrap">{l}</div>
-                  ))
-                ) : (
-                  <div className="text-zinc-500 italic py-6 text-center">Pipeline terminal is idle. Launch a build!</div>
-                )}
-                <div ref={terminalEndRef} />
-              </div>
-            </Card>
-          </div>
+              <div ref={terminalEndRef} />
+            </div>
+          </Card>
         </div>
-      )}
+        );
+      })()}
 
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 6. SLIDING DETAILS DRAWER                                             */}
@@ -1719,8 +1798,8 @@ export function NotionBoard({ initialView = 'board' }: NotionBoardProps) {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">State:</span>
-                        <Badge className={cn("text-[9px] font-bold", (storyStatusMap[selectedItem.data.status || 'unknown'] || storyStatusMap.unknown).bg)}>
-                          {selectedItem.data.status || 'draft'}
+                        <Badge className={cn("text-[9px] font-bold", (storyStatusMap[getEffectiveStatus(selectedItem.data)] || storyStatusMap.unknown).bg)}>
+                          {getEffectiveStatus(selectedItem.data)}
                         </Badge>
                       </div>
                       {selectedItem.data.dbProgress !== undefined && (
@@ -1816,6 +1895,9 @@ interface KanbanColumnProps {
   onValidate: (file: string, kind: string) => void;
   onBuild: (file: string, kind: string) => void;
   activeAction: { type: string; file: string } | null;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+  onDragStart: (e: React.DragEvent, file: string) => void;
 }
 
 function KanbanColumn({
@@ -1826,10 +1908,17 @@ function KanbanColumn({
   onSelect,
   onValidate,
   onBuild,
-  activeAction
+  activeAction,
+  onDragOver,
+  onDrop,
+  onDragStart
 }: KanbanColumnProps) {
   return (
-    <div className="flex flex-col h-[650px] bg-muted/15 border border-border/60 rounded-xl overflow-hidden shadow-xs flex-1">
+    <div
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className="flex flex-col h-[650px] bg-muted/15 border border-border/60 rounded-xl overflow-hidden shadow-xs flex-1 transition-all duration-200 hover:bg-muted/20"
+    >
       {/* Header info */}
       <div className="p-3.5 bg-muted/20 border-b border-border/40 space-y-1 shrink-0 select-none">
         <div className="flex items-center justify-between">
@@ -1853,6 +1942,7 @@ function KanbanColumn({
                 onValidate={onValidate}
                 onBuild={onBuild}
                 activeAction={activeAction}
+                onDragStart={onDragStart}
               />
             ))
           ) : (
@@ -1871,29 +1961,34 @@ function StoryKanbanCard({
   onSelect,
   onValidate,
   onBuild,
-  activeAction
+  activeAction,
+  onDragStart
 }: {
   item: any;
   onSelect: (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => void;
   onValidate: (file: string, kind: string) => void;
   onBuild: (file: string, kind: string) => void;
   activeAction: { type: string; file: string } | null;
+  onDragStart: (e: React.DragEvent, file: string) => void;
 }) {
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
   const icon = item.metadata?.icon || (isFeature ? '🧩' : '📦');
   const desc = item.metadata?.description || item.feature?.description;
   const progress = item.dbProgress !== undefined ? item.dbProgress : 0;
-  const statusCfg = storyStatusMap[item.status || item.dbStatus || 'unknown'] || storyStatusMap.unknown;
+  const effectiveStatus = getEffectiveStatus(item);
+  const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
   const isActionLoading = !!(activeAction && activeAction.file === item.file);
 
   return (
     <Card
+      draggable={true}
+      onDragStart={(e) => onDragStart(e, item.file)}
       onClick={() => onSelect(item, 'story')}
       className={cn(
-        "border border-border/80 bg-background/55 hover:bg-background/90 hover:border-primary/40 hover:shadow-md cursor-pointer transition-all duration-200 group relative",
+        "border border-border/80 bg-background/55 hover:bg-background/90 hover:border-primary/40 hover:shadow-md cursor-grab active:cursor-grabbing transition-all duration-200 group relative",
         item.placeholder && "border-dashed border-border opacity-70",
-        (item.status === 'running' || item.status === 'validation') && "border-primary bg-primary/5 animate-pulse"
+        (effectiveStatus === 'running' || effectiveStatus === 'validation') && "border-primary bg-primary/5 animate-pulse"
       )}
     >
       <CardContent className="p-3.5 space-y-3 select-none">
@@ -1923,7 +2018,7 @@ function StoryKanbanCard({
         )}
 
         {/* Progress Bar */}
-        {item.checklistTasks && item.checklistTasks.length > 0 && (
+        {item.checklistTasks && item.checklistTasks.length > 0 && effectiveStatus !== 'done' && effectiveStatus !== 'completed' && (
           <div className="space-y-1">
             <div className="flex justify-between text-[9px] text-muted-foreground font-semibold">
               <span>Backlog Checklist</span>
@@ -2008,7 +2103,8 @@ function ListStoryRow({
   const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
   const icon = item.metadata?.icon || (isFeature ? '🧩' : '📦');
-  const statusCfg = storyStatusMap[item.status || item.dbStatus || 'unknown'] || storyStatusMap.unknown;
+  const effectiveStatus = getEffectiveStatus(item);
+  const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
   const progress = item.dbProgress !== undefined ? item.dbProgress : 0;
   const hasTasks = item.checklistTasks && item.checklistTasks.length > 0;
   const isActionLoading = !!(activeAction && activeAction.file === item.file);
@@ -2045,8 +2141,8 @@ function ListStoryRow({
           </div>
         </div>
 
-        {/* Task progress percentage */}
-        {hasTasks && (
+        {/* Task progress percentage — only show if not done */}
+        {hasTasks && effectiveStatus !== 'done' && effectiveStatus !== 'completed' && (
           <div className="hidden md:flex items-center gap-2 select-none shrink-0 w-36">
             <div className="h-1 bg-muted rounded-full overflow-hidden w-20 shrink-0 border border-border/30">
               <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />

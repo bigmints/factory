@@ -95,7 +95,25 @@ function featureStoryToTasks(story: FeatureStory): WorkerTask[] {
     ];
 }
 
-// ─── CLI Detector ────────────────────────────────────────
+// ─── Yolo Flags ──────────────────────────────────────────
+
+/**
+ * Non-interactive (yolo) flags per CLI — confirmed from each CLI's --help:
+ *   gemini → --yolo
+ *   claude → --dangerously-skip-permissions
+ *   agy    → --dangerously-skip-permissions
+ *   pi     → non-interactive by default with -p
+ */
+const CLI_YOLO_FLAGS: Record<string, string[]> = {
+    gemini: ['--yolo'],
+    claude: ['--dangerously-skip-permissions'],
+    agy:    ['--dangerously-skip-permissions'],
+    pi:     [],
+};
+
+function getYoloFlags(cliName: string): string[] {
+    return CLI_YOLO_FLAGS[cliName] || [];
+}
 
 /**
  * Detect a compatible CLI binary ('agy', 'claude', 'gemini', or 'pi').
@@ -184,15 +202,13 @@ export async function runQueueTasks(
 
         const taskWorkdir = task.workdir ? resolve(task.workdir) : workdir;
         const taskModel = task.model ?? options.model;
-        const taskMode = task.approval_mode ?? 'yolo';
 
-        const cliArgs = ['-p', task.prompt];
+        const cliArgs = ['-p', task.prompt, ...getYoloFlags(cli!)];
         if (taskModel) cliArgs.push('--model', taskModel);
 
         if (!quiet) {
             console.log(`\n[${i + 1}/${tasks.length}] ${task.name}`);
             console.log(`  workdir: ${taskWorkdir}`);
-            console.log(`  mode: ${taskMode}`);
             if (taskModel) console.log(`  model: ${taskModel}`);
             console.log(`  prompt: ${task.prompt.slice(0, 120)}${task.prompt.length > 120 ? '…' : ''}`);
         }
@@ -205,7 +221,7 @@ export async function runQueueTasks(
         }
 
         const start = Date.now();
-        const result = spawnSync(cli, cliArgs, {
+        const result = spawnSync(cli!, cliArgs, {
             cwd: taskWorkdir,
             stdio: quiet ? 'ignore' : [ 'ignore', 'inherit', 'inherit' ],
             encoding: 'utf8',

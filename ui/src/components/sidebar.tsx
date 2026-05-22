@@ -4,10 +4,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Factory,
-  FileText,
   LayoutDashboard,
-  ListOrdered,
-  BookOpen,
   Plug,
   Settings,
   Wand2,
@@ -16,7 +13,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Terminal,
-  Compass,
+  Rocket,
+  FlaskConical,
+  Globe,
+  Brain,
+  BarChart3,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import {
@@ -36,19 +37,26 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
 }
 
-const mainNav = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'stories', label: 'Stories', icon: FileText },
-  { id: 'queue', label: 'Queue', icon: ListOrdered },
-  { id: 'skills', label: 'Skills', icon: Wand2 },
-  { id: 'reports', label: 'Reports', icon: BookOpen },
-  { id: 'knowledge', label: 'Knowledge', icon: BookOpen },
+// ─── SDLC primary workflow nav ───
+const sdlcNav = [
+  { id: 'plan',   label: 'Plan',   icon: LayoutDashboard },
+  { id: 'build',  label: 'Build',  icon: Rocket },
+  { id: 'test',   label: 'Test',   icon: FlaskConical },
+  { id: 'deploy', label: 'Deploy', icon: Globe },
 ];
 
+// ─── Secondary / analytics nav ───
+const secondaryNav = [
+  { id: 'reports',   label: 'Reports',   icon: BarChart3 },
+  { id: 'knowledge', label: 'Knowledge', icon: Brain },
+];
+
+// ─── Configure nav ───
 const manageNav = [
-  { id: 'projects', label: 'Projects', icon: FolderOpen },
+  { id: 'skills',       label: 'Skills',       icon: Wand2 },
+  { id: 'projects',     label: 'Projects',     icon: FolderOpen },
   { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'settings',     label: 'Settings',     icon: Settings },
 ];
 
 function NavItem({
@@ -84,6 +92,15 @@ function NavItem({
   );
 }
 
+function SectionLabel({ label, isCollapsed }: { label: string; isCollapsed?: boolean }) {
+  if (isCollapsed) return <div className="py-2"><Separator className="opacity-40" /></div>;
+  return (
+    <div className="pt-4 pb-1.5">
+      <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">{label}</p>
+    </div>
+  );
+}
+
 export function Sidebar({
   activeTab,
   onTabChange,
@@ -92,15 +109,12 @@ export function Sidebar({
   isCollapsed = false,
   onToggleCollapse,
 }: SidebarProps) {
-  const handleNavClick = (tab: string) => {
-    onTabChange(tab);
-  };
-
   return (
     <aside className={cn(
       "hidden md:flex md:h-screen md:flex-col md:border-r md:border-border md:bg-sidebar md:text-sidebar-foreground transition-all duration-300",
-      isCollapsed ? "md:w-16" : "md:w-64"
+      isCollapsed ? "md:w-16" : "md:w-60"
     )}>
+      {/* Logo */}
       <div className={cn("flex items-center px-6 py-5", isCollapsed && "px-0 justify-center")}>
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
@@ -126,33 +140,43 @@ export function Sidebar({
 
       <Separator className="opacity-60" />
 
-      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1.5 scrollbar-thin">
-        {mainNav.map((item) => (
+      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin">
+        {/* SDLC workflow */}
+        {!isCollapsed && (
+          <p className="px-4 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Workflow</p>
+        )}
+        {sdlcNav.map((item) => (
           <NavItem
             key={item.id}
             {...item}
             active={activeTab === item.id}
-            onClick={() => handleNavClick(item.id)}
+            onClick={() => onTabChange(item.id)}
             isCollapsed={isCollapsed}
           />
         ))}
 
-        {!isCollapsed ? (
-          <div className="pt-4 pb-2">
-            <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">
-              Configure
-            </p>
-          </div>
-        ) : (
-          <div className="py-2"><Separator className="opacity-40" /></div>
-        )}
+        {/* Separator before secondary */}
+        <div className="py-2"><Separator className="opacity-40" /></div>
 
+        {/* Reports & Knowledge */}
+        {secondaryNav.map((item) => (
+          <NavItem
+            key={item.id}
+            {...item}
+            active={activeTab === item.id}
+            onClick={() => onTabChange(item.id)}
+            isCollapsed={isCollapsed}
+          />
+        ))}
+
+        {/* Configure section */}
+        <SectionLabel label="Configure" isCollapsed={isCollapsed} />
         {manageNav.map((item) => (
           <NavItem
             key={item.id}
             {...item}
             active={activeTab === item.id}
-            onClick={() => handleNavClick(item.id)}
+            onClick={() => onTabChange(item.id)}
             isCollapsed={isCollapsed}
           />
         ))}
@@ -245,36 +269,37 @@ export function MobileNav({
 
             <Separator className="opacity-60 shrink-0" />
 
-            <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 scrollbar-thin">
-              {mainNav.map((item) => (
+            <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1 scrollbar-thin">
+              <p className="px-4 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Workflow</p>
+              {sdlcNav.map((item) => (
                 <NavItem
                   key={item.id}
                   {...item}
                   active={activeTab === item.id}
-                  onClick={() => {
-                    onTabChange(item.id);
-                    setOpen(false);
-                  }}
+                  onClick={() => { onTabChange(item.id); setOpen(false); }}
                 />
               ))}
 
-              <div className="pt-4 pb-2">
-                <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">
-                  Configure
-                </p>
-              </div>
+              <div className="py-2"><Separator className="opacity-40" /></div>
 
+              {secondaryNav.map((item) => (
+                <NavItem
+                  key={item.id}
+                  {...item}
+                  active={activeTab === item.id}
+                  onClick={() => { onTabChange(item.id); setOpen(false); }}
+                />
+              ))}
+
+              <SectionLabel label="Configure" />
               {manageNav.map((item) => (
                 <NavItem
                   key={item.id}
                   {...item}
                   active={activeTab === item.id}
                   onClick={() => {
-                    if (item.id === 'projects') {
-                      onAddProject();
-                    } else {
-                      onTabChange(item.id);
-                    }
+                    if (item.id === 'projects') { onAddProject(); }
+                    else { onTabChange(item.id); }
                     setOpen(false);
                   }}
                 />

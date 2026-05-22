@@ -31,6 +31,7 @@ export const PATHS = {
     settings: resolve(FACTORY_ROOT, 'settings.json'),
     reports: resolve(FACTORY_ROOT, 'reports'),
     db: resolve(FACTORY_ROOT, 'factory.db'),
+    mcp: resolve(FACTORY_ROOT, 'mcp.json'),
 } as const;
 
 // ─── Projects ────────────────────────────────────────────
@@ -168,5 +169,22 @@ export function loadBridgeConfig(repoPath: string): BridgeConfig {
 /** Check if a repo has a .factory bridge */
 export function hasBridge(repoPath: string): boolean {
     return existsSync(join(repoPath, '.factory', 'factory.yaml'));
+}
+
+/** Load MCP config */
+export function loadMcpConfig(): any {
+    if (!existsSync(PATHS.mcp)) {
+        return { mcpServers: {} };
+    }
+    try {
+        return JSON.parse(readFileSync(PATHS.mcp, 'utf-8'));
+    } catch {
+        return { mcpServers: {} };
+    }
+}
+
+/** Save MCP config */
+export function saveMcpConfig(config: any): void {
+    writeFileSync(PATHS.mcp, JSON.stringify(config, null, 2) + '\n');
 }
 

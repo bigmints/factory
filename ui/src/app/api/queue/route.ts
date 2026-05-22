@@ -29,32 +29,52 @@ function getActiveProjectPath(): string | null {
 }
 
 /**
- * Check if the app story for the given target slug is already in the build queue.
- * Feature stories can only be enqueued after their parent app story is queued.
+ * Check if the app story for the given target slug is already in the queue OR already built.
+ * Feature stories can only be enqueued after their parent app story exists and is accounted for.
  */
 function isAppStoryQueued(targetApp: string, queue: QueueItem[]): boolean {
   const projectPath = getActiveProjectPath();
-  if (!projectPath) return false;
+  if (!projectPath) return true; // Fail open if no project
 
+  // Check apps/ dir
   const appsDir = join(projectPath, '.factory', 'stories', 'apps');
-  if (!existsSync(appsDir)) return false;
+  if (existsSync(appsDir)) {
+    const appFiles = readdirSync(appsDir).filter(
+      (f) => f.endsWith('.yaml') || f.endsWith('.yml')
+    );
+    for (const file of appFiles) {
+      try {
+        const raw = readFileSync(join(appsDir, file), 'utf-8');
+        const parsed = parseYaml(raw) as any;
+        const slug = parsed.metadata?.slug || file.replace(/\.ya?ml$/, '');
+        if (slug === targetApp) {
+          // Found in apps/ — check if it's been queued at any point
+          return queue.some(
+            item => (item.storyFile === file || item.storyFile === `apps/${file}`) &&
+              ['pending', 'running', 'completed'].includes(item.status)
+          );
+        }
+      } catch {}
+    }
+  }
 
-  const appFiles = readdirSync(appsDir).filter(
-    (f) => f.endsWith('.yaml') || f.endsWith('.yml')
-  );
-
-  for (const file of appFiles) {
-    try {
-      const raw = readFileSync(join(appsDir, file), 'utf-8');
-      const parsed = parseYaml(raw) as any;
-      const slug = parsed.metadata?.slug || file.replace(/\.ya?ml$/, '');
-      if (slug === targetApp) {
-        // Check if this app story file is already in the queue
-        return queue.some(
-          item => item.storyFile === file && ['pending', 'running', 'completed'].includes(item.status)
-        );
-      }
-    } catch {}
+  // Check done/ dir — already built means it's acceptable to queue features
+  const doneDir = join(projectPath, '.factory', 'stories', 'done');
+  if (existsSync(doneDir)) {
+    const doneFiles = readdirSync(doneDir).filter(
+      (f) => f.endsWith('.yaml') || f.endsWith('.yml')
+    );
+    for (const file of doneFiles) {
+      try {
+        const raw = readFileSync(join(doneDir, file), 'utf-8');
+        const parsed = parseYaml(raw) as any;
+        const slug = parsed.metadata?.slug || file.replace(/\.ya?ml$/, '');
+        if (slug === targetApp) {
+          // App story is in done/ — already completed, allow features
+          return true;
+        }
+      } catch {}
+    }
   }
 
   return false;
@@ -81,12 +101,39 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const storyFile = body.storyFile || body.specFile;
-    const kind = body.kind === 'AppSpec' ? 'AppStory' : body.kind === 'FeatureSpec' ? 'FeatureStory' : body.kind;
+    const storyFileRaw = body.storyFile || body.specFile;
+    const kindRaw = body.kind === 'AppSpec' ? 'AppStory' : body.kind === 'FeatureSpec' ? 'FeatureStory' : body.kind;
     const { phase, dependsOn, buildAll, engine } = body;
 
-    if (!storyFile || !kind) {
+    if (!storyFileRaw || !kindRaw) {
       return NextResponse.json({ error: 'storyFile and kind are required' }, { status: 400 });
+    }
+
+    let storyFile = storyFileRaw;
+    let kind = kindRaw;
+
+    const projectPath = getActiveProjectPath();
+    if (projectPath) {
+      const filename = storyFileRaw.replace(/^(features|apps|done)\//, '');
+      const featuresPath = join(projectPath, '.factory', 'stories', 'features', filename);
+      const appsPath = join(projectPath, '.factory', 'stories', 'apps', filename);
+      const donePath = join(projectPath, '.factory', 'stories', 'done', filename);
+
+      if (existsSync(featuresPath)) {
+        kind = 'FeatureStory';
+        storyFile = `features/${filename}`;
+      } else if (existsSync(appsPath)) {
+        kind = 'AppStory';
+        storyFile = filename;
+      } else if (existsSync(donePath)) {
+        try {
+          const raw = readFileSync(donePath, 'utf-8');
+          const parsed = parseYaml(raw) as any;
+          const isFeature = parsed && (parsed.feature || parsed.target || 'phase' in parsed);
+          kind = isFeature ? 'FeatureStory' : 'AppStory';
+          storyFile = `done/${filename}`;
+        } catch {}
+      }
     }
 
     const queue = loadQueue();

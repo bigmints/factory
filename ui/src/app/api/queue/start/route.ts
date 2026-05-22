@@ -299,8 +299,15 @@ function processQueueInBackground() {
       ? ['feature', 'build', resolvedPath, ...engineFlag]
       : ['build', resolvedPath, ...engineFlag];
 
+    let projectPath: string | undefined;
+    try {
+      const p = getActiveProject();
+      if (p?.path) projectPath = p.path;
+    } catch {}
+
     // Spawn the build process using globally-linked factory CLI
     const child = spawn('factory', cmdArgs, {
+      cwd: projectPath,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, npm_config_cache: '/tmp/factory-npm-cache', TMPDIR: '/tmp/factory-npm-cache' },
     });

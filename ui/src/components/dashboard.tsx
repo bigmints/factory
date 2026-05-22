@@ -7,9 +7,12 @@ import { AddProject } from '@/components/add-project';
 import { BuildLog } from '@/components/build-log';
 import { ReportViewer } from '@/components/report-viewer';
 import { KnowledgeView } from '@/components/knowledge-view';
+import { TestPlaceholder } from '@/components/test-placeholder';
+import { DeployPlaceholder } from '@/components/deploy-placeholder';
 import { SettingsView } from '@/components/settings-view';
 import { SkillsView } from '@/components/skills-view';
 import { NotionBoard } from '@/components/notion-board';
+import { IntegrationsView } from '@/components/integrations-view';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import {
@@ -56,10 +59,10 @@ interface ValidationCheck {
   message: string;
 }
 
-const VALID_TABS = ['dashboard', 'roadmap', 'queue', 'stories', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
+const VALID_TABS = ['plan', 'build', 'test', 'deploy', 'roadmap', 'queue', 'dashboard', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('plan');
   const [showAddProject, setShowAddProject] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -114,7 +117,8 @@ export default function Dashboard() {
       const data = await res.json();
       const map: Record<string, { status: string; id: string }> = {};
       for (const item of (data.items || [])) {
-        const file = item.story_file || item.spec_file;
+        // API returns camelCase: storyFile / specFile
+        const file = item.storyFile || item.specFile || item.story_file || item.spec_file;
         if (file) {
           map[file] = { status: item.status, id: item.id };
         }
@@ -164,8 +168,10 @@ export default function Dashboard() {
     Promise.all([fetchProjects(), fetchStories(), fetchReports(), fetchQueueStatus()]).finally(() => setLoading(false));
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'roadmap') {
-        setActiveTab('dashboard');
+      if (hash === 'roadmap' || hash === 'stories' || hash === 'dashboard') {
+        setActiveTab('plan');
+      } else if (hash === 'queue') {
+        setActiveTab('build');
       } else if (VALID_TABS.includes(hash)) {
         if (hash === 'projects') {
           setShowAddProject(true);
@@ -349,7 +355,7 @@ export default function Dashboard() {
         setBuildOutput(`✓ Added "${storyFile}" to build queue`);
         toast.success('Added to queue', { description: storyFile });
         fetchQueueStatus();
-        setActiveTab('queue');
+        setActiveTab('build');
       } else {
         setBuildOutput(`✗ ${data.error}`);
         toast.error('Failed to enqueue', { description: data.error });
@@ -434,15 +440,15 @@ export default function Dashboard() {
       if (skipped > 0) parts.push(`${skipped} skipped`);
       if (enqueued > 0) {
         toast.success(`Queued ${enqueued} story${enqueued !== 1 ? 'ies' : ''}`, {
-          description: parts.length > 0 ? parts.join(', ') : 'Switch to Queue tab to start processing',
+          description: parts.length > 0 ? parts.join(', ') : 'Switch to Build tab to start processing',
         });
-        setActiveTab('queue');
+        setActiveTab('build');
         fetchQueueStatus();
       } else if (errors > 0 || skipped > 0) {
         toast.error(`No stories queued`, { description: parts.join(', ') });
       } else {
         toast.info('All stories are already in the queue');
-        setActiveTab('queue');
+        setActiveTab('build');
       }
     } catch { toast.error('Build All failed'); }
     finally { setIsBuildingAll(false); }
@@ -464,8 +470,14 @@ export default function Dashboard() {
     </div>
   );
 
-  const hasOutput = !!(validationResult || buildOutput || queueRunning);
-  const showOutputButton = ((activeTab === 'stories' || activeTab === 'queue') && hasOutput && !outputPanelOpen);
+  const handleNavChange = (tab: string) => {
+    setShowAddProject(false);
+    setActiveTab(tab);
+  };
+
+  // ─── Derived state ───────────────────────────────────────
+  const hasOutput = !!(buildOutput || validationResult);
+  const showOutputButton = hasOutput || queueRunning;
 
   // ─── Main Layout ─────────────────────────────────────────
   return (
@@ -542,21 +554,16 @@ export default function Dashboard() {
               </div>
             )}
 
+            {activeTab === 'plan' && <NotionBoard initialView="board" />}
+            {activeTab === 'build' && <NotionBoard initialView="queue" />}
+            {activeTab === 'test' && <TestPlaceholder />}
+            {activeTab === 'deploy' && <DeployPlaceholder />}
+            {/* legacy hash compat */}
             {activeTab === 'dashboard' && <NotionBoard initialView="board" />}
-            {activeTab === 'queue' && <NotionBoard initialView="queue" />}
-            {activeTab === 'stories' && <NotionBoard initialView="list" />}
             {activeTab === 'skills' && <SkillsView />}
             {activeTab === 'reports' && renderReports()}
             {activeTab === 'knowledge' && <KnowledgeView />}
-            {activeTab === 'integrations' && (
-              <div className="flex flex-col items-center justify-center py-16 md:py-24 text-center">
-                <Plug className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground/30 mb-3 md:mb-4" />
-                <h2 className="text-base md:text-lg font-semibold">Integrations</h2>
-                <p className="text-xs md:text-sm text-muted-foreground mt-1 max-w-md">
-                  Connect external services like GitHub, CI/CD pipelines, and notification channels. Coming soon.
-                </p>
-              </div>
-            )}
+            {activeTab === 'integrations' && <IntegrationsView />}
             {activeTab === 'settings' && <SettingsView />}
           </div>
         )}

@@ -84,6 +84,7 @@ export async function GET() {
             providers: merged,
             activeProvider: saved.activeProvider || '',
             buildModel: saved.buildModel || '',
+            defaultCli: saved.defaultCli || '',
             updatedAt: saved.updatedAt,
         });
     } catch {

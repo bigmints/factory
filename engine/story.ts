@@ -305,6 +305,53 @@ export function archiveStory(storyPath: string): string | null {
     }
 }
 
+/**
+ * Restore an archived story back to its original apps/ or features/ folder.
+ * Returns the new path, or null if it could not be restored.
+ */
+export function restoreStory(storyPath: string): string | null {
+    const absPath = resolveStoryPath(storyPath);
+    if (!existsSync(absPath)) return null;
+
+    const storiesDir = dirname(absPath);
+    const folderName = basename(storiesDir);
+    if (folderName !== 'done') {
+        // Already not in done/, so no-op
+        return absPath;
+    }
+
+    const parentDir = dirname(storiesDir); // .factory/stories
+    
+    // Read the file to determine if it is a FeatureStory or AppStory
+    let isFeature = false;
+    try {
+        const raw = readFileSync(absPath, 'utf-8');
+        const parsed = parseYaml(raw) as any;
+        isFeature = !!(parsed && (parsed.feature || parsed.target || 'phase' in parsed));
+    } catch {}
+
+    const targetSubdir = isFeature ? 'features' : 'apps';
+    const destDir = join(parentDir, targetSubdir);
+
+    if (!existsSync(destDir)) {
+        mkdirSync(destDir, { recursive: true });
+    }
+
+    const filename = basename(absPath);
+    const destPath = join(destDir, filename);
+
+    try {
+        renameSync(absPath, destPath);
+        log('✓', `Restored story from done/ to ${targetSubdir}/: ${filename}`);
+        return destPath;
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log('!', `Failed to restore story: ${msg}`);
+        return null;
+    }
+}
+
+
 /** Load an app spec from a YAML file */
 export function loadAppSpec(appPath: string): AppSpec {
     const absPath = resolve(appPath);

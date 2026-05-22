@@ -313,3 +313,45 @@ export async function updateTaskStatus(taskId: string, newStatus: string): Promi
     writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
     log('✓', `Updated task "${taskId}" status to "${newStatus}" and saved app.yaml`);
 }
+
+/**
+ * Updates the status of a specific story within app.yaml directly, recalculating rollups.
+ */
+export async function updateStoryStatusInApp(storyFile: string, newStatus: string): Promise<void> {
+    const project = getActiveProject();
+    if (!project) return;
+    const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+    if (!existsSync(yamlPath)) return;
+
+    const raw = readFileSync(yamlPath, 'utf-8');
+    const app = parseYaml(raw) as any;
+    if (!app) return;
+
+    const basenameOfFile = storyFile.split('/').pop();
+
+    let found = false;
+    if (app.features) {
+        for (const feature of app.features) {
+            if (feature.stories) {
+                for (const story of feature.stories) {
+                    const storyBasename = (story.file || '').split('/').pop();
+                    if (story.file === storyFile || storyBasename === basenameOfFile) {
+                        story.status = newStatus;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (found) break;
+        }
+    }
+
+    if (!found) return;
+
+    // Re-run rollup calculations and save
+    const appSlug = slugify(app.name);
+    const updatedApp = calculateRollups(app, appSlug);
+    writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
+    log('✓', `Updated story "${storyFile}" status to "${newStatus}" and saved app.yaml`);
+}
+

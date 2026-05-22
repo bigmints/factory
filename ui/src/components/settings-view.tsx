@@ -12,15 +12,21 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Sparkles, Bot, Server, Eye, EyeOff, CheckCircle2, XCircle, Loader2,
-  RefreshCw, Star, Zap, Save, Plus, Trash2, Globe, Key,
+  RefreshCw, Star, Zap, Save, Plus, Trash2, Globe, Key, Terminal,
 } from 'lucide-react';
 
 interface ModelConfig { id: string; name: string; }
 interface LLMProvider {
-  id: string; name: string; kind: 'builtin' | 'openai-compat'; enabled: boolean;
+  id: string; name: string; kind: 'builtin' | 'openai-compat' | 'cli'; enabled: boolean;
   apiKey?: string; baseUrl?: string; models: ModelConfig[]; defaultModel?: string;
 }
-interface FactorySettings { providers: LLMProvider[]; activeProvider: string; buildModel: string; updatedAt?: string; }
+interface FactorySettings {
+  providers: LLMProvider[];
+  activeProvider: string;
+  buildModel: string;
+  defaultCli?: string;
+  updatedAt?: string;
+}
 
 const PROVIDER_META: Record<string, { icon: React.ReactNode; color: string; description: string }> = {
   gemini: { icon: <Sparkles className="h-5 w-5" />, color: 'text-blue-500', description: "Google's most capable AI models." },
@@ -139,6 +145,22 @@ export function SettingsView() {
     setDirty(true);
   };
 
+  const setDefaultCli = (cli: string) => {
+    if (!settings) return;
+    // Empty string = no CLI override (fall back to API provider)
+    setSettings({ ...settings, defaultCli: cli || undefined });
+    setDirty(true);
+    if (cli) toast.success(`CLI set to: ${cli}`);
+    else toast.success('CLI override cleared — using API provider');
+  };
+
+  const CLI_OPTIONS = [
+    { id: 'gemini', label: 'gemini', description: 'Google Gemini CLI · uses your Google account' },
+    { id: 'claude', label: 'claude', description: 'Anthropic Claude Code · uses your Anthropic account' },
+    { id: 'agy',    label: 'agy',    description: 'Antigravity CLI · uses your agy account' },
+    { id: 'pi',     label: 'pi',     description: 'Pi AI CLI · uses your Pi account' },
+  ];
+
   if (loading || !settings) {
     return (
       <div className="space-y-4 md:space-y-6">
@@ -155,8 +177,25 @@ export function SettingsView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Active model banner */}
-      {activeProvider && settings.buildModel ? (
+      {/* Active model / CLI banner */}
+      {settings.defaultCli ? (
+        <Card className="border bg-muted p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4 shadow-sm">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-5 w-5 text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm font-semibold">Active Generation Engine</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">
+                CLI mode · <span className="font-mono text-foreground font-bold">{settings.defaultCli}</span>
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className="gap-1.5 self-start sm:self-auto font-semibold text-emerald-600 border-emerald-500/40">
+            <Zap className="h-3 w-3 fill-current" />CLI Active
+          </Badge>
+        </Card>
+      ) : activeProvider && settings.buildModel ? (
         <Card className="border bg-muted p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4 shadow-sm">
           <div className="flex items-center gap-3 md:gap-4">
             <div className="flex items-center gap-2">
@@ -180,10 +219,70 @@ export function SettingsView() {
           </div>
           <div>
             <p className="text-xs sm:text-sm font-semibold">No Model Configured</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">Enable a provider and set it as default.</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Select a CLI below, or enable an API provider and set it as default.</p>
           </div>
         </Card>
       )}
+
+      {/* CLI Generation Engine selector */}
+      <Card className="rounded-xl border border-border overflow-hidden shadow-sm">
+        <div className="p-5 md:p-6 pb-4">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted border-border">
+              <Terminal className="h-4 w-4 text-foreground" />
+            </div>
+            <div>
+              <h3 className="text-sm md:text-base font-bold tracking-tight">CLI Generation Engine</h3>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">Route all builds through an installed CLI. No API key needed — the CLI uses its own auth.</p>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 md:px-6 pb-5 md:pb-6 space-y-3 pt-0">
+          <Separator className="border-border mb-4" />
+          {/* None option */}
+          <button
+            onClick={() => setDefaultCli('')}
+            className={cn(
+              'w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-150',
+              !settings.defaultCli
+                ? 'border-ring bg-accent ring-1 ring-ring'
+                : 'border-border hover:border-border hover:bg-muted/50'
+            )}
+          >
+            <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md border', !settings.defaultCli ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted border-border text-muted-foreground')}>
+              <Globe className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold">API Provider (default)</p>
+              <p className="text-[10px] text-muted-foreground">Use the configured API provider above</p>
+            </div>
+            {!settings.defaultCli && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
+          </button>
+
+          {/* CLI options */}
+          {CLI_OPTIONS.map(cli => (
+            <button
+              key={cli.id}
+              onClick={() => setDefaultCli(cli.id)}
+              className={cn(
+                'w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-150',
+                settings.defaultCli === cli.id
+                  ? 'border-ring bg-accent ring-1 ring-ring'
+                  : 'border-border hover:border-border hover:bg-muted/50'
+              )}
+            >
+              <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md border font-mono text-[10px] font-bold', settings.defaultCli === cli.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted border-border text-muted-foreground')}>
+                {cli.label[0].toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold font-mono">{cli.label}</p>
+                <p className="text-[10px] text-muted-foreground">{cli.description}</p>
+              </div>
+              {settings.defaultCli === cli.id && <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       {/* Provider cards */}
       {settings.providers.map(provider => {

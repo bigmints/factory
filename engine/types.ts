@@ -215,7 +215,12 @@ export interface ModelConfig {
 export interface LLMProvider {
     id: string;
     name: string;
-    kind: 'builtin' | 'openai-compat';
+    /**
+     * 'builtin'      — Factory calls the provider API directly (Gemini, OpenAI, Ollama)
+     * 'openai-compat' — OpenAI-compatible API at a custom baseUrl
+     * 'cli'          — Delegates to an installed CLI tool (gemini, claude, pi, agy)
+     */
+    kind: 'builtin' | 'openai-compat' | 'cli';
     enabled: boolean;
     apiKey?: string;
     baseUrl?: string;

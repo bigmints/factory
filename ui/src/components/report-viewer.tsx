@@ -81,14 +81,27 @@ function storyName(path: string): string {
   return path.split('/').pop()?.replace('.yaml', '') || path;
 }
 
-export function ReportViewer({ entries, stats }: ReportViewerProps) {
+export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
+  const stats: ReportStats = rawStats ?? {
+    totalBuilds: 0,
+    successfulBuilds: 0,
+    failedBuilds: 0,
+    uniqueSpecs: 0,
+    totalTokensIn: 0,
+    totalTokensOut: 0,
+    avgDurationMs: 0,
+    modelUsage: [],
+    errorBreakdown: [],
+  };
+
   const successRate = stats.totalBuilds > 0
     ? Math.round((stats.successfulBuilds / stats.totalBuilds) * 100)
     : 0;
   const totalTokens = stats.totalTokensIn + stats.totalTokensOut;
 
-  const llmErrors = stats.errorBreakdown.find(e => e.error_source === 'llm')?.count || 0;
-  const engineErrors = stats.errorBreakdown.find(e => e.error_source === 'engine')?.count || 0;
+  const errorBreakdown = stats.errorBreakdown ?? [];
+  const llmErrors = errorBreakdown.find(e => e.error_source === 'llm')?.count || 0;
+  const engineErrors = errorBreakdown.find(e => e.error_source === 'engine')?.count || 0;
 
   return (
     <div className="space-y-6 md:space-y-8 flex flex-col">
@@ -123,11 +136,11 @@ export function ReportViewer({ entries, stats }: ReportViewerProps) {
             <Cpu className="h-4 w-4 shrink-0" />
             <span className="text-[10px] font-bold uppercase tracking-wider">Model Usage</span>
           </div>
-          {stats.modelUsage.length === 0 ? (
+          {(stats.modelUsage ?? []).length === 0 ? (
             <p className="text-xs text-muted-foreground py-6">No model data recorded yet</p>
           ) : (
             <div className="space-y-4">
-              {stats.modelUsage.map((m) => {
+              {(stats.modelUsage ?? []).map((m) => {
                 const pct = stats.totalBuilds > 0
                   ? Math.round((m.count / stats.totalBuilds) * 100)
                   : 0;

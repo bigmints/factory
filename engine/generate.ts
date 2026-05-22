@@ -11,6 +11,7 @@ import type {
     AppStory, FeatureStory, ProjectBlueprint,
     GeneratedFile, BuildPlan, BuildResult,
     LLMProvider, TaskProfile, AppIntegrationBlueprint,
+    FactorySettings,
 } from './types.ts';
 import type { QueueBuildBlueprint } from './blueprint.ts';
 import { classifyTask, classifyFeatureTask } from './task-classifier.ts';
@@ -380,7 +381,7 @@ function groupFilesByDirectory(files: GeneratedFile[]): Record<string, number> {
 import { mkdtempSync, writeFileSync as fsWrite, readFileSync as fsRead, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { execSync, spawn as cpSpawn } from 'node:child_process';
+import { execSync, spawn as cpSpawn, spawnSync } from 'node:child_process';
 import type { StackConfig } from './types.ts';
 
 /**
@@ -1315,24 +1316,74 @@ function formatBlueprint(blueprint: ProjectBlueprint): string {
 // ─── Provider Calls ──────────────────────────────────────
 
 export function requireActiveProvider(): { provider: LLMProvider; model: string } {
-    const settings = loadSettings();
-    if (!settings.activeProvider || !settings.buildModel) {
-        throw new Error(
-            'No active model set.\n' +
-            'Go to Settings → enable a provider → click "Set as Default".'
-        );
+    let defaultCli: string | undefined;
+    let settings: FactorySettings | null = null;
+
+    try {
+        settings = loadSettings();
+        defaultCli = settings.defaultCli;
+    } catch {
+        // settings.json missing or malformed
     }
-    const provider = getActiveProvider(settings);
-    if (!provider) {
-        throw new Error(`Provider "${settings.activeProvider}" is not enabled.`);
+
+    // If a defaultCli is explicitly set, use it FIRST — CLIs take priority
+    if (defaultCli) {
+        const r = spawnSync('which', [defaultCli], { encoding: 'utf8', timeout: 3000 });
+        if (r.status === 0 && r.stdout.trim()) {
+            log('→', `Using CLI: ${defaultCli}`);
+            const cliProvider: LLMProvider = {
+                id: defaultCli,
+                name: `${defaultCli} CLI`,
+                kind: 'cli',
+                enabled: true,
+                models: [{ id: 'default', name: 'default' }],
+            };
+            return { provider: cliProvider, model: 'default' };
+        }
+        log('!', `Configured CLI "${defaultCli}" not found in PATH — falling back to API provider`);
     }
-    return { provider, model: settings.buildModel };
+
+    // Try API provider next
+    if (settings?.activeProvider && settings?.buildModel) {
+        const provider = getActiveProvider(settings);
+        if (provider) return { provider, model: settings.buildModel };
+    }
+
+    // Last resort: auto-detect any installed CLI
+    const ALL_CLI_CANDIDATES = ['gemini', 'claude', 'pi', 'agy'] as const;
+    for (const bin of ALL_CLI_CANDIDATES) {
+        if (bin === defaultCli) continue; // already tried above
+        try {
+            const r = spawnSync('which', [bin], { encoding: 'utf8', timeout: 3000 });
+            if (r.status === 0 && r.stdout.trim()) {
+                log('→', `No API provider configured — using installed CLI: ${bin}`);
+                const cliProvider: LLMProvider = {
+                    id: bin,
+                    name: `${bin} CLI`,
+                    kind: 'cli',
+                    enabled: true,
+                    models: [{ id: 'default', name: 'default' }],
+                };
+                return { provider: cliProvider, model: 'default' };
+            }
+        } catch { /* try next */ }
+    }
+
+    throw new Error(
+        'No LLM provider available.\n' +
+        'Either configure an API provider in Settings, or install one of: gemini, claude, pi, agy'
+    );
 }
 
 export async function callProvider(provider: LLMProvider, model: string, prompt: string): Promise<LLMResponse> {
     // Determine the effective kind: treat missing/undefined kind as 'builtin' (legacy)
     const kind = provider.kind || 'builtin';
-    
+
+    // CLI provider — pipe prompt to installed CLI binary
+    if (kind === 'cli') {
+        return callCLISimple(provider.id, prompt);
+    }
+
     // Built-in providers
     if (kind === 'builtin') {
         switch (provider.id) {
@@ -1930,6 +1981,11 @@ export async function callProviderWithTools(
 ): Promise<ToolResponse> {
     const kind = provider.kind || 'builtin';
 
+    // CLI provider — route entire conversation through the CLI binary
+    if (kind === 'cli') {
+        return callCLIWithTools(provider.id, messages, tools);
+    }
+
     if (kind === 'builtin') {
         if (provider.id === 'gemini') {
             if (!provider.apiKey) throw new Error('Gemini API key not configured');
@@ -1943,6 +1999,155 @@ export async function callProviderWithTools(
 
     const baseUrl = provider.baseUrl || 'https://api.openai.com/v1';
     return callOpenAICompatWithTools(provider.apiKey || '', model, messages, tools, baseUrl);
+}
+
+// ─── CLI Provider Implementation ─────────────────────────
+
+/**
+ * Non-interactive (yolo) flags per CLI — confirmed from each CLI's --help output:
+ *
+ * gemini  → --yolo  (also accepts --approval-mode yolo)
+ * claude  → --dangerously-skip-permissions
+ * agy     → --dangerously-skip-permissions
+ * pi      → non-interactive by default with -p; no approval flag needed
+ */
+const CLI_FLAGS: Record<string, string[]> = {
+    gemini: ['--yolo'],
+    claude: ['--dangerously-skip-permissions'],
+    agy:    ['--dangerously-skip-permissions'],
+    pi:     [],   // pi -p is already non-interactive
+};
+
+/**
+ * Serialise the full message history + tool schemas into one prompt string
+ * the CLI can process in a single -p invocation.
+ *
+ * Uses the XML <tool_call> format that parseXmlToolCalls() already understands.
+ */
+function buildCLIConversationPrompt(
+    messages: ToolMessages,
+    tools: typeof TOOL_DEFINITIONS,
+): string {
+    // Tool schema block
+    const toolSchemas = tools.map(t => {
+        const params_def = (t.parameters as any);
+        const params = params_def?.properties
+            ? Object.entries(params_def.properties)
+                .map(([k, v]: [string, any]) =>
+                    `  - ${k} (${v.type || 'string'}${(params_def.required as string[] | undefined)?.includes(k) ? ', required' : ''}): ${v.description || ''}`
+                )
+                .join('\n')
+            : '  (no parameters)';
+        return `### ${t.name}\n${t.description}\nParameters:\n${params}`;
+    }).join('\n\n');
+
+    // Conversation history — skip system message (we embed it inline below)
+    const history = messages
+        .filter(m => m.role !== 'system')
+        .map(m => {
+            if (m.role === 'assistant' && m.tool_calls?.length) {
+                const calls = m.tool_calls
+                    .map(tc => `<tool_call>${JSON.stringify({ name: tc.function.name, arguments: tc.function.arguments })}</tool_call>`)
+                    .join('\n');
+                return `ASSISTANT:\n${m.content ? m.content + '\n' : ''}${calls}`;
+            }
+            if (m.role === 'tool') {
+                return `TOOL RESULT (${m.tool_call_id || 'unknown'}):\n${m.content}`;
+            }
+            return `${m.role.toUpperCase()}:\n${m.content}`;
+        })
+        .join('\n\n---\n\n');
+
+    // Extract the system message
+    const systemMsg = messages.find(m => m.role === 'system')?.content || '';
+
+    return `${systemMsg}
+
+## AVAILABLE TOOLS
+
+You MUST respond by calling tools using this exact XML format:
+<tool_call>{"name": "tool_name", "arguments": {"param": "value"}}</tool_call>
+
+Call as many tools as needed in a single response. Each tool call must be valid JSON.
+
+Available tools:
+${toolSchemas}
+
+## CONVERSATION HISTORY
+
+${history}
+
+## YOUR TURN
+
+Continue the task. Call the appropriate tool(s) now.`;
+}
+
+/**
+ * Route a tool-calling turn through an installed CLI binary.
+ * Builds a single rich prompt, spawns the CLI with -p, parses XML tool calls from stdout.
+ */
+async function callCLIWithTools(
+    cli: string,
+    messages: ToolMessages,
+    tools: typeof TOOL_DEFINITIONS,
+): Promise<ToolResponse> {
+    const prompt = buildCLIConversationPrompt(messages, tools);
+    const extraFlags = CLI_FLAGS[cli] || [];
+
+    log('→', `CLI turn → ${cli} (${prompt.length.toLocaleString()} chars)`);
+
+    const result = spawnSync(cli, ['-p', prompt, ...extraFlags], {
+        encoding: 'utf8',
+        maxBuffer: 50 * 1024 * 1024,   // 50 MB
+        timeout: 5 * 60 * 1000,         // 5 min per turn
+    });
+
+    if (result.error) {
+        throw new Error(`CLI spawn error (${cli}): ${result.error.message}`);
+    }
+
+    if (result.status !== 0) {
+        const stderr = result.stderr?.slice(0, 400) || '';
+        throw new Error(`CLI ${cli} exited with code ${result.status}: ${stderr}`);
+    }
+
+    const text = result.stdout || '';
+    log('✓', `CLI response: ${text.length.toLocaleString()} chars`);
+
+    // Parse XML tool calls — same parser used for Qwen/local LLMs
+    const toolCalls = parseXmlToolCalls(text);
+    log('→', `Parsed ${toolCalls.length} tool call(s) from CLI output`);
+
+    return {
+        text,
+        tokensIn: 0,   // CLIs don't expose token counts
+        tokensOut: 0,
+        toolCalls,
+    };
+}
+
+/**
+ * Simple (non-tool-calling) CLI invocation — used by callProvider() for
+ * legacy code paths that just want text back.
+ */
+async function callCLISimple(cli: string, prompt: string): Promise<LLMResponse> {
+    const extraFlags = CLI_FLAGS[cli] || [];
+    log('→', `CLI simple → ${cli} (${prompt.length.toLocaleString()} chars)`);
+
+    const result = spawnSync(cli, ['-p', prompt, ...extraFlags], {
+        encoding: 'utf8',
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: 5 * 60 * 1000,
+    });
+
+    if (result.error) throw new Error(`CLI spawn error (${cli}): ${result.error.message}`);
+    if (result.status !== 0) {
+        throw new Error(`CLI ${cli} exited with code ${result.status}: ${result.stderr?.slice(0, 400) || ''}`);
+    }
+
+    const text = result.stdout || '';
+    log('✓', `CLI response: ${text.length.toLocaleString()} chars`);
+    return { text, tokensIn: 0, tokensOut: 0 };
 }
 
 /** Robust regex-based XML/tag tool-calling parser for Qwen and other local LLMs */
@@ -2397,8 +2602,14 @@ async function callOllamaWithTools(
                 function: {
                     name: tc.function.name,
                     arguments: typeof tc.function.arguments === 'string'
-                        ? tc.function.arguments
-                        : JSON.stringify(tc.function.arguments),
+                        ? (() => {
+                            try {
+                                return JSON.parse(tc.function.arguments);
+                            } catch {
+                                return tc.function.arguments;
+                            }
+                        })()
+                        : tc.function.arguments,
                 },
             }))
         } : {}),

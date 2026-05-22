@@ -5,10 +5,11 @@
 
 import { writeHeartbeat } from './toon.ts';
 import { log, logError } from './log.ts';
-import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
+import { slugify } from './types.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -192,6 +193,60 @@ export function getLatestDependencyItem(depSlug: string): QueueItem | null {
     return matchingItems.sort((a, b) => b.addedAt.localeCompare(a.addedAt))[0];
 }
 
+/** Check if a dependency is physically completed by searching for story files with matching slugs. */
+export function isDependencyCompleted(depSlug: string): boolean {
+    try {
+        const { getActiveProject } = require('./config.ts');
+        const project = getActiveProject();
+        if (!project || !project.path) return false;
+
+        const storiesDir = join(project.path, '.factory', 'stories');
+        const subDirs = ['done', 'features', 'apps'];
+
+        for (const subDir of subDirs) {
+            const dirPath = join(storiesDir, subDir);
+            if (!existsSync(dirPath)) continue;
+
+            const files = readdirSync(dirPath).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+            for (const file of files) {
+                const filePath = join(dirPath, file);
+                try {
+                    const raw = readFileSync(filePath, 'utf-8');
+                    const parsed = parseYaml(raw);
+                    if (!parsed) continue;
+
+                    let isMatch = false;
+                    // Check if AppStory
+                    if (parsed.appName) {
+                        const appSlug = slugify(parsed.appName);
+                        if (appSlug === depSlug) {
+                            isMatch = true;
+                        }
+                    }
+                    // Check if FeatureStory
+                    if (parsed.feature && parsed.feature.slug) {
+                        if (parsed.feature.slug === depSlug) {
+                            isMatch = true;
+                        }
+                    }
+
+                    if (isMatch) {
+                        // If it's in the 'done' folder, or its status is 'done', it's completed
+                        if (subDir === 'done' || parsed.status === 'done') {
+                            return true;
+                        }
+                    }
+                } catch {
+                    // Ignore parse/read errors for individual files
+                }
+            }
+        }
+    } catch {
+        // Ignore project loading errors
+    }
+    return false;
+}
+
 /** Check if a queue item is ready to build based on explicit and implicit dependencies. */
 export function isItemReady(item: QueueItem): { ready: boolean; reason: string | null } {
     // 1. Implicit parent AppStory dependency check for FeatureStories
@@ -227,14 +282,17 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
     const dependsOn = item.dependsOn || [];
     for (const depSlug of dependsOn) {
         const latestDep = getLatestDependencyItem(depSlug);
-        if (!latestDep) {
-            return { ready: false, reason: `Dependency "${depSlug}" is missing from the queue.` };
-        }
-        if (latestDep.status === 'failed' || latestDep.status === 'blocked') {
-            return { ready: false, reason: `Dependency "${depSlug}" (${latestDep.storyFile}) ${latestDep.status}. Cannot proceed.` };
-        }
-        if (latestDep.status === 'pending' || latestDep.status === 'running') {
-            return { ready: false, reason: `Dependency "${depSlug}" has not completed yet.` };
+        if (latestDep) {
+            if (latestDep.status === 'failed' || latestDep.status === 'blocked') {
+                return { ready: false, reason: `Dependency "${depSlug}" (${latestDep.storyFile}) ${latestDep.status}. Cannot proceed.` };
+            }
+            if (latestDep.status === 'pending' || latestDep.status === 'running') {
+                return { ready: false, reason: `Dependency "${depSlug}" has not completed yet.` };
+            }
+        } else {
+            if (!isDependencyCompleted(depSlug)) {
+                return { ready: false, reason: `Dependency "${depSlug}" is missing from the queue.` };
+            }
         }
     }
 
@@ -283,8 +341,14 @@ export function areDependenciesMet(dependsOn: string[]): boolean {
 
     for (const depSlug of dependsOn) {
         const latestDep = getLatestDependencyItem(depSlug);
-        if (!latestDep || latestDep.status !== 'completed') {
-            return false;
+        if (latestDep) {
+            if (latestDep.status !== 'completed') {
+                return false;
+            }
+        } else {
+            if (!isDependencyCompleted(depSlug)) {
+                return false;
+            }
         }
     }
 

@@ -66,6 +66,25 @@ const VALID_TABS = ['cockpit', 'dashboard', 'roadmap', 'queue', 'stories', 'skil
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showAddProject, setShowAddProject] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('factory_sidebar_collapsed');
+      if (stored !== null) {
+        setSidebarCollapsed(stored === 'true');
+      }
+    }
+  }, []);
+
+  const toggleSidebarCollapse = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('factory_sidebar_collapsed', String(next));
+    }
+  };
+
   const [stories, setStories] = useState<Story[]>([]);
   const [featureStories, setFeatureStories] = useState<FeatureStoryItem[]>([]);
   const [reportEntries, setReportEntries] = useState<any[]>([]);
@@ -536,7 +555,7 @@ export default function Dashboard() {
             </p>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+          <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
             {stories.map((story) => (
               <StoryCard
                 key={story.file}
@@ -571,7 +590,7 @@ export default function Dashboard() {
             </Badge>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+          <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
             {featureStories.map((fs) => (
               <StoryCard
                 key={fs.file}
@@ -588,63 +607,53 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Validation & Build output */}
-      {(validationResult || buildOutput) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          {validationResult && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <div className="flex items-center gap-2">
-                  {validationResult.passed ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-destructive" />
-                  )}
-                  <CardTitle className="text-sm font-bold">
-                    Validation {validationResult.passed ? 'Passed' : 'Failed'}
-                  </CardTitle>
-                </div>
-                <Badge variant={validationResult.passed ? 'default' : 'destructive'} className="text-[10px] font-bold">
-                  {validationResult.checks.filter((c) => c.passed).length}/{validationResult.checks.length}
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8"></TableHead>
-                        <TableHead className="text-xs">Check</TableHead>
-                        <TableHead className="text-xs">Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {validationResult.checks.map((check, i) => (
-                        <TableRow key={i}>
-                          <TableCell>
-                            {check.passed ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                            ) : (
-                              <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs font-medium">{check.name}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {buildOutput && (
-            <BuildLog
-              output={buildOutput}
-              isRunning={activeAction?.type === 'build'}
-            />
-          )}
-        </div>
+      {/* Validation output */}
+      {validationResult && (
+        <Card className="bg-card border-border">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div className="flex items-center gap-2">
+              {validationResult.passed ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              )}
+              <CardTitle className="text-sm font-bold">
+                Validation {validationResult.passed ? 'Passed' : 'Failed'}
+              </CardTitle>
+            </div>
+            <Badge variant={validationResult.passed ? 'default' : 'destructive'} className="text-[10px] font-bold">
+              {validationResult.checks.filter((c) => c.passed).length}/{validationResult.checks.length}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="text-xs">Check</TableHead>
+                    <TableHead className="text-xs">Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {validationResult.checks.map((check, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        {check.passed ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                          <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs font-medium">{check.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -713,9 +722,9 @@ export default function Dashboard() {
         <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={() => fetchStories()} />
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+          <div className="space-y-3">
             {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-[180px] rounded-lg" />
+              <Skeleton key={i} className="h-[64px] rounded-lg" />
             ))}
           </div>
         ) : stories.length === 0 && featureStories.length === 0 ? (
@@ -741,7 +750,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
                   {stories.map((story) => (
                     <StoryCard
                       key={story.file}
@@ -771,7 +780,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
                   {featureStories.map((fs) => (
                     <StoryCard
                       key={fs.file}
@@ -826,6 +835,8 @@ export default function Dashboard() {
         }}
         onAddProject={() => setShowAddProject(true)}
         projectRefreshKey={projectRefreshKey}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
       />
 
       <main className="flex-1 overflow-auto pt-16 md:pt-0 pb-6 md:pb-0">
@@ -911,13 +922,14 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* Output panel — desktop: sidebar, mobile: bottom sheet */}
+      {/* Output panel — desktop: slide-over overlay, mobile: bottom sheet */}
       <aside
-        className={`border-l border-border bg-background transition-all duration-300 ease-in-out overflow-hidden ${
-          outputPanelOpen && hasOutput ? 'w-[320px] md:w-[420px]' : 'w-0'
-        } md:block hidden`}
+        className={cn(
+          "fixed right-0 top-0 h-screen z-50 border-l border-border bg-background/85 backdrop-blur-md shadow-2xl transition-all duration-300 ease-in-out md:block hidden",
+          outputPanelOpen && hasOutput ? "w-[320px] md:w-[450px]" : "w-0 border-l-0 opacity-0 pointer-events-none"
+        )}
       >
-        <div className="w-[320px] md:w-[420px] h-screen flex flex-col">
+        <div className="w-[320px] md:w-[450px] h-screen flex flex-col">
           <div className="flex items-center justify-between px-3 md:px-4 py-2.5 md:py-3 border-b border-border shrink-0">
             <div className="flex items-center gap-2">
               <Terminal className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />

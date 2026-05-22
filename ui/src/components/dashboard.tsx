@@ -27,7 +27,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { FileText, Package, CheckCircle2, AlertCircle, Activity, Puzzle, Globe, ListOrdered, X, Terminal, FolderOpen, Plug, Plus, Loader2 as Spinner, Sparkles, Rocket, Compass, LayoutDashboard } from 'lucide-react';
+import { FileText, Package, CheckCircle2, AlertCircle, Activity, Puzzle, Globe, ListOrdered, X, Terminal, Plug, Plus, Loader2 as Spinner, Sparkles, Rocket, Compass, LayoutDashboard } from 'lucide-react';
 
 
 interface Story {
@@ -459,50 +459,7 @@ export default function Dashboard() {
       <div className="absolute -top-10 left-10 w-96 h-96 bg-primary/5 rounded-full filter blur-[120px] pointer-events-none -z-10" />
       <div className="absolute -top-20 right-20 w-80 h-80 bg-indigo-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
 
-      {activeProject && (
-        <Card className="bg-card border-border hover:shadow-sm transition-all duration-300 overflow-hidden relative group">
-          <CardContent className="p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-            <div className="flex items-center gap-4 md:gap-5 min-w-0">
-              <div className="relative flex h-12 w-12 md:h-14 md:w-14 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border shadow-sm group-hover:scale-105 transition-transform duration-300">
-                <FolderOpen className="h-6 w-6 md:h-7 md:w-7 text-foreground" />
-                <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                </span>
-              </div>
-              <div className="flex-1 min-w-0 space-y-1">
-                <p className="text-base md:text-lg font-black tracking-tight text-foreground truncate flex items-center gap-2 select-none">
-                  {activeProject.name}
-                  <Badge variant="outline" className="text-[10px] font-bold text-emerald-500 bg-emerald-500/5 border-emerald-500/20 uppercase px-2 tracking-wide scale-90">
-                    Active
-                  </Badge>
-                </p>
-                <p className="text-xs text-muted-foreground font-mono truncate">{activeProject.path}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 shrink-0 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBuildAll()}
-                disabled={isBuildingAll}
-                className="text-xs font-semibold h-8 px-3 gap-1.5 shadow-sm border bg-background hover:bg-muted transition-all"
-              >
-                {isBuildingAll ? <Spinner className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
-                <span>Build All</span>
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setShowStoryChat(true)}
-                className="text-xs font-semibold h-8 px-3 gap-1.5 shadow-sm transition-all"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>New Story</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
 
 
 

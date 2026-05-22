@@ -2,6 +2,8 @@
  * GET /api/app-rollup — Fetch hierarchical rollup roadmaps (App -> Features -> Stories -> Tasks)
  * POST /api/app-rollup — Update status of a task or run CLI sync
  */
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';

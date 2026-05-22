@@ -1,6 +1,8 @@
 /**
  * Queue API — list, enqueue, remove items
  */
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { join } from 'node:path';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -311,9 +313,9 @@ export async function DELETE(request: Request) {
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
     }
-    if (item.status !== 'pending') {
+    if (item.status === 'running') {
       return NextResponse.json(
-        { error: `Cannot delete ${item.status} items. Use "Clear Done" for completed items.` },
+        { error: 'Cannot delete currently running items.' },
         { status: 409 }
       );
     }

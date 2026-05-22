@@ -4,6 +4,8 @@
  * Reads stories from the active project's .factory/stories/ directory.
  * Falls back to the factory's own stories/ directory if no project is active.
  */
+export const dynamic = 'force-dynamic';
+
 import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';

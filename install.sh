@@ -19,12 +19,13 @@ STANDALONE_DIR=$(dirname "$(find ui/.next/standalone -name server.js | head -n 1
 
 # Copy standalone build to ~/.factory/ui
 echo "🚚 Copying UI from $STANDALONE_DIR to $FACTORY_DIR/ui..."
-cp -R "$STANDALONE_DIR"/. "$FACTORY_DIR/ui/"
+rsync -a --exclude=".git" "$STANDALONE_DIR/" "$FACTORY_DIR/ui/"
 if [ -d "$STANDALONE_DIR/node_modules" ]; then
-    cp -R "$STANDALONE_DIR/node_modules" "$FACTORY_DIR/ui/" 2>/dev/null || true
+    rsync -a "$STANDALONE_DIR/node_modules/" "$FACTORY_DIR/ui/node_modules/" 2>/dev/null || true
 fi
-cp -R ui/.next/static "$FACTORY_DIR/ui/.next/"
-cp -R ui/public "$FACTORY_DIR/ui/" 2>/dev/null || true
+mkdir -p "$FACTORY_DIR/ui/.next"
+rsync -a ui/.next/static "$FACTORY_DIR/ui/.next/"
+rsync -a ui/public/ "$FACTORY_DIR/ui/public/" 2>/dev/null || true
 
 # Remove "type": "module" from the copied package.json so server.js executes as CommonJS
 echo "🔧 Configuring package.json type for standalone server..."

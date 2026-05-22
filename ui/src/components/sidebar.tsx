@@ -40,7 +40,6 @@ interface SidebarProps {
 const mainNav = [
   { id: 'cockpit', label: 'Cockpit', icon: Smartphone },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'roadmap', label: 'Roadmap', icon: Compass },
   { id: 'stories', label: 'Stories', icon: FileText },
   { id: 'queue', label: 'Queue', icon: ListOrdered },
   { id: 'skills', label: 'Skills', icon: Wand2 },

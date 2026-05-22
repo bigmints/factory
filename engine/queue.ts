@@ -1,13 +1,25 @@
 /**
- * Queue manager — enqueue, dequeue, update, list build items.
- * The factory processes stories from this queue while you sleep.
+ * YAML-driven Queue manager — enqueue, dequeue, update, list build items.
+ * Replaces SQLite entirely, managing state via queue.yaml and queue_state.yaml.
  */
 
-import { getDb } from './db.ts';
 import { writeHeartbeat } from './toon.ts';
 import { log, logError } from './log.ts';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { parse as parseYaml, stringify as toYaml } from 'yaml';
+
+// ─── Paths ───────────────────────────────────────────────
+
+const FACTORY_ROOT = resolve(homedir(), '.factory');
+const QUEUE_YAML = resolve(FACTORY_ROOT, 'queue.yaml');
+const QUEUE_STATE_YAML = resolve(FACTORY_ROOT, 'queue_state.yaml');
+
+// Ensure FACTORY_ROOT exists
+if (!existsSync(FACTORY_ROOT)) {
+    mkdirSync(FACTORY_ROOT, { recursive: true });
+}
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -17,7 +29,7 @@ export interface QueueItem {
     id: string;
     storyFile: string;
     kind: 'AppStory' | 'FeatureStory';
-    status: 'pending' | 'running' | 'completed' | 'failed' | 'needs-attention';
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'needs-attention' | 'blocked';
     priority: number;
     phase: number;
     dependsOn: string[];
@@ -29,49 +41,67 @@ export interface QueueItem {
     error: string | null;
     errorCategory: 'transient' | 'permanent' | null;
     durationMs: number | null;
+    targetApp?: string; // Optional target app slug for feature stories
 }
 
-interface QueueRow {
-    id: string;
-    story_file: string;
-    kind: string;
-    status: string;
-    priority: number;
-    phase: number;
-    depends_on: string;
-    engine: string | null;
-    added_at: string;
-    started_at: string | null;
-    completed_at: string | null;
-    output: string;
-    error: string | null;
-    error_category: string | null;
-    duration_ms: number | null;
+export interface QueueState {
+    is_running: boolean;
+    last_run_at: string;
+    last_heartbeat_at: string;
+}
+
+// ─── IO Helpers ──────────────────────────────────────────
+
+function writeAtomic(filePath: string, content: string): void {
+    const tempPath = filePath + '.tmp';
+    writeFileSync(tempPath, content, 'utf-8');
+    renameSync(tempPath, filePath);
+}
+
+export function loadQueue(): QueueItem[] {
+    if (!existsSync(QUEUE_YAML)) {
+        return [];
+    }
+    try {
+        const raw = readFileSync(QUEUE_YAML, 'utf-8');
+        const parsed = parseYaml(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+export function saveQueue(queue: QueueItem[]): void {
+    writeAtomic(QUEUE_YAML, toYaml(queue, { lineWidth: 120 }));
+}
+
+export function loadQueueState(): QueueState {
+    const defaultState: QueueState = {
+        is_running: false,
+        last_run_at: '',
+        last_heartbeat_at: '',
+    };
+    if (!existsSync(QUEUE_STATE_YAML)) {
+        return defaultState;
+    }
+    try {
+        const raw = readFileSync(QUEUE_STATE_YAML, 'utf-8');
+        const parsed = parseYaml(raw) as any;
+        return {
+            is_running: parsed?.is_running === true || parsed?.is_running === 'true',
+            last_run_at: parsed?.last_run_at || '',
+            last_heartbeat_at: parsed?.last_heartbeat_at || '',
+        };
+    } catch {
+        return defaultState;
+    }
+}
+
+export function saveQueueState(state: QueueState): void {
+    writeAtomic(QUEUE_STATE_YAML, toYaml(state));
 }
 
 // ─── Helpers ─────────────────────────────────────────────
-
-function mapRow(row: QueueRow): QueueItem {
-    let dependsOn: string[] = [];
-    try { dependsOn = JSON.parse(row.depends_on || '[]'); } catch { /* empty */ }
-    return {
-        id: row.id,
-        storyFile: row.story_file,
-        kind: row.kind as QueueItem['kind'],
-        status: row.status as QueueItem['status'],
-        priority: row.priority,
-        phase: row.phase || 0,
-        dependsOn,
-        engine: (row.engine as BuildEngine) || 'factory',
-        addedAt: row.added_at,
-        startedAt: row.started_at,
-        completedAt: row.completed_at,
-        output: row.output,
-        error: row.error,
-        errorCategory: row.error_category as any,
-        durationMs: row.duration_ms,
-    };
-}
 
 function generateId(): string {
     return `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -89,28 +119,62 @@ export function enqueue(
     kind: 'AppStory' | 'FeatureStory',
     opts?: { phase?: number; dependsOn?: string[]; engine?: BuildEngine },
 ): QueueItem {
-    const db = getDb();
+    const queue = loadQueue();
     const id = generateId();
     const now = timestamp();
     const phase = opts?.phase ?? 0;
-    const dependsOn = JSON.stringify(opts?.dependsOn ?? []);
+    const dependsOn = opts?.dependsOn ?? [];
     const engine = opts?.engine ?? 'factory';
 
     // Check for duplicates
-    const existing = db.prepare(
-        `SELECT id FROM queue_items WHERE story_file = ? AND status IN ('pending', 'running')`
-    ).get(storyFile) as QueueRow | undefined;
+    const existing = queue.find(
+        item => item.storyFile === storyFile && ['pending', 'running'].includes(item.status)
+    );
 
     if (existing) {
         throw new Error(`Story "${storyFile}" is already in the queue`);
     }
 
-    db.prepare(`
-        INSERT INTO queue_items (id, story_file, kind, status, priority, phase, depends_on, engine, added_at)
-        VALUES (?, ?, ?, 'pending', 0, ?, ?, ?, ?)
-    `).run(id, storyFile, kind, phase, dependsOn, engine, now);
+    // Try to parse targetApp if feature story
+    let targetApp = '';
+    if (kind === 'FeatureStory') {
+        try {
+            const { getActiveProject } = require('./config.ts');
+            const project = getActiveProject();
+            const storyPath = resolve(project.path, '.factory', 'stories', storyFile);
+            if (existsSync(storyPath)) {
+                const raw = readFileSync(storyPath, 'utf-8');
+                const parsed = parseYaml(raw) as any;
+                targetApp = parsed?.target?.app || '';
+            }
+        } catch {
+            // ignore
+        }
+    }
 
-    return getItem(id)!;
+    const newItem: QueueItem = {
+        id,
+        storyFile,
+        kind,
+        status: 'pending',
+        priority: 0,
+        phase,
+        dependsOn,
+        engine,
+        addedAt: now,
+        startedAt: null,
+        completedAt: null,
+        output: '',
+        error: null,
+        errorCategory: null,
+        durationMs: null,
+        targetApp: targetApp || undefined,
+    };
+
+    queue.push(newItem);
+    saveQueue(queue);
+
+    return newItem;
 }
 
 /**
@@ -119,16 +183,16 @@ export function enqueue(
  * Skips items whose dependsOn stories are not all 'completed'.
  */
 export function dequeue(): QueueItem | null {
-    const db = getDb();
-    // Get all pending items in scheduling order
-    const rows = db.prepare(`
-        SELECT * FROM queue_items
-        WHERE status = 'pending'
-        ORDER BY phase ASC, priority DESC, added_at ASC
-    `).all() as QueueRow[];
+    const queue = loadQueue();
+    const pendingItems = queue
+        .filter(item => item.status === 'pending')
+        .sort((a, b) => {
+            if (a.phase !== b.phase) return a.phase - b.phase;
+            if (a.priority !== b.priority) return b.priority - a.priority;
+            return a.addedAt.localeCompare(b.addedAt);
+        });
 
-    for (const row of rows) {
-        const item = mapRow(row);
+    for (const item of pendingItems) {
         if (areDependenciesMet(item.dependsOn)) {
             return item;
         }
@@ -144,14 +208,12 @@ export function dequeue(): QueueItem | null {
 export function areDependenciesMet(dependsOn: string[]): boolean {
     if (!dependsOn || dependsOn.length === 0) return true;
 
-    const db = getDb();
+    const queue = loadQueue();
     for (const depSlug of dependsOn) {
-        // Match by story_file containing the slug (e.g., "auth-system.yaml" matches slug "auth-system")
-        const completed = db.prepare(`
-            SELECT id FROM queue_items
-            WHERE story_file LIKE ? AND status = 'completed'
-            LIMIT 1
-        `).get(`%${depSlug}%`) as QueueRow | undefined;
+        // Match by storyFile containing the slug
+        const completed = queue.some(
+            item => item.storyFile.includes(depSlug) && item.status === 'completed'
+        );
 
         if (!completed) return false;
     }
@@ -161,29 +223,29 @@ export function areDependenciesMet(dependsOn: string[]): boolean {
 
 /** Get a specific queue item by ID. */
 export function getItem(id: string): QueueItem | null {
-    const db = getDb();
-    const row = db.prepare('SELECT * FROM queue_items WHERE id = ?').get(id) as QueueRow | undefined;
-    return row ? mapRow(row) : null;
+    const queue = loadQueue();
+    return queue.find(item => item.id === id) || null;
 }
 
 /** Get all queue items, ordered by status then added time. */
 export function listQueue(): QueueItem[] {
-    const db = getDb();
-    const rows = db.prepare(`
-        SELECT * FROM queue_items
-        ORDER BY
-            CASE status
-                WHEN 'running' THEN 0
-                WHEN 'pending' THEN 1
-                WHEN 'needs-attention' THEN 2
-                WHEN 'failed' THEN 3
-                WHEN 'completed' THEN 4
-            END,
-            priority DESC,
-            added_at ASC
-    `).all() as QueueRow[];
+    const queue = loadQueue();
+    const statusOrder = {
+        'running': 0,
+        'pending': 1,
+        'needs-attention': 2,
+        'blocked': 3,
+        'failed': 4,
+        'completed': 5,
+    };
 
-    return rows.map(mapRow);
+    return queue.sort((a, b) => {
+        const orderA = statusOrder[a.status] ?? 99;
+        const orderB = statusOrder[b.status] ?? 99;
+        if (orderA !== orderB) return orderA - orderB;
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return a.addedAt.localeCompare(b.addedAt);
+    });
 }
 
 // ─── Status Updates ──────────────────────────────────────
@@ -191,26 +253,19 @@ export function listQueue(): QueueItem[] {
 /** Update a queue item's fields. */
 export function updateItem(
     id: string,
-    updates: Partial<Pick<QueueItem, 'status' | 'output' | 'error' | 'errorCategory' | 'startedAt' | 'completedAt' | 'durationMs'>>
+    updates: Partial<Pick<QueueItem, 'status' | 'output' | 'error' | 'errorCategory' | 'startedAt' | 'completedAt' | 'durationMs' | 'priority'>>
 ): QueueItem | null {
-    const db = getDb();
-    const sets: string[] = [];
-    const values: (string | number | null)[] = [];
+    const queue = loadQueue();
+    const index = queue.findIndex(item => item.id === id);
+    if (index === -1) return null;
 
-    if (updates.status !== undefined) { sets.push('status = ?'); values.push(updates.status); }
-    if (updates.output !== undefined) { sets.push('output = ?'); values.push(updates.output); }
-    if (updates.error !== undefined) { sets.push('error = ?'); values.push(updates.error); }
-    if (updates.errorCategory !== undefined) { sets.push('error_category = ?'); values.push(updates.errorCategory); }
-    if (updates.startedAt !== undefined) { sets.push('started_at = ?'); values.push(updates.startedAt); }
-    if (updates.completedAt !== undefined) { sets.push('completed_at = ?'); values.push(updates.completedAt); }
-    if (updates.durationMs !== undefined) { sets.push('duration_ms = ?'); values.push(updates.durationMs); }
+    queue[index] = {
+        ...queue[index],
+        ...updates,
+    };
+    saveQueue(queue);
 
-    if (sets.length === 0) return getItem(id);
-
-    values.push(id);
-    db.prepare(`UPDATE queue_items SET ${sets.join(', ')} WHERE id = ?`).run(...values);
-
-    return getItem(id);
+    return queue[index];
 }
 
 /** Mark an item as running. */
@@ -234,12 +289,12 @@ export function markCompleted(id: string, output: string, durationMs: number): Q
     });
 }
 
-/** Mark an item as failed — updates DB and writes failure knowledge to disk. */
+/** Mark an item as failed — updates YAML and writes failure knowledge to disk. */
 export function markFailed(id: string, error: string, output: string, durationMs: number, category?: 'transient' | 'permanent'): QueueItem | null {
     const item = updateItem(id, {
         status: 'failed',
         error,
-        errorCategory: category,
+        errorCategory: category ?? null,
         output,
         completedAt: timestamp(),
         durationMs,
@@ -277,7 +332,7 @@ export function markFailed(id: string, error: string, output: string, durationMs
         writeFileSync(filename, content);
         log('→', `Failure knowledge written: .factory/knowledge/failures/${slug}-${ts}.md`);
     } catch {
-        // Non-fatal — failure recording must never crash the daemon
+        // Non-fatal
     }
 
     return item;
@@ -285,16 +340,26 @@ export function markFailed(id: string, error: string, output: string, durationMs
 
 /** Remove a queue item. */
 export function removeItem(id: string): boolean {
-    const db = getDb();
-    const result = db.prepare('DELETE FROM queue_items WHERE id = ?').run(id);
-    return result.changes > 0;
+    const queue = loadQueue();
+    const originalLength = queue.length;
+    const filtered = queue.filter(item => item.id !== id);
+    if (filtered.length < originalLength) {
+        saveQueue(filtered);
+        return true;
+    }
+    return false;
 }
 
 /** Remove all completed items. */
 export function clearCompleted(): number {
-    const db = getDb();
-    const result = db.prepare(`DELETE FROM queue_items WHERE status = 'completed'`).run();
-    return result.changes;
+    const queue = loadQueue();
+    const originalLength = queue.length;
+    const filtered = queue.filter(item => item.status !== 'completed');
+    const removedCount = originalLength - filtered.length;
+    if (removedCount > 0) {
+        saveQueue(filtered);
+    }
+    return removedCount;
 }
 
 /** Retry a failed item — reset to pending. */
@@ -313,54 +378,39 @@ export function retryItem(id: string): QueueItem | null {
 
 /** Get queue counts by status. */
 export function getQueueStats(): Record<string, number> {
-    const db = getDb();
-    const rows = db.prepare(`
-        SELECT status, COUNT(*) as count FROM queue_items GROUP BY status
-    `).all() as { status: string; count: number }[];
-
+    const queue = loadQueue();
     const stats: Record<string, number> = {
-        pending: 0, running: 0, completed: 0, failed: 0, 'needs-attention': 0, total: 0,
+        pending: 0, running: 0, completed: 0, failed: 0, 'needs-attention': 0, blocked: 0, total: 0,
     };
-    for (const row of rows) {
-        stats[row.status] = row.count;
-        stats.total += row.count;
+    for (const item of queue) {
+        if (stats[item.status] !== undefined) {
+            stats[item.status]++;
+        }
+        stats.total++;
     }
     return stats;
 }
 
 /** Check if the queue processor is running. */
 export function isQueueRunning(): boolean {
-    const db = getDb();
-    const row = db.prepare(`SELECT value FROM queue_state WHERE key = 'is_running'`).get() as { value: string } | undefined;
-    return row?.value === 'true';
+    const state = loadQueueState();
+    return state.is_running;
 }
 
 /** Set the queue running state. */
 export function setQueueRunning(running: boolean): void {
-    const db = getDb();
-    db.prepare(`UPDATE queue_state SET value = ? WHERE key = 'is_running'`).run(running ? 'true' : 'false');
+    const state = loadQueueState();
+    state.is_running = running;
     if (running) {
-        db.prepare(`UPDATE queue_state SET value = ? WHERE key = 'last_run_at'`).run(timestamp());
+        state.last_run_at = timestamp();
     }
-}
-
-// ─── Heartbeat Integration ───────────────────────────────
-
-/** Write heartbeat when a build starts. Wrapped in try/catch so it never breaks the queue. */
-function writeHeartbeatOnStart(projectPath: string): void {
-    try {
-        import('./toon.ts').then(({ writeHeartbeat }) => {
-            writeHeartbeat(projectPath, 'queue: build started');
-        }).catch(() => { /* ignore */ });
-    } catch { /* ignore */ }
+    saveQueueState(state);
 }
 
 // ─── Daemon Mode ─────────────────────────────────────────
 
 /**
  * Start the queue daemon — persistent watch loop.
- * Processes all pending items, then polls SQLite every 30s for new items.
- * Never exits unless killed (SIGTERM/SIGINT).
  */
 export async function startQueueDaemon(): Promise<void> {
     let running = true;

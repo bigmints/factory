@@ -1,20 +1,9 @@
-import { homedir } from 'node:os';
 /**
  * Queue Clear API — delete ALL queue items regardless of status
  */
-
 import { NextResponse } from 'next/server';
-import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
-import Database from 'better-sqlite3';
-
-const DB_PATH = resolve(homedir(), '.factory', 'factory.db');
-
-function getDb() {
-  const db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  return db;
-}
+import { saveQueue, setQueueRunning, loadQueue } from '@engine/queue';
 
 /** POST — clear entire queue */
 export async function POST() {
@@ -27,17 +16,16 @@ export async function POST() {
       // pkill returns non-zero if no processes found
     }
 
-    const db = getDb();
+    const queue = loadQueue();
+    const count = queue.length;
 
-    const count = db.prepare(`SELECT COUNT(*) as c FROM queue_items`).get() as { c: number };
-    db.prepare(`DELETE FROM queue_items`).run();
-    db.prepare(`UPDATE queue_state SET value = 'false' WHERE key = 'is_running'`).run();
-
-    db.close();
+    // Direct atomic YAML write of empty array
+    saveQueue([]);
+    setQueueRunning(false);
 
     return NextResponse.json({
-      cleared: count.c,
-      message: `Cleared ${count.c} item(s) from queue`,
+      cleared: count,
+      message: `Cleared ${count} item(s) from queue`,
     });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });

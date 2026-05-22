@@ -1,10 +1,10 @@
-import { homedir } from 'node:os';
 /**
  * GET /api/stories — List all story files (app stories + feature stories)
  *
  * Reads stories from the active project's .factory/stories/ directory.
  * Falls back to the factory's own stories/ directory if no project is active.
  */
+import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -28,7 +28,7 @@ function sanitizeYaml(raw: string): { content: string; fixed: boolean } {
 /**
  * Resolve the stories directories — active project's .factory/stories/.
  */
-function getStoriesDirs(): { apps: string; features: string; source: string } {
+function getStoriesDirs(): { apps: string; features: string; done: string; source: string } {
   try {
     const projectsPath = join(FACTORY_ROOT, 'projects.json');
     if (existsSync(projectsPath)) {
@@ -40,9 +40,11 @@ function getStoriesDirs(): { apps: string; features: string; source: string } {
         if (project) {
           const projectApps = join(project.path, '.factory', 'stories', 'apps');
           const projectFeatures = join(project.path, '.factory', 'stories', 'features');
+          const projectDone = join(project.path, '.factory', 'stories', 'done');
           return {
             apps: projectApps,
             features: projectFeatures,
+            done: projectDone,
             source: project.name,
           };
         }
@@ -50,15 +52,17 @@ function getStoriesDirs(): { apps: string; features: string; source: string } {
     }
   } catch {}
 
-  return { apps: '', features: '', source: 'none' };
+  return { apps: '', features: '', done: '', source: 'none' };
 }
 
 export async function GET() {
   try {
-    const { apps: APPS_DIR, features: FEATURES_DIR, source } = getStoriesDirs();
+    const { apps: APPS_DIR, features: FEATURES_DIR, done: DONE_DIR, source } = getStoriesDirs();
+
+    let stories: any[] = [];
+    let featureStories: any[] = [];
 
     // App stories
-    let stories: any[] = [];
     if (APPS_DIR && existsSync(APPS_DIR)) {
       const appFiles = readdirSync(APPS_DIR).filter(
         (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
@@ -71,7 +75,7 @@ export async function GET() {
           if (fixed) {
             try { writeFileSync(join(APPS_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
           }
-          const parsed = parseYaml(sanitized);
+          const parsed = parseYaml(sanitized) as any;
           return {
             file,
             kind: 'AppStory' as const,
@@ -90,7 +94,6 @@ export async function GET() {
     }
 
     // Feature stories
-    let featureStories: any[] = [];
     if (FEATURES_DIR && existsSync(FEATURES_DIR)) {
       const featureFiles = readdirSync(FEATURES_DIR).filter(
         (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
@@ -103,7 +106,7 @@ export async function GET() {
           if (fixed) {
             try { writeFileSync(join(FEATURES_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
           }
-          const parsed = parseYaml(sanitized);
+          const parsed = parseYaml(sanitized) as any;
           return {
             file: `features/${file}`,
             kind: 'FeatureStory' as const,
@@ -121,6 +124,56 @@ export async function GET() {
           return { file: `features/${file}`, kind: 'FeatureStory' as const, valid: false, error: 'Failed to parse' };
         }
       });
+    }
+
+    // Completed/Done stories in 'done' directory
+    if (DONE_DIR && existsSync(DONE_DIR)) {
+      const doneFiles = readdirSync(DONE_DIR).filter(
+        (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
+      );
+
+      for (const file of doneFiles) {
+        try {
+          const raw = readFileSync(join(DONE_DIR, file), 'utf-8');
+          const { content: sanitized, fixed } = sanitizeYaml(raw);
+          if (fixed) {
+            try { writeFileSync(join(DONE_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
+          }
+          const parsed = parseYaml(sanitized) as any;
+
+          // Determine if it is a FeatureStory or AppStory
+          const isFeature = parsed && (parsed.feature || parsed.target || 'phase' in parsed);
+          if (isFeature) {
+            featureStories.push({
+              file: `done/${file}`,
+              kind: 'FeatureStory' as const,
+              valid: true,
+              feature: parsed.feature || {},
+              target: parsed.target || {},
+              status: parsed.status || 'unknown',
+              pages: parsed.pages || [],
+              model: parsed.model || {},
+              navigation: parsed.navigation || {},
+              phase: parsed.phase ?? 0,
+              dependsOn: parsed.dependsOn ?? [],
+            });
+          } else {
+            stories.push({
+              file: `done/${file}`,
+              kind: 'AppStory' as const,
+              valid: true,
+              metadata: parsed.metadata || {},
+              status: parsed.status || 'unknown',
+              deployment: parsed.deployment || {},
+              database: parsed.database || {},
+              api: parsed.api || {},
+              features: parsed.features || {},
+            });
+          }
+        } catch {
+          featureStories.push({ file: `done/${file}`, kind: 'FeatureStory' as const, valid: false, error: 'Failed to parse' });
+        }
+      }
     }
 
     return NextResponse.json({ stories, featureStories, source });

@@ -4,15 +4,13 @@
  * GET /api/queue/log?offset=N
  * Returns { log: string, offset: number, done: boolean }
  */
-
 import { NextResponse } from 'next/server';
 import { resolve } from 'node:path';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { homedir } from 'node:os';
-import Database from 'better-sqlite3';
+import { isQueueRunning, loadQueue } from '@engine/queue';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
-const DB_PATH = resolve(FACTORY_ROOT, 'factory.db');
 const LOG_FILE = resolve(FACTORY_ROOT, 'factory-build.log');
 
 export async function GET(request: Request) {
@@ -32,29 +30,25 @@ export async function GET(request: Request) {
         let log = '';
         if (offset < fileSize) {
             const buf = Buffer.alloc(fileSize - offset);
-            const fd = require('node:fs').openSync(LOG_FILE, 'r');
-            require('node:fs').readSync(fd, buf, 0, buf.length, offset);
-            require('node:fs').closeSync(fd);
+            const fd = openSync(LOG_FILE, 'r');
+            readSync(fd, buf, 0, buf.length, offset);
+            closeSync(fd);
             log = buf.toString('utf-8');
         }
 
         // Strip ANSI codes for clean display
         const cleanLog = log.replace(/\x1b\[[0-9;]*m/g, '');
 
-        // Check if queue is still running
+        // Check if queue is still running in a database-free way
         let done = true;
         try {
-            const db = new Database(DB_PATH);
-            db.pragma('journal_mode = WAL');
-            const state = db.prepare(
-                `SELECT value FROM queue_state WHERE key = 'is_running'`
-            ).get() as { value: string } | undefined;
-            const running = db.prepare(
-                `SELECT COUNT(*) as c FROM queue_items WHERE status = 'running'`
-            ).get() as { c: number };
-            done = state?.value !== 'true' && running.c === 0;
-            db.close();
-        } catch { /* if DB errors, assume done */ }
+            const isRunning = isQueueRunning();
+            const queue = loadQueue();
+            const runningCount = queue.filter(item => item.status === 'running').length;
+            done = !isRunning && runningCount === 0;
+        } catch { 
+            /* assume done on errors */
+        }
 
         return NextResponse.json({
             log: cleanLog,

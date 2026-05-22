@@ -970,7 +970,7 @@ Commands:
   feature build <story.yaml> [--engine worker]  Build a feature
   feature validate <story.yaml>  Validate a feature story
 
-  app sync [<yaml-path>]        Sync app roadmap and statuses with DB and spec file
+   app sync [<yaml-path>]        Sync app roadmap and statuses with app.yaml roadmap spec
   app list                      List all synced apps
   app status [<app-id>]         Show full hierarchical status tree and progress
 
@@ -1095,35 +1095,15 @@ async function handleTask(): Promise<void> {
 
     if (subcommand === 'start' || subcommand === 'complete' || subcommand === 'fail') {
         if (taskId) {
-            const { getDb } = await import('./db.ts');
-            const db = getDb();
-            // Look up task in SQLite db: either exact match or matches suffix :taskId
-            const task = db.prepare('SELECT id, story_id FROM tasks WHERE id = ? OR id LIKE ?').get(taskId, `%:${taskId}`) as { id: string; story_id: string } | undefined;
-            if (task) {
-                const newStatus = subcommand === 'start' ? 'running' : subcommand === 'complete' ? 'completed' : 'failed';
-                db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run(newStatus, task.id);
-                log('✓', `Updated task ${task.id} to ${newStatus}`);
-
-                // Sync back to app.yaml if exists
-                const parts = task.id.split(':');
-                if (parts.length >= 4) {
-                    const appSlug = parts[0];
-                    const appRow = db.prepare('SELECT id, name FROM apps WHERE id = ?').get(appSlug) as { id: string; name: string } | undefined;
-                    if (appRow) {
-                        try {
-                            const project = getActiveProject();
-                            const yamlPath = resolve(project.path, '.factory', 'app.yaml');
-                            if (existsSync(yamlPath)) {
-                                const { syncAppRoadmap } = await import('./rollup.ts');
-                                await syncAppRoadmap(yamlPath);
-                            }
-                        } catch (err: any) {
-                            log('!', `Could not sync YAML: ${err?.message || err}`);
-                        }
-                    }
-                }
-                return;
+            const newStatus = subcommand === 'start' ? 'running' : subcommand === 'complete' ? 'completed' : 'failed';
+            try {
+                const { updateTaskStatus } = await import('./rollup.ts');
+                await updateTaskStatus(taskId, newStatus);
+                log('✓', `Updated task ${taskId} to ${newStatus}`);
+            } catch (err: any) {
+                log('!', `Could not update task status: ${err?.message || err}`);
             }
+            return;
         }
     }
 
@@ -1194,7 +1174,7 @@ async function handleAppCommand(): Promise<void> {
         const { getAppRollup } = await import('./rollup.ts');
         const data = getAppRollup(appId);
         if (!data) {
-            logError(`App with ID "${appId}" not found in database. Did you run "factory app sync" first?`);
+            logError(`App with ID "${appId}" not found in app.yaml roadmap. Did you run "factory app sync" first?`);
             process.exit(1);
         }
 
@@ -1251,15 +1231,30 @@ async function handleAppCommand(): Promise<void> {
     } else if (subcommand === 'list') {
         logHeader('Synced Apps');
         try {
-            const { getDb } = await import('./db.ts');
-            const db = getDb();
-            const rows = db.prepare('SELECT id, name, version, status FROM apps').all() as any[];
-            if (rows.length === 0) {
-                console.log('No synced apps found. Run "factory app sync [yaml-path]" first.');
-            } else {
-                for (const r of rows) {
-                    console.log(`  ● \x1b[1m${r.name}\x1b[0m (ID: ${r.id}) [v${r.version}] - status: ${r.status}`);
+            const { loadProjects } = await import('./config.ts');
+            const { parse: parseYaml } = await import('yaml');
+            const { readFileSync, existsSync } = await import('node:fs');
+            const projectsConfig = loadProjects();
+            let count = 0;
+            for (const project of projectsConfig.projects) {
+                const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+                if (existsSync(yamlPath)) {
+                    try {
+                        const raw = readFileSync(yamlPath, 'utf-8');
+                        const app = parseYaml(raw) as any;
+                        if (app && app.name) {
+                            const version = app.version || '1.0.0';
+                            const status = app.status || 'draft';
+                            console.log(`  ● \x1b[1m${app.name}\x1b[0m (ID: ${project.id}) [v${version}] - status: ${status} (Path: ${project.path})`);
+                            count++;
+                        }
+                    } catch {
+                        // ignore bad YAML files
+                    }
                 }
+            }
+            if (count === 0) {
+                console.log('No synced apps found. Run "factory app sync [yaml-path]" first.');
             }
         } catch (e: any) {
             logError(`Failed to list apps: ${e?.message || e}`);

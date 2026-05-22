@@ -31,10 +31,26 @@ function resolveStoryFile(storyFile: string): string {
         );
         if (project) {
           const isFeature = storyFile.startsWith('features/');
-          const subdir = isFeature ? 'features' : 'apps';
-          const cleanFile = isFeature ? storyFile.replace(/^features\//, '') : storyFile;
+          const isDone = storyFile.startsWith('done/');
+          const subdir = isFeature ? 'features' : isDone ? 'done' : 'apps';
+          const cleanFile = isFeature 
+            ? storyFile.replace(/^features\//, '') 
+            : isDone 
+            ? storyFile.replace(/^done\//, '') 
+            : storyFile;
           const projectPath = join(project.path, '.factory', 'stories', subdir, cleanFile);
           if (existsSync(projectPath)) return projectPath;
+
+          // Candidate checks
+          const candidates = [
+            join(project.path, '.factory', 'stories', 'apps', storyFile),
+            join(project.path, '.factory', 'stories', 'features', storyFile),
+            join(project.path, '.factory', 'stories', 'done', storyFile),
+            join(project.path, '.factory', 'stories', storyFile),
+          ];
+          for (const candidate of candidates) {
+            if (existsSync(candidate)) return candidate;
+          }
         }
       }
     }

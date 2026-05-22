@@ -2,8 +2,7 @@
  * Health & Self-Healing — monitoring and recovery for the factory engine.
  */
 
-import { getDb } from './db.ts';
-import { timestamp, updateItem } from './queue.ts';
+import { timestamp, updateItem, loadQueue, loadQueueState, saveQueueState } from './queue.ts';
 import { log } from './log.ts';
 
 /**
@@ -12,25 +11,24 @@ import { log } from './log.ts';
  * 2. Find any tasks stuck in 'running' and reset them to 'pending'.
  */
 export function performStateAudit(): void {
-    const db = getDb();
-    
     // 1. Check for stale is_running flag
-    const state = db.prepare(`SELECT value FROM queue_state WHERE key = 'is_running'`).get() as { value: string } | undefined;
-    const lastHeartbeat = db.prepare(`SELECT value FROM queue_state WHERE key = 'last_heartbeat_at'`).get() as { value: string } | undefined;
+    const state = loadQueueState();
     
-    if (state?.value === 'true' && lastHeartbeat?.value) {
-        const lastHbTime = new Date(lastHeartbeat.value).getTime();
+    if (state.is_running && state.last_heartbeat_at) {
+        const lastHbTime = new Date(state.last_heartbeat_at).getTime();
         const now = Date.now();
         const HEARTBEAT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
         
         if (now - lastHbTime > HEARTBEAT_TIMEOUT) {
             log('🔧', 'Detected stale queue runner (no heartbeat) — resetting state');
-            db.prepare(`UPDATE queue_state SET value = 'false' WHERE key = 'is_running'`).run();
+            state.is_running = false;
+            saveQueueState(state);
         }
     }
 
     // 2. Find zombie tasks ('running' but runner isn't active)
-    const runningTasks = db.prepare(`SELECT id, story_file FROM queue_items WHERE status = 'running'`).all() as { id: string, story_file: string }[];
+    const queue = loadQueue();
+    const runningTasks = queue.filter(item => item.status === 'running');
     
     if (runningTasks.length > 0) {
         log('🔧', `Found ${runningTasks.length} interrupted task(s) — resetting to pending`);
@@ -40,7 +38,7 @@ export function performStateAudit(): void {
                 startedAt: null, 
                 error: 'Interrupted by process exit' 
             });
-            log('↻', `  Reset: ${task.story_file}`);
+            log('↻', `  Reset: ${task.storyFile}`);
         }
     }
 }
@@ -49,8 +47,9 @@ export function performStateAudit(): void {
  * Update the heartbeat timestamp in the database.
  */
 export function updateHeartbeat(): void {
-    const db = getDb();
-    db.prepare(`UPDATE queue_state SET value = ? WHERE key = 'last_heartbeat_at'`).run(timestamp());
+    const state = loadQueueState();
+    state.last_heartbeat_at = timestamp();
+    saveQueueState(state);
 }
 
 /**

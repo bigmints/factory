@@ -4,16 +4,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { Sidebar, MobileNav } from '@/components/sidebar';
 import { AddProject } from '@/components/add-project';
-import { StoryCard } from '@/components/story-card';
-import { StoryEditor } from '@/components/story-editor';
-import { StoryChat } from '@/components/story-chat';
 import { BuildLog } from '@/components/build-log';
 import { ReportViewer } from '@/components/report-viewer';
-import { QueueView } from '@/components/queue-view';
 import { KnowledgeView } from '@/components/knowledge-view';
 import { SettingsView } from '@/components/settings-view';
 import { SkillsView } from '@/components/skills-view';
-import { AppDashboard } from '@/components/app-dashboard';
+import { NotionBoard } from '@/components/notion-board';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import {
@@ -452,166 +448,7 @@ export default function Dashboard() {
     finally { setIsBuildingAll(false); }
   };
 
-  // ─── Render: Dashboard ──────────────────────────────────
-  const renderDashboard = () => (
-    <div className="space-y-6 md:space-y-10 relative">
-      {/* Decorative subtle background glows */}
-      <div className="absolute -top-10 left-10 w-96 h-96 bg-primary/5 rounded-full filter blur-[120px] pointer-events-none -z-10" />
-      <div className="absolute -top-20 right-20 w-80 h-80 bg-indigo-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
-
-
-
-
-
-      <div className="animate-in fade-in duration-300">
-        <AppDashboard />
-      </div>
-    </div>
-  );
-
-  // ─── Render: Stories ────────────────────────────────────
-  const renderStories = () => {
-    if (editingStory) {
-      return (
-        <StoryEditor
-          storyFile={editingStory.file}
-          storyName={editingStory.name}
-          onClose={() => setEditingStory(null)}
-          onSaved={() => fetchStories()}
-        />
-      );
-    }
-
-    return (
-      <div className="space-y-8">
-        {/* Header row & control bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-muted border border-border p-4 rounded-lg">
-          <div className="flex flex-wrap items-center gap-4 text-xs md:text-sm text-muted-foreground">
-            <span className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-              <span className="font-bold text-foreground">{stories.length}</span> App Stories
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-purple-500" />
-              <span className="font-bold text-foreground">{featureStories.length}</span> Feature Stories
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center border rounded-lg h-9 overflow-x-auto text-xs bg-background p-1 shrink-0">
-              <span className="text-[10px] text-muted-foreground font-bold px-2 uppercase tracking-wider">Engine:</span>
-              <button
-                className={`px-3 py-1 rounded-md transition-all text-[11px] font-semibold shrink-0 ${buildEngine === 'factory' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
-                onClick={() => setBuildEngine('factory')}
-              >
-                Factory
-              </button>
-            </div>
-            
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleBuildAll}
-              disabled={isBuildingAll || (stories.length === 0 && featureStories.length === 0)}
-              className="h-9 text-xs gap-1.5 rounded-lg border hover:bg-muted font-semibold"
-            >
-              {isBuildingAll ? <Spinner className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
-              <span>Build All</span>
-            </Button>
-            
-            <Button
-              size="sm"
-              onClick={() => setShowStoryChat(true)}
-              className="h-9 text-xs gap-1.5 rounded-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>New Story</span>
-            </Button>
-          </div>
-        </div>
-
-        <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={() => fetchStories()} />
-
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-[64px] rounded-lg" />
-            ))}
-          </div>
-        ) : stories.length === 0 && featureStories.length === 0 ? (
-          <Card className="border-dashed p-6 sm:p-10 text-center flex flex-col items-center justify-center">
-            <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-            <p className="text-sm font-semibold text-foreground">No stories found</p>
-            <p className="text-xs text-muted-foreground mt-1.5 max-w-xs mx-auto leading-relaxed">
-              Add YAML files to stories/apps/ or stories/features/ to get started
-            </p>
-          </Card>
-        ) : (
-          <div className="space-y-8 md:space-y-10">
-            {/* App Stories Section */}
-            {stories.length > 0 && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <h3 className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    App Stories
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Core backend structure, schemas, and cloud resources.
-                  </p>
-                </div>
-                
-                <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
-                  {stories.map((story) => (
-                    <StoryCard
-                      key={story.file}
-                      story={story}
-                      onValidate={handleValidate}
-                      onBuild={handleBuild}
-                      onEnqueue={handleEnqueue}
-                      onView={(file, name) => setEditingStory({ file, name })}
-                      isValidating={activeAction?.type === 'validate' && activeAction?.file === story.file}
-                      isBuilding={activeAction?.type === 'build' && activeAction?.file === story.file}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Feature Stories Section */}
-            {featureStories.length > 0 && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <h3 className="text-base md:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <Puzzle className="h-4 w-4 text-muted-foreground" />
-                    Feature Stories
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Sequenced features, UI pages, logic flows, and user experiences.
-                  </p>
-                </div>
-                
-                <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
-                  {featureStories.map((fs) => (
-                    <StoryCard
-                      key={fs.file}
-                      story={{ ...fs, kind: 'FeatureStory' }}
-                      onValidate={(file) => handleFeatureAction(file, 'validate')}
-                      onBuild={(file) => handleFeatureAction(file, 'build')}
-                      onEnqueue={handleEnqueue}
-                      onView={(file, name) => setEditingStory({ file, name })}
-                      isValidating={activeAction?.type === 'feature-validate' && activeAction?.file === fs.file}
-                      isBuilding={activeAction?.type === 'feature-build' && activeAction?.file === fs.file}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+  // Removed old render functions - fully replaced by NotionBoard
 
   // ─── Render: Reports ────────────────────────────────────
   const renderReports = () => (
@@ -665,7 +502,7 @@ export default function Dashboard() {
         ) : (
           <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto">
             {/* Page header */}
-            {['dashboard', 'stories', 'skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
+            {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
               <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                 <div>
                   <h1 className="text-xl md:text-2xl font-bold tracking-tight">
@@ -705,15 +542,9 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'dashboard' && renderDashboard()}
-            {activeTab === 'queue' && (
-              <QueueView
-                onToggleOutput={() => setOutputPanelOpen(!outputPanelOpen)}
-                outputPanelOpen={outputPanelOpen}
-                queueRunning={queueRunning}
-              />
-            )}
-            {activeTab === 'stories' && renderStories()}
+            {activeTab === 'dashboard' && <NotionBoard initialView="board" />}
+            {activeTab === 'queue' && <NotionBoard initialView="queue" />}
+            {activeTab === 'stories' && <NotionBoard initialView="list" />}
             {activeTab === 'skills' && <SkillsView />}
             {activeTab === 'reports' && renderReports()}
             {activeTab === 'knowledge' && <KnowledgeView />}

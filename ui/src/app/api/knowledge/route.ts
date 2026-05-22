@@ -1,61 +1,8 @@
-import { homedir } from 'node:os';
 /**
  * Knowledge API — retrieve build history, search, and aggregate stats.
  */
-
 import { NextResponse } from 'next/server';
-import { resolve } from 'node:path';
-import Database from 'better-sqlite3';
-
-const DB_PATH = resolve(homedir(), '.factory', 'factory.db');
-
-function getDb() {
-  const db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-
-  // Ensure table info column renaming migration
-  try {
-    const cols = db.prepare(`PRAGMA table_info(builds)`).all() as { name: string }[];
-    const colNames = new Set(cols.map((c) => c.name));
-    if (colNames.has('spec_file') && !colNames.has('story_file')) {
-      db.exec(`ALTER TABLE builds RENAME COLUMN spec_file TO story_file`);
-    }
-  } catch {}
-
-  // Ensure tables exist
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS builds (
-      id TEXT PRIMARY KEY,
-      story_file TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      timestamp TEXT NOT NULL,
-      duration_ms INTEGER,
-      status TEXT NOT NULL,
-      files_generated TEXT DEFAULT '[]',
-      validation_result TEXT,
-      output TEXT DEFAULT '',
-      notes TEXT DEFAULT ''
-    );
-  `);
-
-  // Safely add new columns if missing
-  const cols = db.prepare(`PRAGMA table_info(builds)`).all() as { name: string }[];
-  const colNames = new Set(cols.map((c) => c.name));
-  const migrations: [string, string][] = [
-    ['model', 'TEXT'],
-    ['provider', 'TEXT'],
-    ['tokens_in', 'INTEGER DEFAULT 0'],
-    ['tokens_out', 'INTEGER DEFAULT 0'],
-    ['error_source', 'TEXT'],
-  ];
-  for (const [col, type] of migrations) {
-    if (!colNames.has(col)) {
-      db.exec(`ALTER TABLE builds ADD COLUMN ${col} ${type}`);
-    }
-  }
-
-  return db;
-}
+import { getBuildLogs } from '@engine/db';
 
 /** GET — retrieve build history + aggregate stats */
 export async function GET(request: Request) {
@@ -63,97 +10,115 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const storyFile = url.searchParams.get('storyFile') || url.searchParams.get('specFile');
     const query = url.searchParams.get('q');
-    const limit = parseInt(url.searchParams.get('limit') || '50');
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
 
-    const db = getDb();
+    const allLogs = getBuildLogs();
 
-    let rows: any[];
+    let rows = allLogs;
 
+    // Filter by query
     if (query) {
-      // Full-text search if FTS table exists
-      try {
-        rows = db.prepare(`
-          SELECT builds.* FROM builds_fts
-          JOIN builds ON builds.rowid = builds_fts.rowid
-          WHERE builds_fts MATCH ?
-          ORDER BY rank
-          LIMIT ?
-        `).all(query, limit);
-      } catch {
-        // FTS table might not exist yet — fallback to LIKE search
-        rows = db.prepare(`
-          SELECT * FROM builds
-          WHERE story_file LIKE ? OR output LIKE ? OR notes LIKE ?
-          ORDER BY timestamp DESC
-          LIMIT ?
-        `).all(`%${query}%`, `%${query}%`, `%${query}%`, limit);
-      }
+      const q = query.toLowerCase();
+      rows = allLogs.filter(log =>
+        (log.storyFile || '').toLowerCase().includes(q) ||
+        (log.output || '').toLowerCase().includes(q) ||
+        (log.notes || '').toLowerCase().includes(q)
+      );
     } else if (storyFile) {
-      rows = db.prepare(`
-        SELECT * FROM builds WHERE story_file = ? ORDER BY timestamp DESC LIMIT ?
-      `).all(storyFile, limit);
-    } else {
-      rows = db.prepare(`
-        SELECT * FROM builds ORDER BY timestamp DESC LIMIT ?
-      `).all(limit);
+      rows = allLogs.filter(log => log.storyFile === storyFile);
     }
 
-    // Core stats
-    const total = db.prepare('SELECT COUNT(*) as count FROM builds').get() as { count: number };
-    const successful = db.prepare(`SELECT COUNT(*) as count FROM builds WHERE status = 'completed'`).get() as { count: number };
-    const failed = db.prepare(`SELECT COUNT(*) as count FROM builds WHERE status = 'failed'`).get() as { count: number };
-    const unique = db.prepare('SELECT COUNT(DISTINCT story_file) as count FROM builds').get() as { count: number };
+    // Limit the results
+    const limitedRows = rows.slice(0, limit);
 
-    // Token stats
-    const tokenStats = db.prepare(`
-      SELECT 
-        COALESCE(SUM(tokens_in), 0) as total_tokens_in,
-        COALESCE(SUM(tokens_out), 0) as total_tokens_out,
-        COALESCE(AVG(duration_ms), 0) as avg_duration_ms
-      FROM builds
-    `).get() as { total_tokens_in: number; total_tokens_out: number; avg_duration_ms: number };
+    // Compute stats on ALL logs
+    const totalCount = allLogs.length;
+    const successfulCount = allLogs.filter(log => log.status === 'completed').length;
+    const failedCount = allLogs.filter(log => log.status === 'failed').length;
+    const uniqueStoriesCount = new Set(allLogs.map(log => log.storyFile)).size;
+
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
+    let totalDurationMs = 0;
+
+    for (const log of allLogs) {
+      totalTokensIn += log.tokensIn || 0;
+      totalTokensOut += log.tokensOut || 0;
+      totalDurationMs += log.durationMs || 0;
+    }
+
+    const avgDurationMs = totalCount > 0 ? Math.round(totalDurationMs / totalCount) : 0;
 
     // Model usage breakdown
-    const modelUsage = db.prepare(`
-      SELECT model, provider, COUNT(*) as count,
-        COALESCE(SUM(tokens_in), 0) as tokens_in,
-        COALESCE(SUM(tokens_out), 0) as tokens_out
-      FROM builds WHERE model IS NOT NULL
-      GROUP BY model, provider
-      ORDER BY count DESC
-    `).all() as { model: string; provider: string; count: number; tokens_in: number; tokens_out: number }[];
+    const usageMap = new Map<string, { model: string; provider: string; count: number; tokens_in: number; tokens_out: number }>();
+    for (const log of allLogs) {
+      if (log.model) {
+        const providerName = log.provider || 'unknown';
+        const key = `${providerName}:${log.model}`;
+        let existing = usageMap.get(key);
+        if (!existing) {
+          existing = { model: log.model, provider: providerName, count: 0, tokens_in: 0, tokens_out: 0 };
+          usageMap.set(key, existing);
+        }
+        existing.count++;
+        existing.tokens_in += log.tokensIn || 0;
+        existing.tokens_out += log.tokensOut || 0;
+      }
+    }
+    const modelUsage = Array.from(usageMap.values()).sort((a, b) => b.count - a.count);
 
     // Error breakdown
-    const errorBreakdown = db.prepare(`
-      SELECT error_source, COUNT(*) as count
-      FROM builds WHERE status = 'failed' AND error_source IS NOT NULL
-      GROUP BY error_source
-    `).all() as { error_source: string; count: number }[];
+    const errorMap = new Map<string, number>();
+    for (const log of allLogs) {
+      if (log.status === 'failed' && log.errorSource) {
+        errorMap.set(log.errorSource, (errorMap.get(log.errorSource) || 0) + 1);
+      }
+    }
+    const errorBreakdown = Array.from(errorMap.entries()).map(([error_source, count]) => ({
+      error_source,
+      count
+    }));
 
-    db.close();
-
-    // Parse files_generated JSON and expose new fields
-    const entries = rows.map((row: any) => ({
-      ...row,
-      storyFile: row.story_file || row.spec_file,
-      specFile: row.story_file || row.spec_file,
-      story_file: row.story_file || row.spec_file,
-      spec_file: row.story_file || row.spec_file,
+    // Map to API backward-compatible response fields
+    const entries = limitedRows.map((row) => ({
+      id: row.id,
+      storyFile: row.storyFile,
+      specFile: row.storyFile,
+      story_file: row.storyFile,
+      spec_file: row.storyFile,
+      kind: row.kind,
+      timestamp: row.timestamp,
+      durationMs: row.durationMs,
+      duration_ms: row.durationMs,
+      status: row.status,
+      filesGenerated: row.filesGenerated || [],
+      files_generated: JSON.stringify(row.filesGenerated || []),
+      output: row.output,
       summary: row.output || '',
-      filesGenerated: JSON.parse(row.files_generated || '[]'),
+      notes: row.notes,
+      model: row.model,
+      provider: row.provider,
+      tokensIn: row.tokensIn,
+      tokensOut: row.tokensOut,
+      tokens_in: row.tokensIn,
+      tokens_out: row.tokensOut,
+      errorSource: row.errorSource,
+      error_source: row.errorSource,
+      errorCategory: row.errorCategory,
+      engine: row.engine
     }));
 
     return NextResponse.json({
       entries,
       stats: {
-        totalBuilds: total.count,
-        successfulBuilds: successful.count,
-        failedBuilds: failed.count,
-        uniqueStories: unique.count,
-        uniqueSpecs: unique.count,
-        totalTokensIn: tokenStats.total_tokens_in,
-        totalTokensOut: tokenStats.total_tokens_out,
-        avgDurationMs: Math.round(tokenStats.avg_duration_ms),
+        totalBuilds: totalCount,
+        successfulBuilds: successfulCount,
+        failedBuilds: failedCount,
+        uniqueStories: uniqueStoriesCount,
+        uniqueSpecs: uniqueStoriesCount,
+        totalTokensIn,
+        totalTokensOut,
+        avgDurationMs,
         modelUsage,
         errorBreakdown,
       },

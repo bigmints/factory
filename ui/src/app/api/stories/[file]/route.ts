@@ -39,9 +39,14 @@ function resolveStoryPath(file: string): string | null {
   if (existsSync(appsPath)) return appsPath;
 
   // Match in features/
-  const cleaned = file.replace(/^features\//, '');
-  const featuresPath = join(base, 'features', cleaned);
+  const cleanedFeatures = file.replace(/^features\//, '');
+  const featuresPath = join(base, 'features', cleanedFeatures);
   if (existsSync(featuresPath)) return featuresPath;
+
+  // Match in done/
+  const cleanedDone = file.replace(/^done\//, '');
+  const donePath = join(base, 'done', cleanedDone);
+  if (existsSync(donePath)) return donePath;
 
   return null;
 }

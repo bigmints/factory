@@ -22,7 +22,11 @@ import {
   Filter,
   User,
   Tag,
-  Columns
+  Columns,
+  Play,
+  Square,
+  ExternalLink,
+  Terminal
 } from 'lucide-react';
 
 interface Task {
@@ -102,6 +106,85 @@ export function AppDashboard() {
     parentFeature?: FeatureEpic;
   } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Run App states
+  const [runStatus, setRunStatus] = useState<'stopped' | 'starting' | 'running'>('stopped');
+  const [runPid, setRunPid] = useState<number | null>(null);
+  const [runPort, setRunPort] = useState<number | null>(null);
+  const [runLogs, setRunLogs] = useState<string>('');
+  const [showLogsPanel, setShowLogsPanel] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+
+  const fetchRunStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/run-app');
+      if (res.ok) {
+        const json = await res.json();
+        setRunStatus(json.status);
+        setRunPid(json.pid);
+        setRunPort(json.port);
+        setRunLogs(json.logs || '');
+      }
+    } catch (err) {
+      console.error('Failed to fetch run status:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRunStatus();
+    const interval = setInterval(fetchRunStatus, 3000);
+    return () => clearInterval(interval);
+  }, [fetchRunStatus]);
+
+  const handleStartApp = async () => {
+    setIsActionLoading(true);
+    setRunStatus('starting');
+    try {
+      const res = await fetch('/api/run-app', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to start application');
+      }
+      toast.success('Application start initiated in background');
+      setRunStatus('running');
+      if (json.pid) setRunPid(json.pid);
+      setShowLogsPanel(true);
+      await fetchRunStatus();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start application');
+      setRunStatus('stopped');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleStopApp = async () => {
+    setIsActionLoading(true);
+    try {
+      const res = await fetch('/api/run-app', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to stop application');
+      }
+      toast.success('Application stopped successfully');
+      setRunStatus('stopped');
+      setRunPid(null);
+      setRunPort(null);
+      await fetchRunStatus();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to stop application');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
 
   const fetchRollup = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -386,97 +469,214 @@ export function AppDashboard() {
 
   const appStatus = getAppStatusStyle(data.status);
   
-  // Radial Progress Calculations
-  const radius = 54;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (data.progressPercent / 100) * circumference;
 
   return (
     <div className="space-y-6 md:space-y-8 animate-in fade-in duration-300 relative">
       
-      {/* Un-boxed Header Section */}
-      <div className="relative pb-2 space-y-4">
-        {/* Subtle glowing radial background rings */}
-        <div className="absolute -top-10 left-10 w-96 h-96 bg-primary/10 rounded-full filter blur-[120px] pointer-events-none -z-10" />
-        <div className="absolute -top-20 right-20 w-80 h-80 bg-indigo-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
-        
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <Badge variant="outline" className={cn("text-xs font-semibold uppercase tracking-wider px-2.5 py-0.5 border shadow-sm backdrop-blur-xs", appStatus.bg)}>
-              <span className="relative flex h-1.5 w-1.5 mr-1.5">
-                <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", appStatus.pulse)}></span>
-                <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appStatus.pulse)}></span>
-              </span>
-              {appStatus.label}
-            </Badge>
-            <span className="text-xs font-mono text-muted-foreground font-semibold bg-muted/40 backdrop-blur-xs px-2.5 py-0.5 rounded border border-border/40">v{data.version}</span>
-          </div>
+      {/* Sleek, Compact Header Container */}
+      <div className="relative border border-border bg-card/45 backdrop-blur-md rounded-2xl p-4 md:p-5 shadow-sm overflow-hidden">
+        {/* Subtle glowing radial background */}
+        <div className="absolute -top-12 -left-12 w-64 h-64 bg-primary/10 rounded-full filter blur-[80px] pointer-events-none -z-10" />
+        <div className="absolute -bottom-12 -right-12 w-64 h-64 bg-indigo-500/5 rounded-full filter blur-[80px] pointer-events-none -z-10" />
 
-          <div>
-            <h1 className="text-3xl md:text-5xl font-black tracking-tight text-foreground flex items-center gap-3 select-none">
-              <Compass className="h-8 w-8 md:h-10 md:w-10 text-primary animate-pulse shrink-0" />
-              <span className="bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">{data.name}</span>
-            </h1>
-            <p className="text-sm md:text-base text-muted-foreground mt-2 leading-relaxed max-w-4xl font-medium">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Left Side: App Identity & Description */}
+          <div className="space-y-2.5 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Compass className="h-5 w-5 text-primary shrink-0" />
+              <h1 className="text-lg md:text-xl font-bold tracking-tight text-foreground truncate select-none">
+                {data.name}
+              </h1>
+              <span className="text-[10px] font-mono font-medium text-muted-foreground bg-muted border border-border/50 px-2 py-0.5 rounded">
+                v{data.version}
+              </span>
+              <Badge variant="outline" className={cn("text-[10px] font-medium uppercase tracking-wider px-2 py-0 border shadow-xs scale-95", appStatus.bg)}>
+                <span className="relative flex h-1.5 w-1.5 mr-1.5">
+                  <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", appStatus.pulse)}></span>
+                  <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appStatus.pulse)}></span>
+                </span>
+                {appStatus.label}
+              </Badge>
+              
+              <span className="text-xs text-muted-foreground/60 px-1">|</span>
+              
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                Progress: <span className="font-semibold text-foreground">{data.progressPercent}%</span>
+              </span>
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0" />
+                Stories: <span className="font-semibold text-foreground">{stats.totalStories}</span>
+              </span>
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                Tasks: <span className="font-semibold text-foreground">{stats.completedTasks}</span> <span className="text-[10px] text-muted-foreground/60">of {stats.totalTasks}</span>
+              </span>
+              {stats.failedTasks > 0 && (
+                <span className="text-[11px] text-rose-400 flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0 animate-pulse" />
+                  Failed: <span className="font-semibold">{stats.failedTasks}</span>
+                </span>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed font-medium line-clamp-1 max-w-3xl">
               {data.description}
             </p>
+
+            {/* Stack Badges simplified into a single flex wrap row of minimal tag text */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/80 font-mono">
+              {Object.entries(data.stack).map(([key, val]) => {
+                if (!val) return null;
+                return (
+                  <span key={key} className="flex items-center gap-1">
+                    <span className="text-[9px] uppercase tracking-wider font-semibold text-primary/70">{key}:</span>
+                    <span className="text-foreground/90 font-medium">{val}</span>
+                  </span>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Stack badges styled as glowing tags */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {Object.entries(data.stack).map(([key, val]) => {
-              if (!val) return null;
-              return (
-                <Badge 
-                  key={key} 
-                  variant="outline" 
-                  className="text-[10px] md:text-xs font-bold font-mono bg-muted border-border text-foreground/80 px-2.5 py-1 transition-colors hover:bg-muted"
-                >
-                  <span className="text-primary/70 font-semibold mr-1 uppercase text-[9px] tracking-wider">{key}:</span>
-                  <span>{val}</span>
-                </Badge>
-              );
-            })}
+          {/* Right Side: Process Execution Controls */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 md:border-l md:border-border/60 md:pl-4">
+            {/* Run / Stop Button */}
+            {runStatus === 'running' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleStopApp}
+                disabled={isActionLoading}
+                className="h-8 text-xs font-semibold px-3 text-rose-500 border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/10 hover:text-rose-600 transition-all rounded-xl gap-1.5"
+              >
+                <Square className="h-3.5 w-3.5 fill-rose-500" />
+                <span>Stop App</span>
+              </Button>
+            ) : runStatus === 'starting' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                className="h-8 text-xs font-semibold px-3 text-amber-500 border-amber-500/25 bg-amber-500/5 transition-all rounded-xl gap-1.5"
+              >
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                <span>Starting...</span>
+              </Button>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleStartApp}
+                disabled={isActionLoading}
+                className="h-8 text-xs font-bold px-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-sm transition-all rounded-xl gap-1.5 border-0"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>Run App</span>
+              </Button>
+            )}
+
+            {/* Launch App Button (Only active when port is parsed) */}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={runStatus !== 'running' || !runPort}
+              onClick={() => runPort && window.open(`http://localhost:${runPort}`, '_blank')}
+              className={cn(
+                "h-8 text-xs font-semibold px-3 rounded-xl gap-1.5 border transition-all",
+                runStatus === 'running' && runPort
+                  ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/15 hover:border-indigo-500/35 cursor-pointer"
+                  : "text-muted-foreground/45 border-border bg-muted/10 cursor-not-allowed opacity-50"
+              )}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span>Open App</span>
+              {runPort && <span className="text-[9px] font-mono opacity-80">(:{runPort})</span>}
+            </Button>
+
+            {/* Live Terminal Console Toggle */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLogsPanel(!showLogsPanel)}
+              className={cn(
+                "h-8 text-xs font-semibold px-3 rounded-xl gap-1.5 border transition-all",
+                showLogsPanel
+                  ? "bg-secondary text-secondary-foreground border-border"
+                  : "bg-background text-muted-foreground border-border hover:bg-muted"
+              )}
+            >
+              <Terminal className="h-3.5 w-3.5" />
+              <span>Logs</span>
+              {runStatus === 'running' && (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+              )}
+            </Button>
+
+            {/* Sync Roadmap Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-all"
+              onClick={handleSync}
+              disabled={syncing}
+              title="Sync Spec File"
+            >
+              <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            </Button>
           </div>
         </div>
-      </div>
 
-      {/* Minimalist Stats Ribbon */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground border-b border-border/40 pb-4">
-        <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />
-          Progress: <span className="font-semibold text-foreground">{data.progressPercent}%</span>
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-violet-500 shrink-0" />
-          Stories: <span className="font-semibold text-foreground">{stats.totalStories}</span>
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-          Tasks Completed: <span className="font-semibold text-foreground">{stats.completedTasks}</span> <span className="text-[10px] text-muted-foreground/60">of {stats.totalTasks}</span>
-        </span>
-        {stats.runningTasks > 0 && (
-          <span className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0 animate-pulse" />
-            Running: <span className="font-semibold text-blue-400">{stats.runningTasks}</span>
-          </span>
+        {/* Live Logs Dropdown Console (styled as a beautiful dark retro terminal) */}
+        {showLogsPanel && (
+          <div className="mt-4 border border-border/80 bg-black/90 font-mono text-xs rounded-xl p-4 shadow-inner text-emerald-400 relative animate-in slide-in-from-top duration-300">
+            {/* Header controls for the logs console */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                <span className="text-[10px] font-bold text-zinc-500 tracking-wider uppercase ml-1.5">
+                  Live Application Console Logs
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {runPid && (
+                  <span className="text-[9px] font-mono text-zinc-500">
+                    PID: <span className="text-zinc-400">{runPid}</span>
+                  </span>
+                )}
+                {runStatus === 'running' ? (
+                  <span className="text-[9px] font-mono text-emerald-500/80 font-bold flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    STREAMING
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-mono text-zinc-500 font-bold">
+                    OFFLINE
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowLogsPanel(false)}
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable log contents */}
+            <div className="h-44 overflow-y-auto leading-relaxed whitespace-pre-wrap select-text pr-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+              {runLogs ? (
+                runLogs
+              ) : (
+                <span className="text-zinc-600 italic">No output logged yet. Run the application to see compile and server start stdout/stderr streams here.</span>
+              )}
+            </div>
+          </div>
         )}
-        {stats.failedTasks > 0 && (
-          <span className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
-            Attention: <span className="font-semibold text-rose-400">{stats.failedTasks}</span>
-          </span>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 text-[10px] hover:bg-muted ml-auto font-bold gap-1 text-muted-foreground hover:text-foreground"
-          onClick={handleSync}
-          disabled={syncing}
-        >
-          <RefreshCw className={cn("h-3 w-3", syncing && "animate-spin")} />
-          <span>Sync Spec</span>
-        </Button>
       </div>
 
       {/* Main Backlog Toolbar: Search, Filters, View Modes */}

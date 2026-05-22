@@ -2506,6 +2506,62 @@ function KanbanColumn({
   hoveredStorySlug,
   onHoverChange
 }: KanbanColumnProps) {
+  // Group stories into clusters of related items using their prerequisite, dependent, and peer links
+  const clusters = useMemo(() => {
+    if (!stories || stories.length === 0) return [];
+    const pool = allStories || stories;
+    
+    const visited = new Set<string>();
+    const result: any[][] = [];
+
+    const getStoryBySlug = (slug: string) => {
+      return stories.find(s => getSlug(s.file) === slug);
+    };
+
+    stories.forEach(story => {
+      const slug = getSlug(story.file);
+      if (visited.has(slug)) return;
+
+      const cluster: any[] = [];
+      const queue: any[] = [story];
+      visited.add(slug);
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        cluster.push(current);
+
+        const { prerequisites, dependents, peers } = getRelatedStories(current, pool);
+        const related = [...prerequisites, ...dependents, ...peers];
+
+        related.forEach(rel => {
+          const relSlug = getSlug(rel.file);
+          const storyInCol = getStoryBySlug(relSlug);
+          if (storyInCol && !visited.has(relSlug)) {
+            visited.add(relSlug);
+            queue.push(storyInCol);
+          }
+        });
+      }
+      result.push(cluster);
+    });
+
+    // Sort stories within each cluster in execution order by their index in the input stories array
+    const sortedResult = result.map(cluster => {
+      return [...cluster].sort((a, b) => {
+        const idxA = stories.findIndex(s => getSlug(s.file) === getSlug(a.file));
+        const idxB = stories.findIndex(s => getSlug(s.file) === getSlug(b.file));
+        return idxA - idxB;
+      });
+    });
+
+    // Sort the clusters themselves based on the original index of their first story
+    return sortedResult.sort((a, b) => {
+      const idxA = stories.findIndex(s => getSlug(s.file) === getSlug(a[0].file));
+      const idxB = stories.findIndex(s => getSlug(s.file) === getSlug(b[0].file));
+      return idxA - idxB;
+    });
+  }, [stories, allStories]);
+
   return (
     <div
       onDragOver={onDragOver}
@@ -2524,23 +2580,80 @@ function KanbanColumn({
       </div>
 
       {/* Cards list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-6 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
-        {stories.length > 0 ? (
-          stories.map(item => (
-            <StoryKanbanCard
-              key={item.file}
-              item={item}
-              epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
-              onSelect={onSelect}
-              onValidate={onValidate}
-              onBuild={onBuild}
-              activeAction={activeAction}
-              onDragStart={onDragStart}
-              allStories={allStories}
-              hoveredStorySlug={hoveredStorySlug}
-              onHoverChange={onHoverChange}
-            />
-          ))
+      <div className="flex-1 overflow-y-auto p-3 space-y-3.5 pb-6 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
+        {clusters.length > 0 ? (
+          clusters.map((cluster, clusterIdx) => {
+            if (cluster.length === 1) {
+              const item = cluster[0];
+              return (
+                <StoryKanbanCard
+                  key={item.file}
+                  item={item}
+                  epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
+                  onSelect={onSelect}
+                  onValidate={onValidate}
+                  onBuild={onBuild}
+                  activeAction={activeAction}
+                  onDragStart={onDragStart}
+                  allStories={allStories}
+                  hoveredStorySlug={hoveredStorySlug}
+                  onHoverChange={onHoverChange}
+                />
+              );
+            }
+
+            // Render a beautiful premium group container for clusters of size > 1
+            return (
+              <div
+                key={`cluster-${clusterIdx}-${cluster[0].file}`}
+                className="border border-indigo-500/20 bg-indigo-950/5 dark:bg-indigo-950/10 rounded-xl p-3.5 space-y-3.5 relative overflow-hidden transition-all duration-300 hover:border-indigo-500/40 hover:bg-indigo-950/15 group/cluster shadow-[inset_0_1px_1px_rgba(255,255,255,0.02)]"
+              >
+                {/* Glassmorphic border glow effect on hover */}
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 via-indigo-500/0 to-indigo-500/5 opacity-0 group-hover/cluster:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+                {/* Elegant Group Header */}
+                <div className="flex items-center justify-between pb-1 select-none relative z-10">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                      <Network className="h-3.5 w-3.5" />
+                    </div>
+                    <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-wider">
+                      Related Queue
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] text-indigo-300 border-indigo-500/20 px-1.5 h-4.5 bg-indigo-950/40 font-bold">
+                    {cluster.length} Stories
+                  </Badge>
+                </div>
+                
+                {/* The cards in the cluster */}
+                <div className="space-y-3 relative z-10 pl-1">
+                  {/* Visual connector line between cards */}
+                  <div className="absolute left-[7px] top-4 bottom-4 w-0.5 bg-indigo-500/15 pointer-events-none" />
+                  
+                  {cluster.map((item, idx) => (
+                    <div key={item.file} className="relative pl-4">
+                      {/* Connector node bullet */}
+                      <div className="absolute left-[4px] top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full border border-indigo-500/60 bg-background z-10" />
+                      
+                      <StoryKanbanCard
+                        item={item}
+                        epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
+                        onSelect={onSelect}
+                        onValidate={onValidate}
+                        onBuild={onBuild}
+                        activeAction={activeAction}
+                        onDragStart={onDragStart}
+                        allStories={allStories}
+                        hoveredStorySlug={hoveredStorySlug}
+                        onHoverChange={onHoverChange}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })
         ) : (
           <div className="h-32 border border-dashed border-border/60 rounded-xl flex items-center justify-center text-center p-4 select-none">
             <span className="text-[10px] text-muted-foreground/50 italic font-semibold">Column empty</span>

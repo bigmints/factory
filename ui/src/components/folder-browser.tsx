@@ -204,7 +204,9 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : error ? (
-            <div className="px-4 sm:px-5 py-4 text-xs sm:text-sm text-destructive">{error}</div>
+            <div className="mx-4 my-3 px-3 py-2.5 rounded-lg border border-rose-500/25 bg-rose-500/5 dark:bg-rose-950/15 text-xs text-rose-600 dark:text-rose-400 font-medium">
+              {error}
+            </div>
           ) : visibleEntries.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-xs sm:text-sm">
               <Folder className="h-8 w-8 mb-2 opacity-30" />

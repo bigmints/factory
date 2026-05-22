@@ -273,7 +273,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
               </Button>
 
               {isDirty && (
-                <Button variant="outline" size="icon" onClick={handleReset} className="h-9 w-9 rounded-md shrink-0 text-destructive bg-background hover:bg-accent hover:text-destructive">
+                <Button variant="outline" size="icon" onClick={handleReset} className="h-9 w-9 rounded-md shrink-0 text-rose-600 dark:text-rose-400 bg-background hover:bg-rose-500/5 hover:text-rose-500 border-border">
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
               )}
@@ -293,8 +293,8 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive bg-muted px-4 py-3 text-xs sm:text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+        <div className="flex items-center gap-2 rounded-md border border-rose-500/25 bg-rose-500/5 dark:bg-rose-950/15 px-4 py-3 text-xs sm:text-sm text-rose-600 dark:text-rose-400">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-500 dark:text-rose-400" />
           <span className="font-medium">{error}</span>
         </div>
       )}
@@ -515,7 +515,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
                   </button>
                   <button
                     onClick={handleReset}
-                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold text-destructive hover:bg-muted shrink-0 ml-auto select-none transition-colors"
+                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/5 dark:hover:bg-rose-950/20 shrink-0 ml-auto select-none transition-colors"
                   >
                     Restore
                   </button>

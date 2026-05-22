@@ -338,168 +338,164 @@ export function SkillsView() {
             )}
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          <div className="divide-y divide-border border border-border rounded-xl bg-card/5 overflow-hidden">
             {filteredSkills.map(skill => {
               const isExpanded = expandedSkill === skill.id;
               const CatIcon = categoryIcon(skill.category);
 
               return (
-                <Card
+                <div
                   key={skill.id}
                   className={cn(
-                    "flex flex-col justify-between overflow-hidden transition-all duration-300",
-                    skill.enabled ? 'opacity-100 border-primary/25 shadow-sm' : 'opacity-60'
+                    "flex flex-col transition-colors duration-150",
+                    skill.enabled ? 'bg-transparent' : 'opacity-60 bg-muted/5'
                   )}
                 >
-                  <CardContent className="p-5 md:p-6 space-y-4 flex-1 flex flex-col justify-between">
-                    <div className="space-y-4">
-                      {/* Header row */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                          <div className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border select-none shadow-sm",
-                            CATEGORY_COLORS[skill.category] || CATEGORY_COLORS.general
-                          )}>
-                            <CatIcon className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <h3 className="text-sm md:text-base font-bold tracking-tight text-foreground truncate max-w-[200px]">
-                                {skill.name}
-                              </h3>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 border",
-                                  CATEGORY_COLORS[skill.category] || CATEGORY_COLORS.general
-                                )}
-                              >
-                                {skill.category}
-                              </Badge>
-                            </div>
-                            {skill.description && (
-                              <p className="text-xs text-muted-foreground/90 line-clamp-2 leading-relaxed">
-                                {skill.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0 h-10 select-none">
-                          <Switch
-                            checked={skill.enabled}
-                            onCheckedChange={(checked) => handleToggle(skill, checked)}
-                            className="scale-75"
-                          />
-                        </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 gap-4">
+                    {/* Left side info */}
+                    <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
+                      <span className={cn(
+                        "h-2 w-2 rounded-full shrink-0 transition-all sm:mt-0 mt-2",
+                        skill.enabled ? "bg-emerald-500" : "bg-muted-foreground/30"
+                      )} />
+                      <div className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-muted text-muted-foreground select-none shadow-xs sm:mt-0 mt-1"
+                      )}>
+                        <CatIcon className="h-3.5 w-3.5" />
                       </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm text-foreground truncate">{skill.name}</span>
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] font-semibold h-4 px-2 rounded-full shrink-0 border-border bg-muted/40 uppercase"
+                          >
+                            {skill.category}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {skill.description || "No description provided."}
+                        </p>
+                      </div>
+                    </div>
 
+                    {/* Right actions and switch */}
+                    <div className="flex items-center justify-end gap-2.5 shrink-0 select-none">
+                      {skill.trigger && (
+                        <span className="text-[10px] font-mono text-muted-foreground/80 bg-muted/60 border px-2 py-0.5 rounded max-w-[120px] truncate">
+                          {skill.trigger}
+                        </span>
+                      )}
+
+                      <Switch
+                        checked={skill.enabled}
+                        onCheckedChange={(checked) => handleToggle(skill, checked)}
+                        className="scale-75"
+                      />
+
+                      <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
+
+                      <div className="flex items-center gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground rounded-md"
+                              onClick={() => handleCopyInstructions(skill)}
+                            >
+                              {copiedId === skill.id ? (
+                                <Check className="h-3.5 w-3.5 text-emerald-500" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-[10px]">Copy instructions</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground rounded-md"
+                              onClick={() => openEditDialog(skill)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-[10px]">Edit</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-destructive hover:text-destructive rounded-md"
+                              onClick={() => setDeleteTarget(skill)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-[10px]">Delete</TooltipContent>
+                        </Tooltip>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-md text-muted-foreground hover:bg-muted"
+                          onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
+                        >
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="px-6 py-4 bg-muted/20 border-t border-border/40 text-xs text-muted-foreground space-y-3.5 animate-in fade-in duration-150">
                       {/* Tags */}
                       {skill.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1.5 pb-2">
                           {skill.tags.map(tag => (
                             <Badge
                               key={tag}
                               variant="secondary"
-                              className="text-[9px] font-bold py-0 px-2 flex items-center gap-1"
+                              className="text-[9px] font-medium py-0 px-2 flex items-center gap-1 bg-muted/60 border border-border/40 text-muted-foreground"
                             >
-                              <Tag className="h-2 w-2 text-muted-foreground" />
+                              <Tag className="h-2.5 w-2.5" />
                               {tag}
                             </Badge>
                           ))}
                         </div>
                       )}
+                      
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Instructions</span>
+                        <div className="rounded-md bg-background border p-4 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+                          {skill.instructions}
+                        </div>
+                      </div>
 
-                      {skill.trigger && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary p-2.5 rounded-lg border">
-                          <Zap className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold">{skill.trigger}</code>
+                      {skill.template && (
+                        <div className="flex flex-col gap-2 pt-2 border-t border-border/20">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Starter Code Template</span>
+                          <pre className="bg-background rounded-md border p-4 overflow-x-auto text-[10px] font-mono leading-relaxed text-foreground/90">
+                            {skill.template}
+                          </pre>
                         </div>
                       )}
 
-                      {/* Expandable instructions preview */}
-                      <div className="space-y-2">
-                        <button
-                          onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[36px] px-1 font-semibold"
-                        >
-                          <FileText className="h-3.5 w-3.5 shrink-0" />
-                          <span>{isExpanded ? 'Hide instructions' : 'Show instructions'}</span>
-                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
-                        </button>
-                        {isExpanded && (
-                          <div className="rounded-md bg-muted border p-4 text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed animate-in fade-in slide-in-from-top-2 duration-200">
-                            {skill.instructions}
-                            {skill.template && (
-                              <>
-                                <Separator className="my-3" />
-                                <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">Template</p>
-                                <pre className="bg-background rounded-md border p-3 overflow-x-auto text-[10px] font-mono leading-relaxed">
-                                  {skill.template}
-                                </pre>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 pt-4">
-                      <Separator />
-
-                      {/* Action buttons */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-                          {skill.updatedAt ? `Updated ${new Date(skill.updatedAt).toLocaleDateString()}` : ''}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 shrink-0 text-muted-foreground"
-                                onClick={() => handleCopyInstructions(skill)}
-                              >
-                                {copiedId === skill.id ? (
-                                  <Check className="h-4 w-4 text-emerald-500" />
-                                ) : (
-                                  <Copy className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">Copy instructions</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 shrink-0 text-muted-foreground"
-                                onClick={() => openEditDialog(skill)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">Edit</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-                                onClick={() => setDeleteTarget(skill)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">Delete</TooltipContent>
-                          </Tooltip>
+                      {skill.updatedAt && (
+                        <div className="text-[9px] font-mono text-muted-foreground/50 pt-2 border-t border-border/10">
+                          Last updated: {new Date(skill.updatedAt).toLocaleString()}
                         </div>
-                      </div>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+                </div>
               );
             })}
           </div>

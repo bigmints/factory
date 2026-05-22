@@ -615,7 +615,7 @@ export default function Dashboard() {
               {validationResult.passed ? (
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               ) : (
-                <AlertCircle className="h-4 w-4 text-destructive" />
+                <AlertCircle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
               )}
               <CardTitle className="text-sm font-bold">
                 Validation {validationResult.passed ? 'Passed' : 'Failed'}
@@ -642,7 +642,7 @@ export default function Dashboard() {
                         {check.passed ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                         ) : (
-                          <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                          <AlertCircle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
                         )}
                       </TableCell>
                       <TableCell className="text-xs font-medium">{check.name}</TableCell>
@@ -953,7 +953,7 @@ export default function Dashboard() {
                     {validationResult.passed ? (
                       <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                     ) : (
-                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <AlertCircle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
                     )}
                     <CardTitle className="text-xs md:text-sm font-bold text-foreground">
                       Validation {validationResult.passed ? 'Passed' : 'Failed'}
@@ -977,7 +977,7 @@ export default function Dashboard() {
                               {check.passed ? (
                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                               ) : (
-                                <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                                <AlertCircle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
                               )}
                             </TableCell>
                             <TableCell className="text-xs font-medium">{check.name}</TableCell>

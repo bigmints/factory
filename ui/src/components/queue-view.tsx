@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Play, Square, Trash2, RotateCcw, CheckCircle2, XCircle, Clock, Loader2,
@@ -43,15 +41,15 @@ interface ActivityStep {
   status: 'success' | 'error' | 'running' | 'info' | 'warning';
   icon: any;
   details: string[];
-  substeps: { text: string; status: 'success' | 'error' | 'info' }[];
+  substeps: { text: string; status: 'success' | 'error' | 'info' | 'warning' }[];
 }
 
 const statusConfig: Record<string, { label: string; color: string; glowClass: string; icon: any; bg: string }> = {
   pending: { label: 'Pending', color: 'text-muted-foreground', glowClass: 'border-border shadow-sm', icon: Clock, bg: 'bg-muted' },
   running: { label: 'Running', color: 'text-primary', glowClass: 'border-border shadow-sm', icon: Loader2, bg: 'bg-muted' },
   completed: { label: 'Completed', color: 'text-emerald-500', glowClass: 'border-border shadow-sm', icon: CheckCircle2, bg: 'bg-muted' },
-  failed: { label: 'Failed', color: 'text-destructive', glowClass: 'border-border shadow-sm', icon: XCircle, bg: 'bg-muted' },
-  'needs-attention': { label: 'Attention', color: 'text-amber-500', glowClass: 'border-border shadow-sm', icon: AlertTriangle, bg: 'bg-muted' },
+  failed: { label: 'Failed', color: 'text-rose-500 dark:text-rose-400', glowClass: 'border-rose-200 dark:border-rose-950 shadow-sm', icon: XCircle, bg: 'bg-rose-500/5 dark:bg-rose-950/15' },
+  'needs-attention': { label: 'Attention', color: 'text-amber-500 dark:text-amber-400', glowClass: 'border-amber-200 dark:border-amber-950 shadow-sm', icon: AlertTriangle, bg: 'bg-amber-500/5 dark:bg-amber-950/15' },
 };
 
 function parseActivities(output: string): ActivityStep[] {
@@ -96,7 +94,7 @@ function parseActivities(output: string): ActivityStep[] {
     if (errorMatch && current) { current.status = 'error'; current.substeps.push({ text: errorMatch[1], status: 'error' }); }
 
     const warningMatch = line.match(/^!\s+(.+)/);
-    if (warningMatch && current) { current.status = 'error'; current.substeps.push({ text: warningMatch[1], status: 'error' }); }
+    if (warningMatch && current) { current.status = 'warning'; current.substeps.push({ text: warningMatch[1], status: 'warning' }); }
 
     const arrowMatch = line.match(/^→\s+(.+)/);
     if (arrowMatch && current) { current.substeps.push({ text: arrowMatch[1], status: 'info' }); }
@@ -141,7 +139,8 @@ function CircularProgress({ completed, total }: { completed: number; total: numb
 
 function StepIndicator({ status, isActive }: { status: 'success' | 'error' | 'running' | 'info' | 'warning'; isActive: boolean }) {
   if (status === 'success') return <CheckCircle2 className="mt-0.5 h-[18px] w-[18px] shrink-0 text-emerald-500" />;
-  if (status === 'error') return <XCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-destructive" />;
+  if (status === 'error') return <XCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-rose-500 dark:text-rose-400" />;
+  if (status === 'warning') return <AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-amber-500 dark:text-amber-400 animate-pulse" />;
   if (status === 'running' && isActive) return <Loader2 className="mt-0.5 h-[18px] w-[18px] shrink-0 text-primary animate-spin" />;
   return <div className="mt-1.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-muted-foreground/30 bg-muted" />;
 }
@@ -217,21 +216,24 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
                           <div className="flex items-center gap-2 min-w-0">
                             {StepIcon && <StepIcon className={`h-4 w-4 shrink-0 ${
                               step.status === 'success' ? 'text-emerald-500' :
-                              step.status === 'error' ? 'text-destructive' :
+                              step.status === 'error' ? 'text-rose-500 dark:text-rose-400' :
+                              step.status === 'warning' ? 'text-amber-500 dark:text-amber-400' :
                               step.status === 'running' && itemStatus === 'running' ? 'text-primary animate-pulse' :
                               'text-muted-foreground'
                             }`} />}
                             <h4 className={`text-xs sm:text-sm font-medium truncate ${
                               step.status === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
-                              step.status === 'error' ? 'text-destructive' :
+                              step.status === 'error' ? 'text-rose-600 dark:text-rose-400' :
+                              step.status === 'warning' ? 'text-amber-600 dark:text-amber-400' :
                               step.status === 'running' && itemStatus === 'running' ? 'text-primary' :
                               'text-foreground/90'
                             }`}>{step.label}</h4>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
-                             {step.status === 'success' && <Badge variant="outline" className="text-[9px] border-emerald-500 text-emerald-500 px-1.5 py-0 rounded-md font-medium">Done</Badge>}
-                             {step.status === 'error' && <Badge variant="outline" className="text-[9px] border-destructive text-destructive px-1.5 py-0 rounded-md font-medium">Failed</Badge>}
-                             {step.status === 'running' && itemStatus === 'running' && <Badge variant="outline" className="text-[9px] border-primary text-primary px-1.5 py-0 rounded-md font-medium animate-pulse">Active</Badge>}
+                             {step.status === 'success' && <Badge variant="outline" className="text-[9px] border-emerald-500 text-emerald-500 bg-emerald-500/5 dark:bg-emerald-950/10 px-1.5 py-0 rounded-md font-medium">Done</Badge>}
+                             {step.status === 'error' && <Badge variant="outline" className="text-[9px] border-rose-500 text-rose-500 dark:border-rose-400/30 dark:text-rose-400 bg-rose-500/5 dark:bg-rose-950/10 px-1.5 py-0 rounded-md font-medium">Failed</Badge>}
+                             {step.status === 'warning' && <Badge variant="outline" className="text-[9px] border-amber-500 text-amber-500 dark:border-amber-400/30 dark:text-amber-400 bg-amber-500/5 dark:bg-amber-950/10 px-1.5 py-0 rounded-md font-medium">Warning</Badge>}
+                             {step.status === 'running' && itemStatus === 'running' && <Badge variant="outline" className="text-[9px] border-primary text-primary bg-primary/5 px-1.5 py-0 rounded-md font-medium animate-pulse">Active</Badge>}
                              <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ${isOpen ? 'rotate-90 text-foreground' : ''}`} />
                            </div>
                         </button>
@@ -243,16 +245,25 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
                                 {step.substeps.map((sub, si) => (
                                   <div key={si} className="flex items-start gap-2 text-[10px] sm:text-xs">
                                     {sub.status === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />}
-                                    {sub.status === 'error' && <XCircle className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />}
+                                    {sub.status === 'error' && <XCircle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400 mt-0.5 shrink-0" />}
+                                    {sub.status === 'warning' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400 mt-0.5 shrink-0" />}
                                     {sub.status === 'info' && <ChevronRight className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />}
-                                    <span className={sub.status === 'error' ? 'text-destructive font-medium' : 'text-muted-foreground'}>{sub.text}</span>
+                                    <span className={
+                                      sub.status === 'error' ? 'text-rose-600 dark:text-rose-400 font-medium' :
+                                      sub.status === 'warning' ? 'text-amber-600 dark:text-amber-400 font-medium' :
+                                      'text-muted-foreground'
+                                    }>{sub.text}</span>
                                   </div>
                                 ))}
                               </div>
                             )}
-                            {step.details.length > 0 && step.status === 'error' && (
-                              <div className="rounded-lg bg-muted border border-border p-3 max-h-40 overflow-y-auto mt-2">
-                                <pre className="text-[10px] sm:text-[11px] font-mono text-destructive whitespace-pre-wrap">{step.details.join('\n')}</pre>
+                            {step.details.length > 0 && (step.status === 'error' || step.status === 'warning') && (
+                              <div className={`rounded-lg border p-3 max-h-60 overflow-y-auto mt-2 font-mono text-[10px] sm:text-[11px] leading-relaxed shadow-inner ${
+                                step.status === 'error'
+                                  ? 'bg-rose-500/5 dark:bg-rose-950/20 border-rose-200/50 dark:border-rose-900/40 text-rose-600 dark:text-rose-300'
+                                  : 'bg-amber-500/5 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-900/40 text-amber-600 dark:text-amber-300'
+                              }`}>
+                                <pre className="whitespace-pre-wrap font-mono">{step.details.join('\n')}</pre>
                               </div>
                             )}
                           </div>
@@ -268,13 +279,13 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
       </div>
 
       {error && (
-        <div className="rounded-lg border border-border bg-muted p-4 md:p-5 relative overflow-hidden">
-          <div className="absolute left-0 top-0 h-full w-1 bg-destructive" />
-          <div className="flex items-center gap-2 mb-1.5">
-            <AlertTriangle className="h-4 w-4 text-destructive" />
-            <p className="text-xs sm:text-sm text-destructive font-semibold">Error Log Details</p>
+        <div className="rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-500/5 dark:bg-rose-950/15 p-4 md:p-5 relative overflow-hidden shadow-sm">
+          <div className="absolute left-0 top-0 h-full w-1 bg-rose-500" />
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
+            <p className="text-xs sm:text-sm text-rose-600 dark:text-rose-400 font-semibold">Error Log Details</p>
           </div>
-          <pre className="text-[10px] sm:text-xs font-mono whitespace-pre-wrap bg-background p-2.5 rounded-lg border border-border max-h-48 overflow-y-auto">{error}</pre>
+          <pre className="text-[10px] sm:text-xs font-mono whitespace-pre-wrap bg-background/50 dark:bg-black/40 p-3 rounded-lg border border-rose-200/40 dark:border-rose-900/30 text-rose-600 dark:text-rose-300 max-h-64 overflow-y-auto leading-relaxed">{error}</pre>
         </div>
       )}
 
@@ -360,123 +371,101 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
   const storyName = (path: string) => path.split('/').pop()?.replace('.yaml', '') || path;
 
   return (
-    <div className="space-y-5 pb-20 sm:pb-8">
-      <div className="relative overflow-hidden rounded-lg border bg-card text-card-foreground p-5 md:p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Build Queue</h1>
-            </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1.5">Manage, prioritize, and execute your build specs autonomously</p>
+    <div className="space-y-6 pb-20 sm:pb-8">
+      {/* Header and Controls */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border border-border bg-card/10 rounded-xl p-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary" />
+            <h1 className="text-lg font-bold tracking-tight">Build Queue</h1>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {onToggleOutput && (isRunning || queueRunning) && (
-              <Button variant={outputPanelOpen ? 'default' : 'outline'} size="sm" onClick={onToggleOutput} className="text-xs gap-1.5 rounded-full h-9 px-3.5">
-                <Terminal className="h-4 w-4" />
-                Output
-                {(isRunning || queueRunning) && (
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                  </span>
-                )}
-              </Button>
-            )}
-            {stats.total > 0 && !isRunning && (
-              <Button variant="outline" size="sm" onClick={handleClearAll} className="text-xs gap-1.5 rounded-lg border hover:bg-muted text-muted-foreground hover:text-foreground">
-                <Trash2 className="h-4 w-4" />
-                <span>Clear All ({stats.total})</span>
-              </Button>
-            )}
-            {isRunning && (
-              <Button variant="outline" size="sm" onClick={handleStopAll} className="text-xs gap-1.5 rounded-lg border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground">
-                <Square className="h-4 w-4" />
-                <span>Stop Execution</span>
-              </Button>
-            )}
-            <Button onClick={handleStart} disabled={isRunning || stats.pending === 0} size="sm" className="text-xs gap-1.5 h-9 px-4">
-              {isRunning ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /><span>Running Queue...</span></>
-              ) : (
-                <><Play className="h-4 w-4 fill-current" /><span>Start Build Queue ({stats.pending})</span></>
+          <p className="text-xs text-muted-foreground mt-1">Manage, prioritize, and execute your build specs autonomously</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {onToggleOutput && (isRunning || queueRunning) && (
+            <Button variant={outputPanelOpen ? 'default' : 'outline'} size="sm" onClick={onToggleOutput} className="text-xs gap-1.5 rounded-lg h-9">
+              <Terminal className="h-4 w-4" />
+              Output
+              {(isRunning || queueRunning) && (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
               )}
             </Button>
-          </div>
+          )}
+          {stats.total > 0 && !isRunning && (
+            <Button variant="outline" size="sm" onClick={handleClearAll} className="text-xs gap-1.5 rounded-lg h-9 border text-muted-foreground hover:text-foreground">
+              <Trash2 className="h-4 w-4" />
+              <span>Clear All ({stats.total})</span>
+            </Button>
+          )}
+          {isRunning && (
+            <Button variant="outline" size="sm" onClick={handleStopAll} className="text-xs gap-1.5 rounded-lg h-9 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground">
+              <Square className="h-4 w-4" />
+              <span>Stop Execution</span>
+            </Button>
+          )}
+          <Button onClick={handleStart} disabled={isRunning || stats.pending === 0} size="sm" className="text-xs gap-1.5 h-9 font-semibold">
+            {isRunning ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /><span>Running Queue...</span></>
+            ) : (
+              <><Play className="h-4 w-4 fill-current" /><span>Start Build Queue ({stats.pending})</span></>
+            )}
+          </Button>
         </div>
       </div>
 
-      {/* Swipeable Status Cards Grid */}
-      <div className="relative">
-        {/* Shadow Overlay Faders for horizontal overflow */}
-        <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none sm:hidden z-10" />
-        <div className="flex sm:grid sm:grid-cols-5 gap-2.5 overflow-x-auto sm:overflow-visible pb-2.5 sm:pb-0 scrollbar-none snap-x snap-mandatory px-0.5">
-          {(['pending', 'running', 'completed', 'failed', 'needs-attention'] as const).map((status) => {
-            const cfg = statusConfig[status];
-            const Icon = cfg.icon;
-            const hasCount = stats[status] > 0;
-            return (
-              <div key={status} className="snap-center shrink-0 w-[140px] sm:w-auto">
-                <div className={`relative overflow-hidden transition-all duration-300 rounded-lg border bg-card text-card-foreground min-h-[72px] flex items-center justify-between p-4 md:p-5 ${
-                  hasCount ? 'border-border' : 'opacity-40 border-border'
-                }`}>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{cfg.label}</span>
-                    <span className="text-xl font-bold tracking-tight mt-0.5">{stats[status]}</span>
-                  </div>
-                  <div className={`p-2 rounded-lg ${cfg.bg} shrink-0`}>
-                     <Icon className={`h-4 w-4 ${cfg.color} ${status === 'running' && hasCount ? 'animate-spin' : ''}`} />
-                   </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {/* Collapse Stats into a clean inline horizontal summary */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground bg-muted/40 px-4 py-2.5 rounded-lg border border-border">
+        <span className="font-semibold text-foreground">Summary:</span>
+        <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> <span className="font-semibold text-foreground">{stats.pending}</span> pending</span>
+        <span className="text-muted-foreground/30">·</span>
+        <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin text-primary" /> <span className="font-semibold text-foreground">{stats.running}</span> running</span>
+        <span className="text-muted-foreground/30">·</span>
+        <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> <span className="font-semibold text-emerald-500">{stats.completed}</span> completed</span>
+        <span className="text-muted-foreground/30">·</span>
+        <span className="flex items-center gap-1.5"><XCircle className="h-3 w-3 text-rose-500 dark:text-rose-400" /> <span className="font-semibold text-rose-500 dark:text-rose-400">{stats.failed}</span> failed</span>
       </div>
-
-      <Separator className="bg-border" />
 
       {/* Queue items */}
       {items.length === 0 ? (
-        <div className="bg-card rounded-lg border border-dashed border-border p-6 sm:p-10 text-center">
-          <div className="h-12 w-12 rounded-lg bg-muted border border-border flex items-center justify-center mx-auto mb-4">
-            <Clock className="h-6 w-6 text-muted-foreground/60" />
+        <div className="bg-card/10 rounded-xl border border-dashed border-border p-6 sm:p-10 text-center">
+          <div className="h-10 w-10 rounded-lg bg-muted border border-border flex items-center justify-center mx-auto mb-3">
+            <Clock className="h-5 w-5 text-muted-foreground/60" />
           </div>
           <h3 className="text-sm font-semibold text-foreground">Build queue is empty</h3>
           <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1.5 leading-relaxed">Go to the Stories panel and configure your build stories to load items here.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
           {items.map((item) => {
             const cfg = statusConfig[item.status] || statusConfig.pending;
             const Icon = cfg.icon;
             const isExpanded = expandedItem === item.id;
 
             return (
-              <div key={item.id} className={`relative overflow-hidden rounded-lg border bg-card text-card-foreground transition-all duration-300 ${
-                isExpanded ? 'ring-1 ring-ring' : 'hover:bg-muted'
-              }`}>
-
-                <div className="p-5 md:p-6 pl-6 md:pl-8">
+              <div key={item.id} className="hover:bg-muted/10 transition-colors duration-150">
+                <div className="p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-3">
                     <button
                       className="flex items-center gap-2.5 text-left flex-1 min-w-0 cursor-pointer outline-none select-none"
                       onClick={() => setExpandedItem(isExpanded ? null : item.id)}
                     >
-                      <div className="shrink-0 p-1.5 rounded-lg bg-muted border border-border">
-                        <Icon className={`h-4 w-4 ${cfg.color} ${item.status === 'running' ? 'animate-spin' : ''}`} />
+                      <div className="shrink-0 p-1 rounded bg-muted border border-border">
+                        <Icon className={`h-3.5 w-3.5 ${cfg.color} ${item.status === 'running' ? 'animate-spin' : ''}`} />
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-xs sm:text-sm text-foreground/90 truncate">{storyName(item.story_file || item.spec_file || '')}</span>
-                           <Badge variant="outline" className="text-[9px] shrink-0 font-medium px-1.5 rounded-md">
-                             {item.kind === 'FeatureSpec' || item.kind === 'FeatureStory' ? 'Feature' : 'App'}
-                           </Badge>
-                           {item.engine === 'gemini-cli' && (
-                             <Badge variant="outline" className="text-[9px] border-primary text-primary font-medium px-1.5 rounded-md gap-1 shrink-0">
-                               <Terminal className="h-3 w-3" />Gemini CLI
-                             </Badge>
-                           )}
+                          <span className="font-semibold text-sm text-foreground truncate">{storyName(item.story_file || item.spec_file || '')}</span>
+                          <Badge variant="outline" className="text-[9px] shrink-0 font-medium px-1.5 rounded-md border-border bg-muted/40">
+                            {item.kind === 'FeatureSpec' || item.kind === 'FeatureStory' ? 'Feature' : 'App'}
+                          </Badge>
+                          {item.engine === 'gemini-cli' && (
+                            <Badge variant="outline" className="text-[9px] border-primary/20 text-primary font-medium px-1.5 rounded-md gap-1 shrink-0 bg-primary/5">
+                              <Terminal className="h-3 w-3" />Gemini CLI
+                            </Badge>
+                          )}
                         </div>
                         <span className="text-[10px] text-muted-foreground mt-0.5 sm:hidden">
                           {formatTime(item.added_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ''}
@@ -485,47 +474,65 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                     </button>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline mr-1 bg-muted px-2 py-0.5 rounded-full border border-border">
+                      <span className="text-[10px] text-muted-foreground hidden sm:inline mr-1 bg-muted/50 px-2 py-0.5 rounded-full border border-border/60">
                         Added at {formatTime(item.added_at)}
-                        {item.duration_ms ? ` · Total: ${formatDuration(item.duration_ms)}` : ''}
+                        {item.duration_ms ? ` · Duration: ${formatDuration(item.duration_ms)}` : ''}
                       </span>
+                      
+                      <Badge variant="outline" className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold ${
+                        item.status === 'completed' ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5 dark:bg-emerald-950/10' :
+                        item.status === 'failed' ? 'border-rose-500/30 text-rose-500 bg-rose-500/5 dark:bg-rose-950/10' :
+                        item.status === 'running' ? 'border-primary/30 text-primary bg-primary/5 animate-pulse' :
+                        'border-border text-muted-foreground bg-muted/40'
+                      }`}>
+                        {item.status}
+                      </Badge>
+                      
                       {item.status === 'failed' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleRetry(item.id)} className="h-8 w-8 rounded-md bg-muted border border-border">
+                        <Button variant="ghost" size="icon" onClick={() => handleRetry(item.id)} className="h-8 w-8 rounded hover:bg-muted border border-border/80">
                           <RotateCcw className="h-3.5 w-3.5 text-foreground" />
                         </Button>
                       )}
                       {item.status === 'pending' && !isRunning && (
-                        <Button variant="ghost" size="icon" onClick={() => handleRemove(item.id)} className="h-8 w-8 rounded-md bg-muted hover:bg-accent text-muted-foreground hover:text-destructive border border-border">
+                        <Button variant="ghost" size="icon" onClick={() => handleRemove(item.id)} className="h-8 w-8 rounded hover:bg-muted hover:text-destructive border border-border/80">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      <ChevronRight className={`h-4 w-4 text-muted-foreground/60 transition-transform duration-200 hidden sm:inline-block ${isExpanded ? 'rotate-90 text-foreground' : ''}`} />
+                      
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded"
+                        onClick={() => setExpandedItem(isExpanded ? null : item.id)}
+                      >
+                        {isExpanded ? <ChevronDown className="h-4 w-4 rotate-180" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
                     </div>
                   </div>
 
                   {isExpanded && (
-                    <div className="mt-4 ml-0 sm:ml-9 border-t border-border pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted border border-border rounded-lg p-4 text-[10px] sm:text-[11px] text-muted-foreground mb-4">
+                    <div className="mt-4 border-t border-border/45 pt-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/30 border border-border/65 rounded-lg p-4 text-[10px] sm:text-[11px] text-muted-foreground mb-4">
                         <div>
                           <span className="block text-muted-foreground/50 font-medium">Story File</span>
-                          <span className="text-foreground/95 truncate block mt-0.5">{(item.story_file || item.spec_file || '').split('/').pop()}</span>
+                          <span className="text-foreground truncate block mt-0.5 font-mono">{(item.story_file || item.spec_file || '').split('/').pop()}</span>
                         </div>
                         {item.engine && (
                           <div>
                             <span className="block text-muted-foreground/50 font-medium">Engine Driver</span>
-                            <span className="text-sky-400 font-semibold block mt-0.5">{item.engine}</span>
+                            <span className="text-primary font-semibold block mt-0.5">{item.engine}</span>
                           </div>
                         )}
                         {item.started_at && (
                           <div>
                             <span className="block text-muted-foreground/50 font-medium">Start Time</span>
-                            <span className="text-foreground/90 block mt-0.5">{new Date(item.started_at).toLocaleTimeString()}</span>
+                            <span className="text-foreground block mt-0.5">{new Date(item.started_at).toLocaleTimeString()}</span>
                           </div>
                         )}
                         {item.duration_ms && (
                           <div>
                             <span className="block text-muted-foreground/50 font-medium">Duration</span>
-                            <span className="text-foreground/90 block mt-0.5">{formatDuration(item.duration_ms)}</span>
+                            <span className="text-foreground block mt-0.5">{formatDuration(item.duration_ms)}</span>
                           </div>
                         )}
                       </div>

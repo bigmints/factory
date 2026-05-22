@@ -526,7 +526,7 @@ export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) 
                 "mx-4 mt-3 px-3 py-2.5 rounded-lg border text-[10px] sm:text-xs font-semibold flex items-center gap-2 transition-colors",
                 scanning ? "border-border bg-muted text-foreground" :
                 repoBlueprint ? "border-border bg-muted text-foreground" :
-                scanError ? "border-destructive bg-muted text-destructive" : ""
+                scanError ? "border-rose-500/25 bg-rose-500/5 dark:bg-rose-950/15 text-rose-600 dark:text-rose-400" : ""
               )}>
                 {scanning ? (
                   <><ScanSearch className="h-4 w-4 text-muted-foreground shrink-0 animate-pulse" /> <span>Analyzing codebase structure...</span></>
@@ -537,7 +537,7 @@ export function StoryChat({ open, onOpenChange, onStorySaved }: StoryChatProps) 
                     </span>
                   </>
                 ) : scanError ? (
-                  <><ScanSearch className="h-4 w-4 text-destructive shrink-0" /> <span>Codebase lookup unavailable</span></>
+                  <><ScanSearch className="h-4 w-4 text-rose-500 dark:text-rose-400 shrink-0" /> <span>Codebase lookup unavailable</span></>
                 ) : null}
               </div>
             )}

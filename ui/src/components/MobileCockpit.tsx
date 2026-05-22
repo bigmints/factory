@@ -471,7 +471,7 @@ export function MobileCockpit() {
       case 'completed':
         return 'bg-green-500/10 text-green-500 border-green-500/20';
       case 'failed':
-        return 'bg-destructive/10 text-destructive border-destructive/20';
+        return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
       case 'blocked':
         return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
       default:
@@ -758,7 +758,7 @@ export function MobileCockpit() {
                         )}
                       </div>
                       {item.error && (
-                        <p className="text-[9px] text-destructive font-mono mt-1 leading-snug line-clamp-1 border-l border-destructive pl-2">
+                        <p className="text-[9px] text-rose-600 dark:text-rose-400 font-mono mt-1 leading-snug line-clamp-1 border-l border-rose-500 pl-2">
                           Error: {item.error}
                         </p>
                       )}
@@ -782,7 +782,7 @@ export function MobileCockpit() {
                           variant="outline"
                           size="icon"
                           onClick={() => handleRemoveItem(item.id, name)}
-                          className="h-7 w-7 rounded-full border-destructive/20 hover:border-destructive/30 bg-destructive/5 hover:bg-destructive/10 text-destructive active:scale-95 transition-transform"
+                          className="h-7 w-7 rounded-full border-rose-500/20 hover:border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 text-rose-500 active:scale-95 transition-transform"
                           title="Remove from stack"
                         >
                           <Trash2 className="h-3 w-3" />

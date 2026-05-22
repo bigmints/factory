@@ -13,6 +13,7 @@ import {
   Wand2,
   FolderOpen,
   Menu,
+  ChevronLeft,
   ChevronRight,
   Terminal,
   Compass,
@@ -32,6 +33,8 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
   onAddProject: () => void;
   projectRefreshKey?: number;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const mainNav = [
@@ -56,26 +59,30 @@ function NavItem({
   icon: Icon,
   active,
   onClick,
+  isCollapsed,
 }: {
   id: string;
   label: string;
   icon: any;
   active: boolean;
   onClick: () => void;
+  isCollapsed?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      title={isCollapsed ? label : undefined}
       className={cn(
-        'tap-shrink flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200',
+        'tap-shrink flex items-center justify-start rounded-lg transition-all duration-200',
+        isCollapsed ? 'w-10 h-10 justify-center p-0 mx-auto' : 'w-full gap-3 px-4 py-2.5 text-sm font-medium',
         active
           ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className="truncate">{label}</span>
-      {active && <ChevronRight className="ml-auto h-3.5 w-3.5" />}
+      <Icon className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+      {!isCollapsed && <span className="truncate">{label}</span>}
+      {!isCollapsed && active && <ChevronRight className="ml-auto h-3.5 w-3.5" />}
     </button>
   );
 }
@@ -85,46 +92,63 @@ export function Sidebar({
   onTabChange,
   onAddProject,
   projectRefreshKey,
+  isCollapsed = false,
+  onToggleCollapse,
 }: SidebarProps) {
   const handleNavClick = (tab: string) => {
     onTabChange(tab);
   };
 
   return (
-    <aside className="hidden md:flex md:h-screen md:w-64 md:flex-col md:border-r md:border-border md:bg-sidebar md:text-sidebar-foreground">
-      <div className="flex items-center gap-3 px-6 py-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-          <Factory className="h-4 w-4" />
-        </div>
-        <div>
-          <p className="text-sm font-bold tracking-tight">Factory</p>
-          <p className="text-[10px] text-muted-foreground font-medium tracking-wide uppercase">Build Engine</p>
+    <aside className={cn(
+      "hidden md:flex md:h-screen md:flex-col md:border-r md:border-border md:bg-sidebar md:text-sidebar-foreground transition-all duration-300",
+      isCollapsed ? "md:w-16" : "md:w-64"
+    )}>
+      <div className={cn("flex items-center px-6 py-5", isCollapsed && "px-0 justify-center")}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+            <Factory className="h-4 w-4" />
+          </div>
+          {!isCollapsed && (
+            <div>
+              <p className="text-sm font-bold tracking-tight">Factory</p>
+              <p className="text-[10px] text-muted-foreground font-medium tracking-wide uppercase">Build Engine</p>
+            </div>
+          )}
         </div>
       </div>
 
+      {!isCollapsed && (
+        <>
+          <Separator className="opacity-60" />
+          <div className="px-4 py-4">
+            <ProjectSwitcher onAddProject={onAddProject} refreshKey={projectRefreshKey} />
+          </div>
+        </>
+      )}
+
       <Separator className="opacity-60" />
 
-      <div className="px-4 py-4">
-        <ProjectSwitcher onAddProject={onAddProject} refreshKey={projectRefreshKey} />
-      </div>
-
-      <Separator className="opacity-60" />
-
-      <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 scrollbar-thin">
+      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1.5 scrollbar-thin">
         {mainNav.map((item) => (
           <NavItem
             key={item.id}
             {...item}
             active={activeTab === item.id}
             onClick={() => handleNavClick(item.id)}
+            isCollapsed={isCollapsed}
           />
         ))}
 
-        <div className="pt-4 pb-2">
-          <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">
-            Configure
-          </p>
-        </div>
+        {!isCollapsed ? (
+          <div className="pt-4 pb-2">
+            <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">
+              Configure
+            </p>
+          </div>
+        ) : (
+          <div className="py-2"><Separator className="opacity-40" /></div>
+        )}
 
         {manageNav.map((item) => (
           <NavItem
@@ -132,13 +156,45 @@ export function Sidebar({
             {...item}
             active={activeTab === item.id}
             onClick={() => handleNavClick(item.id)}
+            isCollapsed={isCollapsed}
           />
         ))}
       </nav>
 
-      <div className="border-t border-border px-5 py-4 flex items-center justify-between bg-muted">
-        <p className="text-[10px] font-mono text-muted-foreground font-semibold">factory v1.1.0</p>
-        <ThemeToggle />
+      <div className={cn(
+        "border-t border-border px-5 py-4 flex items-center justify-between bg-muted",
+        isCollapsed && "px-0 py-3 flex-col gap-4 justify-center"
+      )}>
+        {!isCollapsed ? (
+          <>
+            <p className="text-[10px] font-mono text-muted-foreground font-semibold">factory v1.1.0</p>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              {onToggleCollapse && (
+                <button
+                  onClick={onToggleCollapse}
+                  className="p-1 rounded hover:bg-background transition-colors text-muted-foreground hover:text-foreground"
+                  title="Collapse sidebar"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <ThemeToggle />
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                className="p-1 rounded hover:bg-background transition-colors text-muted-foreground hover:text-foreground"
+                title="Expand sidebar"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
+          </>
+        )}
       </div>
     </aside>
   );

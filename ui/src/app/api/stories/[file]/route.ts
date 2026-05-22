@@ -2,9 +2,10 @@ import { homedir } from 'node:os';
 /**
  * GET  /api/stories/[file] — Read raw YAML content of a story file
  * PUT  /api/stories/[file] — Write updated YAML content back to the story file
+ * DELETE /api/stories/[file] — Delete a story file from disk
  */
 import { NextResponse } from 'next/server';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
@@ -117,6 +118,31 @@ export async function PUT(
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || 'Failed to save story' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ file: string }> }
+) {
+  try {
+    const { file } = await params;
+    const storyPath = resolveStoryPath(decodeURIComponent(file));
+
+    if (!storyPath) {
+      return NextResponse.json(
+        { error: `Story not found: ${file}` },
+        { status: 404 }
+      );
+    }
+
+    unlinkSync(storyPath);
+    return NextResponse.json({ success: true, file, path: storyPath });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || 'Failed to delete story' },
       { status: 500 }
     );
   }

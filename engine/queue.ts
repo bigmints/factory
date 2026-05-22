@@ -10,6 +10,7 @@ import { join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { slugify } from './types.ts';
+import { getActiveProject } from './config.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -140,7 +141,6 @@ export function enqueue(
     let targetApp = '';
     if (kind === 'FeatureStory') {
         try {
-            const { getActiveProject } = require('./config.ts');
             const project = getActiveProject();
             const storyPath = resolve(project.path, '.factory', 'stories', storyFile);
             if (existsSync(storyPath)) {
@@ -196,7 +196,6 @@ export function getLatestDependencyItem(depSlug: string): QueueItem | null {
 /** Check if a dependency is physically completed by searching for story files with matching slugs. */
 export function isDependencyCompleted(depSlug: string): boolean {
     try {
-        const { getActiveProject } = require('./config.ts');
         const project = getActiveProject();
         if (!project || !project.path) return false;
 
@@ -262,7 +261,6 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
         } else {
             // No app story in queue. Check if parent app story is physically built (in done/ directory)
             try {
-                const { getActiveProject } = require('./config.ts');
                 const project = getActiveProject();
                 if (project && project.path) {
                     const doneAppPath1 = join(project.path, '.factory', 'stories', 'done', `${item.targetApp}.yaml`);

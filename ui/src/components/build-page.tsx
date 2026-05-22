@@ -4,14 +4,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  Terminal, Loader2, XCircle, CheckCircle2, RefreshCw, X,
-  Square, Package, Play, Rocket, Trash2, Search, Filter,
-  Pin, Mail, Inbox, ChevronDown, Calendar, Archive, Eye,
-  Check, Info, FileText, Settings, HelpCircle, User, AlertCircle
+  Terminal, Loader2, XCircle, CheckCircle2, RefreshCw,
+  Square, Play, Trash2, Search, Clock, Cpu,
+  GitBranch, Zap, AlertTriangle, ChevronRight, Package,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +21,7 @@ interface QueueItem {
   kind: string;
   status: string;
   priority: number;
+  phase?: number;
   engine?: string;
   addedAt: string;
   startedAt: string | null;
@@ -30,6 +29,7 @@ interface QueueItem {
   output: string;
   error: string | null;
   durationMs: number | null;
+  dependsOn?: string[];
 }
 
 interface QueueStats {
@@ -37,67 +37,114 @@ interface QueueStats {
   running: number;
   completed: number;
   failed: number;
+  blocked: number;
   total: number;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+type StatusFilter = 'all' | 'active' | 'completed' | 'failed';
 
-function getBasename(p: string) {
-  return p?.split('/').pop() ?? p;
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function humanName(item: QueueItem, idx: number): string {
   if (item.displayName) return item.displayName;
   const specName = item.storyFile || item.specFile || '';
-  if (!specName) return `Build item ${idx + 1}`;
+  if (!specName) return `Build #${idx + 1}`;
   return specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '');
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  return `${Math.floor(diff / 3600_000)}h ago`;
 }
 
-function formatDuration(ms: number | null) {
+function formatDuration(ms: number | null): string | null {
   if (!ms) return null;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }
 
-function getInitials(item: QueueItem): string {
-  if (item.kind === 'story') return 'SB';
-  if (item.kind === 'app') return 'AB';
-  if (item.kind === 'feature') return 'FB';
-  return 'BA';
-}
-
-function getSnippet(item: QueueItem): string {
+function getLogPreview(item: QueueItem): string {
   if (item.error) {
-    const errorLines = item.error.trim().split('\n').filter(l => l.trim());
-    if (errorLines.length > 0) {
-      return errorLines[errorLines.length - 1].substring(0, 80);
-    }
-    return 'Build failed with errors';
+    const lines = item.error.trim().split('\n').filter(l => l.trim());
+    return lines.at(-1)?.substring(0, 90) ?? 'Build failed';
   }
   if (item.output) {
-    const outputLines = item.output.trim().split('\n').filter(l => l.trim() && !l.includes('.sst') && !l.includes('.meta'));
-    if (outputLines.length > 0) {
-      for (let i = outputLines.length - 1; i >= 0; i--) {
-        const line = outputLines[i].trim();
-        if (line.length > 10 && !line.startsWith('✓') && !line.startsWith('✔')) {
-          return line.substring(0, 80);
-        }
-      }
-      return outputLines[outputLines.length - 1].substring(0, 80);
-    }
+    const lines = item.output.trim().split('\n').filter(l => l.trim() && !l.includes('.sst'));
+    if (lines.length > 0) return lines.at(-1)!.substring(0, 90);
   }
-  if (item.status === 'running') return 'Compiling assets and running validation gates...';
-  if (item.status === 'pending') return 'Queued: Waiting for build dependencies to resolve...';
-  if (item.status === 'completed') return 'Finished successfully: Artifacts emitted, AGENTS.md compiled';
-  if (item.status === 'failed') return 'Failed: Compilation interrupted by validation gate';
-  return 'No live build console logs are available yet.';
+  if (item.status === 'running') return 'Compiling — validation gates in progress...';
+  if (item.status === 'pending') return 'Queued — waiting for dependencies to resolve';
+  if (item.status === 'completed') return 'Artifacts emitted • AGENTS.md written • committed';
+  if (item.status === 'blocked') return 'Blocked by unresolved dependency';
+  return 'No output yet';
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+function kindLabel(kind: string): string {
+  if (kind === 'AppStory') return 'App';
+  if (kind === 'FeatureStory') return 'Feature';
+  return kind;
+}
+
+// ─── Status Pill ─────────────────────────────────────────────────────────────
+
+function StatusPill({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    running: 'bg-violet-500/15 text-violet-300 border-violet-500/30 animate-pulse',
+    pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    failed: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    blocked: 'bg-zinc-700/40 text-zinc-400 border-zinc-600/30',
+    'needs-attention': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  };
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border font-mono',
+      map[status] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'
+    )}>
+      {status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
+      {status === 'completed' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+      {status === 'failed' && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
+      {status}
+    </span>
+  );
+}
+
+// ─── Stat Card ───────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className={cn('flex flex-col items-center justify-center rounded-lg border px-4 py-2 min-w-[64px]', color)}>
+      <span className="text-xl font-bold font-mono tabular-nums leading-none">{value}</span>
+      <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium mt-0.5">{label}</span>
+    </div>
+  );
+}
+
+// ─── Log Line renderer ────────────────────────────────────────────────────────
+
+function LogLine({ line }: { line: string }) {
+  const isError = line.startsWith('✗') || line.startsWith('✘') || /\berror\b/i.test(line);
+  const isSuccess = line.startsWith('✓') || line.startsWith('✔');
+  const isStep = line.startsWith('●') || line.startsWith('→') || line.startsWith('[');
+  const isWarn = /\bwarn/i.test(line);
+
+  return (
+    <div className={cn(
+      'leading-5 whitespace-pre-wrap font-mono text-[11px] px-1 py-[1px] rounded',
+      isError && 'text-rose-400 bg-rose-950/20 font-semibold',
+      isSuccess && !isError && 'text-emerald-400',
+      isStep && !isError && !isSuccess && 'text-sky-400 font-semibold',
+      isWarn && !isError && !isSuccess && !isStep && 'text-amber-400',
+      !isError && !isSuccess && !isStep && !isWarn && 'text-zinc-300',
+    )}>
+      {line || '\u00A0'}
+    </div>
+  );
+}
+
+// ─── Build Page ───────────────────────────────────────────────────────────────
 
 export function BuildPage() {
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
@@ -105,12 +152,12 @@ export function BuildPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [buildOutput, setBuildOutput] = useState('');
   const [startingQueue, setStartingQueue] = useState(false);
-  const [filterTab, setFilterTab] = useState<'focused' | 'other' | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const logOffsetRef = useRef(0);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  // ── Data Fetching ──────────────────────────────────────────────────────────
+  // ── Data ──────────────────────────────────────────────────────────────────
 
   const fetchQueue = useCallback(async () => {
     try {
@@ -123,30 +170,25 @@ export function BuildPage() {
     } catch {}
   }, []);
 
-  // Poll queue every 3 s
   useEffect(() => {
     fetchQueue();
     const interval = setInterval(fetchQueue, 3000);
     return () => clearInterval(interval);
   }, [fetchQueue]);
 
-  // Stream live log while a build is running
+  // Stream live log
   useEffect(() => {
     if (!queueRunning) {
       logOffsetRef.current = 0;
       return;
     }
-    setBuildOutput('Connecting to pipeline logs…\n');
+    setBuildOutput('Connecting to pipeline...\n');
     logOffsetRef.current = 0;
-
     const pollLog = async () => {
       try {
         const res = await fetch(`/api/queue/log?offset=${logOffsetRef.current}`);
         const data = await res.json();
-        if (data.log) {
-          setBuildOutput(prev => prev + data.log);
-          logOffsetRef.current = data.offset;
-        }
+        if (data.log) { setBuildOutput(prev => prev + data.log); logOffsetRef.current = data.offset; }
       } catch {}
     };
     pollLog();
@@ -154,34 +196,30 @@ export function BuildPage() {
     return () => clearInterval(interval);
   }, [queueRunning]);
 
-  // Auto-scroll terminal
-  useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [buildOutput]);
+  useEffect(() => { terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [buildOutput]);
 
-  // Auto-select running item; fallback to first item
+  // Auto-select running item
   useEffect(() => {
     const running = queueItems.find(i => i.status === 'running');
     if (running) {
-      setSelectedId(prev =>
-        prev && queueItems.some(i => i.id === prev) ? prev : running.id
-      );
+      setSelectedId(prev => prev && queueItems.some(i => i.id === prev) ? prev : running.id);
     } else {
       setSelectedId(prev => {
         if (prev && queueItems.some(i => i.id === prev)) return prev;
         return queueItems[0]?.id ?? null;
       });
     }
-  }, [queueItems]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [queueItems]); // eslint-disable-line
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const queueStats = useMemo<QueueStats>(() => {
-    const s = { pending: 0, running: 0, completed: 0, failed: 0, total: queueItems.length };
+  const stats = useMemo<QueueStats>(() => {
+    const s = { pending: 0, running: 0, completed: 0, failed: 0, blocked: 0, total: queueItems.length };
     queueItems.forEach(i => {
       if (i.status === 'running') s.running++;
       else if (i.status === 'completed') s.completed++;
       else if (i.status === 'failed') s.failed++;
+      else if (i.status === 'blocked') s.blocked++;
       else s.pending++;
     });
     return s;
@@ -190,35 +228,25 @@ export function BuildPage() {
   const filteredItems = useMemo(() => {
     return queueItems.filter(item => {
       const name = humanName(item, queueItems.indexOf(item)).toLowerCase();
-      const kind = item.kind.toLowerCase();
-      const status = item.status.toLowerCase();
-      const matchesSearch = name.includes(searchQuery.toLowerCase()) ||
-                            kind.includes(searchQuery.toLowerCase()) ||
-                            status.includes(searchQuery.toLowerCase());
+      const matchesSearch = !searchQuery || name.includes(searchQuery.toLowerCase()) ||
+        item.kind.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.status.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
-      if (filterTab === 'focused') {
-        return item.status === 'running' || item.status === 'pending';
-      }
-      if (filterTab === 'other') {
-        return item.status === 'completed' || item.status === 'failed';
-      }
+      if (filterStatus === 'active') return item.status === 'running' || item.status === 'pending';
+      if (filterStatus === 'completed') return item.status === 'completed';
+      if (filterStatus === 'failed') return item.status === 'failed' || item.status === 'blocked';
       return true;
     });
-  }, [queueItems, filterTab, searchQuery]);
+  }, [queueItems, filterStatus, searchQuery]);
 
   const selectedItem = queueItems.find(i => i.id === selectedId) ?? null;
   const isSelectedRunning = selectedItem?.status === 'running';
-
   const panelLog = selectedItem
     ? (isSelectedRunning
-        ? (buildOutput || selectedItem.output || '')
-        : (selectedItem.output || selectedItem.error || ''))
+      ? (buildOutput || selectedItem.output || '')
+      : (selectedItem.output || selectedItem.error || ''))
     : (buildOutput || '');
-
-  const panelLabel = selectedItem
-    ? humanName(selectedItem, queueItems.indexOf(selectedItem))
-    : 'Build console';
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -226,24 +254,24 @@ export function BuildPage() {
     setStartingQueue(true);
     try {
       const res = await fetch('/api/queue/start', { method: 'POST' });
-      if (res.ok) { toast.success('Build queue started'); fetchQueue(); }
-      else { const d = await res.json(); toast.error(d.error ?? 'Failed to start queue'); }
-    } catch { toast.error('Failed to start queue'); }
+      if (res.ok) { toast.success('Pipeline started'); fetchQueue(); }
+      else { const d = await res.json(); toast.error(d.error ?? 'Failed to start pipeline'); }
+    } catch { toast.error('Failed to start pipeline'); }
     finally { setStartingQueue(false); }
   };
 
   const handleStopQueue = async () => {
     try {
       const res = await fetch('/api/queue/stop', { method: 'POST' });
-      if (res.ok) { toast.success('Build runner stopped'); fetchQueue(); }
-      else toast.error('Failed to stop queue');
-    } catch { toast.error('Failed to stop queue'); }
+      if (res.ok) { toast.success('Pipeline stopped'); fetchQueue(); }
+      else toast.error('Failed to stop pipeline');
+    } catch { toast.error('Failed to stop pipeline'); }
   };
 
   const handleClearQueue = async () => {
     try {
       const res = await fetch('/api/queue/clear', { method: 'POST' });
-      if (res.ok) { toast.success('Queue history cleared'); fetchQueue(); }
+      if (res.ok) { toast.success('Completed runs cleared'); fetchQueue(); }
       else toast.error('Failed to clear queue');
     } catch { toast.error('Failed to clear queue'); }
   };
@@ -255,9 +283,9 @@ export function BuildPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'retry' }),
       });
-      if (res.ok) { toast.success('Retrying…'); fetchQueue(); handleStartQueue(); }
-      else toast.error('Failed to retry item');
-    } catch { toast.error('Failed to retry'); }
+      if (res.ok) { toast.success('Build re-queued'); fetchQueue(); handleStartQueue(); }
+      else toast.error('Retry failed');
+    } catch { toast.error('Retry failed'); }
   };
 
   const handleRemove = async (id: string) => {
@@ -268,454 +296,384 @@ export function BuildPage() {
         body: JSON.stringify({ id }),
       });
       if (res.ok) { toast.success('Removed from queue'); fetchQueue(); }
-      else toast.error('Failed to remove item');
+      else toast.error('Failed to remove');
     } catch { toast.error('Failed to remove'); }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* ── Page Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-2 px-1 select-none">
-        <div>
-          <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2 font-sans">
-            <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-            Build Workspace
-          </h1>
-          <p className="text-[11px] text-zinc-400 mt-0.5 font-sans">
-            Manage your autonomous compilation pipelines, review historical steps, and inspect system output logs in a desktop-grade client.
-          </p>
+    <div className="flex flex-col gap-4 h-full">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3 px-1">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            'h-2.5 w-2.5 rounded-full ring-2 transition-all',
+            queueRunning
+              ? 'bg-violet-400 ring-violet-500/30 animate-pulse'
+              : 'bg-zinc-600 ring-zinc-700/30'
+          )} />
+          <div>
+            <h1 className="text-base font-bold tracking-tight text-white font-sans">Build Pipeline</h1>
+            <p className="text-[11px] text-zinc-500 font-sans">
+              {queueRunning
+                ? `Running — ${stats.running} active build${stats.running !== 1 ? 's' : ''}`
+                : stats.pending > 0
+                  ? `${stats.pending} build${stats.pending !== 1 ? 's' : ''} queued`
+                  : 'Idle — no pending builds'}
+            </p>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchQueue}
+            className="h-8 px-3 gap-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 text-[11px] font-sans"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={stats.completed === 0}
+            onClick={handleClearQueue}
+            className="h-8 px-3 gap-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 text-[11px] font-sans"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Clear done
+          </Button>
+
+          {!queueRunning ? (
+            <Button
+              size="sm"
+              disabled={startingQueue || stats.pending === 0}
+              onClick={handleStartQueue}
+              className="h-8 px-4 gap-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold text-[11px] font-sans shadow-lg shadow-violet-900/30"
+            >
+              {startingQueue
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Play className="h-3.5 w-3.5 fill-white" />}
+              Run queue
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleStopQueue}
+              className="h-8 px-4 gap-2 bg-zinc-800 hover:bg-zinc-700 text-rose-400 font-semibold text-[11px] font-sans border border-zinc-700"
+            >
+              <Square className="h-3.5 w-3.5 fill-rose-400" />
+              Stop
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* ── Outlook-Style Ribbon / Command Bar ── */}
-      <div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-lg select-none">
-        {/* Ribbon Top Tabs */}
-        <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 bg-zinc-950/40 text-[11px] font-medium text-zinc-400">
-          <div className="flex gap-4">
-            <span className="py-2 px-1 border-b-2 border-blue-500 text-zinc-100 font-semibold cursor-pointer">Home</span>
-            <span className="py-2 px-1 hover:text-zinc-200 cursor-pointer">Organize</span>
-            <span className="py-2 px-1 hover:text-zinc-200 cursor-pointer">View</span>
-            <span className="py-2 px-1 hover:text-zinc-200 cursor-pointer">Help</span>
-          </div>
-          <div className="flex items-center gap-1.5 font-mono text-zinc-500">
-            <span className={cn(
-              "h-1.5 w-1.5 rounded-full transition-all",
-              queueRunning ? "bg-emerald-500 animate-pulse" : "bg-zinc-600"
-            )} />
-            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
-              {queueRunning ? 'Runner Active' : 'Runner Idle'}
-            </span>
-          </div>
-        </div>
-
-        {/* Ribbon Action Items */}
-        <div className="flex items-center justify-between p-2 bg-zinc-900/60 text-xs">
-          <div className="flex items-center gap-1">
-            {!queueRunning ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={startingQueue || queueStats.pending === 0}
-                onClick={handleStartQueue}
-                className="gap-2 text-zinc-300 hover:text-white hover:bg-zinc-800 h-8 px-3 rounded-md transition-all font-medium text-[11px]"
-              >
-                <Play className={cn('h-3.5 w-3.5 text-emerald-400 fill-emerald-400/20', startingQueue && 'animate-bounce')} />
-                <span>Start Queue</span>
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleStopQueue}
-                className="gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 h-8 px-3 rounded-md transition-all font-medium text-[11px]"
-              >
-                <Square className="h-3.5 w-3.5 fill-rose-400/20 text-rose-400" />
-                <span>Stop Runner</span>
-              </Button>
-            )}
-
-            <div className="h-4 w-px bg-zinc-800 mx-1" />
-
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={queueItems.length === 0}
-              onClick={handleClearQueue}
-              className="gap-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 h-8 px-3 rounded-md transition-all font-medium text-[11px]"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-zinc-400" />
-              <span>Clear Workspace</span>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={fetchQueue}
-              className="gap-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 h-8 px-3 rounded-md transition-all font-medium text-[11px]"
-            >
-              <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
-              <span>Refresh</span>
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-3 text-[11px] text-zinc-400 font-mono pr-2">
-            <span>
-              {queueItems.length > 0 ? `1-${queueItems.length} of ${queueItems.length}` : '0 of 0'}
-            </span>
-          </div>
-        </div>
+      {/* ── Stats Row ── */}
+      <div className="flex items-center gap-2 px-1">
+        <StatCard label="Pending" value={stats.pending} color="border-amber-500/15 text-amber-300 bg-amber-950/10" />
+        <StatCard label="Running" value={stats.running} color="border-violet-500/15 text-violet-300 bg-violet-950/10" />
+        <StatCard label="Done" value={stats.completed} color="border-emerald-500/15 text-emerald-300 bg-emerald-950/10" />
+        <StatCard label="Failed" value={stats.failed} color="border-rose-500/15 text-rose-300 bg-rose-950/10" />
+        {stats.blocked > 0 && (
+          <StatCard label="Blocked" value={stats.blocked} color="border-zinc-600/40 text-zinc-400 bg-zinc-800/30" />
+        )}
       </div>
 
-      {/* ── Split Layout Grid (Outlook Style) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        
-        {/* Left Column: Inbox List (Build Queue) */}
-        <div className="lg:col-span-5 border border-zinc-800 bg-zinc-950/40 rounded-xl overflow-hidden shadow-xl flex flex-col min-w-0">
-          
-          {/* Outlook-Style Inbox Search Bar */}
-          <div className="p-3 border-b border-zinc-800 bg-zinc-900/30 flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
+      {/* ── Split Layout ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
+
+        {/* Left: Queue list */}
+        <div className="lg:col-span-4 flex flex-col border border-zinc-800 bg-zinc-950/40 rounded-xl overflow-hidden shadow-xl">
+
+          {/* Search + filter */}
+          <div className="p-2.5 border-b border-zinc-800/80 flex flex-col gap-2 bg-zinc-900/30">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
               <input
                 type="text"
-                placeholder="Search mail (specs, features, status)..."
+                placeholder="Filter builds..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 pl-9 pr-8 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-sans"
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-1.5 pl-8 pr-3 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-violet-500/60 focus:border-violet-500/50 font-sans"
               />
-              {searchQuery && (
+            </div>
+            <div className="flex items-center gap-1">
+              {(['all', 'active', 'completed', 'failed'] as StatusFilter[]).map(f => (
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  key={f}
+                  onClick={() => setFilterStatus(f)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wide transition-all font-sans',
+                    filterStatus === f
+                      ? 'bg-zinc-700 text-zinc-100'
+                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                  )}
                 >
-                  <X className="h-4 w-4" />
+                  {f}
+                  {f === 'active' && (stats.running + stats.pending) > 0 && (
+                    <span className="ml-1 text-violet-400">{stats.running + stats.pending}</span>
+                  )}
+                  {f === 'failed' && (stats.failed + stats.blocked) > 0 && (
+                    <span className="ml-1 text-rose-400">{stats.failed + stats.blocked}</span>
+                  )}
                 </button>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-800"
-              title="Filters"
-            >
-              <Filter className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Focused / Other Tabs */}
-          <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/10 px-3 py-1.5 text-xs select-none">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setFilterTab('all')}
-                className={cn(
-                  "py-1 font-semibold relative text-zinc-400 hover:text-zinc-200 transition-all font-sans",
-                  filterTab === 'all' && "text-blue-400 border-b-2 border-blue-500"
-                )}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFilterTab('focused')}
-                className={cn(
-                  "py-1 font-semibold relative text-zinc-400 hover:text-zinc-200 transition-all font-sans",
-                  filterTab === 'focused' && "text-blue-400 border-b-2 border-blue-500"
-                )}
-              >
-                Focused
-                {queueStats.running + queueStats.pending > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-500/20 text-blue-400">
-                    {queueStats.running + queueStats.pending}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setFilterTab('other')}
-                className={cn(
-                  "py-1 font-semibold relative text-zinc-400 hover:text-zinc-200 transition-all font-sans",
-                  filterTab === 'other' && "text-blue-400 border-b-2 border-blue-500"
-                )}
-              >
-                Other
-              </button>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-zinc-500 font-sans">
-              <span className="font-semibold">{filteredItems.length} items</span>
-              <ChevronDown className="h-3 w-3" />
+              ))}
             </div>
           </div>
 
-          {/* Message List */}
-          <div className="divide-y divide-zinc-900/60 overflow-y-auto max-h-[65vh] scrollbar-thin select-none">
+          {/* Build list */}
+          <div className="divide-y divide-zinc-900/60 overflow-y-auto flex-1 scrollbar-thin">
             {filteredItems.length > 0 ? (
               filteredItems.map((item, idx) => {
-                const isRunning  = item.status === 'running';
-                const isFailed   = item.status === 'failed';
-                const isDone     = item.status === 'completed';
-                const isPending  = !isRunning && !isFailed && !isDone;
                 const isSelected = item.id === selectedId;
+                const isRunning = item.status === 'running';
+                const isFailed = item.status === 'failed' || item.status === 'blocked';
+                const isDone = item.status === 'completed';
 
                 return (
                   <div
                     key={item.id}
                     className={cn(
-                      'flex items-start gap-3.5 px-3.5 py-3 cursor-pointer transition-all duration-150 relative border-b border-zinc-900 group',
+                      'flex items-start gap-3 px-3.5 py-3 cursor-pointer transition-all duration-150 group relative',
                       isSelected
-                        ? 'bg-zinc-900/80 text-white border-l-4 border-l-blue-500 shadow-inner'
-                        : 'border-l-4 border-l-transparent text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200'
+                        ? 'bg-zinc-800/70 border-l-2 border-l-violet-500'
+                        : 'border-l-2 border-l-transparent hover:bg-zinc-900/50 hover:border-l-zinc-700'
                     )}
                     onClick={() => setSelectedId(item.id)}
                   >
-                    {/* Status Color Strip */}
+                    {/* Kind icon */}
                     <div className={cn(
-                      "absolute left-0 top-0 bottom-0 w-1",
-                      isRunning ? "bg-violet-500 animate-pulse" :
-                      isDone ? "bg-emerald-500" :
-                      isFailed ? "bg-rose-500" :
-                      "bg-zinc-600"
-                    )} />
-
-                    {/* Avatar Icon */}
-                    <div className="relative shrink-0 mt-0.5">
-                      <div className={cn(
-                        "h-9 w-9 rounded-full border flex items-center justify-center font-bold text-xs select-none shadow-sm transition-colors font-sans",
-                        isSelected
-                          ? 'bg-zinc-800 border-zinc-700 text-zinc-200'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 group-hover:bg-zinc-800 group-hover:text-zinc-300'
-                      )}>
-                        {getInitials(item)}
-                      </div>
-                      <span className={cn(
-                        "absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-zinc-950 shadow-sm",
-                        isRunning ? "bg-violet-400 animate-pulse" :
-                        isDone ? "bg-emerald-400" :
-                        isFailed ? "bg-rose-400" :
-                        "bg-zinc-500"
-                      )} />
+                      'shrink-0 mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center border text-xs font-bold font-mono',
+                      isRunning ? 'bg-violet-500/10 border-violet-500/30 text-violet-400' :
+                      isDone ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                      isFailed ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
+                      'bg-zinc-800/80 border-zinc-700/50 text-zinc-400'
+                    )}>
+                      {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
+                       isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> :
+                       isFailed ? <XCircle className="h-3.5 w-3.5" /> :
+                       <Package className="h-3.5 w-3.5" />}
                     </div>
 
-                    {/* Text block: 3-line layout */}
-                    <div className="flex-1 min-w-0 pr-1 font-sans">
-                      {/* Line 1: Sender & Time */}
-                      <div className="flex items-center justify-between gap-2">
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
                         <span className={cn(
-                          "font-semibold truncate text-[12px]",
-                          isSelected || isRunning ? "text-zinc-100" : "text-zinc-300 group-hover:text-zinc-100"
+                          'text-xs font-semibold truncate font-sans',
+                          isSelected || isRunning ? 'text-white' : 'text-zinc-200 group-hover:text-white'
                         )}>
-                          {item.kind.charAt(0).toUpperCase() + item.kind.slice(1)} Build Agent
+                          {humanName(item, idx)}
                         </span>
-                        <span className="text-[10px] text-zinc-500 font-mono shrink-0 group-hover:hidden">
-                          {item.addedAt ? formatTime(item.addedAt) : ''}
+                        <span className="text-[10px] text-zinc-600 font-mono shrink-0 group-hover:hidden tabular-nums">
+                          {formatRelativeTime(item.addedAt)}
                         </span>
-                        {/* Floating actions that show on hover instead of timestamp */}
-                        <div className="hidden group-hover:flex items-center gap-1 shrink-0 bg-transparent animate-in fade-in duration-200" onClick={e => e.stopPropagation()}>
+                        {/* Hover actions */}
+                        <div className="hidden group-hover:flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                           {isFailed && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md"
-                              title="Retry Build"
+                            <button
+                              className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-700"
+                              title="Retry"
                               onClick={() => handleRetry(item.id)}
                             >
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </Button>
+                              <RefreshCw className="h-3 w-3" />
+                            </button>
                           )}
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-md"
-                            title="Remove from queue"
+                          <button
+                            className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30"
+                            title="Remove"
                             onClick={() => handleRemove(item.id)}
                           >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
+                            <XCircle className="h-3 w-3" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Line 2: Subject (Build Name) */}
-                      <div className={cn(
-                        "text-[12px] truncate mt-0.5",
-                        isSelected || isRunning ? "text-white font-medium" : "text-zinc-200 group-hover:text-white"
-                      )}>
-                        {humanName(item, idx)}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded border font-mono font-semibold uppercase tracking-wider',
+                          'bg-zinc-800/60 border-zinc-700/50 text-zinc-500'
+                        )}>
+                          {kindLabel(item.kind)}
+                        </span>
+                        {item.phase && item.phase > 0 && (
+                          <span className="text-[10px] text-zinc-600 font-mono">
+                            phase {item.phase}
+                          </span>
+                        )}
+                        <StatusPill status={item.status} />
                       </div>
 
-                      {/* Line 3: Snippet / Log preview */}
-                      <div className="text-[11px] text-zinc-500 group-hover:text-zinc-400 truncate mt-0.5 leading-snug">
-                        {getSnippet(item)}
-                      </div>
+                      <p className="text-[10.5px] text-zinc-600 group-hover:text-zinc-500 truncate mt-1 font-sans leading-snug">
+                        {getLogPreview(item)}
+                      </p>
                     </div>
+
+                    {isSelected && (
+                      <ChevronRight className="h-3.5 w-3.5 text-violet-400 shrink-0 mt-2" />
+                    )}
                   </div>
                 );
               })
             ) : (
-              <div className="h-64 flex flex-col items-center justify-center text-center text-zinc-500 px-6 py-12">
-                <Inbox className="h-10 w-10 text-zinc-700/60 mb-3" />
-                <p className="text-xs font-semibold text-zinc-300 mb-1 font-sans">Your build inbox is empty</p>
-                <p className="text-[11px] text-zinc-500 max-w-xs leading-normal font-sans">
-                  Ready components will show up here automatically when stories or specs are queued from the dashboard.
+              <div className="flex flex-col items-center justify-center h-48 text-center px-6">
+                <Cpu className="h-8 w-8 text-zinc-700/50 mb-3" />
+                <p className="text-xs font-semibold text-zinc-400 mb-1 font-sans">No builds in queue</p>
+                <p className="text-[11px] text-zinc-600 leading-normal font-sans max-w-[200px]">
+                  Queue stories from the Roadmap board to start building.
                 </p>
               </div>
             )}
           </div>
+
+          {/* Footer count */}
+          <div className="border-t border-zinc-800/60 px-3.5 py-2 flex items-center justify-between bg-zinc-900/20">
+            <span className="text-[10px] text-zinc-600 font-mono tabular-nums">
+              {filteredItems.length} of {queueItems.length} builds
+            </span>
+            {queueRunning && (
+              <span className="flex items-center gap-1 text-[10px] text-violet-400 font-mono">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+                Runner active
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Right Column: Message Details (Log output / Reading Pane) */}
-        <div className="lg:col-span-7 border border-zinc-800 bg-zinc-950 rounded-xl shadow-xl overflow-hidden flex flex-col min-w-0 min-h-[550px]">
+        {/* Right: Terminal / detail panel */}
+        <div className="lg:col-span-8 border border-zinc-800 bg-zinc-950 rounded-xl shadow-xl overflow-hidden flex flex-col min-h-[500px]">
+
           {selectedItem ? (
-            <div className="flex flex-col h-full">
-              {/* Detailed Email-style Header */}
-              <div className="bg-zinc-900/20 border-b border-zinc-800 p-5 shrink-0 flex flex-col gap-4">
-                {/* Subject Line & Badge */}
-                <div className="flex items-start justify-between gap-4">
-                  <h2 className="text-xl font-bold tracking-tight text-white leading-tight break-words select-text font-sans">
-                    {panelLabel}
-                  </h2>
-                  <Badge className={cn(
-                    "shrink-0 font-mono text-[10px] uppercase font-bold",
-                    selectedItem.status === 'completed' && "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-                    selectedItem.status === 'failed' && "bg-rose-500/10 text-rose-400 border-rose-500/30",
-                    selectedItem.status === 'running' && "bg-violet-500/10 text-violet-400 border-violet-500/30 animate-pulse",
-                    selectedItem.status === 'pending' && "bg-zinc-800 text-zinc-400 border-zinc-700"
-                  )}>
-                    {selectedItem.status}
-                  </Badge>
+            <>
+              {/* Build header */}
+              <div className="border-b border-zinc-800 bg-zinc-900/30 px-5 py-4 shrink-0">
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider font-semibold">
+                        {kindLabel(selectedItem.kind)}
+                      </span>
+                      {selectedItem.phase && selectedItem.phase > 0 && (
+                        <span className="text-[10px] font-mono text-zinc-600">
+                          · phase {selectedItem.phase}
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-base font-bold text-white leading-tight font-sans truncate">
+                      {humanName(selectedItem, queueItems.indexOf(selectedItem))}
+                    </h2>
+                  </div>
+                  <StatusPill status={selectedItem.status} />
                 </div>
 
-                {/* Reading Pane Command Bar */}
-                <div className="flex items-center justify-between border-t border-b border-zinc-800/80 py-1.5 my-1 text-xs select-none">
-                  <div className="flex items-center gap-1 font-sans">
-                    {selectedItem.status === 'failed' && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRetry(selectedItem.id)}
-                        className="h-8 text-[11px] gap-1.5 px-3 text-zinc-300 hover:text-white hover:bg-zinc-800"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
-                        <span>Retry Build</span>
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRemove(selectedItem.id)}
-                      className="h-8 text-[11px] gap-1.5 px-3 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/20"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-zinc-400" />
-                      <span>Discard logs</span>
-                    </Button>
-                    <div className="h-4 w-px bg-zinc-800 mx-1" />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-[11px] gap-1.5 px-3 text-zinc-400 hover:text-white hover:bg-zinc-800"
-                      title="Move to Folder"
-                    >
-                      <Archive className="h-3.5 w-3.5 text-zinc-400" />
-                      <span>Move to</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-[11px] gap-1.5 px-3 text-zinc-400 hover:text-white hover:bg-zinc-800"
-                      title="Categorize"
-                    >
-                      <Pin className="h-3.5 w-3.5 text-zinc-400" />
-                      <span>Pin message</span>
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-zinc-500 text-[11px] font-mono">
-                    <span>ID: {selectedItem.id.slice(0, 8)}</span>
-                  </div>
+                {/* Build meta */}
+                <div className="flex items-center gap-4 flex-wrap text-[11px] text-zinc-500 font-mono">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {selectedItem.startedAt
+                      ? `Started ${formatRelativeTime(selectedItem.startedAt)}`
+                      : `Queued ${formatRelativeTime(selectedItem.addedAt)}`}
+                  </span>
+                  {selectedItem.durationMs && (
+                    <span className="flex items-center gap-1 text-zinc-400">
+                      <Zap className="h-3 w-3 text-amber-500" />
+                      {formatDuration(selectedItem.durationMs)}
+                    </span>
+                  )}
+                  {selectedItem.engine && (
+                    <span className="flex items-center gap-1">
+                      <GitBranch className="h-3 w-3" />
+                      {selectedItem.engine}
+                    </span>
+                  )}
+                  {selectedItem.dependsOn && selectedItem.dependsOn.length > 0 && (
+                    <span className="text-zinc-600">
+                      depends on: {selectedItem.dependsOn.join(', ')}
+                    </span>
+                  )}
+                  <span className="text-zinc-700 text-[10px]">
+                    id: {selectedItem.id.replace('q_', '').slice(0, 12)}
+                  </span>
                 </div>
 
-                {/* Sender/Receiver Meta row */}
-                <div className="flex items-start justify-between text-xs gap-3">
-                  <div className="flex items-center gap-3">
-                    {/* User status avatar */}
-                    <div className={cn(
-                      "h-10 w-10 rounded-full border flex items-center justify-center font-bold text-sm select-none shrink-0 shadow-inner relative font-sans",
-                      selectedItem.status === 'completed' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
-                      selectedItem.status === 'failed' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' :
-                      selectedItem.status === 'running' ? 'bg-violet-500/10 border-violet-500/30 text-violet-400' :
-                      'bg-zinc-800 border-zinc-700 text-zinc-400'
-                    )}>
-                      {getInitials(selectedItem)}
-                      <span className={cn(
-                        "absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border border-zinc-950",
-                        selectedItem.status === 'completed' ? 'bg-emerald-400' :
-                        selectedItem.status === 'failed' ? 'bg-rose-400' :
-                        selectedItem.status === 'running' ? 'bg-violet-400 animate-pulse' :
-                        'bg-zinc-500'
-                      )} />
-                    </div>
-
-                    <div className="min-w-0 font-sans">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-zinc-200">
-                          {selectedItem.kind.charAt(0).toUpperCase() + selectedItem.kind.slice(1)} Build Agent
-                        </span>
-                        <span className="text-zinc-500 text-[10.5px] font-mono">
-                          &lt;pipeline-worker@{selectedItem.id.slice(0, 12)}&gt;
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-zinc-500 mt-0.5 font-sans">
-                        to <span className="text-zinc-400">factory-logs-console</span> · phase {selectedItem.priority || 1}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-right text-[11px] text-zinc-500 font-mono shrink-0">
-                    <p title={selectedItem.addedAt}>{new Date(selectedItem.addedAt).toLocaleString()}</p>
-                    {selectedItem.durationMs && (
-                      <p className="text-zinc-400 mt-0.5 font-medium">Time elapsed: {formatDuration(selectedItem.durationMs)}</p>
-                    )}
-                  </div>
+                {/* Action bar */}
+                <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-zinc-800/60">
+                  {selectedItem.status === 'failed' || selectedItem.status === 'blocked' ? (
+                    <Button
+                      size="sm"
+                      onClick={() => handleRetry(selectedItem.id)}
+                      className="h-7 px-3 gap-1.5 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-sans border border-zinc-700"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Retry build
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleRemove(selectedItem.id)}
+                    className="h-7 px-3 gap-1.5 text-[11px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 font-sans"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Remove
+                  </Button>
                 </div>
               </div>
 
-              {/* Log stream ("Email Content Body") */}
-              <div className="p-5 font-mono text-[11px] text-zinc-300 space-y-0.5 select-text overflow-y-auto flex-1 max-h-[60vh] bg-zinc-950/60 scrollbar-thin border-t border-zinc-900">
+              {/* Terminal output */}
+              <div className="flex items-center justify-between px-4 py-1.5 border-b border-zinc-800/50 bg-zinc-900/20 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Terminal className="h-3.5 w-3.5 text-zinc-500" />
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider font-semibold">
+                    {isSelectedRunning ? 'Live output' : 'Build log'}
+                  </span>
+                  {isSelectedRunning && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+                  )}
+                </div>
+                {selectedItem.status === 'failed' && (
+                  <div className="flex items-center gap-1 text-[10px] text-rose-400 font-mono">
+                    <AlertTriangle className="h-3 w-3" />
+                    Build failed
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 scrollbar-thin min-h-0">
                 {panelLog ? (
-                  panelLog.split('\n').map((line, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        'leading-5 whitespace-pre-wrap px-1 rounded transition-colors',
-                        line.startsWith('✗') || line.startsWith('✘') || line.toLowerCase().includes('error') ? 'text-rose-400 bg-rose-950/10 font-semibold' :
-                        line.startsWith('✓') || line.startsWith('✔') ? 'text-emerald-400 bg-emerald-950/5' :
-                        line.startsWith('●') || line.startsWith('→') ? 'text-zinc-400 font-semibold' :
-                        line.startsWith('[') ? 'text-sky-400' :
-                        'text-zinc-300 hover:bg-zinc-900/20',
-                      )}
-                    >
-                      {line || '\u00A0'}
-                    </div>
-                  ))
+                  <div className="space-y-px">
+                    {panelLog.split('\n').map((line, i) => (
+                      <LogLine key={i} line={line} />
+                    ))}
+                    <div ref={terminalEndRef} />
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center py-16">
                     <Terminal className="h-8 w-8 text-zinc-800 mb-3" />
-                    <p className="text-zinc-500 italic text-xs">
-                      No runtime log entries have been received.
+                    <p className="text-xs text-zinc-600 italic font-sans">
+                      {selectedItem.status === 'pending'
+                        ? 'Build is queued — output will appear once the runner starts.'
+                        : 'No log output recorded.'}
                     </p>
                   </div>
                 )}
-                <div ref={terminalEndRef} />
               </div>
-            </div>
+            </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-zinc-500">
-              <Inbox className="h-12 w-12 text-zinc-800 mb-4" />
-              <h3 className="text-zinc-300 font-bold text-sm mb-1 font-sans">No build agent selected</h3>
-              <p className="text-xs max-w-sm leading-normal font-sans">
-                Select a message row from the queue list on the left to inspect detailed live build telemetry and logs in the reading pane.
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+              <Terminal className="h-10 w-10 text-zinc-800 mb-4" />
+              <p className="text-sm font-semibold text-zinc-400 mb-1 font-sans">No build selected</p>
+              <p className="text-xs text-zinc-600 max-w-xs leading-normal font-sans">
+                Select a build from the queue list to view its logs and status.
               </p>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

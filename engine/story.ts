@@ -1,12 +1,13 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve, join, basename, dirname } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult } from './types.ts';
+import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult, AppSpec } from './types.ts';
 import { storySlug, storyPort } from './types.ts';
 import { log } from './log.ts';
 import { execSync } from 'node:child_process';
 
 // ─── Load ────────────────────────────────────────────────
+
 
 /** Load an app story from a YAML file */
 export function loadStory(storyPath: string): AppStory {
@@ -260,3 +261,80 @@ export function archiveStory(storyPath: string): string | null {
         return null;
     }
 }
+
+/** Load an app spec from a YAML file */
+export function loadAppSpec(appPath: string): AppSpec {
+    const absPath = resolve(appPath);
+    if (!existsSync(absPath)) {
+        throw new Error(`App spec file not found: ${absPath}`);
+    }
+    const raw = readFileSync(absPath, 'utf-8');
+    return parseYaml(raw) as AppSpec;
+}
+
+/** Validate an app spec */
+export function validateAppSpec(app: AppSpec): ValidationResult {
+    const errors: string[] = [];
+
+    if (!app.name || app.name.trim().length === 0) {
+        errors.push('App name is required');
+    }
+    if (!app.description || app.description.trim().length === 0) {
+        errors.push('App description is required');
+    }
+    if (!app.brd || app.brd.trim().length === 0) {
+        errors.push('App brd is required');
+    }
+    if (!app.version || app.version.trim().length === 0) {
+        errors.push('App version is required');
+    }
+    if (!app.stack?.framework) {
+        errors.push('App stack.framework is required');
+    }
+
+    if (app.features) {
+        if (!Array.isArray(app.features)) {
+            errors.push('App features must be an array');
+        } else {
+            for (let fIdx = 0; fIdx < app.features.length; fIdx++) {
+                const feature = app.features[fIdx];
+                if (!feature.name || feature.name.trim().length === 0) {
+                    errors.push(`Feature at index ${fIdx} must have a name`);
+                }
+                if (feature.stories) {
+                    if (!Array.isArray(feature.stories)) {
+                        errors.push(`Feature "${feature.name}" stories must be an array`);
+                    } else {
+                        for (let sIdx = 0; sIdx < feature.stories.length; sIdx++) {
+                            const story = feature.stories[sIdx];
+                            if (!story.name || story.name.trim().length === 0) {
+                                errors.push(`Story at index ${sIdx} under Feature "${feature.name}" must have a name`);
+                            }
+                            if (story.tasks) {
+                                if (!Array.isArray(story.tasks)) {
+                                    errors.push(`Story "${story.name}" tasks must be an array`);
+                                } else {
+                                    for (let tIdx = 0; tIdx < story.tasks.length; tIdx++) {
+                                        const task = story.tasks[tIdx];
+                                        if (!task.id || task.id.trim().length === 0) {
+                                            errors.push(`Task at index ${tIdx} under Story "${story.name}" must have an id`);
+                                        }
+                                        if (!task.title || task.title.trim().length === 0) {
+                                            errors.push(`Task at index ${tIdx} under Story "${story.name}" must have a title`);
+                                        }
+                                        if (task.status && !['pending', 'running', 'completed', 'failed'].includes(task.status)) {
+                                            errors.push(`Task "${task.title}" has invalid status "${task.status}"`);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return { passed: errors.length === 0, errors };
+}
+

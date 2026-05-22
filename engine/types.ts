@@ -356,3 +356,40 @@ export function storyPort(story: AppStory): number {
 export function storyRegion(story: AppStory): string {
     return story.deployment?.region || 'us-central1';
 }
+
+// ─── Hierarchical App Roadmaps (App -> Feature/Epic -> Story -> Task) ───
+
+export type AppStatus = 'draft' | 'in-progress' | 'testing' | 'done';
+export type EpicStatus = 'pending' | 'in-progress' | 'completed' | 'blocked';
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface AppSpec {
+    name: string;
+    description: string;
+    brd: string; // File path or content describing Business Requirements Document
+    version: string;
+    stack: StackConfig;
+    features: FeatureEpicSpec[];
+    status?: AppStatus;
+}
+
+export interface FeatureEpicSpec {
+    name: string;
+    description?: string;
+    status?: EpicStatus;
+    stories: StoryReferenceSpec[];
+}
+
+export interface StoryReferenceSpec {
+    name: string;
+    file?: string; // Path relative to project root or .factory/ (e.g. ".factory/stories/apps/greeting-app.yaml")
+    status?: StoryStatus;
+    tasks: TaskItemSpec[];
+}
+
+export interface TaskItemSpec {
+    id: string; // e.g. "task_001" or "lint"
+    title: string;
+    status: TaskStatus;
+}
+

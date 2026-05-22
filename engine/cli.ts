@@ -38,6 +38,13 @@ import {
 import { closeDb, logBuild } from './db.ts';
 import { performStateAudit, updateHeartbeat, withRetry, categorizeError } from './health.ts';
 
+// Clean process.env to avoid leaking Next.js internal variables from parent Next.js processes
+for (const key of Object.keys(process.env)) {
+    if (key.startsWith('__NEXT') || key.startsWith('NEXT_') || key === 'NODE_OPTIONS') {
+        delete process.env[key];
+    }
+}
+
 const args = process.argv.slice(2);
 const command = args[0];
 const target = args[1];
@@ -82,6 +89,8 @@ async function main(): Promise<void> {
         case 'restart':
             handleStop();
             return handleStart();
+        case 'app':
+            return handleAppCommand();
         // ─── CLI Facade (us_004) ─────────────────────────────
         case 'pulse':
             return handlePulse();
@@ -961,6 +970,10 @@ Commands:
   feature build <story.yaml> [--engine worker]  Build a feature
   feature validate <story.yaml>  Validate a feature story
 
+  app sync [<yaml-path>]        Sync app roadmap and statuses with DB and spec file
+  app list                      List all synced apps
+  app status [<app-id>]         Show full hierarchical status tree and progress
+
   queue list                    List all queue items
   queue add <story.yaml> [--engine worker]  Add to queue
   queue start                   Process all pending items autonomously
@@ -1076,9 +1089,45 @@ function handlePulse(): void {
 }
 
 /** factory task <list|start|complete|add> [args...] — manage tasks */
-function handleTask(): void {
-    const script = resolve(process.cwd(), '.factory/task-manager/manage.sh');
+async function handleTask(): Promise<void> {
     const subcommand = args[1];
+    const taskId = args[2];
+
+    if (subcommand === 'start' || subcommand === 'complete' || subcommand === 'fail') {
+        if (taskId) {
+            const { getDb } = await import('./db.ts');
+            const db = getDb();
+            // Look up task in SQLite db: either exact match or matches suffix :taskId
+            const task = db.prepare('SELECT id, story_id FROM tasks WHERE id = ? OR id LIKE ?').get(taskId, `%:${taskId}`) as { id: string; story_id: string } | undefined;
+            if (task) {
+                const newStatus = subcommand === 'start' ? 'running' : subcommand === 'complete' ? 'completed' : 'failed';
+                db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run(newStatus, task.id);
+                log('✓', `Updated task ${task.id} to ${newStatus}`);
+
+                // Sync back to app.yaml if exists
+                const parts = task.id.split(':');
+                if (parts.length >= 4) {
+                    const appSlug = parts[0];
+                    const appRow = db.prepare('SELECT id, name FROM apps WHERE id = ?').get(appSlug) as { id: string; name: string } | undefined;
+                    if (appRow) {
+                        try {
+                            const project = getActiveProject();
+                            const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+                            if (existsSync(yamlPath)) {
+                                const { syncAppRoadmap } = await import('./rollup.ts');
+                                await syncAppRoadmap(yamlPath);
+                            }
+                        } catch (err: any) {
+                            log('!', `Could not sync YAML: ${err?.message || err}`);
+                        }
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+    const script = resolve(process.cwd(), '.factory/task-manager/manage.sh');
     if (!subcommand) {
         console.error('Usage: factory task <list|start|complete|add> [args...]');
         process.exit(1);
@@ -1097,6 +1146,128 @@ function handleTask(): void {
     child.on('close', (code: number | null) => {
         process.exit(code ?? 0);
     });
+}
+
+/** factory app <sync|status|list> — manage hierarchical roadmap specs */
+async function handleAppCommand(): Promise<void> {
+    const subcommand = args[1];
+    if (subcommand === 'sync') {
+        let yamlPath = args[2];
+        if (!yamlPath) {
+            try {
+                const project = getActiveProject();
+                yamlPath = resolve(project.path, '.factory', 'app.yaml');
+            } catch (err: any) {
+                logError('Error: No active project and no app.yaml path provided.');
+                process.exit(1);
+            }
+        }
+        logHeader('Syncing App Roadmap Spec');
+        try {
+            const { syncAppRoadmap } = await import('./rollup.ts');
+            await syncAppRoadmap(yamlPath);
+            log('✓', `Synced roadmap from ${yamlPath}`);
+        } catch (e: any) {
+            logError(`Sync failed: ${e?.message || e}`);
+            process.exit(1);
+        }
+    } else if (subcommand === 'status') {
+        let appId = args[2];
+        if (!appId) {
+            try {
+                const project = getActiveProject();
+                const { loadAppSpec } = await import('./story.ts');
+                const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+                if (existsSync(yamlPath)) {
+                    const spec = loadAppSpec(yamlPath);
+                    const { slugify } = await import('./types.ts');
+                    appId = slugify(spec.name);
+                } else {
+                    appId = project.id;
+                }
+            } catch (err: any) {
+                logError('Error: No active project or app ID provided.');
+                process.exit(1);
+            }
+        }
+
+        const { getAppRollup } = await import('./rollup.ts');
+        const data = getAppRollup(appId);
+        if (!data) {
+            logError(`App with ID "${appId}" not found in database. Did you run "factory app sync" first?`);
+            process.exit(1);
+        }
+
+        logHeader(`App Roadmap Status: ${data.name} (v${data.version})`);
+        
+        const statusColors: Record<string, string> = {
+            'draft': '\x1b[37m', // white
+            'in-progress': '\x1b[36m', // cyan
+            'testing': '\x1b[33m', // yellow
+            'done': '\x1b[32m', // green
+            'completed': '\x1b[32m', // green
+            'failed': '\x1b[31m', // red
+            'pending': '\x1b[2m', // dim
+            'blocked': '\x1b[31m', // red
+        };
+
+        const getStatusText = (status: string) => {
+            const color = statusColors[status] || '\x1b[0m';
+            return `${color}[${status}]\x1b[0m`;
+        };
+
+        console.log(`\x1b[1m● ${data.name}\x1b[0m ${getStatusText(data.status)} — \x1b[32m${data.progressPercent}% completed\x1b[0m`);
+        console.log(`  \x1b[2m${data.description}\x1b[0m`);
+        console.log(`  \x1b[34mStack:\x1b[0m ${data.stack.framework} / ${data.stack.language || 'typescript'} / db: ${data.stack.database || 'none'}`);
+        console.log(`  \x1b[34mBRD:\x1b[0m ${data.brd}`);
+        console.log('');
+        console.log(`\x1b[1mFeatures & Epics:\x1b[0m`);
+
+        for (let fIdx = 0; fIdx < data.features.length; fIdx++) {
+            const feature = data.features[fIdx];
+            const isLastFeature = fIdx === data.features.length - 1;
+            const featureBranch = isLastFeature ? '└──' : '├──';
+            const featurePrefix = isLastFeature ? '    ' : '│   ';
+            console.log(`  ${featureBranch} \x1b[1m${feature.name}\x1b[0m ${getStatusText(feature.status)} — \x1b[32m${feature.progressPercent}% completed\x1b[0m`);
+            if (feature.description) {
+                console.log(`  ${featurePrefix}\x1b[2m${feature.description}\x1b[0m`);
+            }
+            for (let sIdx = 0; sIdx < feature.stories.length; sIdx++) {
+                const story = feature.stories[sIdx];
+                const isLastStory = sIdx === feature.stories.length - 1;
+                const storyBranch = isLastStory ? '└──' : '├──';
+                const storyPrefix = isLastStory ? '    ' : '│   ';
+                console.log(`  ${featurePrefix}${storyBranch} \x1b[36mStory:\x1b[0m ${story.name} ${story.file ? `\x1b[2m(${story.file})\x1b[0m` : ''} ${getStatusText(story.status)} — \x1b[32m${story.progressPercent}% completed\x1b[0m`);
+                for (let i = 0; i < story.tasks.length; i++) {
+                    const task = story.tasks[i];
+                    const isLastTask = i === story.tasks.length - 1;
+                    const taskBranch = isLastTask ? '└──' : '├──';
+                    const checkIcon = task.status === 'completed' ? '\x1b[32m[✔]\x1b[0m' : task.status === 'failed' ? '\x1b[31m[✖]\x1b[0m' : task.status === 'running' ? '\x1b[36m[⏳]\x1b[0m' : '[ ]';
+                    console.log(`  ${featurePrefix}${storyPrefix}${taskBranch} ${checkIcon} ${task.title} \x1b[2m(${task.id})\x1b[0m`);
+                }
+            }
+        }
+        console.log('');
+    } else if (subcommand === 'list') {
+        logHeader('Synced Apps');
+        try {
+            const { getDb } = await import('./db.ts');
+            const db = getDb();
+            const rows = db.prepare('SELECT id, name, version, status FROM apps').all() as any[];
+            if (rows.length === 0) {
+                console.log('No synced apps found. Run "factory app sync [yaml-path]" first.');
+            } else {
+                for (const r of rows) {
+                    console.log(`  ● \x1b[1m${r.name}\x1b[0m (ID: ${r.id}) [v${r.version}] - status: ${r.status}`);
+                }
+            }
+        } catch (e: any) {
+            logError(`Failed to list apps: ${e?.message || e}`);
+        }
+    } else {
+        console.error('Usage: factory app <sync [yaml-path] | status [app-id] | list>');
+        process.exit(1);
+    }
 }
 
 /** factory blueprint update "<msg>" — append to worklog

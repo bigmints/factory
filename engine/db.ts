@@ -183,6 +183,87 @@ function initSchema(db: Database.Database): void {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        -- Hierarchical task organization
+        CREATE TABLE IF NOT EXISTS apps (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            brd TEXT NOT NULL,
+            version TEXT NOT NULL,
+            stack TEXT NOT NULL, -- JSON
+            status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'in-progress', 'testing', 'done'))
+        );
+
+        CREATE TABLE IF NOT EXISTS features (
+            id TEXT PRIMARY KEY,
+            app_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in-progress', 'completed', 'blocked')),
+            FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS stories (
+            id TEXT PRIMARY KEY,
+            feature_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            story_file TEXT,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'ready', 'in-progress', 'validation', 'review', 'done')),
+            FOREIGN KEY (feature_id) REFERENCES features(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            story_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed')),
+            FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
+        );
+
+        -- Drop existing triggers to ensure updates are applied
+        DROP TRIGGER IF EXISTS update_story_status_on_task_update;
+        DROP TRIGGER IF EXISTS update_feature_status_on_story_update;
+        DROP TRIGGER IF EXISTS update_app_status_on_feature_update;
+
+        -- Triggers for automatic status rollups
+        CREATE TRIGGER update_story_status_on_task_update
+        AFTER UPDATE OF status ON tasks
+        BEGIN
+            UPDATE stories
+            SET status = CASE 
+                -- If all tasks are completed, the story is done
+                WHEN (SELECT COUNT(*) FROM tasks WHERE story_id = NEW.story_id AND status != 'completed') = 0 THEN 'done'
+                -- If any task is completed, running, or failed, mark the story as in-progress
+                WHEN (SELECT COUNT(*) FROM tasks WHERE story_id = NEW.story_id AND status IN ('completed', 'running', 'failed')) > 0 THEN 'in-progress'
+                ELSE status
+            END
+            WHERE id = NEW.story_id;
+        END;
+
+        CREATE TRIGGER update_feature_status_on_story_update
+        AFTER UPDATE OF status ON stories
+        BEGIN
+            UPDATE features
+            SET status = CASE
+                WHEN (SELECT COUNT(*) FROM stories WHERE feature_id = NEW.feature_id AND status != 'done') = 0 THEN 'completed'
+                WHEN (SELECT COUNT(*) FROM stories WHERE feature_id = NEW.feature_id AND status IN ('in-progress', 'validation', 'review', 'done')) > 0 THEN 'in-progress'
+                ELSE 'pending'
+            END
+            WHERE id = NEW.feature_id;
+        END;
+
+        CREATE TRIGGER update_app_status_on_feature_update
+        AFTER UPDATE OF status ON features
+        BEGIN
+            UPDATE apps
+            SET status = CASE
+                WHEN (SELECT COUNT(*) FROM features WHERE app_id = NEW.app_id AND status != 'completed') = 0 THEN 'done'
+                WHEN (SELECT COUNT(*) FROM features WHERE app_id = NEW.app_id AND status IN ('in-progress', 'completed')) > 0 THEN 'in-progress'
+                ELSE 'draft'
+            END
+            WHERE id = NEW.app_id;
+        END;
     `);
 
     // Ensure default state values exist

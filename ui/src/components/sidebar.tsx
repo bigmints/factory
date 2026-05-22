@@ -15,14 +15,14 @@ import {
   Menu,
   ChevronRight,
   Terminal,
+  Compass,
+  Smartphone,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
-  SheetHeader,
-  SheetTitle,
 } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { ProjectSwitcher } from '@/components/project-switcher';
@@ -35,7 +35,9 @@ interface SidebarProps {
 }
 
 const mainNav = [
+  { id: 'cockpit', label: 'Cockpit', icon: Smartphone },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'roadmap', label: 'Roadmap', icon: Compass },
   { id: 'stories', label: 'Stories', icon: FileText },
   { id: 'queue', label: 'Queue', icon: ListOrdered },
   { id: 'skills', label: 'Skills', icon: Wand2 },

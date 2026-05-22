@@ -19,6 +19,9 @@ import { loadSettings, getActiveProvider } from './config.ts';
 import { gatherAppBlueprint, loadQueueBlueprint } from './blueprint.ts';
 import { log, logStep, logError } from './log.ts';
 import { resolveSkillsForBuild, formatSkillsForPrompt, seedDefaultSkills } from './skills.ts';
+import { parse as parseYaml } from 'yaml';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, basename } from 'node:path';
 
 const PIPELINE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes — prioritise quality over speed
 
@@ -374,9 +377,9 @@ function groupFilesByDirectory(files: GeneratedFile[]): Record<string, number> {
 
 // ─── Test ────────────────────────────────────────────────
 
-import { mkdtempSync, writeFileSync as fsWrite, readFileSync as fsRead, mkdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync as fsWrite, readFileSync as fsRead, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname } from 'node:path';
 import { execSync, spawn as cpSpawn } from 'node:child_process';
 import type { StackConfig } from './types.ts';
 
@@ -1567,9 +1570,84 @@ export function buildToolSystemPrompt(
     blueprint: ProjectBlueprint,
     targetDir: string,
     appBlueprint?: AppIntegrationBlueprint,
+    storyFile?: string,
 ): string {
     const isApp = 'appName' in story;
     const storyBlock = isApp ? formatStory(story as AppStory) : formatFeatureStory(story as FeatureStory);
+
+    let roadmapBlock = '';
+    try {
+        const appYamlPath = resolve(blueprint.repoPath, '.factory', 'app.yaml');
+        if (existsSync(appYamlPath)) {
+            const raw = readFileSync(appYamlPath, 'utf-8');
+            const appSpec = parseYaml(raw) as any;
+            if (appSpec) {
+                let brdContent = appSpec.brd || '';
+                // If brd is a markdown file path, attempt to load its content
+                if (brdContent && brdContent.endsWith('.md')) {
+                    const possibleBrdPaths = [
+                        resolve(blueprint.repoPath, brdContent),
+                        resolve(blueprint.repoPath, '.factory', brdContent),
+                        resolve(blueprint.repoPath, '.factory', 'specs', brdContent)
+                    ];
+                    for (const p of possibleBrdPaths) {
+                        if (existsSync(p)) {
+                            try {
+                                brdContent = readFileSync(p, 'utf-8');
+                                break;
+                            } catch {}
+                        }
+                    }
+                }
+
+                let matchingFeature: any = null;
+                const targetStoryFile = storyFile ? basename(storyFile) : '';
+                if (targetStoryFile && appSpec.features) {
+                    for (const f of appSpec.features) {
+                        if (f.stories) {
+                            for (const s of f.stories) {
+                                if (s.file && basename(s.file) === targetStoryFile) {
+                                    matchingFeature = f;
+                                    break;
+                                }
+                            }
+                        }
+                        if (matchingFeature) break;
+                    }
+                }
+
+                if (!matchingFeature && appSpec.features) {
+                    const sName = isApp ? (story as AppStory).appName : (story as FeatureStory).feature?.name;
+                    if (sName) {
+                        for (const f of appSpec.features) {
+                            if (f.stories && f.stories.some((s: any) => s.name === sName)) {
+                                matchingFeature = f;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                roadmapBlock = `\n## Project Roadmap & Requirements (App-level Context)
+Application: ${appSpec.name} (v${appSpec.version})
+Description: ${appSpec.description}
+
+### Business Requirements Document (BRD)
+${brdContent || 'No business requirements document specified.'}
+`;
+
+                if (matchingFeature) {
+                    roadmapBlock += `
+### Active Feature Epic Context
+You are currently building a story for the Feature Epic: **${matchingFeature.name}**
+Feature Epic Description: ${matchingFeature.description || 'No description provided.'}
+`;
+                }
+            }
+        }
+    } catch (e: any) {
+        log('!', `Warning: Could not inject App Roadmap context: ${e?.message || e}`);
+    }
 
     const toonBlueprint = blueprint.toonSnapshot
         ? `\n## Project Blueprint (TOON)\n\`\`\`toon\n${blueprint.toonSnapshot}\n\`\`\`\n`
@@ -1645,6 +1723,7 @@ Make sure to format all your tool calls exactly like this inside your response. 
 5. Use log_step(info/warn/error) to track progress.
 6. Only call mark_failed after genuinely exhausting all remediation options.
 ${storyBlock}
+${roadmapBlock}
 ${toonBlueprint}${skillsBlock}${appBlueprintBlock}
 ## Available Tools
 ${TOOL_DEFINITIONS.map(t => `- **${t.name}**: ${t.description}`).join('\n')}
@@ -1665,7 +1744,7 @@ export async function runToolSession(
     appBlueprint?: AppIntegrationBlueprint,
 ): Promise<BuildResult> {
     const { provider, model } = requireActiveProvider();
-    const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint);
+    const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
 
     const ctx: BuildToolBlueprint = {
         targetDir,
@@ -1878,15 +1957,46 @@ function parseXmlToolCalls(content: string): ToolCallResult {
             }
         } catch {
             // Not valid JSON. Let's try to extract JSON-like structure or extract name/arguments manually if possible.
-            const nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/);
-            const argsMatch = block.match(/"arguments"\s*:\s*(\{[\s\S]*\})/);
+            const nameMatch = block.match(/"name"\s*:\s*"([^"]+)"/) || block.match(/(?:<)?function\s*=\s*\\?"?([a-zA-Z_][a-zA-Z0-9_]*)\\?"?/);
+            const argsMatch = block.match(/"arguments"\s*:\s*(\{[\s\S]*\})/) || block.match(/"parameters"\s*:\s*(\{[\s\S]*\})/) || block.match(/"args"\s*:\s*(\{[\s\S]*\})/);
             if (nameMatch) {
                 const name = nameMatch[1];
-                let args = {};
+                let args: Record<string, any> = {};
                 if (argsMatch) {
                     try {
-                        args = JSON.parse(argsMatch[1]);
-                    } catch {}
+                        let jsonStr = argsMatch[1].trim();
+                        // If it has unmatched opening brackets, try to append closing ones
+                        const openBraces = (jsonStr.match(/\{/g) || []).length;
+                        const closeBraces = (jsonStr.match(/\}/g) || []).length;
+                        if (openBraces > closeBraces) {
+                            jsonStr += '}'.repeat(openBraces - closeBraces);
+                        }
+                        args = JSON.parse(jsonStr);
+                    } catch {
+                        // Fallback: try parsing individual parameters if JSON.parse fails
+                        try {
+                            const pathMatch = argsMatch[1].match(/"path"\s*:\s*"([^"]+)"/);
+                            const contentMatch = argsMatch[1].match(/"content"\s*:\s*"([\s\S]*?)"(?=\s*[,\}])/);
+                            const tempArgs: any = {};
+                            if (pathMatch) tempArgs.path = pathMatch[1];
+                            if (contentMatch) {
+                                tempArgs.content = contentMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                            } else {
+                                // If content is huge/multiline and has unescaped quotes, try to get it between content and next key or end
+                                const contentFallback = argsMatch[1].match(/"content"\s*:\s*"([\s\S]*)$/);
+                                if (contentFallback) {
+                                    let raw = contentFallback[1].trim();
+                                    if (raw.endsWith('}') || raw.endsWith('}"')) {
+                                        raw = raw.replace(/"?\}*$/, '');
+                                    }
+                                    tempArgs.content = raw.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                                }
+                            }
+                            if (Object.keys(tempArgs).length > 0) {
+                                args = tempArgs;
+                            }
+                        } catch {}
+                    }
                 }
                 toolCalls.push({
                     id: `xml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

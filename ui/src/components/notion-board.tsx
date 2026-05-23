@@ -1366,10 +1366,6 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
     });
   }, [filteredStoriesList]);
 
-  // Unsynced/Standalone stories (not declared in app.yaml)
-  const unsyncedStories = useMemo(() => {
-    return filteredStoriesList.filter(item => !item.epicParent);
-  }, [filteredStoriesList]);
 
   // Map each epic id → stable EPIC_COLORS entry
   const epicColorMap = useMemo(() => {
@@ -1856,7 +1852,6 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
           readyStories={readyStories}
           buildingStories={buildingStories}
           doneStories={doneStories}
-          unsyncedStories={unsyncedStories}
           mergedStories={mergedStories}
           epicColorMap={epicColorMap}
           handleOpenDrawer={handleOpenDrawer}
@@ -2633,13 +2628,13 @@ interface KanbanColumnProps {
 
 function MobileKanbanBoard({
   backlogStories, readyStories, buildingStories, doneStories,
-  unsyncedStories, mergedStories, epicColorMap,
+  mergedStories, epicColorMap,
   handleOpenDrawer, handleValidateStory, handleSingleBuild, activeAction,
   handleDragOver, handleDrop, handleDragStart,
   showEpicLegend, appRollup,
 }: {
   backlogStories: any[]; readyStories: any[]; buildingStories: any[]; doneStories: any[];
-  unsyncedStories: any[]; mergedStories: any[]; epicColorMap: Map<string, any>;
+  mergedStories: any[]; epicColorMap: Map<string, any>;
   handleOpenDrawer: any; handleValidateStory: any; handleSingleBuild: any; activeAction: any;
   handleDragOver: any; handleDrop: any; handleDragStart: any;
   showEpicLegend: boolean; appRollup: any;
@@ -2652,15 +2647,7 @@ function MobileKanbanBoard({
     { title: 'Ready to Build', desc: 'Verified specifications awaiting launch', badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10', stories: readyStories, status: 'ready', dot: 'bg-teal-400' },
     { title: 'In Progress', desc: 'Actively compiling or iterating', badge: 'bg-blue-500/5 text-blue-300 border-blue-500/10', stories: buildingStories, status: 'in-progress', dot: 'bg-blue-400' },
     { title: 'Completed', desc: 'Code written and tests passed', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10', stories: doneStories, status: 'done', dot: 'bg-emerald-400' },
-    ...(unsyncedStories.length > 0 ? [{
-      title: 'Issues',
-      desc: 'Specs not yet linked to an Epic — run Sync Roadmap to assign',
-      badge: 'bg-rose-500/5 text-rose-300 border-rose-500/10',
-      stories: unsyncedStories,
-      status: 'unknown',
-      dot: 'bg-rose-400',
-    }] : []),
-  ];
+  ] as const;
 
   // Update active dot based on scroll position
   const onScroll = useCallback(() => {
@@ -2702,13 +2689,8 @@ function MobileKanbanBoard({
         </div>
       )}
 
-      {/* ── Desktop: Kanban columns (5 when Issues present, 4 otherwise) ── */}
-      <div className={cn(
-        'hidden md:grid gap-4 flex-1 min-h-0 h-full',
-        unsyncedStories.length > 0
-          ? 'md:grid-cols-2 xl:grid-cols-5'
-          : 'md:grid-cols-2 xl:grid-cols-4'
-      )}>
+      {/* ── Desktop: 4-column Kanban ── */}
+      <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-4 gap-4 flex-1 min-h-0 h-full">
         {COLS.map((col) => (
           <KanbanColumn
             key={col.title}

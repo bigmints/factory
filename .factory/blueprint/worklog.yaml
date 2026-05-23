@@ -1,4 +1,4 @@
-entries[4]:
+entries[5]:
   - date: "2026-05-22 15:30:42"
     message: factory .factory/ scaffold initialized
   - date: "2026-05-23 07:28:49"
@@ -10,3 +10,6 @@ entries[4]:
   - date: "2026-05-23 07:42:02"
     message: "committed: fix(onboarding): correct skill URL branch (main → master) and org casing"
     files: ui/src/components/new-project-guide.tsx
+  - date: "2026-05-23 07:46:20"
+    message: "committed: feat(board): move unsynced stories into main board as 'Issues' column\n\n- Issues column appears only when there are unsynced stories (no epic parent)\n- Rose-colored theme to visually distinguish it as needing attention\n- Desktop grid expands to 5 columns when Issues is present, stays 4 otherwise\n- Mobile carousel dot indicator automatically includes the new column\n- Removes the old standalone 'Uncategorized' section below the board"
+    files: ".factory/blueprint/worklog.yaml,.factory/context/heartbeat.yaml,engine/init.ts,ui/src/components/notion-board.tsx"

@@ -1,5 +1,11 @@
 heartbeat:
-  last_seen: "2026-05-23T07:42:02Z"
+  last_seen: "2026-05-23T07:46:20Z"
   host: "BigMac-2"
-  task: "post-commit: fix(onboarding): correct skill URL branch (main → master) and org casing"
+  task: "post-commit: feat(board): move unsynced stories into main board as 'Issues' column
+
+- Issues column appears only when there are unsynced stories (no epic parent)
+- Rose-colored theme to visually distinguish it as needing attention
+- Desktop grid expands to 5 columns when Issues is present, stays 4 otherwise
+- Mobile carousel dot indicator automatically includes the new column
+- Removes the old standalone 'Uncategorized' section below the board"
   status: alive

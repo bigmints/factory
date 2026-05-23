@@ -1,361 +1,228 @@
 ---
 name: factory-spec-bootstrap
 description: >
-  Interactively create a complete Factory spec suite for a new project — app spec,
-  feature specs (epics), and stories — so the build engine can start immediately.
+  Interactively create a complete Factory spec suite for a new project —
+  one app.yaml with features + inline stories, plus individual story YAML files.
+  No dependency maps. No epic hierarchy. Flat, engine-ready structure.
 ---
 
 # Factory Spec Bootstrap Skill
 
-You are helping the user create a complete set of **Factory specs** for their project.
-Factory is a spec-driven build engine: you write YAML, queue it up, and the engine builds the code.
+You are helping the user create specs for their project so the Factory build engine can start immediately.
 
-Your job is to **gather information through conversation**, then **write the YAML spec files** directly
-into the project's `.factory/specs/` directory.
+Factory reads **one file**: `.factory/app.yaml`. Everything — features, stories, progress — lives there or is referenced from it. Your job is to produce that file plus the individual story YAML files it references.
 
----
-
-## Step 1 — Understand the project
-
-Ask the user the following questions (you may batch several at once to keep it fast):
-
-1. **What does this project do?** (one paragraph description)
-2. **What is the app name?** (used as a slug, e.g. `my-saas-app`)
-3. **What is the tech stack?**
-   - Framework: `next.js` | `remix` | `vite` | `astro` | `node`
-   - Package manager: `pnpm` | `npm` | `yarn` | `bun`
-   - Language: `typescript` | `javascript`
-   - Database: `supabase` | `postgres` | `firestore` | `sqlite` | `mongodb` | `none`
-   - Cloud/hosting: `vercel` | `gcp` | `aws` | `none`
-4. **What authentication method?** (`firebase` | `nextauth` | `clerk` | `supabase` | `none`)
-   - Which sign-in methods? (email, google, github, apple, phone)
-5. **What are the main features / epics?** List 3–10 feature names with a one-line description each.
-6. **What data models are needed?** For each model: name, key fields, and their types.
-7. **What pages does each feature need?** (list, detail, form, dashboard, etc.)
-
-> **Tip**: If the user's FACTORY_PROJECT_ROOT is provided, read the existing `AGENTS.md`,
-> `package.json`, and `.factory/factory.yaml` first to auto-detect the stack and conventions.
-> Incorporate existing context so you don't ask questions already answered.
+**No epics. No dependency maps. No phase ordering. No dependsOn. Just features → stories.**
 
 ---
 
-## Step 2 — Plan the spec decomposition
+## Step 1 — Ask only what you need
 
-Before writing any files, present a **spec plan** to the user:
+Ask these questions (batch them to keep it fast):
+
+1. **What does this project do?** (one paragraph)
+2. **App name?** (becomes the slug, e.g. `pi-app`)
+3. **Tech stack?** — framework, package manager, language, database, cloud
+4. **What are the main feature areas?** List 4–8 feature names (e.g. "Chat UI", "Auth", "Settings"). These become features in app.yaml.
+5. **For each feature, what are the individual pieces of work (stories)?** 2–6 per feature is ideal.
+
+> If you can read existing files in the project (package.json, AGENTS.md, README), do so first — auto-detect the stack so you don't have to ask.
+
+---
+
+## Step 2 — Show a plan, get confirmation
+
+Before writing any files, show this summary and ask the user to confirm:
 
 ```
-App Spec:      .factory/specs/apps/<slug>.yaml
-Feature Specs:
-  Phase 1 (Foundation):
-    - .factory/specs/features/auth-system.yaml
-    - .factory/specs/features/data-models.yaml
-  Phase 2 (Core):
-    - .factory/specs/features/invoicing.yaml      (dependsOn: [auth-system, data-models])
-    - .factory/specs/features/dashboard.yaml      (dependsOn: [auth-system, data-models])
-  Phase 3 (Polish):
-    - .factory/specs/features/notifications.yaml  (dependsOn: [auth-system])
-    - .factory/specs/features/settings.yaml       (dependsOn: [auth-system])
+app.yaml will contain:
+  Feature: Chat UI
+    - Story: Build message bubble components
+    - Story: Implement WebSocket streaming
+    - Story: Add auto-scroll behaviour
+  Feature: Auth
+    - Story: Build login screen
+    - Story: Implement session persistence
+  ...
+
+Story files will be created in:
+  .factory/stories/features/<story-slug>.yaml
 ```
 
-Explain the **phase system**:
-- **Phase 1** — Foundation (auth, core data models, shared utilities)
-- **Phase 2** — Core features (business logic, CRUD, APIs)
-- **Phase 3** — Polish (notifications, analytics, settings, exports)
-
-Explain **`dependsOn`**: lists slugs of features that must complete before this one builds.
-The engine enforces this — a feature will not start until all its dependencies are `completed`.
-
-Ask the user to confirm or adjust the plan before writing files.
+Adjust based on feedback before writing anything.
 
 ---
 
-## Step 3 — Write the App Spec
+## Step 3 — Write `.factory/app.yaml`
 
-Create `.factory/specs/apps/<slug>.yaml`:
+This is the **only** file the engine reads for roadmap state. Write it exactly like this:
 
 ```yaml
-# ─── App Spec ────────────────────────────────────────────────────────────────
-# Generated by factory-spec-bootstrap skill
-# Run: factory build .factory/specs/apps/<slug>.yaml
-
-appName: "<App Name>"
-description: "<One paragraph description>"
-
-status: draft  # draft | in-progress | validation | done
-
-# ─── Stack ────────────────────────────────────────────────────────────────────
-stack:
-  framework: <framework>     # next.js | remix | vite | astro | node
-  packageManager: <pm>       # pnpm | npm | yarn | bun
-  language: <language>       # typescript | javascript
-  linter: eslint             # eslint | biome | none
-  testing: vitest            # vitest | jest | playwright | none
-  database: <database>       # supabase | postgres | firestore | sqlite | mongodb | none
-  cloud: <cloud>             # vercel | gcp | aws | none
-
-# ─── Frontend ────────────────────────────────────────────────────────────────
-frontend:
-  ui: shadcn/ui              # shadcn/ui | tailwind | material-ui | chakra | none
-  theme: dark/light          # dark | light | dark/light
-  icons: lucide              # lucide | heroicons | phosphor | none
-  fonts:
-    - Inter
-    - "JetBrains Mono"
-
-# ─── Layout ──────────────────────────────────────────────────────────────────
-layout:
-  sidebar: true
-  topbar: true
-  bottombar: false
-  footer: false
-
-# ─── Auth ────────────────────────────────────────────────────────────────────
-auth:
-  provider: <provider>       # firebase | nextauth | supabase | clerk | none
-  methods:
-    email: <true|false>
-    google: <true|false>
-    github: <true|false>
-    apple: <true|false>
-    phone: <true|false>
-  pages:
-    login: true
-    signup: true
-    forgotPassword: true
-
-# ─── Data Models ─────────────────────────────────────────────────────────────
-data:
-  tables:
-    - name: <model_name>
-      fields:
-        <field>: { type: <string|number|boolean|datetime>, required: <true|false>, default: "<value>" }
-        # Add all fields here
-
-# ─── Pages ───────────────────────────────────────────────────────────────────
-# Describe pages in natural language — the engine generates routes and components
-pages:
-  dashboard:
-    - "<description of dashboard/overview page>"
-  crud:
-    - table: <model_name>    # auto-generates list, detail, create, edit pages
-  custom: []
-    # - "<description of any other page>"
-
-# ─── Deployment ──────────────────────────────────────────────────────────────
-deployment:
-  port: 3000
-  region: <region>           # us-central1 | us-east-1 | etc
-```
-
-**Rules when filling this template:**
-- `appName` becomes the slug: lowercase, hyphens, no spaces
-- Describe pages in natural language — DO NOT generate code, just describe intent
-- Only include data models belonging to the core app; feature-specific models go in feature specs
-- Remove commented-out sections that don't apply
-
----
-
-## Step 4 — Write Feature Specs
-
-For each feature, create `.factory/specs/features/<feature-slug>.yaml`:
-
-```yaml
-# ─── Feature Spec ─────────────────────────────────────────────────────────────
-# Target: <appName>  Phase: <1|2|3>
-
-feature:
-  name: "<Feature Name>"
-  description: "<What this feature does>"
-  slug: <feature-slug>       # lowercase-hyphen, matches filename
-
-target:
-  app: <appName-slug>        # must exactly match the app spec's appName (slugified)
-
-phase: <1|2|3>               # 1=foundation · 2=core · 3=polish
-dependsOn:                   # slugs of features that must complete first (empty array if none)
-  - <dependency-slug>
-
-# ─── Data Model ──────────────────────────────────────────────────────────────
-model:
-  collection: <collectionName>
-  fields:
-    - { name: <field>, type: <string|number|boolean|datetime>, required: <true|false> }
-
-# ─── Pages ───────────────────────────────────────────────────────────────────
-pages:
-  - "<description of page 1>"
-  - "<description of page 2>"
-  # Describe in natural language: "invoice list with search and date filters"
-  # "invoice detail page with PDF export button"
-
-# ─── Dependencies (npm packages) ─────────────────────────────────────────────
-dependencies: []
-  # Only list packages NOT already in the app's package.json
-  # - react-pdf
-  # - date-fns
-
+name: "<app-name>"
+description: "<one paragraph description>"
+version: 1.0.0
 status: draft
+progressPercent: 0
+
+stack:
+  framework: <framework>        # next.js | remix | vite | node | astro
+  language: <language>          # typescript | javascript
+  packageManager: <pm>          # npm | pnpm | yarn | bun
+  styling: <styling>            # tailwind | vanilla-css | shadcn/ui
+  database: <database>          # supabase | postgres | sqlite | none
+  cloud: <cloud>                # vercel | gcp | aws | none
+
+features:
+  - name: "<Feature Name>"
+    status: draft
+    progressPercent: 0
+    stories:
+      - name: "<Story title>"
+        file: .factory/stories/features/<story-slug>.yaml
+        status: draft
+        progressPercent: 0
+        tasks: []
+
+  - name: "<Next Feature>"
+    status: draft
+    progressPercent: 0
+    stories:
+      - name: "<Story title>"
+        file: .factory/stories/features/<story-slug>.yaml
+        status: draft
+        progressPercent: 0
+        tasks: []
 ```
 
 **Rules:**
-- `feature.slug` must match the filename (without `.yaml`)
-- `target.app` must exactly match the app spec's `appName` (slugified, lowercase-hyphen)
-- `dependsOn` uses slugs (filenames without `.yaml`) of other feature specs
-- Write `pages` as natural language sentences, not code
-- Only list `dependencies` that are new — the engine checks existing `package.json`
+- `name` at the top level is the app slug — lowercase, hyphens, no spaces
+- `features` is a flat list — no nesting, no IDs, no phase numbers, no milestones
+- Each feature has a `stories` array — **inline**, not a file reference
+- Each story has a `file` pointing to `.factory/stories/features/<story-slug>.yaml`
+- `status` is always `draft` to start — never `todo`, `pending`, or `unknown`
+- No `dependsOn`, no `phase`, no `milestone`, no `id` fields on features or stories
+- `tasks: []` is required on every story even if empty
 
 ---
 
-## Step 5 — Write the factory.yaml bridge config
+## Step 4 — Write individual story YAML files
 
-If `.factory/factory.yaml` doesn't exist, create it:
+For each story create `.factory/stories/features/<story-slug>.yaml`:
 
 ```yaml
-# Factory Bridge Config
-# Links this repo to the Factory build engine
+name: "<Story title — same as in app.yaml>"
+description: "<What this story builds, 1–3 sentences>"
+status: draft
 
-project:
-  name: "<App Name>"
-  description: "<Short description>"
+acceptance_criteria:
+  - "<Specific, testable criterion>"
+  - "<Another criterion>"
+  - "<Another criterion>"
+```
 
-stack:
-  framework: <framework>
-  packageManager: <pm>
-  language: <language>
+**Rules:**
+- `name` must exactly match the `name` field in `app.yaml`'s story entry
+- `status: draft` always
+- Include 3–6 acceptance criteria written as present-tense testable statements
+- No tasks, no subtasks, no checklists, no dependencies — keep it minimal
+- Filename is lowercase-hyphen slug of the story title
 
-# Conventions the LLM follows when generating code
-conventions:
-  - "Use TypeScript strict mode throughout"
-  - "Follow the existing file/folder structure"
-  - "All components use shadcn/ui primitives"
-  - "API routes live in src/app/api/"
-  - "Shared types go in src/lib/types.ts"
-  # Add project-specific conventions here
+---
 
-# Knowledge files the engine reads for context
-knowledge: []
-  # - path: docs/architecture.md
-  # - path: docs/api-design.md
+## Step 5 — Write `.factory/factory.yaml` if it doesn't exist
+
+```yaml
+version: 1
+name: "<app-name>"
+description: "<short description>"
+factory_home: /path/to/factory  # path to Factory install — ask user if unsure
 ```
 
 ---
 
-## Step 6 — Confirm and validate
+## Step 6 — Validate and summarise
 
-After writing all files, run:
-
-```bash
-# From the Factory install directory:
-npx tsx engine/cli.ts validate .factory/specs/apps/<slug>.yaml
-
-# Validate each feature spec:
-npx tsx engine/cli.ts validate .factory/specs/features/<feature>.yaml
-
-# Check status of all specs:
-npx tsx engine/cli.ts status
-```
-
-If validation fails, fix the flagged issues in the YAML files.
-
----
-
-## Step 7 — Summary handoff
-
-Present the user with a final summary:
+After writing all files, tell the user:
 
 ```
-✅ Spec suite created for <App Name>
+✅ Done. Here's what was created:
 
-Files written:
-  .factory/specs/apps/<slug>.yaml
-  .factory/specs/features/auth-system.yaml      (phase 1)
-  .factory/specs/features/data-models.yaml      (phase 1)
-  .factory/specs/features/<feature>.yaml        (phase 2, depends on: auth-system, data-models)
-  ...
+.factory/app.yaml
+  └── Feature: Chat UI (3 stories)
+  └── Feature: Auth (2 stories)
+  └── Feature: Settings (2 stories)
 
-Next steps:
-  1. Open the Factory dashboard → Plan tab
-  2. Click "Sync Roadmap" to populate the board from your specs
-  3. Drag stories to "Ready to Build" or click "Build All"
-  4. Or run: factory queue start
+.factory/stories/features/
+  ├── build-message-bubbles.yaml
+  ├── implement-websocket-streaming.yaml
+  ├── ...
+
+Next: open the Factory dashboard → Plan tab → click "Sync Roadmap"
+Stories will appear on the board grouped by feature.
 ```
-
----
-
-## Spec slug rules
-
-| Input | Slug |
-|-------|------|
-| "My SaaS App" | `my-saas-app` |
-| "Auth System" | `auth-system` |
-| "User Profiles" | `user-profiles` |
-
-Slugs are always: **lowercase, hyphens only, no spaces or special chars**.
 
 ---
 
 ## Minimal working example
 
-Here is the smallest valid spec set for a task management app:
-
-**`.factory/specs/apps/task-manager.yaml`**
+**.factory/app.yaml**
 ```yaml
-appName: "task-manager"
-description: "A web app to manage tasks with team collaboration"
+name: task-manager
+description: A web app to manage tasks with team collaboration
+version: 1.0.0
 status: draft
+progressPercent: 0
+
 stack:
   framework: next.js
-  packageManager: pnpm
   language: typescript
+  packageManager: pnpm
+  styling: tailwind
   database: supabase
   cloud: vercel
-frontend:
-  ui: shadcn/ui
-  theme: dark/light
-  icons: lucide
-auth:
-  provider: nextauth
-  methods:
-    email: true
-    google: true
-data:
-  tables:
-    - name: tasks
-      fields:
-        title: { type: string, required: true }
-        description: { type: string }
-        status: { type: string, default: "todo" }
-        assigneeId: { type: string }
-        dueDate: { type: datetime }
-pages:
-  dashboard:
-    - "overview showing task counts by status and upcoming due dates"
-  crud:
-    - table: tasks
-deployment:
-  port: 3000
-  region: us-east-1
+
+features:
+  - name: Auth
+    status: draft
+    progressPercent: 0
+    stories:
+      - name: Build login and signup screens
+        file: .factory/stories/features/login-signup-screens.yaml
+        status: draft
+        progressPercent: 0
+        tasks: []
+      - name: Implement session persistence with httpOnly cookie
+        file: .factory/stories/features/session-persistence.yaml
+        status: draft
+        progressPercent: 0
+        tasks: []
+
+  - name: Task Management
+    status: draft
+    progressPercent: 0
+    stories:
+      - name: Build task list with filters and sorting
+        file: .factory/stories/features/task-list.yaml
+        status: draft
+        progressPercent: 0
+        tasks: []
+      - name: Build task detail and edit form
+        file: .factory/stories/features/task-detail-form.yaml
+        status: draft
+        progressPercent: 0
+        tasks: []
 ```
 
-**`.factory/specs/features/task-comments.yaml`**
+**.factory/stories/features/login-signup-screens.yaml**
 ```yaml
-feature:
-  name: "Task Comments"
-  description: "Real-time comments on tasks"
-  slug: task-comments
-target:
-  app: task-manager
-phase: 2
-dependsOn:
-  - auth-system
-model:
-  collection: comments
-  fields:
-    - { name: content, type: string, required: true }
-    - { name: taskId, type: string, required: true }
-    - { name: authorId, type: string, required: true }
-pages:
-  - "comment thread on task detail page with real-time updates"
-  - "comment composer with markdown support"
+name: Build login and signup screens
+description: Login and signup UI with form validation, error states, and redirect on success.
 status: draft
+
+acceptance_criteria:
+  - Login form accepts email and password with inline validation
+  - Signup form collects name, email, and password with confirmation
+  - Errors display inline beneath each field
+  - Successful login redirects to dashboard
+  - Loading state shown on submit button during request
 ```

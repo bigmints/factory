@@ -89,13 +89,13 @@ export function parseToonSkillIndex(path: string): Array<{ name: string; path: s
 // ─── Heartbeat ───────────────────────────────────────────
 
 /**
- * Write a heartbeat to .factory/context/heartbeat.toon.
+ * Write a heartbeat to .factory/logs/heartbeat.yaml.
  * @param projectRoot - Path to the project root
  * @param task - Current task description
  */
 export function writeHeartbeat(projectRoot: string, task: string): void {
     // Write to .yaml — YAML is the canonical storage format
-    const heartbeatFile = join(projectRoot, '.factory/context/heartbeat.yaml');
+    const heartbeatFile = join(projectRoot, '.factory/logs/heartbeat.yaml');
     mkdirSync(dirname(heartbeatFile), { recursive: true });
 
     const data = {
@@ -112,7 +112,7 @@ export function writeHeartbeat(projectRoot: string, task: string): void {
 // ─── Tasks Snapshot ─────────────────────────────────────
 
 /**
- * Write a TOON snapshot of the current task queue to .factory/context/tasks.toon.
+ * Write a TOON snapshot of the current task queue to .factory/logs/tasks.yaml.
  * Preserves human-added tasks (those not matching any spec slug).
  */
 export function writeToonTasksSnapshot(
@@ -120,7 +120,7 @@ export function writeToonTasksSnapshot(
     tasks: Array<{ id: string; status: string; summary: string }>,
 ): void {
     // Write to .yaml — YAML is the canonical storage format
-    const tasksFile = join(projectRoot, '.factory/context/tasks.yaml');
+    const tasksFile = join(projectRoot, '.factory/logs/tasks.yaml');
     mkdirSync(dirname(tasksFile), { recursive: true });
     const data = {
         tasks: tasks.map(t => ({ id: t.id, status: t.status, summary: t.summary })),

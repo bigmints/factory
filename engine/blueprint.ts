@@ -216,20 +216,20 @@ function gatherKnowledgeFiles(repoPath: string, bridge: BridgeConfig): Knowledge
         }
     }
 
-    // Build knowledge - auto-discover .factory/knowledge/builds/ summaries
-    const knowledgeBuildsDir = join(repoPath, '.factory', 'knowledge', 'builds');
-    if (existsSync(knowledgeBuildsDir)) {
-        const buildFiles = readdirSync(knowledgeBuildsDir)
+    // Build knowledge - auto-discover .factory/logs/builds/ summaries
+    const logsBuildsDir = join(repoPath, '.factory', 'logs', 'builds');
+    if (existsSync(logsBuildsDir)) {
+        const buildFiles = readdirSync(logsBuildsDir)
             .filter(f => f.endsWith('.md'))
             .sort();
         for (const buildFile of buildFiles) {
-            const relPath = `.factory/knowledge/builds/${buildFile}`;
+            const relPath = `.factory/logs/builds/${buildFile}`;
             if (!files.some(f => f.path === relPath)) {
                 files.push({
                     app: buildFile.replace('.md', ''),
                     filename: buildFile,
                     path: relPath,
-                    content: readFileSync(join(knowledgeBuildsDir, buildFile), 'utf-8'),
+                    content: readFileSync(join(logsBuildsDir, buildFile), 'utf-8'),
                 });
             }
         }
@@ -289,11 +289,13 @@ function extractAppName(filePath: string): string {
  * the same role gzip plays in HTTP: store raw, compress on transmission.
  */
 export function gatherToonSnapshot(repoPath: string): { toonSnapshot?: string; projectSkills?: Array<{ name: string; path: string; description: string }> } {
-    // Prefer blueprint — fall back to context for backward compatibility
-    const blueprintYaml = join(repoPath, '.factory/blueprint/blueprint.yaml');
-    const blueprintToon = join(repoPath, '.factory/blueprint/blueprint.toon');
-    const contextYaml = join(repoPath, '.factory/context/context.yaml');
-    const contextToon = join(repoPath, '.factory/context/context.toon');
+    // Prefer logs/ — fall back to blueprint/ and context/ for backward compatibility
+    const stateYaml = join(repoPath, '.factory/logs/state.yaml');
+    const stateToon = join(repoPath, '.factory/logs/state.toon');
+    const legacyBlueprintYaml = join(repoPath, '.factory/blueprint/blueprint.yaml');
+    const legacyBlueprintToon = join(repoPath, '.factory/blueprint/blueprint.toon');
+    const legacyContextYaml = join(repoPath, '.factory/context/context.yaml');
+    const legacyContextToon = join(repoPath, '.factory/context/context.toon');
 
     const skillIndexYaml = join(repoPath, '.factory/skill-index.yaml');
     const skillIndexToon = join(repoPath, '.factory/skill-index.toon');
@@ -301,11 +303,13 @@ export function gatherToonSnapshot(repoPath: string): { toonSnapshot?: string; p
     let toonSnapshot: string | undefined;
     let projectSkills: Array<{ name: string; path: string; description: string }> | undefined;
 
-    // Read blueprint / context — encode YAML → TOON for token-efficient LLM injection
-    const blueprintFile = existsSync(blueprintYaml) ? blueprintYaml
-        : existsSync(blueprintToon) ? blueprintToon
-        : existsSync(contextYaml) ? contextYaml
-        : existsSync(contextToon) ? contextToon : null;
+    // Read state — encode YAML → TOON for token-efficient LLM injection
+    const blueprintFile = existsSync(stateYaml) ? stateYaml
+        : existsSync(stateToon) ? stateToon
+        : existsSync(legacyBlueprintYaml) ? legacyBlueprintYaml
+        : existsSync(legacyBlueprintToon) ? legacyBlueprintToon
+        : existsSync(legacyContextYaml) ? legacyContextYaml
+        : existsSync(legacyContextToon) ? legacyContextToon : null;
 
     if (blueprintFile) {
         try {
@@ -350,15 +354,16 @@ export function syncBlueprint(repoPath: string): void {
         return;
     }
 
-    const blueprintDir = join(factoryDir, 'blueprint');
-    const blueprintPath = join(blueprintDir, 'blueprint.yaml');
+    const logsDir = join(factoryDir, 'logs');
+    const statePath = join(logsDir, 'state.yaml');
+    const legacyBlueprintPath = join(factoryDir, 'blueprint', 'blueprint.yaml');
     const legacyContextPath = join(factoryDir, 'context', 'context.yaml');
 
-    if (!existsSync(blueprintDir)) {
+    if (!existsSync(logsDir)) {
         try {
-            mkdirSync(blueprintDir, { recursive: true });
+            mkdirSync(logsDir, { recursive: true });
         } catch (e) {
-            log('!', `Failed to create blueprint directory: ${e}`);
+            log('!', `Failed to create logs directory: ${e}`);
         }
     }
 
@@ -366,7 +371,7 @@ export function syncBlueprint(repoPath: string): void {
     const newAnalysis = analyzeExistingProject(repoPath);
 
     let existingData: Record<string, any> = {};
-    const pathToRead = existsSync(blueprintPath) ? blueprintPath : (existsSync(legacyContextPath) ? legacyContextPath : null);
+    const pathToRead = existsSync(statePath) ? statePath : (existsSync(legacyBlueprintPath) ? legacyBlueprintPath : (existsSync(legacyContextPath) ? legacyContextPath : null));
 
     if (pathToRead) {
         try {
@@ -376,7 +381,7 @@ export function syncBlueprint(repoPath: string): void {
                 existingData = {};
             }
         } catch (e) {
-            log('!', `Failed to parse existing blueprint/context at ${pathToRead}: ${e}`);
+            log('!', `Failed to parse existing state/blueprint/context at ${pathToRead}: ${e}`);
         }
     }
 
@@ -430,11 +435,11 @@ export function syncBlueprint(repoPath: string): void {
     const mergedDecisions = existingDecisions.length > 0 ? existingDecisions : newDecisions;
     mergedData.key_decisions = mergedDecisions;
 
-    // 6. Write back to blueprint.yaml
+    // 6. Write back to state.yaml
     try {
-        writeFileSync(blueprintPath, toYaml(mergedData));
-        log('✓', `Codebase analysis merged and written to ${blueprintPath}`);
+        writeFileSync(statePath, toYaml(mergedData));
+        log('✓', `Codebase analysis merged and written to ${statePath}`);
     } catch (e) {
-        logError(`Failed to write merged blueprint to ${blueprintPath}: ${e}`);
+        logError(`Failed to write merged state to ${statePath}: ${e}`);
     }
 }

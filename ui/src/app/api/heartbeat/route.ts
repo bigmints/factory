@@ -16,13 +16,15 @@ export async function GET() {
             for (const proj of config.projects || []) {
                 const projectDir = join(proj.path, '.factory');
                 if (existsSync(projectDir)) {
+                    const logsYaml = join(projectDir, 'logs', 'heartbeat.yaml');
+                    const logsToon = join(projectDir, 'logs', 'heartbeat.toon');
                     const bpYaml = join(projectDir, 'blueprint', 'heartbeat.yaml');
                     const bpToon = join(projectDir, 'blueprint', 'heartbeat.toon');
                     const ctxYaml = join(projectDir, 'context', 'heartbeat.yaml');
                     const ctxToon = join(projectDir, 'context', 'heartbeat.toon');
                     
                     let data: any = null;
-                    const candidates = [bpYaml, bpToon, ctxYaml, ctxToon];
+                    const candidates = [logsYaml, logsToon, bpYaml, bpToon, ctxYaml, ctxToon];
                     for (const p of candidates) {
                         if (existsSync(p)) {
                             try {
@@ -52,13 +54,15 @@ export async function GET() {
     if (projects.length === 0) {
         const projectsDir = join(process.cwd(), '.factory');
         if (existsSync(projectsDir)) {
+            const logsYaml = join(projectsDir, 'logs', 'heartbeat.yaml');
+            const logsToon = join(projectsDir, 'logs', 'heartbeat.toon');
             const bpYaml = join(projectsDir, 'blueprint', 'heartbeat.yaml');
             const bpToon = join(projectsDir, 'blueprint', 'heartbeat.toon');
             const ctxYaml = join(projectsDir, 'context', 'heartbeat.yaml');
             const ctxToon = join(projectsDir, 'context', 'heartbeat.toon');
             
             let data: any = null;
-            const candidates = [bpYaml, bpToon, ctxYaml, ctxToon];
+            const candidates = [logsYaml, logsToon, bpYaml, bpToon, ctxYaml, ctxToon];
             for (const p of candidates) {
                 if (existsSync(p)) {
                     try {

@@ -145,7 +145,7 @@ After writing files, the engine:
 
 1. Runs `npm install` in the target app directory
 2. Generates `AGENTS.md` inside the app with stack, structure, and conventions
-3. Writes a knowledge entry to `.factory/knowledge/builds/` for future context
+3. Writes a knowledge entry to `.factory/logs/builds/` for future context
 4. Commits and pushes
 
 ## Spec Status Lifecycle
@@ -179,7 +179,7 @@ When `queue start` finishes, it reports any specs still blocked by unmet depende
 
 ### Knowledge Feedback
 
-Each build writes a summary to `.factory/knowledge/builds/`. The context gatherer auto-discovers these, so subsequent specs have full awareness of what's already been built.
+Each build writes a summary to `.factory/logs/builds/`. The context gatherer auto-discovers these, so subsequent specs have full awareness of what's already been built.
 
 ## CLI Commands
 
@@ -265,9 +265,9 @@ factory hooks install            # Install git hooks
 | File | Purpose |
 |------|---------|
 | `.factory/factory.yaml` | Bridge config (links to Factory install) |
-| `.factory/blueprint/blueprint.yaml` | Project state snapshot (read by agent on start) |
-| `.factory/blueprint/heartbeat.yaml` | Liveness signal (written every build step) |
-| `.factory/blueprint/worklog.yaml` | Append-only session log |
+| `.factory/logs/state.yaml` | Project state snapshot (read by agent on start) |
+| `.factory/logs/heartbeat.yaml` | Liveness signal (written every build step) |
+| `.factory/logs/worklog.yaml` | Append-only session log |
 | `.factory/skill-index.yaml` | Available agentic skills |
 | `.factory/task-manager/todo.yaml` | Task queue (human + agent readable) |
 | `.factory/task-manager/manage.sh` | Task lifecycle CLI |
@@ -275,6 +275,6 @@ factory hooks install            # Install git hooks
 ### Workflow
 
 1. Start: `factory task start <id>` → `factory pulse "starting <id>"`
-2. Work: agent reads blueprint.yaml, builds, writes heartbeat on each step
+2. Work: agent reads logs/state.yaml, builds, writes heartbeat on each step
 3. Done: `factory task complete --id <id> --summary "what was done"`
 4. Commit: `factory blueprint update "summary"` → git commit

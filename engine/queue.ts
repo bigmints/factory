@@ -435,7 +435,7 @@ export function markFailed(id: string, error: string, output: string, durationMs
     // Write failure knowledge so future builds can learn from this error
     try {
         const projectRoot = process.env.FACTORY_PROJECT_ROOT || process.cwd();
-        const failuresDir = join(projectRoot, '.factory', 'knowledge', 'failures');
+        const failuresDir = join(projectRoot, '.factory', 'logs', 'failures');
         if (!existsSync(failuresDir)) mkdirSync(failuresDir, { recursive: true });
 
         const slug = id.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
@@ -462,7 +462,7 @@ export function markFailed(id: string, error: string, output: string, durationMs
         ].filter(l => l !== undefined).join('\n');
 
         writeFileSync(filename, content);
-        log('→', `Failure knowledge written: .factory/knowledge/failures/${slug}-${ts}.md`);
+        log('→', `Failure knowledge written: .factory/logs/failures/${slug}-${ts}.md`);
     } catch {
         // Non-fatal
     }

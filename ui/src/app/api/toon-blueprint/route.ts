@@ -5,6 +5,8 @@ import { parse } from 'yaml';
 
 export async function GET() {
     const candidates = [
+        join(process.cwd(), '.factory', 'logs', 'state.yaml'),
+        join(process.cwd(), '.factory', 'logs', 'state.toon'),
         join(process.cwd(), '.factory', 'blueprint', 'blueprint.yaml'),
         join(process.cwd(), '.factory', 'blueprint', 'blueprint.toon'),
         join(process.cwd(), '.factory', 'context', 'context.yaml'),

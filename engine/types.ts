@@ -165,10 +165,11 @@ export interface BridgeConfig {
     skills?: SkillsConfig;
     templates?: { starter?: string };
     apps_dir?: string;
-    /** Agentic configuration — paths to blueprint, tasks, skills, workflows, knowledge */
+    /** Agentic configuration — paths to logs, tasks, skills, workflows, knowledge */
     agentic?: {
-        blueprint_dir?: string;
-        context_dir?: string; // legacy fallback
+        logs_dir?: string;
+        blueprint_dir?: string;  // legacy: was .factory/blueprint
+        context_dir?: string;    // legacy: was .factory/context
         task_queue?: string;
         skill_index?: string;
         workflows_dir?: string;
@@ -291,7 +292,7 @@ export interface ProjectBlueprint {
     knowledgeFiles: KnowledgeFile[];
     conventions: string[];
     stack: ProjectStack | undefined;
-    /** Raw TOON blueprint snapshot from .factory/blueprint/blueprint.toon */
+    /** Raw TOON state snapshot from .factory/logs/state.toon (or legacy .factory/blueprint/blueprint.toon) */
     toonSnapshot?: string;
     /** Parsed skill index entries from .factory/skill-index.toon */
     projectSkills?: Array<{ name: string; path: string; description: string }>;

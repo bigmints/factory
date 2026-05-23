@@ -32,13 +32,15 @@ export async function GET(request: Request) {
     const stream = new ReadableStream({
         start(controller) {
             const projectRoot = getProjectPath(project);
+            const logsYaml = join(projectRoot, '.factory', 'logs', 'heartbeat.yaml');
+            const logsToon = join(projectRoot, '.factory', 'logs', 'heartbeat.toon');
             const bpYaml = join(projectRoot, '.factory', 'blueprint', 'heartbeat.yaml');
             const bpToon = join(projectRoot, '.factory', 'blueprint', 'heartbeat.toon');
             const ctxYaml = join(projectRoot, '.factory', 'context', 'heartbeat.yaml');
             const ctxToon = join(projectRoot, '.factory', 'context', 'heartbeat.toon');
 
             const getHeartbeatData = () => {
-                const candidates = [bpYaml, bpToon, ctxYaml, ctxToon];
+                const candidates = [logsYaml, logsToon, bpYaml, bpToon, ctxYaml, ctxToon];
                 for (const p of candidates) {
                     if (existsSync(p)) {
                         try {

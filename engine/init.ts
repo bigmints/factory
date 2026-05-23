@@ -1,14 +1,14 @@
 /**
  * Bridge Initialization — creates .factory/ scaffold in a target repo.
  *
- * Storage: all blueprint files are stored as YAML (.yaml), human-editable.
+ * Storage: all state files are stored as YAML (.yaml), human-editable.
  * TOON encoding happens at prompt-injection time (in blueprint.ts), not here.
  *
  * Creates:
  *   .factory/factory.yaml           — bridge config (absolute factory_home)
- *   .factory/blueprint/blueprint.yaml — project blueprint (analyzed from codebase)
- *   .factory/blueprint/heartbeat.yaml — liveness signal
- *   .factory/blueprint/worklog.yaml   — append-only session log
+ *   .factory/logs/state.yaml          — project state (analyzed from codebase)
+ *   .factory/logs/heartbeat.yaml      — liveness signal
+ *   .factory/logs/worklog.yaml        — append-only session log
  *   .factory/skill-index.yaml       — skills directory
  *   .factory/task-manager/todo.yaml — task queue
  *   .factory/task-manager/manage.sh — task lifecycle manager (copied)
@@ -211,9 +211,9 @@ factory hooks install            # Install git hooks
 | File | Purpose |
 |------|---------|
 | \`.factory/factory.yaml\` | Bridge config (links to Factory install) |
-| \`.factory/blueprint/blueprint.yaml\` | Project state snapshot (read by agent on start) |
-| \`.factory/blueprint/heartbeat.yaml\` | Liveness signal (written every build step) |
-| \`.factory/blueprint/worklog.yaml\` | Append-only session log |
+| \`.factory/logs/state.yaml\` | Project state snapshot (read by agent on start) |
+| \`.factory/logs/heartbeat.yaml\` | Liveness signal (written every build step) |
+| \`.factory/logs/worklog.yaml\` | Append-only session log |
 | \`.factory/skill-index.yaml\` | Available agentic skills |
 | \`.factory/task-manager/todo.yaml\` | Task queue (human + agent readable) |
 | \`.factory/task-manager/manage.sh\` | Task lifecycle CLI |
@@ -221,7 +221,7 @@ factory hooks install            # Install git hooks
 ### Workflow
 
 1. Start: \`factory task start <id>\` → \`factory pulse "starting <id>"\`
-2. Work: agent reads blueprint.yaml, builds, writes heartbeat on each step
+2. Work: agent reads logs/state.yaml, builds, writes heartbeat on each step
 3. Done: \`factory task complete --id <id> --summary "what was done"\`
 4. Commit: \`factory blueprint update "summary"\` → git commit
 `.trim();
@@ -247,7 +247,7 @@ export function patchAgentsMd(repoPath: string): { path: string; action: 'create
 
 ## Role
 You are a senior developer working on **${name}**.
-Always read \`.factory/blueprint/blueprint.yaml\` before starting work.
+Always read .factory/logs/state.yaml before starting work.
 Write heartbeat on every significant step.
 
 ${stackLine}
@@ -492,11 +492,12 @@ export function initBridge(repoPath: string): InitResult {
     // Create directory structure
     const dirs = [
         factoryDir,
-        join(factoryDir, 'blueprint'),
+        join(factoryDir, 'logs'),
+        join(factoryDir, 'logs', 'builds'),
+        join(factoryDir, 'logs', 'failures'),
         join(factoryDir, 'stories', 'apps'),
         join(factoryDir, 'stories', 'features'),
-        join(factoryDir, 'knowledge', 'builds'),
-        join(factoryDir, 'knowledge', 'failures'),
+        join(factoryDir, 'knowledge'),
         join(factoryDir, 'task-manager'),
         join(factoryDir, 'workflows'),
     ];
@@ -516,8 +517,7 @@ export function initBridge(repoPath: string): InitResult {
         factory_home: factoryRoot,  // absolute path — resolves scripts correctly
         stack,
         agentic: {
-            blueprint_dir: '.factory/blueprint',
-            context_dir: '.factory/context',
+            logs_dir: '.factory/logs',
             task_queue: '.factory/task-manager/todo.yaml',
             skill_index: '.factory/skill-index.yaml',
             workflows_dir: '.factory/workflows',
@@ -527,18 +527,18 @@ export function initBridge(repoPath: string): InitResult {
     writeFileSync(yamlPath, toYaml(config));
     files.push({ path: '.factory/factory.yaml', action: 'created' });
 
-    // 2. blueprint.yaml — analyze codebase (skip if already exists)
-    const blueprintPath = join(factoryDir, 'blueprint', 'blueprint.yaml');
-    if (!existsSync(blueprintPath)) {
-        const blueprintData = analyzeExistingProject(repoPath);
-        writeFileSync(blueprintPath, toYaml(blueprintData));
-        files.push({ path: '.factory/blueprint/blueprint.yaml', action: 'created' });
+    // 2. state.yaml — analyze codebase (skip if already exists)
+    const statePath = join(factoryDir, 'logs', 'state.yaml');
+    if (!existsSync(statePath)) {
+        const stateData = analyzeExistingProject(repoPath);
+        writeFileSync(statePath, toYaml(stateData));
+        files.push({ path: '.factory/logs/state.yaml', action: 'created' });
     } else {
-        files.push({ path: '.factory/blueprint/blueprint.yaml', action: 'skipped' });
+        files.push({ path: '.factory/logs/state.yaml', action: 'skipped' });
     }
 
     // 3. heartbeat.yaml
-    const heartbeatPath = join(factoryDir, 'blueprint', 'heartbeat.yaml');
+    const heartbeatPath = join(factoryDir, 'logs', 'heartbeat.yaml');
     if (!existsSync(heartbeatPath)) {
         writeFileSync(heartbeatPath, toYaml({
             heartbeat: {
@@ -548,13 +548,13 @@ export function initBridge(repoPath: string): InitResult {
                 status: 'idle',
             },
         }));
-        files.push({ path: '.factory/blueprint/heartbeat.yaml', action: 'created' });
+        files.push({ path: '.factory/logs/heartbeat.yaml', action: 'created' });
     } else {
-        files.push({ path: '.factory/blueprint/heartbeat.yaml', action: 'skipped' });
+        files.push({ path: '.factory/logs/heartbeat.yaml', action: 'skipped' });
     }
 
     // 4. worklog.yaml
-    const worklogPath = join(factoryDir, 'blueprint', 'worklog.yaml');
+    const worklogPath = join(factoryDir, 'logs', 'worklog.yaml');
     if (!existsSync(worklogPath)) {
         writeFileSync(worklogPath, toYaml({
             entries: [{
@@ -562,9 +562,9 @@ export function initBridge(repoPath: string): InitResult {
                 message: `${name} .factory/ scaffold initialized`,
             }],
         }));
-        files.push({ path: '.factory/blueprint/worklog.yaml', action: 'created' });
+        files.push({ path: '.factory/logs/worklog.yaml', action: 'created' });
     } else {
-        files.push({ path: '.factory/blueprint/worklog.yaml', action: 'skipped' });
+        files.push({ path: '.factory/logs/worklog.yaml', action: 'skipped' });
     }
 
     // 5. skill-index.yaml

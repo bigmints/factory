@@ -14,12 +14,12 @@ This skill instructs an AI agent on how to manage and synchronize integration bl
 ### 1. The `.factory` Bridge
 Every project connected to the Factory has a `.factory/` directory in its repository root containing:
 - `factory.yaml` — Bridge manifest containing the stack, active applications, and configuration of directories.
-- `blueprint/` — Holds the dynamic chronological worklog and active blueprints in TOON format.
+- `logs/` — Holds the dynamic chronological worklog, liveness heartbeat, and project state in TOON format.
 - `stories/` — Contains target application and feature stories (`stories/apps/` and `stories/features/`).
 - `knowledge/` — Built histories and architectural summaries generated after successful builds.
 
 ### 2. Chronological Worklogs (TOON format)
-To prevent blueprint drift and token fatigue, a chronological worklog (`.factory/blueprint/worklog.yaml` in TOON format) tracks key milestones, major updates, and database or API changes. The blueprint gatherer automatically compiles this, giving the LLM precise awareness of past features.
+To prevent state drift and token fatigue, a chronological worklog (`.factory/logs/worklog.yaml` in TOON format) tracks key milestones, major updates, and database or API changes. The blueprint gatherer automatically compiles this, giving the LLM precise awareness of past features.
 
 ## Step-by-Step Operations
 

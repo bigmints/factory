@@ -1,4 +1,4 @@
-entries[8]:
+entries[9]:
   - date: "2026-05-22 15:30:42"
     message: factory .factory/ scaffold initialized
   - date: "2026-05-23 07:28:49"
@@ -22,3 +22,6 @@ entries[8]:
   - date: "2026-05-23 08:13:28"
     message: "committed: feat(skill): add app-context skill for scanning existing projects"
     files: skills/app-context/SKILL.md
+  - date: "2026-05-23 08:16:29"
+    message: "committed: refactor: rename app.yaml → scaffold.yaml throughout\n\napp.yaml sounded like a build artifact. scaffold.yaml better\ncommunicates that this is a planning/scaffolding spec that\ndescribes what to build, not what was built.\n\n- engine/rollup.ts, cli.ts, generate.ts, init.ts, story.ts, types.ts\n- ui/src/app/api/* routes\n- ui/src/components/app-dashboard.tsx\n- skills/spec-bootstrap/SKILL.md, app-context/SKILL.md, story-generator/SKILL.md\n- AGENTS.md\n- .factory/app.yaml → .factory/scaffold.yaml (Factory's own bridge file)"
+    files: ".factory/app.yaml,.factory/blueprint/worklog.yaml,.factory/context/heartbeat.yaml,.factory/scaffold.yaml,engine/cli.ts,engine/generate.ts,engine/init.ts,engine/rollup.ts,engine/story.ts,engine/types.ts,skills/app-context/SKILL.md,skills/spec-bootstrap/SKILL.md,skills/story-generator/SKILL.md,ui/src/app/api/app-rollup/route.ts,ui/src/app/api/queue/route.ts,ui/src/app/api/stories/update-status/route.ts,ui/src/components/app-dashboard.tsx,ui/src/components/dashboard.tsx,ui/src/components/notion-board.tsx"

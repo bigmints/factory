@@ -229,7 +229,7 @@ function extractExports(content: string): string[] {
 }
 
 /**
- * Write a structured debrief into `.factory/knowledge/builds/` so future
+ * Write a structured debrief into `.factory/logs/builds/` so future
  * stories have context about what has already been built.
  *
  * The context gatherer auto-discovers these if the directory is listed
@@ -242,7 +242,7 @@ export function writeKnowledgeEntry(
     stack: StackConfig,
     storyFile: string,
 ): void {
-    const knowledgeDir = join(repoPath, '.factory', 'knowledge', 'builds');
+    const knowledgeDir = join(repoPath, '.factory', 'logs', 'builds');
     if (!existsSync(knowledgeDir)) {
         mkdirSync(knowledgeDir, { recursive: true });
     }
@@ -252,7 +252,7 @@ export function writeKnowledgeEntry(
     const content = buildDebrief(appName, result, stack, storyFile);
 
     writeFileSync(filePath, content);
-    log('✓', `Knowledge entry written: .factory/knowledge/builds/${slug}.md`);
+    log('✓', `Knowledge entry written: .factory/logs/builds/${slug}.md`);
     writeTasksToon(repoPath, slug);
 }
 

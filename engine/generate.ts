@@ -49,52 +49,52 @@ export async function runPipeline(
 ): Promise<BuildResult> {
     log('●', `Starting tool-calling build session for app: ${story.appName}`);
 
-    // Pre-scaffold draft app.yaml in the target directory before starting build session
+    // Pre-scaffold draft scaffold.yaml in the target directory before starting build session
     const factoryDir = join(targetDir, '.factory');
     if (!existsSync(factoryDir)) {
         mkdirSync(factoryDir, { recursive: true });
     }
-    const appYamlPath = join(factoryDir, 'app.yaml');
+    const scaffoldYamlPath = join(factoryDir, 'scaffold.yaml');
     let baselineAppSpec;
     try {
         baselineAppSpec = generateAppYamlFromStory(story, storyFile);
-        if (!existsSync(appYamlPath)) {
-            writeFileSync(appYamlPath, toYaml(baselineAppSpec));
-            log('✓', `Pre-scaffolded draft app.yaml spec at ${appYamlPath}`);
+        if (!existsSync(scaffoldYamlPath)) {
+            writeFileSync(scaffoldYamlPath, toYaml(baselineAppSpec));
+            log('✓', `Pre-scaffolded draft scaffold.yaml spec at ${scaffoldYamlPath}`);
         }
     } catch (e) {
-        log('!', `Warning: Failed to pre-scaffold baseline app.yaml: ${e}`);
+        log('!', `Warning: Failed to pre-scaffold baseline scaffold.yaml: ${e}`);
     }
 
     const result = await runToolSession(story, blueprint, targetDir, storyFile);
 
-    // Intercept result: ensure .factory/app.yaml is explicitly tracked in result.files
+    // Intercept result: ensure .factory/scaffold.yaml is explicitly tracked in result.files
     try {
-        let hasAppYaml = result.files.some(f => f.filename === '.factory/app.yaml');
+        let hasAppYaml = result.files.some(f => f.filename === '.factory/scaffold.yaml');
         if (!hasAppYaml) {
-            let appYamlContent = '';
-            if (existsSync(appYamlPath)) {
-                appYamlContent = readFileSync(appYamlPath, 'utf-8');
+            let scaffoldYamlContent = '';
+            if (existsSync(scaffoldYamlPath)) {
+                scaffoldYamlContent = readFileSync(scaffoldYamlPath, 'utf-8');
             } else if (baselineAppSpec) {
-                appYamlContent = toYaml(baselineAppSpec);
+                scaffoldYamlContent = toYaml(baselineAppSpec);
             }
-            if (appYamlContent) {
+            if (scaffoldYamlContent) {
                 result.files.push({
-                    filename: '.factory/app.yaml',
-                    content: appYamlContent
+                    filename: '.factory/scaffold.yaml',
+                    content: scaffoldYamlContent
                 });
-                log('✓', `Explicitly appended .factory/app.yaml to build result files checklist`);
+                log('✓', `Explicitly appended .factory/scaffold.yaml to build result files checklist`);
             }
         }
 
         // Also push it to result.plan.files if not present
         if (result.plan && result.plan.files) {
-            if (!result.plan.files.includes('.factory/app.yaml')) {
-                result.plan.files.push('.factory/app.yaml');
+            if (!result.plan.files.includes('.factory/scaffold.yaml')) {
+                result.plan.files.push('.factory/scaffold.yaml');
             }
         }
     } catch (e) {
-        log('!', `Warning: Failed to append .factory/app.yaml to result: ${e}`);
+        log('!', `Warning: Failed to append .factory/scaffold.yaml to result: ${e}`);
     }
 
     return result;
@@ -1678,9 +1678,9 @@ export function buildToolSystemPrompt(
 
     let roadmapBlock = '';
     try {
-        const appYamlPath = resolve(blueprint.repoPath, '.factory', 'app.yaml');
-        if (existsSync(appYamlPath)) {
-            const raw = readFileSync(appYamlPath, 'utf-8');
+        const scaffoldYamlPath = resolve(blueprint.repoPath, '.factory', 'scaffold.yaml');
+        if (existsSync(scaffoldYamlPath)) {
+            const raw = readFileSync(scaffoldYamlPath, 'utf-8');
             const appSpec = parseYaml(raw) as any;
             if (appSpec) {
                 let brdContent = appSpec.brd || '';
@@ -1813,8 +1813,8 @@ To write a file:
 
 Make sure to format all your tool calls exactly like this inside your response. Do not use plain text or standard markdown code blocks for calling tools.`;
 
-    const appYamlRule = isApp
-        ? '\n7. You MUST create a comprehensive roadmap and status specification file at `.factory/app.yaml` inside the application directory. This file must be added to your implementation plan/files checklist, and successfully written to disk before calling mark_complete.'
+    const scaffoldYamlRule = isApp
+        ? '\n7. You MUST create a comprehensive roadmap and status specification file at `.factory/scaffold.yaml` inside the application directory. This file must be added to your implementation plan/files checklist, and successfully written to disk before calling mark_complete.'
         : '';
 
     return `You are an autonomous code generation engine with access to tools for reading, writing, and executing commands.
@@ -1840,7 +1840,7 @@ ${toolCallingBlock}
 3. Every import from a package must exist in package.json.
 4. Match the coding style and patterns from the story and existing code.
 5. Use log_step(info/warn/error) to track progress.
-6. Only call mark_failed after genuinely exhausting all remediation options.${appYamlRule}
+6. Only call mark_failed after genuinely exhausting all remediation options.${scaffoldYamlRule}
 ${storyBlock}
 ${roadmapBlock}
 ${toonBlueprint}${skillsBlock}${appBlueprintBlock}
@@ -1869,9 +1869,9 @@ export function buildCLISystemPrompt(
 
     let roadmapBlock = '';
     try {
-        const appYamlPath = resolve(blueprint.repoPath, '.factory', 'app.yaml');
-        if (existsSync(appYamlPath)) {
-            const raw = readFileSync(appYamlPath, 'utf-8');
+        const scaffoldYamlPath = resolve(blueprint.repoPath, '.factory', 'scaffold.yaml');
+        if (existsSync(scaffoldYamlPath)) {
+            const raw = readFileSync(scaffoldYamlPath, 'utf-8');
             const appSpec = parseYaml(raw) as any;
             if (appSpec) {
                 let brdContent = appSpec.brd || '';
@@ -1976,8 +1976,8 @@ Feature Epic Description: ${matchingFeature.description || 'No description provi
         }
     }
 
-    const appYamlRule = isApp
-        ? '\n5. You MUST create a comprehensive roadmap and status specification file at `.factory/app.yaml` inside the application directory. This file must be added to your implementation plan and files checklist, and successfully written to disk before completion.'
+    const scaffoldYamlRule = isApp
+        ? '\n5. You MUST create a comprehensive roadmap and status specification file at `.factory/scaffold.yaml` inside the application directory. This file must be added to your implementation plan and files checklist, and successfully written to disk before completion.'
         : '';
 
     return `You are an expert autonomous software engineer agent with complete capabilities to read/write/edit files and run terminal commands using your own built-in tools.
@@ -1990,7 +1990,7 @@ ${targetDir}
 1. Examine the current folder structure, package.json, and tsconfig.json to orient yourself before starting.
 2. Generate production-ready code — no placeholders, no TODOs, no stubs.
 3. Every import from a package must exist in package.json. If you need to install a dependency, do so.
-4. Match the coding style and patterns from the story and existing files.${appYamlRule}
+4. Match the coding style and patterns from the story and existing files.${scaffoldYamlRule}
 
 ${storyBlock}
 ${roadmapBlock}
@@ -2024,8 +2024,8 @@ async function runCLISingleShot(
 
     // Build a rich, self-contained prompt the CLI can act on directly
     const systemPrompt = buildCLISystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
-    const appYamlReminder = isApp
-        ? '\nMake sure that `.factory/app.yaml` is created/updated, added to your implementation plan, and written to disk as required.\n'
+    const scaffoldYamlReminder = isApp
+        ? '\nMake sure that `.factory/scaffold.yaml` is created/updated, added to your implementation plan, and written to disk as required.\n'
         : '';
 
     // Derive required page files from the story so the CLI agent can't skip them
@@ -2050,7 +2050,7 @@ async function runCLISingleShot(
 
 You are working in: ${targetDir}
 
-Build the complete ${isApp ? 'application' : 'feature'} described above.${appYamlReminder}
+Build the complete ${isApp ? 'application' : 'feature'} described above.${scaffoldYamlReminder}
 Use your file tools to write ALL necessary files directly to this directory.
 Do not output file contents as text — write them to disk using your tools.
 When complete, run: npx tsc --noEmit (if TypeScript) to verify there are no errors.

@@ -495,11 +495,11 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
         }
     }
     
-    // 3. Reset app.yaml (App Roadmap Spec)
-    const appYamlPath = join(resolvedPath, '.factory', 'app.yaml');
-    if (ex(appYamlPath)) {
+    // 3. Reset scaffold.yaml (App Roadmap Spec)
+    const scaffoldYamlPath = join(resolvedPath, '.factory', 'scaffold.yaml');
+    if (ex(scaffoldYamlPath)) {
         try {
-            const raw = readFileSync(appYamlPath, 'utf-8');
+            const raw = readFileSync(scaffoldYamlPath, 'utf-8');
             const app = parseYaml(raw) as any;
             if (app) {
                 app.status = 'draft';
@@ -523,15 +523,15 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
                 }
                 
                 // Save initial structure
-                wr(appYamlPath, stringifyYaml(app, { lineWidth: 120 }), 'utf-8');
-                log('✓', `Reset app.yaml roadmap progress and tasks to draft/pending.`);
+                wr(scaffoldYamlPath, stringifyYaml(app, { lineWidth: 120 }), 'utf-8');
+                log('✓', `Reset scaffold.yaml roadmap progress and tasks to draft/pending.`);
                 
                 // Now run a rollup calculation to be absolutely robust and consistent
                 const { syncAppRoadmap } = await import('./rollup.ts');
-                await syncAppRoadmap(appYamlPath);
+                await syncAppRoadmap(scaffoldYamlPath);
             }
         } catch (err: any) {
-            logError(`Failed to reset app.yaml roadmap: ${err?.message || err}`);
+            logError(`Failed to reset scaffold.yaml roadmap: ${err?.message || err}`);
         }
     }
     
@@ -1162,7 +1162,7 @@ Commands:
   feature build <story.yaml> [--engine worker]  Build a feature
   feature validate <story.yaml>  Validate a feature story
 
-   app sync [<yaml-path>]        Sync app roadmap and statuses with app.yaml roadmap spec
+   app sync [<yaml-path>]        Sync app roadmap and statuses with scaffold.yaml roadmap spec
   app list                      List all synced apps
   app status [<app-id>]         Show full hierarchical status tree and progress
 
@@ -1328,9 +1328,9 @@ async function handleAppCommand(): Promise<void> {
         if (!yamlPath) {
             try {
                 const project = getActiveProject();
-                yamlPath = resolve(project.path, '.factory', 'app.yaml');
+                yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
             } catch (err: any) {
-                logError('Error: No active project and no app.yaml path provided.');
+                logError('Error: No active project and no scaffold.yaml path provided.');
                 process.exit(1);
             }
         }
@@ -1349,7 +1349,7 @@ async function handleAppCommand(): Promise<void> {
             try {
                 const project = getActiveProject();
                 const { loadAppSpec } = await import('./story.ts');
-                const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+                const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
                 if (existsSync(yamlPath)) {
                     const spec = loadAppSpec(yamlPath);
                     const { slugify } = await import('./types.ts');
@@ -1366,7 +1366,7 @@ async function handleAppCommand(): Promise<void> {
         const { getAppRollup } = await import('./rollup.ts');
         const data = getAppRollup(appId);
         if (!data) {
-            logError(`App with ID "${appId}" not found in app.yaml roadmap. Did you run "factory app sync" first?`);
+            logError(`App with ID "${appId}" not found in scaffold.yaml roadmap. Did you run "factory app sync" first?`);
             process.exit(1);
         }
 
@@ -1429,7 +1429,7 @@ async function handleAppCommand(): Promise<void> {
             const projectsConfig = loadProjects();
             let count = 0;
             for (const project of projectsConfig.projects) {
-                const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+                const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
                 if (existsSync(yamlPath)) {
                     try {
                         const raw = readFileSync(yamlPath, 'utf-8');

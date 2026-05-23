@@ -1,7 +1,7 @@
 ---
 name: factory-app-context
 description: >
-  Scans an existing codebase and builds Factory app context — the .factory/app.yaml
+  Scans an existing codebase and builds Factory app context — the .factory/scaffold.yaml
   and story files that reflect what is already built and what still needs to be built.
   Run this before queuing any builds on an existing project.
 ---
@@ -12,7 +12,7 @@ You are scanning an **existing codebase** to build Factory's app context.
 Factory needs to understand what already exists before it can generate anything new — otherwise it duplicates work, uses wrong patterns, or generates conflicting code.
 
 Your job is to produce:
-1. `.factory/app.yaml` — features and stories, with existing work marked `done`
+1. `.factory/scaffold.yaml` — features and stories, with existing work marked `done`
 2. Individual story YAML files in `.factory/stories/features/` for work that still needs to be built
 3. `.factory/factory.yaml` — bridge config if missing
 
@@ -30,7 +30,7 @@ tsconfig.json             # compiler options, paths
 README.md                 # product description
 AGENTS.md                 # existing conventions (if present)
 .factory/factory.yaml     # existing bridge config
-.factory/app.yaml         # existing spec (if any)
+.factory/scaffold.yaml         # existing spec (if any)
 src/ or app/ directory    # file tree — understand routes, components, modules
 ```
 
@@ -64,7 +64,7 @@ stack:
 
 ## Step 3 — Map existing work to features
 
-Group what you find into **4–8 named feature areas** (same as you'd put in app.yaml `features`).
+Group what you find into **4–8 named feature areas** (same as you'd put in scaffold.yaml `features`).
 For each feature, assess its completeness:
 
 | Status | Meaning |
@@ -117,7 +117,7 @@ Wait for confirmation before writing files.
 
 ---
 
-## Step 5 — Write `.factory/app.yaml`
+## Step 5 — Write `.factory/scaffold.yaml`
 
 ```yaml
 name: "<app-name>"                    # lowercase-hyphen slug
@@ -189,7 +189,7 @@ features:
 **For `done` stories** (what already exists), create a minimal record:
 
 ```yaml
-name: "<Story title — matches app.yaml exactly>"
+name: "<Story title — matches scaffold.yaml exactly>"
 description: "<What was built — past tense>"
 status: done
 
@@ -203,7 +203,7 @@ notes: |
 **For `draft` stories** (what still needs to be built), create a full spec:
 
 ```yaml
-name: "<Story title — matches app.yaml exactly>"
+name: "<Story title — matches scaffold.yaml exactly>"
 description: "<What needs to be built, 1–3 sentences>"
 status: draft
 
@@ -239,7 +239,7 @@ factory_home: /path/to/factory       # path to Factory install — ask user if u
 ```
 ✅ App context built for <App Name>
 
-.factory/app.yaml
+.factory/scaffold.yaml
   └── App Shell & Navigation     done       (2 stories)
   └── Auth                       done       (3 stories)
   └── Dashboard                  in-progress (1 done, 2 draft)
@@ -264,7 +264,7 @@ To build draft stories: drag to "Ready to Build" → click "Build Ready"
 
 ## Minimal working example
 
-**.factory/app.yaml** (for a project with auth done, dashboard in-progress)
+**.factory/scaffold.yaml** (for a project with auth done, dashboard in-progress)
 ```yaml
 name: my-saas
 description: SaaS platform for managing client projects

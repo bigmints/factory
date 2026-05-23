@@ -222,7 +222,7 @@ export function AppDashboard() {
 
   const handleSync = async () => {
     setSyncing(true);
-    const toastId = toast.loading('Synchronizing .factory/app.yaml with SQLite database...');
+    const toastId = toast.loading('Synchronizing .factory/scaffold.yaml with SQLite database...');
     try {
       const res = await fetch('/api/app-rollup', {
         method: 'POST',
@@ -452,7 +452,7 @@ export function AppDashboard() {
           <AlertCircle className="h-12 w-12 text-amber-500 mb-4 animate-bounce" />
           <CardTitle className="text-lg font-bold">Roadmap Spec Not Synced</CardTitle>
           <CardDescription className="text-sm mt-2 text-muted-foreground text-center max-w-md">
-            {error || 'No active project with a valid .factory/app.yaml was detected in SQLite database.'}
+            {error || 'No active project with a valid .factory/scaffold.yaml was detected in SQLite database.'}
           </CardDescription>
           <Button 
             className="mt-6 font-bold shadow-md bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/95 hover:to-indigo-600/95" 
@@ -1374,7 +1374,7 @@ export function AppDashboard() {
                           <p className="text-cyan-400">[STAGE: LINTER] Executing Biome linter check: passed.</p>
                           <p className="text-cyan-400">[STAGE: TESTS] Running unit & smoke tests... 4/4 assertions passed.</p>
                           <p className="text-emerald-400 font-bold">[SUCCESS] Task completed and all validation gates passed!</p>
-                          <p className="text-emerald-400">[POST-BUILD] Synchronized app.yaml spec file and saved SQLite history.</p>
+                          <p className="text-emerald-400">[POST-BUILD] Synchronized scaffold.yaml spec file and saved SQLite history.</p>
                         </>
                       )}
                       

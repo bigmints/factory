@@ -83,7 +83,7 @@ function isAppStoryQueued(targetApp: string, queue: QueueItem[]): boolean {
 }
 
 /**
- * Resolve a human-readable display name for a queue item by reading the active project's app.yaml
+ * Resolve a human-readable display name for a queue item by reading the active project's scaffold.yaml
  * (the absolute source of truth for the Kanban board) or falling back to the parsed name/slug from the story YAML.
  */
 function resolveDisplayName(storyFile: string, projectPath: string | null): string {
@@ -102,11 +102,11 @@ function resolveDisplayName(storyFile: string, projectPath: string | null): stri
 
   const normalizedStoryFile = normalizePath(storyFile);
 
-  // 1. Try to load and match from app.yaml (the absolute source of truth)
-  const appYamlPath = join(projectPath, '.factory', 'app.yaml');
-  if (existsSync(appYamlPath)) {
+  // 1. Try to load and match from scaffold.yaml (the absolute source of truth)
+  const scaffoldYamlPath = join(projectPath, '.factory', 'scaffold.yaml');
+  if (existsSync(scaffoldYamlPath)) {
     try {
-      const raw = readFileSync(appYamlPath, 'utf-8');
+      const raw = readFileSync(scaffoldYamlPath, 'utf-8');
       const parsed = parseYaml(raw) as any;
       if (parsed && Array.isArray(parsed.features)) {
         for (const feature of parsed.features) {

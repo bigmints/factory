@@ -158,12 +158,12 @@ export function calculateRollups(app: any, appSlug: string): any {
 }
 
 /**
- * Synchronizes the app.yaml specification.
+ * Synchronizes the scaffold.yaml specification.
  * Since we are database-free, this is a pure self-contained in-memory rollup
  * that writes status and progress rollups directly back to the yaml file.
  */
-export async function syncAppRoadmap(appYamlPath: string): Promise<void> {
-    const absPath = resolve(appYamlPath);
+export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
+    const absPath = resolve(scaffoldYamlPath);
     if (!existsSync(absPath)) {
         throw new Error(`App spec file not found at: ${absPath}`);
     }
@@ -171,7 +171,7 @@ export async function syncAppRoadmap(appYamlPath: string): Promise<void> {
     const app = loadAppSpec(absPath);
     const validation = validateAppSpec(app);
     if (!validation.passed) {
-        logError(`App spec validation failed for ${appYamlPath}:`);
+        logError(`App spec validation failed for ${scaffoldYamlPath}:`);
         for (const err of validation.errors) {
             log('  ', `  ✗ ${err}`);
         }
@@ -228,22 +228,22 @@ export async function syncAppRoadmap(appYamlPath: string): Promise<void> {
 
     // Write the updated spec back to the yaml file
     writeFileSync(absPath, stringifyYaml(updatedApp, { lineWidth: 120 }));
-    log('✓', `Synced roadmap structure and statuses successfully: ${appYamlPath}`);
+    log('✓', `Synced roadmap structure and statuses successfully: ${scaffoldYamlPath}`);
 }
 
 /**
  * Get overall progress stats for the app rollup UI dashboard.
- * Directly loads app.yaml from the active project.
+ * Directly loads scaffold.yaml from the active project.
  */
 export function getAppRollup(appId: string): AppRollupData | null {
     try {
         const project = getActiveProject();
-        const appYamlPath = resolve(project.path, '.factory', 'app.yaml');
-        if (!existsSync(appYamlPath)) {
+        const scaffoldYamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
+        if (!existsSync(scaffoldYamlPath)) {
             return null;
         }
 
-        const raw = readFileSync(appYamlPath, 'utf-8');
+        const raw = readFileSync(scaffoldYamlPath, 'utf-8');
         const app = parseYaml(raw) as any;
         if (!app) return null;
 
@@ -310,19 +310,19 @@ export function getAppRollup(appId: string): AppRollupData | null {
 }
 
 /**
- * Updates the status of a specific task within app.yaml directly, recalculating rollups.
+ * Updates the status of a specific task within scaffold.yaml directly, recalculating rollups.
  */
 export async function updateTaskStatus(taskId: string, newStatus: string): Promise<void> {
     const project = getActiveProject();
-    const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+    const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
     if (!existsSync(yamlPath)) {
-        throw new Error(`app.yaml not found at active project: ${yamlPath}`);
+        throw new Error(`scaffold.yaml not found at active project: ${yamlPath}`);
     }
 
     const raw = readFileSync(yamlPath, 'utf-8');
     const app = parseYaml(raw) as any;
     if (!app) {
-        throw new Error('Failed to parse app.yaml');
+        throw new Error('Failed to parse scaffold.yaml');
     }
 
     // Traverse and update task
@@ -349,23 +349,23 @@ export async function updateTaskStatus(taskId: string, newStatus: string): Promi
     }
 
     if (!found) {
-        throw new Error(`Task with ID "${taskId}" not found in app.yaml`);
+        throw new Error(`Task with ID "${taskId}" not found in scaffold.yaml`);
     }
 
     // Re-run rollup calculations and save
     const appSlug = slugify(app.name);
     const updatedApp = calculateRollups(app, appSlug);
     writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
-    log('✓', `Updated task "${taskId}" status to "${newStatus}" and saved app.yaml`);
+    log('✓', `Updated task "${taskId}" status to "${newStatus}" and saved scaffold.yaml`);
 }
 
 /**
- * Updates the status of a specific story within app.yaml directly, recalculating rollups.
+ * Updates the status of a specific story within scaffold.yaml directly, recalculating rollups.
  */
 export async function updateStoryStatusInApp(storyFile: string, newStatus: string): Promise<void> {
     const project = getActiveProject();
     if (!project) return;
-    const yamlPath = resolve(project.path, '.factory', 'app.yaml');
+    const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
     if (!existsSync(yamlPath)) return;
 
     const raw = readFileSync(yamlPath, 'utf-8');
@@ -407,6 +407,6 @@ export async function updateStoryStatusInApp(storyFile: string, newStatus: strin
     const appSlug = slugify(app.name);
     const updatedApp = calculateRollups(app, appSlug);
     writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
-    log('✓', `Updated story "${storyFile}" status to "${newStatus}" and saved app.yaml`);
+    log('✓', `Updated story "${storyFile}" status to "${newStatus}" and saved scaffold.yaml`);
 }
 

@@ -293,7 +293,7 @@ function copyManageSh(factoryRoot: string, factoryDir: string): { path: string; 
 }
 
 
-/** Generate an app.yaml spec from an existing codebase.
+/** Generate an scaffold.yaml spec from an existing codebase.
  *  For brand-new/empty projects: stories are created as 'draft' (not 'done').
  *  For existing codebases (has src/, app/, components/, or ≥5 package deps): stories are marked 'done'.
  */
@@ -628,18 +628,18 @@ export function initBridge(repoPath: string): InitResult {
         logError(`agents.md patch failed: ${e}`);
     }
 
-    // 10. app.yaml — generate completed spec if not exists
-    const appYamlPath = join(factoryDir, 'app.yaml');
-    if (!existsSync(appYamlPath)) {
+    // 10. scaffold.yaml — generate completed spec if not exists
+    const scaffoldYamlPath = join(factoryDir, 'scaffold.yaml');
+    if (!existsSync(scaffoldYamlPath)) {
         try {
             const appSpec = generateAppYamlFromExistingCodebase(repoPath);
-            writeFileSync(appYamlPath, toYaml(appSpec));
-            files.push({ path: '.factory/app.yaml', action: 'created' });
+            writeFileSync(scaffoldYamlPath, toYaml(appSpec));
+            files.push({ path: '.factory/scaffold.yaml', action: 'created' });
         } catch (e) {
-            logError(`app.yaml generation failed: ${e}`);
+            logError(`scaffold.yaml generation failed: ${e}`);
         }
     } else {
-        files.push({ path: '.factory/app.yaml', action: 'skipped' });
+        files.push({ path: '.factory/scaffold.yaml', action: 'skipped' });
     }
 
     log('✓', `Initialized .factory/ bridge in ${repoPath} (${files.filter(f => f.action === 'created').length} created, ${files.filter(f => f.action === 'skipped').length} skipped)`);

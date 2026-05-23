@@ -152,6 +152,7 @@ interface NotionBoardProps {
   /** When this flips to true, open the story-chat dialog. Parent resets it after. */
   externalOpenStoryChat?: boolean;
   onExternalStoryChatConsumed?: () => void;
+  className?: string;
 }
 
 // ─── Constants & Configurations ───
@@ -395,7 +396,7 @@ function YamlViewer({ content }: { content: string }) {
   );
 }
 
-export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectRefreshKey = 0, externalOpenStoryChat, onExternalStoryChatConsumed }: NotionBoardProps) {
+export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectRefreshKey = 0, externalOpenStoryChat, onExternalStoryChatConsumed, className }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
   const [loading, setLoading] = useState(true);
@@ -1504,12 +1505,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
   // ─── JSX Renders ───
 
   return (
-    <div className={cn(
-      "relative",
-      viewMode === 'board'
-        ? "h-full flex flex-col overflow-hidden gap-3 pb-2"
-        : "space-y-3 pb-6"
-    )}>
+    <div className={cn("relative", className)}>
       {/* Visual background atmospheric lights */}
       <div className="absolute -top-20 left-10 w-96 h-96 bg-primary/5 rounded-full filter blur-[120px] pointer-events-none -z-10" />
       <div className="absolute -top-30 right-20 w-80 h-80 bg-cyan-500/5 rounded-full filter blur-[100px] pointer-events-none -z-10" />
@@ -2668,7 +2664,7 @@ function MobileKanbanBoard({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="space-y-3">
       {/* Epic Legend (desktop only, mobile would be too crowded) */}
       {showEpicLegend && appRollup?.features && appRollup.features.length > 0 && (
         <div className="shrink-0 hidden md:flex flex-wrap items-center gap-2 px-3 py-2 mb-3 bg-muted/15 border border-border/40 rounded-xl select-none">
@@ -2690,7 +2686,7 @@ function MobileKanbanBoard({
       )}
 
       {/* ── Desktop: 4-column Kanban ── */}
-      <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-4 gap-4 flex-1 min-h-0 h-full">
+      <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-4 gap-4" style={{ height: 'calc(100vh - 220px)' }}>
         {COLS.map((col) => (
           <KanbanColumn
             key={col.title}

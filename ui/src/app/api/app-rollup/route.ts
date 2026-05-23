@@ -21,9 +21,9 @@ export async function GET(request: Request) {
 
     if (!appId) {
       if (activeProject) {
-        const appYamlPath = join(activeProject.path, '.factory', 'app.yaml');
-        if (existsSync(appYamlPath)) {
-          const raw = readFileSync(appYamlPath, 'utf-8');
+        const scaffoldYamlPath = join(activeProject.path, '.factory', 'scaffold.yaml');
+        if (existsSync(scaffoldYamlPath)) {
+          const raw = readFileSync(scaffoldYamlPath, 'utf-8');
           const parsed = parseYaml(raw) as any;
           if (parsed && parsed.name) {
             appId = slugify(parsed.name);
@@ -58,12 +58,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'No active project found to sync.' }, { status: 400 });
       }
 
-      const appYamlPath = join(activeProject.path, '.factory', 'app.yaml');
-      if (!existsSync(appYamlPath)) {
-        return NextResponse.json({ error: 'app.yaml not found in active project. Cannot sync.' }, { status: 404 });
+      const scaffoldYamlPath = join(activeProject.path, '.factory', 'scaffold.yaml');
+      if (!existsSync(scaffoldYamlPath)) {
+        return NextResponse.json({ error: 'scaffold.yaml not found in active project. Cannot sync.' }, { status: 404 });
       }
 
-      await syncAppRoadmap(appYamlPath);
+      await syncAppRoadmap(scaffoldYamlPath);
       return NextResponse.json({ success: true, message: 'Roadmap synchronized successfully.' });
     }
 
@@ -76,10 +76,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Invalid status: ${status}` }, { status: 400 });
     }
 
-    // Update task status in app.yaml and recalculate rollups in-memory
+    // Update task status in scaffold.yaml and recalculate rollups in-memory
     await updateTaskStatus(taskId, status);
 
-    return NextResponse.json({ success: true, message: `Task "${taskId}" updated to "${status}" and app.yaml synced.` });
+    return NextResponse.json({ success: true, message: `Task "${taskId}" updated to "${status}" and scaffold.yaml synced.` });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

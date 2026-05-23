@@ -387,7 +387,7 @@ export interface FeatureEpicSpec {
 
 export interface StoryReferenceSpec {
     name: string;
-    file?: string; // Path relative to project root or .factory/ (e.g. ".factory/stories/apps/greeting-app.yaml")
+    file?: string; // Path relative to project root or .factory/ (e.g. ".factory/stories/apps/greeting-scaffold.yaml")
     status?: StoryStatus;
     tasks: TaskItemSpec[];
 }

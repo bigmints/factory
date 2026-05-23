@@ -352,7 +352,7 @@ export function restoreStory(storyPath: string): string | null {
 }
 
 
-/** Generate a draft app.yaml spec from a new AppStory */
+/** Generate a draft scaffold.yaml spec from a new AppStory */
 export function generateAppYamlFromStory(story: AppStory, storyFile?: string): AppSpec {
     const slug = storySlug(story);
     const storyFilename = storyFile ? basename(storyFile) : `${slug}.yaml`;

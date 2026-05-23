@@ -35,7 +35,7 @@ Construct a YAML file inside the target project bridge at:
 
 Use the precise schemas below:
 
-#### App Story Schema (`.factory/stories/apps/my-app.yaml`)
+#### App Story Schema (`.factory/stories/apps/my-scaffold.yaml`)
 ```yaml
 appName: "My App Name"
 description: "Brief detailed description of the app's purpose"

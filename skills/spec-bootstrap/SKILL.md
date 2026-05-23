@@ -2,7 +2,7 @@
 name: factory-spec-bootstrap
 description: >
   Interactively create a complete Factory spec suite for a new project —
-  one app.yaml with features + inline stories, plus individual story YAML files.
+  one scaffold.yaml with features + inline stories, plus individual story YAML files.
   No dependency maps. No epic hierarchy. Flat, engine-ready structure.
 ---
 
@@ -10,7 +10,7 @@ description: >
 
 You are helping the user create specs for their project so the Factory build engine can start immediately.
 
-Factory reads **one file**: `.factory/app.yaml`. Everything — features, stories, progress — lives there or is referenced from it. Your job is to produce that file plus the individual story YAML files it references.
+Factory reads **one file**: `.factory/scaffold.yaml`. Everything — features, stories, progress — lives there or is referenced from it. Your job is to produce that file plus the individual story YAML files it references.
 
 **No epics. No dependency maps. No phase ordering. No dependsOn. Just features → stories.**
 
@@ -23,7 +23,7 @@ Ask these questions (batch them to keep it fast):
 1. **What does this project do?** (one paragraph)
 2. **App name?** (becomes the slug, e.g. `pi-app`)
 3. **Tech stack?** — framework, package manager, language, database, cloud
-4. **What are the main feature areas?** List 4–8 feature names (e.g. "Chat UI", "Auth", "Settings"). These become features in app.yaml.
+4. **What are the main feature areas?** List 4–8 feature names (e.g. "Chat UI", "Auth", "Settings"). These become features in scaffold.yaml.
 5. **For each feature, what are the individual pieces of work (stories)?** 2–6 per feature is ideal.
 
 > If you can read existing files in the project (package.json, AGENTS.md, README), do so first — auto-detect the stack so you don't have to ask.
@@ -35,7 +35,7 @@ Ask these questions (batch them to keep it fast):
 Before writing any files, show this summary and ask the user to confirm:
 
 ```
-app.yaml will contain:
+scaffold.yaml will contain:
   Feature: Chat UI
     - Story: Build message bubble components
     - Story: Implement WebSocket streaming
@@ -53,7 +53,7 @@ Adjust based on feedback before writing anything.
 
 ---
 
-## Step 3 — Write `.factory/app.yaml`
+## Step 3 — Write `.factory/scaffold.yaml`
 
 This is the **only** file the engine reads for roadmap state. Write it exactly like this:
 
@@ -110,7 +110,7 @@ features:
 For each story create `.factory/stories/features/<story-slug>.yaml`:
 
 ```yaml
-name: "<Story title — same as in app.yaml>"
+name: "<Story title — same as in scaffold.yaml>"
 description: "<What this story builds, 1–3 sentences>"
 status: draft
 
@@ -121,7 +121,7 @@ acceptance_criteria:
 ```
 
 **Rules:**
-- `name` must exactly match the `name` field in `app.yaml`'s story entry
+- `name` must exactly match the `name` field in `scaffold.yaml`'s story entry
 - `status: draft` always
 - Include 3–6 acceptance criteria written as present-tense testable statements
 - No tasks, no subtasks, no checklists, no dependencies — keep it minimal
@@ -147,7 +147,7 @@ After writing all files, tell the user:
 ```
 ✅ Done. Here's what was created:
 
-.factory/app.yaml
+.factory/scaffold.yaml
   └── Feature: Chat UI (3 stories)
   └── Feature: Auth (2 stories)
   └── Feature: Settings (2 stories)
@@ -165,7 +165,7 @@ Stories will appear on the board grouped by feature.
 
 ## Minimal working example
 
-**.factory/app.yaml**
+**.factory/scaffold.yaml**
 ```yaml
 name: task-manager
 description: A web app to manage tasks with team collaboration

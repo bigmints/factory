@@ -566,13 +566,7 @@ export default function Dashboard() {
         onToggleCollapse={toggleSidebarCollapse}
       />
 
-      <main className={cn(
-        "flex-1 min-h-0 pt-12 md:pt-0",
-        // Board view needs full height with no overflow; other tabs scroll
-        ['plan', 'dashboard'].includes(activeTab) && !showAddProject
-          ? "h-screen flex flex-col overflow-hidden"
-          : "overflow-auto"
-      )}>
+      <main className="flex-1 min-h-0 pt-12 md:pt-0 overflow-auto">
         {showAddProject ? (
           <div className="p-4 md:p-8 w-full h-full">
             <AddProject
@@ -591,12 +585,7 @@ export default function Dashboard() {
             />
           </div>
         ) : (
-          <div className={cn(
-            "w-full max-w-[1400px] mx-auto",
-            ['plan', 'dashboard'].includes(activeTab)
-              ? "flex-1 flex flex-col min-h-0 h-full overflow-hidden p-2 md:px-6 md:py-4"
-              : "p-3 md:px-6 md:py-4"
-          )}>
+          <div className="w-full max-w-[1400px] mx-auto p-2 md:px-6 md:py-4">
             {/* Page header */}
             {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
               <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
@@ -638,12 +627,12 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'plan' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} />}
+            {activeTab === 'plan' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} className="flex-1 min-h-0" />}
             {activeTab === 'build' && <BuildPage />}
             {activeTab === 'test' && <TestPlaceholder />}
             {activeTab === 'deploy' && <DeployPlaceholder />}
             {/* legacy hash compat */}
-            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} />}
+            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} className="flex-1 min-h-0" />}
             {activeTab === 'skills' && <SkillsView />}
             {activeTab === 'reports' && renderReports()}
             {activeTab === 'knowledge' && <KnowledgeView />}

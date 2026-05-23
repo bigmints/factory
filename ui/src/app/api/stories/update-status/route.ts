@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     if (status === 'done') {
       const archivedPath = archiveStory(file);
       if (archivedPath) {
-        // Extract new relative file key (e.g. done/greeting-app.yaml)
+        // Extract new relative file key (e.g. done/greeting-scaffold.yaml)
         const filename = archivedPath.split('/').pop();
         currentFile = `done/${filename}`;
       }
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     // 2. Update physical story YAML file status
     updateStoryStatus(currentFile, status);
 
-    // 3. Update status inside app.yaml & calculate rollups
+    // 3. Update status inside scaffold.yaml & calculate rollups
     await updateStoryStatusInApp(currentFile, status);
 
     return NextResponse.json({

@@ -1274,7 +1274,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(item => {
-        const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
+        const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
         return name.toLowerCase().includes(q) || item.file.toLowerCase().includes(q);
       });
     }
@@ -1483,7 +1483,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
 
   const getStoryTitle = (item: any) => {
     if (item.kind === 'FeatureStory' || !!item.feature) {
-      return item.feature?.name || item.dbName || item.file;
+      return item.name || item.feature?.name || item.dbName || item.file;
     }
     return item.metadata?.name || item.dbName || item.file;
   };
@@ -1979,7 +1979,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
           ? (selectedQueueItem.status === 'running' ? (buildOutput || selectedQueueItem.output || '') : (selectedQueueItem.output || selectedQueueItem.error || ''))
           : (buildOutput || '');
         const panelLabel = selectedQueueItem
-          ? (selectedMatchedStory?.metadata?.name || selectedMatchedStory?.feature?.name || selectedMatchedStory?.dbName || (selectedQueueItem as any).displayName || selectedQueueItem.storyFile?.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || 'Select a build')
+          ? (selectedMatchedStory?.name || selectedMatchedStory?.metadata?.name || selectedMatchedStory?.feature?.name || selectedMatchedStory?.dbName || (selectedQueueItem as any).displayName || selectedQueueItem.storyFile?.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || 'Select a build')
           : 'Live agent log console';
         const isSelectedRunning = selectedQueueItem?.status === 'running';
 
@@ -2018,7 +2018,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
                       const isBlocked = item.status === 'blocked';
                       const isSelected = item.id === selectedQueueItemId;
                       const matchedStory = mergedStories.find(s => s.file === specName || getSlug(s.file) === getSlug(specName));
-                      const humanReadableName = matchedStory?.metadata?.name || matchedStory?.feature?.name || matchedStory?.dbName || (item as any).displayName || specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || `Queue item ${idx + 1}`;
+                      const humanReadableName = matchedStory?.name || matchedStory?.metadata?.name || matchedStory?.feature?.name || matchedStory?.dbName || (item as any).displayName || specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || `Queue item ${idx + 1}`;
                       const epicParent = matchedStory?.epicParent;
                       const epicColor = epicParent ? epicColorMap.get(epicParent.id) : undefined;
                       const desc = matchedStory?.metadata?.description || matchedStory?.feature?.description || '';
@@ -2942,7 +2942,7 @@ function StoryKanbanCard({
   onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
 }) {
-  const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
+  const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const effectiveStatus = getEffectiveStatus(item);
   const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
   const totalTasks = item.checklistTasks ? item.checklistTasks.length : 0;
@@ -3074,7 +3074,7 @@ function ListStoryRow({
   activeAction,
   allStories
 }: ListStoryRowProps) {
-  const name = item.metadata?.name || item.feature?.name || item.dbName || item.file;
+  const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
   const icon = item.metadata?.icon || (isFeature ? '🧩' : '📦');
   const effectiveStatus = getEffectiveStatus(item);

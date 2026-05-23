@@ -30,12 +30,12 @@ Begin by asking the user a few structured questions to detail their product or f
 
 ### 2. Generate Schema-Compliant Story YAML
 Construct a YAML file inside the target project bridge at:
-- **App Stories:** `.factory/stories/apps/<story-slug>.yaml`
+- **App Stories:** `.factory/stories/features/<story-slug>.yaml`
 - **Feature Stories:** `.factory/stories/features/<story-slug>.yaml`
 
 Use the precise schemas below:
 
-#### App Story Schema (`.factory/stories/apps/my-scaffold.yaml`)
+#### App Story Schema (`.factory/stories/features/my-scaffold.yaml`)
 ```yaml
 appName: "My App Name"
 description: "Brief detailed description of the app's purpose"
@@ -129,7 +129,7 @@ pages:
 Run the local CLI validation tool to ensure the generated YAML is schema-compliant:
 ```bash
 # To validate an App Story:
-npx tsx engine/cli.ts validate .factory/stories/apps/<story-slug>.yaml
+npx tsx engine/cli.ts validate .factory/stories/features/<story-slug>.yaml
 
 # To validate a Feature Story:
 npx tsx engine/cli.ts feature validate .factory/stories/features/<story-slug>.yaml
@@ -141,7 +141,7 @@ If errors are found, fix them in the YAML file and re-run the validation command
 Inform the user how they can run the Factory build engine on the story:
 - **For an App Story:**
   ```bash
-  npx tsx engine/cli.ts build .factory/stories/apps/<story-slug>.yaml
+  npx tsx engine/cli.ts build .factory/stories/features/<story-slug>.yaml
   ```
 - **For a Feature Story:**
   ```bash

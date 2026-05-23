@@ -158,28 +158,42 @@ Updated in the YAML file itself via `updateSpecStatus()`.
 
 ## Key Concepts
 
-### Specs
+### .factory Bridge
 
-YAML files in `.factory/specs/apps/` (app specs) and `.factory/specs/features/` (feature specs). Define the app's stack, data model, pages, auth, and deployment.
+The `.factory/` folder inside a connected project repo. It is the single source of truth for planning and agent context. Structure:
 
-**Feature specs** support two additional fields for build ordering:
+```
+.factory/
+├── scaffold.yaml          ← Planning spec: features → stories (the ONE file the board reads)
+├── factory.yaml           ← Bridge config: stack, conventions, knowledge paths
+├── stories/
+│   └── features/          ← Individual story YAML files (status, acceptance criteria)
+├── knowledge/             ← Agent-authored ADRs, decisions, conventions for future runs
+├── logs/                  ← Machine-written runtime output (never hand-edit)
+│   ├── state.yaml         ← Project state snapshot
+│   ├── heartbeat.yaml     ← Liveness signal written each build step
+│   ├── worklog.yaml       ← Append-only session log
+│   ├── builds/            ← Build receipts written after each successful build
+│   └── failures/          ← Failure records for debugging
+├── task-manager/
+│   ├── todo.yaml          ← Task queue
+│   └── manage.sh          ← Task lifecycle CLI
+└── workflows/             ← Workflow markdown scripts
+```
 
-- `phase: 1` — Build phase (1 = foundation, 2 = core, 3 = polish). Lower phases build first.
-- `dependsOn: [auth-system, data-models]` — Slugs of other specs that must complete before this spec can build. The engine enforces this — a spec will NOT dequeue until all its dependencies are `completed`.
+### scaffold.yaml
 
-### Bridge
+The planning spec at `.factory/scaffold.yaml`. Contains features with inline stories. Each story points to a file in `.factory/stories/features/`. This is what the Factory dashboard board reads — do not confuse it with build output.
 
-The `.factory/` folder inside a connected project repo. Contains `factory.yaml` (manifest), `knowledge/` (build history), and `specs/` subdirectories.
+Valid story `status` values: `draft` | `in-progress` | `done` (never `todo`, `pending`, `unknown`).
 
 ### Queue
 
-SQLite-backed (`factory.db`) build queue with **dependency-aware scheduling**. Items: `pending → running → completed | failed`. The queue dequeues items in phase order (ascending) and only processes a spec when all its `dependsOn` specs are `completed`. Supports priority, retry, batch processing, and autonomous `queue start`.
+SQLite-backed (`factory.db`) build queue. Items: `pending → running → completed | failed`. Supports priority, retry, batch processing, and autonomous `queue start`.
 
-When `queue start` finishes, it reports any specs still blocked by unmet dependencies.
+### Knowledge
 
-### Knowledge Feedback
-
-Each build writes a summary to `.factory/logs/builds/`. The context gatherer auto-discovers these, so subsequent specs have full awareness of what's already been built.
+The `.factory/knowledge/` directory is for **agent-authored reference material** — Architecture Decision Records, key technical decisions, established conventions. The engine injects these into LLM prompts so future builds are context-aware. Build receipts go to `.factory/logs/builds/` (not knowledge).
 
 ## CLI Commands
 
@@ -264,17 +278,21 @@ factory hooks install            # Install git hooks
 
 | File | Purpose |
 |------|---------|
-| `.factory/factory.yaml` | Bridge config (links to Factory install) |
-| `.factory/logs/state.yaml` | Project state snapshot (read by agent on start) |
+| `.factory/scaffold.yaml` | Planning spec — features → stories (board reads this) |
+| `.factory/factory.yaml` | Bridge config — stack, conventions, knowledge paths |
+| `.factory/stories/features/*.yaml` | Individual story detail files |
+| `.factory/knowledge/` | Agent-authored ADRs and decisions (future context) |
+| `.factory/logs/state.yaml` | Project state snapshot |
 | `.factory/logs/heartbeat.yaml` | Liveness signal (written every build step) |
 | `.factory/logs/worklog.yaml` | Append-only session log |
+| `.factory/logs/builds/` | Build receipts |
 | `.factory/skill-index.yaml` | Available agentic skills |
-| `.factory/task-manager/todo.yaml` | Task queue (human + agent readable) |
+| `.factory/task-manager/todo.yaml` | Task queue |
 | `.factory/task-manager/manage.sh` | Task lifecycle CLI |
 
 ### Workflow
 
 1. Start: `factory task start <id>` → `factory pulse "starting <id>"`
-2. Work: agent reads logs/state.yaml, builds, writes heartbeat on each step
+2. Work: agent reads `.factory/logs/state.yaml`, builds, writes heartbeat on each step
 3. Done: `factory task complete --id <id> --summary "what was done"`
-4. Commit: `factory blueprint update "summary"` → git commit
+4. Commit: `git add -A && git commit -m "feat(scope): what and why"`

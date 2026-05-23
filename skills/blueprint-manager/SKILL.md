@@ -1,62 +1,152 @@
 ---
-name: Blueprint Manager
-description: Manages the .factory bridge blueprint, automated TOON worklog updates, AGENTS.md rules, and Git post-commit hooks
+name: factory-bridge-manager
+description: >
+  Manages the .factory bridge in a connected project — initialising the
+  directory structure, keeping logs/ up to date, writing knowledge entries,
+  and maintaining the worklog. Use when setting up a new bridge, writing an
+  ADR to knowledge/, or troubleshooting the agent state files.
 ---
 
-# Blueprint Manager Skill
+# Factory Bridge Manager Skill
 
-## What This Does
+The `.factory/` directory is the bridge between a project repo and the Factory build engine.
+This skill covers: initialising it, maintaining `logs/`, writing to `knowledge/`, and keeping the worklog.
 
-This skill instructs an AI agent on how to manage and synchronize integration blueprints between the **Factory build engine** and target application repositories. It covers initializing the `.factory` bridge in target repos, installing automated git hooks for chronological TOON worklogs, updating the worklog manually, and keeping `AGENTS.md` rules current.
+---
 
-## Core Concepts
+## .factory Directory Structure
 
-### 1. The `.factory` Bridge
-Every project connected to the Factory has a `.factory/` directory in its repository root containing:
-- `factory.yaml` — Bridge manifest containing the stack, active applications, and configuration of directories.
-- `logs/` — Holds the dynamic chronological worklog, liveness heartbeat, and project state in TOON format.
-- `stories/` — Contains target application and feature stories (`stories/apps/` and `stories/features/`).
-- `knowledge/` — Built histories and architectural summaries generated after successful builds.
+```
+.factory/
+├── scaffold.yaml          ← Planning spec: features → stories (board reads this)
+├── factory.yaml           ← Bridge config: stack, conventions, paths
+├── stories/
+│   └── features/          ← Individual story YAML files
+├── knowledge/             ← Agent-authored ADRs, decisions, conventions
+├── logs/                  ← Machine-written runtime files (never hand-edit)
+│   ├── state.yaml         ← Project state snapshot
+│   ├── heartbeat.yaml     ← Liveness signal
+│   ├── worklog.yaml       ← Append-only session log
+│   ├── builds/            ← Build receipts (one JSON per build)
+│   └── failures/          ← Failure records
+├── task-manager/
+│   ├── todo.yaml          ← Task queue
+│   └── manage.sh          ← Task lifecycle CLI
+└── workflows/             ← Workflow markdown scripts
+```
 
-### 2. Chronological Worklogs (TOON format)
-To prevent state drift and token fatigue, a chronological worklog (`.factory/logs/worklog.yaml` in TOON format) tracks key milestones, major updates, and database or API changes. The blueprint gatherer automatically compiles this, giving the LLM precise awareness of past features.
+---
 
-## Step-by-Step Operations
+## Initialising the bridge
 
-### 1. Initialize a Bridge in a Target Repo
-To connect any repository and initialize a `.factory` bridge:
+Run from within the connected project repo:
+
 ```bash
-# Connect the repository to the Factory project manager
-npx tsx engine/cli.ts project add /path/to/target-repo
-
-# Initialize the bridge structure inside the target repository
-npx tsx engine/cli.ts init-bridge /path/to/target-repo
+factory init-bridge <repo-path>
 ```
-This generates the `.factory/` directory and creates `factory.yaml`.
 
-### 2. Install Automated Git Hooks (Chronological Worklog)
-To automate worklog updates, install git post-commit hooks in the target repository. This guarantees that every commit is logged, parsing file changes and commit messages in TOON format without human intervention:
+This creates the full `.factory/` structure above, writes a starter `scaffold.yaml`, and registers the project.
+
+Or manually: create the dirs and write `factory.yaml` + `scaffold.yaml` following the skill schemas.
+
+---
+
+## factory.yaml schema
+
+```yaml
+version: 1
+
+project:
+  name: my-app
+  description: >
+    One paragraph description.
+
+stack:
+  framework: next.js         # next.js | node | vite | remix | astro
+  language: typescript
+  packageManager: npm        # npm | pnpm | yarn | bun
+  styling: tailwind          # tailwind | vanilla-css | shadcn/ui
+  database: supabase         # supabase | postgres | sqlite | none
+  cloud: vercel              # vercel | gcp | aws | none
+
+conventions:
+  - "TypeScript strict mode; no any"
+  - "Components in src/components/<Name>.tsx"
+  # Add project-specific conventions here
+
+knowledge:
+  - path: AGENTS.md
+  - path: .factory/knowledge/   # directory — all files in it are injected
+
+agentic:
+  logs_dir: .factory/logs
+  stories_dir: .factory/stories/features
+  task_queue: .factory/task-manager/todo.yaml
+  skill_index: .factory/skill-index.yaml
+  workflows_dir: .factory/workflows
+  knowledge_dir: .factory/knowledge
+```
+
+---
+
+## Writing a knowledge entry
+
+Use knowledge entries to record decisions that future build runs must be aware of.
+Save as `.factory/knowledge/<slug>.md`:
+
+```markdown
+# ADR: Chose Zustand over Redux
+
+Date: 2025-05-23
+Decision: Use Zustand for client state management.
+
+## Rationale
+- Much smaller bundle (8kb vs 50kb+)
+- No boilerplate; slice pattern matches our conventions
+- Works natively with React hooks
+
+## Implications
+- All stores in src/store/<slice>.ts
+- Never import Redux or RTK
+```
+
+The engine auto-discovers all files in `.factory/knowledge/` and injects them into every LLM prompt.
+
+---
+
+## Maintaining the worklog
+
+The worklog at `.factory/logs/worklog.yaml` is append-only. The engine writes to it automatically on every build step. You can also write to it manually:
+
 ```bash
-npx tsx engine/cli.ts hooks install
+factory pulse "starting auth feature build"
 ```
-This writes a `.git/hooks/post-commit` script that triggers blueprint updates automatically whenever developers or agents commit code.
 
-### 3. Manually Update Blueprint Worklog
-When making direct modifications outside of Git, or to log manual updates, run the blueprint update tool:
+Or via the CLI:
 ```bash
-# General syntax: factory blueprint update "<message>"
-npx tsx engine/cli.ts blueprint update "feat(database): added migration support for SQLite"
+npx tsx engine/cli.ts blueprint update "completed WebSocket bridge setup"
 ```
-This appends the entry to the worklog securely in TOON format.
 
-### 4. Maintain and Update `AGENTS.md`
-Every project contains a specialized `AGENTS.md` (or `AGENTS.md` under `.factory/conventions/`) that serves as the "constitution" for AI development in that project.
-- **When to read it:** Eagerly read the `AGENTS.md` of any target project before modifying code to align on its guidelines, stack, directory layouts, and rules.
-- **When to update it:** When you introduce a major architectural design decision, add a new table/schema, or install new core packages (e.g. Prisma, Firebase-auth), edit `AGENTS.md` to document the new conventions. Keep the guidelines crisp, concise, and structured.
+---
 
-### 5. Blueprint Compilation (Gathering)
-Before generating any app or feature, the build pipeline automatically compiles these files via:
-```typescript
-const blueprint = gatherBlueprint(projectPath, bridgeConfig);
+## Checking agent liveness
+
+```bash
+# Check when the agent last wrote a heartbeat
+cat .factory/logs/heartbeat.yaml
+
+# Check the project state snapshot
+cat .factory/logs/state.yaml
 ```
-This scans tsconfig.json, package.json, TOON worklogs, file structures, and past knowledge files, ensuring the LLM generates 100% complementary and integration-aware code.
+
+---
+
+## Git hooks
+
+Install a post-commit hook that auto-updates the worklog on every commit:
+
+```bash
+factory hooks install
+```
+
+This writes `.git/hooks/post-commit` which calls `factory pulse` on every commit.

@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { FolderBrowser } from '@/components/folder-browser';
 import { toast } from 'sonner';
+import { NewProjectGuide } from '@/components/new-project-guide';
 import {
   Collapsible,
   CollapsibleContent,
@@ -71,6 +72,7 @@ interface Project {
 
 interface AddProjectProps {
   onProjectAdded: () => void;
+  onNavigateToPlan?: () => void;
 }
 
 function CircularProgress({
@@ -133,7 +135,7 @@ function StepIndicator({ completed }: { completed: boolean }) {
   );
 }
 
-export function AddProject({ onProjectAdded }: AddProjectProps) {
+export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps) {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
@@ -142,6 +144,12 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+
+  // New-project guide state
+  const [showGuide, setShowGuide] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectPath, setNewProjectPath] = useState('');
+  const [newProjectStack, setNewProjectStack] = useState<{ framework?: string; packageManager?: string; language?: string }>({});
 
   // Onboarding logic state
   const [openStepId, setOpenStepId] = useState<string | null>("location");
@@ -205,15 +213,24 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
         return;
       }
       setCompletedSteps(prev => ({ ...prev, build: true }));
-      toast.success(`${data.project?.name || 'Project'} connected!`, {
+      const projName = data.project?.name || 'Project';
+      toast.success(`${projName} connected!`, {
         description: data.project?.path,
       });
       await loadProjects();
       onProjectAdded();
       
+      // Show the getting-started guide after a brief delay
       setTimeout(() => {
         resetOnboarding();
-      }, 1000);
+        setNewProjectName(projName);
+        setNewProjectPath(data.project?.path || pendingPath || '');
+        setNewProjectStack({
+          framework: config.framework,
+          packageManager: config.packageManager,
+        });
+        setShowGuide(true);
+      }, 600);
     } catch (err: any) {
       toast.error('Connection failed', { description: err.message });
     } finally {
@@ -754,6 +771,19 @@ export function AddProject({ onProjectAdded }: AddProjectProps) {
           ? 'Create Project'
           : 'Select Folder'
         }
+      />
+
+      {/* Getting-started prompt guide */}
+      <NewProjectGuide
+        open={showGuide}
+        projectName={newProjectName}
+        projectPath={newProjectPath}
+        projectStack={newProjectStack}
+        onClose={() => setShowGuide(false)}
+        onStartCreating={() => {
+          setShowGuide(false);
+          onNavigateToPlan?.();
+        }}
       />
     </div>
   );

@@ -105,6 +105,7 @@ export default function Dashboard() {
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
   const [showStoryChat, setShowStoryChat] = useState(false);
+  const [globalOpenStoryChat, setGlobalOpenStoryChat] = useState(false);
   const [isBuildingAll, setIsBuildingAll] = useState(false);
   const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
   const [queueRunning, setQueueRunning] = useState(false);
@@ -470,6 +471,72 @@ export default function Dashboard() {
     </div>
   );
 
+  // ─── Render: Output Content (shared between desktop panel and mobile sheet) ──
+  const OutputContent = ({
+    validationResult: vr,
+    buildOutput: bo,
+    activeAction: aa,
+    queueRunning: qr,
+  }: {
+    validationResult: typeof validationResult;
+    buildOutput: string;
+    activeAction: typeof activeAction;
+    queueRunning: boolean;
+  }) => (
+    <>
+      {vr && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+            <div className="flex items-center gap-2">
+              {vr.passed ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
+              )}
+              <CardTitle className="text-sm font-bold text-foreground">
+                Validation {vr.passed ? 'Passed' : 'Failed'}
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="text-xs">Check</TableHead>
+                    <TableHead className="text-xs">Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {vr.checks.map((check, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        {check.passed ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                          <AlertCircle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs font-medium">{check.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {bo && (
+        <BuildLog
+          output={bo}
+          isRunning={!!aa || qr}
+        />
+      )}
+    </>
+  );
+
   const handleNavChange = (tab: string) => {
     setShowAddProject(false);
     setActiveTab(tab);
@@ -500,28 +567,35 @@ export default function Dashboard() {
       />
 
       <main className={cn(
-        "flex-1 min-h-0 pt-16 md:pt-0 pb-6 md:pb-0",
+        "flex-1 min-h-0 pt-12 md:pt-0",
+        // Board view needs full height with no overflow; other tabs scroll
         ['plan', 'dashboard'].includes(activeTab) && !showAddProject
           ? "h-screen flex flex-col overflow-hidden"
           : "overflow-auto"
       )}>
         {showAddProject ? (
           <div className="p-4 md:p-8 w-full h-full">
-            <AddProject onProjectAdded={() => {
-              setShowAddProject(false);
-              setHasProjects(true);
-              setProjectRefreshKey((k) => k + 1);
-              fetchProjects();
-              fetchStories();
-              fetchReports();
-            }} />
+            <AddProject
+              onProjectAdded={() => {
+                setShowAddProject(false);
+                setHasProjects(true);
+                setProjectRefreshKey((k) => k + 1);
+                fetchProjects();
+                fetchStories();
+                fetchReports();
+              }}
+              onNavigateToPlan={() => {
+                setShowAddProject(false);
+                setActiveTab('plan');
+              }}
+            />
           </div>
         ) : (
           <div className={cn(
-            "p-3 md:px-6 md:py-4 w-full max-w-[1400px] mx-auto",
+            "w-full max-w-[1400px] mx-auto",
             ['plan', 'dashboard'].includes(activeTab)
-              ? "flex-1 flex flex-col min-h-0 h-full overflow-hidden"
-              : ""
+              ? "flex-1 flex flex-col min-h-0 h-full overflow-hidden p-2 md:px-6 md:py-4"
+              : "p-3 md:px-6 md:py-4"
           )}>
             {/* Page header */}
             {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
@@ -564,12 +638,12 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'plan' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} />}
+            {activeTab === 'plan' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} />}
             {activeTab === 'build' && <BuildPage />}
             {activeTab === 'test' && <TestPlaceholder />}
             {activeTab === 'deploy' && <DeployPlaceholder />}
             {/* legacy hash compat */}
-            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} />}
+            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} />}
             {activeTab === 'skills' && <SkillsView />}
             {activeTab === 'reports' && renderReports()}
             {activeTab === 'knowledge' && <KnowledgeView />}
@@ -580,17 +654,18 @@ export default function Dashboard() {
       </main>
 
       {/* Output panel — desktop: slide-over overlay, mobile: bottom sheet */}
+      {/* Desktop panel */}
       <aside
         className={cn(
-          "fixed right-0 top-0 h-screen z-50 border-l border-border bg-background/85 backdrop-blur-md shadow-2xl transition-all duration-300 ease-in-out md:block hidden",
-          outputPanelOpen && hasOutput ? "w-[320px] md:w-[450px]" : "w-0 border-l-0 opacity-0 pointer-events-none"
+          "fixed right-0 top-0 h-screen z-50 border-l border-border bg-background/85 backdrop-blur-md shadow-2xl transition-all duration-300 ease-in-out hidden md:block",
+          outputPanelOpen && hasOutput ? "w-[450px]" : "w-0 border-l-0 opacity-0 pointer-events-none"
         )}
       >
-        <div className="w-[320px] md:w-[450px] h-screen flex flex-col">
-          <div className="flex items-center justify-between px-3 md:px-4 py-2.5 md:py-3 border-b border-border shrink-0">
+        <div className="w-[450px] h-screen flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
             <div className="flex items-center gap-2">
-              <Terminal className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
-              <span className="text-xs md:text-sm font-medium">Output</span>
+              <Terminal className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Output</span>
               {(activeAction || queueRunning) && (
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -602,60 +677,45 @@ export default function Dashboard() {
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
-            {validationResult && (
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                  <div className="flex items-center gap-2">
-                    {validationResult.passed ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
-                    )}
-                    <CardTitle className="text-xs md:text-sm font-bold text-foreground">
-                      Validation {validationResult.passed ? 'Passed' : 'Failed'}
-                    </CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-8"></TableHead>
-                          <TableHead className="text-xs">Check</TableHead>
-                          <TableHead className="text-xs">Details</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {validationResult.checks.map((check, i) => (
-                          <TableRow key={i}>
-                            <TableCell>
-                              {check.passed ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                              ) : (
-                                <AlertCircle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
-                              )}
-                            </TableCell>
-                            <TableCell className="text-xs font-medium">{check.name}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-            {buildOutput && (
-              <BuildLog
-                output={buildOutput}
-                isRunning={!!activeAction || queueRunning}
-              />
-            )}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <OutputContent validationResult={validationResult} buildOutput={buildOutput} activeAction={activeAction} queueRunning={queueRunning} />
           </div>
         </div>
       </aside>
+
+      {/* Mobile bottom sheet output */}
+      {outputPanelOpen && hasOutput && (
+        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setOutputPanelOpen(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-background border-t border-border rounded-t-2xl max-h-[75vh] flex flex-col"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="h-1 w-10 rounded-full bg-muted-foreground/20" />
+            </div>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
+              <div className="flex items-center gap-2">
+                <Terminal className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Output</span>
+                {(activeAction || queueRunning) && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                )}
+              </div>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOutputPanelOpen(false)}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+              <OutputContent validationResult={validationResult} buildOutput={buildOutput} activeAction={activeAction} queueRunning={queueRunning} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile top header & left side drawer navigation */}
       <MobileNav
@@ -670,6 +730,13 @@ export default function Dashboard() {
         }}
         onAddProject={() => setShowAddProject(true)}
         projectRefreshKey={projectRefreshKey}
+        onNewStory={() => {
+          // Switch to Plan tab first if not already there
+          if (activeTab !== 'plan' && activeTab !== 'dashboard') {
+            setActiveTab('plan');
+          }
+          setGlobalOpenStoryChat(true);
+        }}
       />
     </div>
   );

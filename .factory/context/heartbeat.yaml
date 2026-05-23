@@ -1,13 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-23T07:28:49Z"
+  last_seen: "2026-05-23T07:42:02Z"
   host: "BigMac-2"
-  task: "post-commit: feat(onboarding): prompt-based spec bootstrap after new project connect
-
-- Add skills/spec-bootstrap/SKILL.md — agent-readable skill file that
-  guides creation of app spec, feature specs, and stories in YAML
-- Add NewProjectGuide modal that appears after a project is connected,
-  showing a copyable prompt: 'Read [SKILL_URL] and create specs for [project]'
-- Pre-fills prompt with project name, path, and detected stack
-- 'Open Plan Board' CTA navigates directly to the plan tab
-- Wire onNavigateToPlan through dashboard → AddProject → guide"
+  task: "post-commit: fix(onboarding): correct skill URL branch (main → master) and org casing"
   status: alive

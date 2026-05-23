@@ -2652,7 +2652,15 @@ function MobileKanbanBoard({
     { title: 'Ready to Build', desc: 'Verified specifications awaiting launch', badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10', stories: readyStories, status: 'ready', dot: 'bg-teal-400' },
     { title: 'In Progress', desc: 'Actively compiling or iterating', badge: 'bg-blue-500/5 text-blue-300 border-blue-500/10', stories: buildingStories, status: 'in-progress', dot: 'bg-blue-400' },
     { title: 'Completed', desc: 'Code written and tests passed', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10', stories: doneStories, status: 'done', dot: 'bg-emerald-400' },
-  ] as const;
+    ...(unsyncedStories.length > 0 ? [{
+      title: 'Issues',
+      desc: 'Specs not yet linked to an Epic — run Sync Roadmap to assign',
+      badge: 'bg-rose-500/5 text-rose-300 border-rose-500/10',
+      stories: unsyncedStories,
+      status: 'unknown',
+      dot: 'bg-rose-400',
+    }] : []),
+  ];
 
   // Update active dot based on scroll position
   const onScroll = useCallback(() => {
@@ -2661,6 +2669,7 @@ function MobileKanbanBoard({
     const colWidth = el.scrollWidth / COLS.length;
     const idx = Math.round(el.scrollLeft / colWidth);
     setActiveCol(Math.max(0, Math.min(COLS.length - 1, idx)));
+
   }, []);
 
   // Scroll to a column on dot click
@@ -2693,8 +2702,13 @@ function MobileKanbanBoard({
         </div>
       )}
 
-      {/* ── Desktop: 4-column Kanban ── */}
-      <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-4 gap-4 flex-1 min-h-0 h-full">
+      {/* ── Desktop: Kanban columns (5 when Issues present, 4 otherwise) ── */}
+      <div className={cn(
+        'hidden md:grid gap-4 flex-1 min-h-0 h-full',
+        unsyncedStories.length > 0
+          ? 'md:grid-cols-2 xl:grid-cols-5'
+          : 'md:grid-cols-2 xl:grid-cols-4'
+      )}>
         {COLS.map((col) => (
           <KanbanColumn
             key={col.title}
@@ -2775,30 +2789,7 @@ function MobileKanbanBoard({
         </div>
       </div>
 
-      {/* Unsynced stories — shown below on both */}
-      {unsyncedStories.length > 0 && (
-        <div className="space-y-3 mt-4 border border-border/60 bg-muted/20 p-4 rounded-xl shrink-0">
-          <div className="flex items-center gap-2">
-            <Info className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-bold text-sm text-foreground">Uncategorized</h3>
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">{unsyncedStories.length}</Badge>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-2">
-            {unsyncedStories.map(item => (
-              <StoryKanbanCard
-                key={item.file}
-                item={item}
-                onSelect={handleOpenDrawer}
-                onValidate={handleValidateStory}
-                onBuild={handleSingleBuild}
-                activeAction={activeAction}
-                onDragStart={handleDragStart}
-                allStories={mergedStories}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

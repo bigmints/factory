@@ -353,102 +353,105 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
     }
 
     const features: FeatureEpicSpec[] = [];
-    const epicStatus  = isExistingCodebase ? 'completed' : 'pending';
-    const storyStatus = isExistingCodebase ? 'done' : 'draft';
-    const taskStatus  = isExistingCodebase ? 'completed' : 'pending';
+    
+    if (isExistingCodebase) {
+        const epicStatus = 'completed';
+        const storyStatus = 'done';
+        const taskStatus = 'completed';
 
-    // 1. Foundational Scaffold Feature
-    features.push({
-        name: 'Project Foundation',
-        description: 'Scaffold and baseline project setup.',
-        status: epicStatus as any,
-        stories: [
-            {
-                name: 'Scaffold Environment',
-                file: `stories/apps/${name}.yaml`,
-                status: storyStatus,
-                tasks: [
-                    { id: 'task-init-setup', title: 'Initialize project, configurations, and environment dependencies', status: taskStatus }
+        // 1. Foundational Scaffold Feature
+        features.push({
+            name: 'Project Foundation',
+            description: 'Scaffold and baseline project setup.',
+            status: epicStatus as any,
+            stories: [
+                {
+                    name: 'Scaffold Environment',
+                    file: `stories/apps/${name}.yaml`,
+                    status: storyStatus,
+                    tasks: [
+                        { id: 'task-init-setup', title: 'Initialize project, configurations, and environment dependencies', status: taskStatus }
+                    ]
+                }
+            ]
+        });
+
+        // 2. Database Feature (if Prisma or Drizzle ORM detected)
+        const hasPrisma = existsSync(join(repoPath, 'prisma'));
+        const hasDrizzle = existsSync(join(repoPath, 'drizzle.config.ts')) || existsSync(join(repoPath, 'drizzle.config.js')) || existsSync(join(repoPath, 'drizzle'));
+
+        if (hasPrisma || hasDrizzle) {
+            const dbTech = hasPrisma ? 'Prisma' : 'Drizzle';
+            features.push({
+                name: 'Database Layer',
+                description: `Database connectivity, schema validation, and ORM layer configuration using ${dbTech}.`,
+                status: epicStatus as any,
+                stories: [
+                    {
+                        name: `${dbTech} Configuration`,
+                        status: storyStatus,
+                        tasks: [
+                            { id: 'task-db-setup', title: `Setup ${dbTech} ORM, configure database credentials, and seed initial schemas`, status: taskStatus }
+                        ]
+                    }
                 ]
-            }
-        ]
-    });
+            });
+        }
 
-    // 2. Database Feature (if Prisma or Drizzle ORM detected)
-    const hasPrisma = existsSync(join(repoPath, 'prisma'));
-    const hasDrizzle = existsSync(join(repoPath, 'drizzle.config.ts')) || existsSync(join(repoPath, 'drizzle.config.js')) || existsSync(join(repoPath, 'drizzle'));
-
-    if (hasPrisma || hasDrizzle) {
-        const dbTech = hasPrisma ? 'Prisma' : 'Drizzle';
-        features.push({
-            name: 'Database Layer',
-            description: `Database connectivity, schema validation, and ORM layer configuration using ${dbTech}.`,
-            status: epicStatus as any,
-            stories: [
-                {
-                    name: `${dbTech} Configuration`,
+        // 3. Page Routes Feature
+        if (possibleRoutes.length > 0) {
+            const routeStories: StoryReferenceSpec[] = possibleRoutes.map(route => {
+                const routeName = route.charAt(0).toUpperCase() + route.slice(1);
+                return {
+                    name: `${routeName} Page`,
                     status: storyStatus,
                     tasks: [
-                        { id: 'task-db-setup', title: `Setup ${dbTech} ORM, configure database credentials, and seed initial schemas`, status: taskStatus }
+                        { id: `task-route-${route}`, title: `Implement ${route} page layout and visual route components`, status: taskStatus }
                     ]
-                }
-            ]
-        });
-    }
+                };
+            });
 
-    // 3. Page Routes Feature
-    if (possibleRoutes.length > 0) {
-        const routeStories: StoryReferenceSpec[] = possibleRoutes.map(route => {
-            const routeName = route.charAt(0).toUpperCase() + route.slice(1);
-            return {
-                name: `${routeName} Page`,
-                status: storyStatus,
-                tasks: [
-                    { id: `task-route-${route}`, title: `Implement ${route} page layout and visual route components`, status: taskStatus }
+            features.push({
+                name: 'Application Pages & Routing',
+                description: 'Core user-facing layout views and page route handlers.',
+                status: epicStatus as any,
+                stories: routeStories
+            });
+        } else {
+            // Fallback main page feature
+            features.push({
+                name: 'Core Application Pages',
+                description: 'Main user-facing layouts and pages.',
+                status: epicStatus as any,
+                stories: [
+                    {
+                        name: 'Root Application Page',
+                        status: storyStatus,
+                        tasks: [
+                            { id: 'task-root-page', title: 'Scaffold application root homepage view and components', status: taskStatus }
+                        ]
+                    }
                 ]
-            };
-        });
+            });
+        }
 
-        features.push({
-            name: 'Application Pages & Routing',
-            description: 'Core user-facing layout views and page route handlers.',
-            status: epicStatus as any,
-            stories: routeStories
-        });
-    } else {
-        // Fallback main page feature
-        features.push({
-            name: 'Core Application Pages',
-            description: 'Main user-facing layouts and pages.',
-            status: epicStatus as any,
-            stories: [
-                {
-                    name: 'Root Application Page',
-                    status: storyStatus,
-                    tasks: [
-                        { id: 'task-root-page', title: 'Scaffold application root homepage view and components', status: taskStatus }
-                    ]
-                }
-            ]
-        });
-    }
-
-    // 4. UI Components Feature (if components dir exists)
-    if (hasComponentsDir) {
-        features.push({
-            name: 'UI Components Library',
-            description: 'Reusable structural layout components and design tokens.',
-            status: epicStatus as any,
-            stories: [
-                {
-                    name: 'Common Design System',
-                    status: storyStatus,
-                    tasks: [
-                        { id: 'task-common-ui', title: 'Scaffold responsive common layout component wrappers and UI elements', status: taskStatus }
-                    ]
-                }
-            ]
-        });
+        // 4. UI Components Feature (if components dir exists)
+        if (hasComponentsDir) {
+            features.push({
+                name: 'UI Components Library',
+                description: 'Reusable structural layout components and design tokens.',
+                status: epicStatus as any,
+                stories: [
+                    {
+                        name: 'Common Design System',
+                        status: storyStatus,
+                        tasks: [
+                            { id: 'task-common-ui', title: 'Scaffold responsive common layout component wrappers and UI elements', status: taskStatus }
+                        ]
+                    }
+                ]
+            });
+        }
     }
 
     // Formulate a beautiful BRD section

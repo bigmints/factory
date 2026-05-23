@@ -1,6 +1,12 @@
-entries[2]:
+entries[4]:
   - date: "2026-05-22 15:30:42"
     message: factory .factory/ scaffold initialized
   - date: "2026-05-23 07:28:49"
     message: "committed: feat(onboarding): prompt-based spec bootstrap after new project connect\n\n- Add skills/spec-bootstrap/SKILL.md — agent-readable skill file that\n  guides creation of app spec, feature specs, and stories in YAML\n- Add NewProjectGuide modal that appears after a project is connected,\n  showing a copyable prompt: 'Read [SKILL_URL] and create specs for [project]'\n- Pre-fills prompt with project name, path, and detected stack\n- 'Open Plan Board' CTA navigates directly to the plan tab\n- Wire onNavigateToPlan through dashboard → AddProject → guide"
     files: "skills/spec-bootstrap/SKILL.md,ui/src/components/add-project.tsx,ui/src/components/dashboard.tsx,ui/src/components/new-project-guide.tsx"
+  - date: "2026-05-23 07:31:56"
+    message: "committed: feat(board): show dismissable prompt banner when stories are empty\n\n- Banner appears above the kanban/list board when mergedStories is empty\n- Includes 'Get Prompt' button that opens the full NewProjectGuide modal\n- Dismiss button (X) hides it and persists to localStorage\n- Resets on project switch so new projects always see it\n- Modal 'Open Plan Board' CTA opens the New Story chat"
+    files: ".factory/app.yaml,.factory/blueprint/blueprint.yaml,.factory/blueprint/heartbeat.yaml,.factory/blueprint/worklog.yaml,.factory/context/heartbeat.yaml,.factory/factory.yaml,AGENTS.md,engine/generate.ts,engine/init.ts,ui/src/app/api/stories/update-status/route.ts,ui/src/app/globals.css,ui/src/components/build-page.tsx,ui/src/components/notion-board.tsx,ui/src/components/sidebar.tsx"
+  - date: "2026-05-23 07:42:02"
+    message: "committed: fix(onboarding): correct skill URL branch (main → master) and org casing"
+    files: ui/src/components/new-project-guide.tsx

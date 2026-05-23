@@ -32,7 +32,7 @@ interface NewProjectGuideProps {
 }
 
 const SKILL_URL =
-  'https://raw.githubusercontent.com/Bigmints-com/factory/main/skills/spec-bootstrap/SKILL.md';
+  'https://raw.githubusercontent.com/bigmints/factory/master/skills/spec-bootstrap/SKILL.md';
 
 function buildPrompt(
   projectName: string,

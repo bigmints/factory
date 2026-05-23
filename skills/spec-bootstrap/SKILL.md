@@ -107,12 +107,30 @@ features:
 
 ## Step 4 — Write individual story YAML files
 
-For each story create `.factory/stories/features/<story-slug>.yaml`:
+For each story create `.factory/stories/features/<story-slug>.yaml`.
+
+Each story file is **both** a planning document and a build spec — the engine reads it directly when you click Build:
 
 ```yaml
-name: "<Story title — same as in scaffold.yaml>"
+name: "<Story title — must exactly match scaffold.yaml>"
 description: "<What this story builds, 1–3 sentences>"
 status: draft
+
+# Build spec — required for the engine to run this story
+feature:
+  name: "<Feature name from scaffold.yaml>"
+  slug: "<kebab-case-slug-of-feature-name>"
+
+target:
+  app: "<app name — matches scaffold.yaml name field>"
+
+stack:
+  framework: <framework>        # inherit from factory.yaml
+  language: <language>
+  packageManager: <pm>
+
+# Optional: npm packages this story needs installed
+dependencies: []
 
 acceptance_criteria:
   - "<Specific, testable criterion>"
@@ -121,10 +139,14 @@ acceptance_criteria:
 ```
 
 **Rules:**
-- `name` must exactly match the `name` field in `scaffold.yaml`'s story entry
-- `status: draft` always
-- Include 3–6 acceptance criteria written as present-tense testable statements
-- No tasks, no subtasks, no checklists, no dependencies — keep it minimal
+- `name` must exactly match the story `name` in `scaffold.yaml`
+- `feature.name` must match the parent feature name in `scaffold.yaml`
+- `feature.slug` is kebab-case of the feature name (e.g. `auth-app-shell`)
+- `target.app` is the app slug from `scaffold.yaml`'s root `name` field
+- `stack` should match the project's `factory.yaml` stack
+- `status: draft` always to start
+- Include 3–6 acceptance criteria as present-tense testable statements
+- If a string contains double quotes, wrap the whole value in single quotes
 - Filename is lowercase-hyphen slug of the story title
 
 ---

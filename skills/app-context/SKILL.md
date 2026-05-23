@@ -186,6 +186,8 @@ features:
 
 ## Step 6 — Write story YAML files
 
+Every story file is **both** a planning document and a build spec. The engine reads the same file when you click Build.
+
 **For `done` stories** (what already exists), create a minimal record:
 
 ```yaml
@@ -193,25 +195,41 @@ name: "<Story title — matches scaffold.yaml exactly>"
 description: "<What was built — past tense>"
 status: done
 
+feature:
+  name: "<Parent feature name>"
+  slug: "<kebab-case-of-feature-name>"
+
+target:
+  app: "<app slug — root name from scaffold.yaml>"
+
 notes: |
   Already implemented. Key files:
   - src/components/layout/AppLayout.tsx
   - src/app/(auth)/login/page.tsx
-  (Add the actual key files you found)
 ```
 
-**For `draft` stories** (what still needs to be built), create a full spec:
+**For `draft` stories** (what still needs to be built):
 
 ```yaml
 name: "<Story title — matches scaffold.yaml exactly>"
 description: "<What needs to be built, 1–3 sentences>"
 status: draft
 
-context: |
-  Existing codebase uses:
-  - <relevant package already installed>
-  - <relevant convention to follow>
-  - <relevant file to extend or not duplicate>
+# Build spec — required fields
+feature:
+  name: "<Parent feature name from scaffold.yaml>"
+  slug: "<kebab-case-slug>"              # e.g. auth-app-shell
+
+target:
+  app: "<app slug>"                      # root name from scaffold.yaml
+
+stack:
+  framework: <framework>                 # match factory.yaml
+  language: <language>
+  packageManager: <pm>
+
+# Optional: extra npm packages needed for this story specifically
+dependencies: []
 
 acceptance_criteria:
   - "<Specific, testable criterion>"
@@ -219,7 +237,13 @@ acceptance_criteria:
   - "<Another criterion>"
 ```
 
-The `context:` block is important — it tells the build engine what already exists so it doesn't duplicate or conflict.
+**Rules:**
+- `feature.name` must match the parent feature name exactly as it appears in `scaffold.yaml`
+- `feature.slug` is kebab-case of the feature name (e.g. `Auth & App Shell` → `auth-app-shell`)
+- `target.app` is the root `name` value from `scaffold.yaml`
+- `stack` values should mirror the project's `factory.yaml`
+- If a string contains double quotes, wrap the whole value in single quotes
+- The `context:` block can be added for additional build context (what already exists to not duplicate)
 
 ---
 
@@ -313,6 +337,13 @@ name: Login, signup, and session management
 description: Authentication flow with Supabase Auth — already implemented.
 status: done
 
+feature:
+  name: Auth
+  slug: auth
+
+target:
+  app: my-saas
+
 notes: |
   Already implemented. Key files:
   - src/app/(auth)/login/page.tsx
@@ -327,12 +358,17 @@ name: Connect metrics cards to live Supabase data
 description: Replace hardcoded numbers in the dashboard metrics cards with real queries from Supabase.
 status: draft
 
-context: |
-  Existing codebase uses:
-  - @supabase/supabase-js (already installed)
-  - React Query for server state (tanstack/react-query)
-  - Metrics card component at src/components/dashboard/MetricsCard.tsx
-  Do NOT create a new Supabase client — use src/lib/supabase/client.ts
+feature:
+  name: Dashboard
+  slug: dashboard
+
+target:
+  app: my-saas
+
+stack:
+  framework: next.js
+  language: typescript
+  packageManager: pnpm
 
 acceptance_criteria:
   - Metrics cards fetch data from Supabase on page load

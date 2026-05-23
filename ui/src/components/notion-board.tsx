@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { NewProjectGuide } from '@/components/new-project-guide';
 import {
   Rocket, Play, Square, ExternalLink, Terminal, Settings, Activity,
   CheckCircle2, XCircle, Loader2, AlertTriangle, ChevronDown, ChevronRight, Plus,
@@ -146,47 +147,52 @@ interface ActivityStep {
 interface NotionBoardProps {
   initialView?: 'board' | 'list' | 'queue';
   onNavigateToBuild?: () => void;
+  /** Increment this key whenever the active project changes to force a full data reset. */
+  projectRefreshKey?: number;
+  /** When this flips to true, open the story-chat dialog. Parent resets it after. */
+  externalOpenStoryChat?: boolean;
+  onExternalStoryChatConsumed?: () => void;
 }
 
 // ─── Constants & Configurations ───
 
 const storyStatusMap: Record<string, { label: string; bg: string; dot: string }> = {
-  done: { label: 'Done', bg: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10 backdrop-blur-xs font-semibold', dot: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
-  completed: { label: 'Done', bg: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10 backdrop-blur-xs font-semibold', dot: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
-  review: { label: 'In Review', bg: 'bg-purple-500/5 text-purple-300 border-purple-500/10 backdrop-blur-xs font-semibold', dot: 'bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.5)]' },
-  validation: { label: 'Validation', bg: 'bg-cyan-500/5 text-cyan-300 border-cyan-500/10 backdrop-blur-xs font-semibold', dot: 'bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)]' },
-  'in-progress': { label: 'In Progress', bg: 'bg-blue-500/5 text-blue-300 border-blue-500/10 backdrop-blur-xs font-semibold', dot: 'bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.5)]' },
-  running: { label: 'Building', bg: 'bg-blue-500/5 text-blue-300 border-blue-500/10 backdrop-blur-xs font-semibold', dot: 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)] animate-pulse' },
-  ready: { label: 'Ready to Build', bg: 'bg-teal-500/5 text-teal-300 border-teal-500/10 backdrop-blur-xs font-semibold', dot: 'bg-teal-400 shadow-[0_0_6px_rgba(45,212,191,0.5)]' },
-  failed: { label: 'Failed', bg: 'bg-rose-500/5 text-rose-300 border-rose-500/10 backdrop-blur-xs font-semibold', dot: 'bg-rose-400 shadow-[0_0_6px_rgba(248,113,113,0.5)]' },
-  draft: { label: 'Draft', bg: 'bg-amber-500/5 text-amber-300 border-amber-500/10 backdrop-blur-xs font-semibold', dot: 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]' },
-  unknown: { label: 'Draft', bg: 'bg-muted/30 border-border/20 text-muted-foreground', dot: 'bg-muted-foreground/60' }
+  done:         { label: 'Done',          bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 font-semibold', dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
+  completed:    { label: 'Done',          bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 font-semibold', dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
+  review:       { label: 'In Review',     bg: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/25 font-semibold',   dot: 'bg-purple-500 shadow-[0_0_6px_rgba(192,132,252,0.5)]' },
+  validation:   { label: 'Validation',    bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/25 font-semibold',            dot: 'bg-cyan-500 shadow-[0_0_6px_rgba(34,211,238,0.5)]' },
+  'in-progress':{ label: 'In Progress',   bg: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25 font-semibold',            dot: 'bg-blue-500 shadow-[0_0_6px_rgba(96,165,250,0.5)]' },
+  running:      { label: 'Building',      bg: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25 font-semibold',            dot: 'bg-blue-500 shadow-[0_0_8px_rgba(96,165,250,0.8)] animate-pulse' },
+  ready:        { label: 'Ready to Build',bg: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/25 font-semibold',            dot: 'bg-teal-500 shadow-[0_0_6px_rgba(45,212,191,0.5)]' },
+  failed:       { label: 'Failed',        bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25 font-semibold',            dot: 'bg-rose-500 shadow-[0_0_6px_rgba(248,113,113,0.5)]' },
+  draft:        { label: 'Draft',         bg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/25 font-semibold',        dot: 'bg-amber-500 shadow-[0_0_6px_rgba(251,191,36,0.5)]' },
+  unknown:      { label: 'Draft',         bg: 'bg-muted/50 border-border text-muted-foreground',                                              dot: 'bg-muted-foreground/60' }
 };
 
 const epicStatusMap: Record<string, { label: string; bg: string }> = {
-  completed: { label: 'Completed', bg: 'bg-emerald-500/15 border-emerald-500/10 text-emerald-300 backdrop-blur-xs' },
-  'in-progress': { label: 'In Progress', bg: 'bg-blue-500/15 border-blue-500/10 text-blue-300 backdrop-blur-xs' },
-  blocked: { label: 'Blocked', bg: 'bg-rose-500/15 border-rose-500/10 text-rose-300 backdrop-blur-xs' },
-  pending: { label: 'Pending', bg: 'bg-muted/30 border-border/20 text-muted-foreground' }
+  completed:    { label: 'Completed',  bg: 'bg-emerald-500/15 border-emerald-500/25 text-emerald-700 dark:text-emerald-300' },
+  'in-progress':{ label: 'In Progress',bg: 'bg-blue-500/15 border-blue-500/25 text-blue-700 dark:text-blue-300' },
+  blocked:      { label: 'Blocked',    bg: 'bg-rose-500/15 border-rose-500/25 text-rose-700 dark:text-rose-300' },
+  pending:      { label: 'Pending',    bg: 'bg-muted/50 border-border text-muted-foreground' }
 };
 
 // Rotating palette of epic accent colors (border-left + badge tints)
 const EPIC_COLORS = [
-  { border: 'border-l-violet-500',  badge: 'bg-violet-500/5 text-violet-300 border-violet-500/10 backdrop-blur-md font-medium' },
-  { border: 'border-l-sky-500',     badge: 'bg-sky-500/5 text-sky-300 border-sky-500/10 backdrop-blur-md font-medium' },
-  { border: 'border-l-emerald-500', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10 backdrop-blur-md font-medium' },
-  { border: 'border-l-rose-500',    badge: 'bg-rose-500/5 text-rose-300 border-rose-500/10 backdrop-blur-md font-medium' },
-  { border: 'border-l-teal-500',    badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10 backdrop-blur-md font-medium' },
-  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-500/5 text-fuchsia-300 border-fuchsia-500/10 backdrop-blur-md font-medium' },
-  { border: 'border-l-amber-500',   badge: 'bg-amber-500/5 text-amber-300 border-amber-500/10 backdrop-blur-md font-medium' },
-  { border: 'border-l-pink-500',    badge: 'bg-pink-500/5 text-pink-300 border-pink-500/10 backdrop-blur-md font-medium' },
+  { border: 'border-l-violet-500',  badge: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/25 font-medium' },
+  { border: 'border-l-sky-500',     badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/25 font-medium' },
+  { border: 'border-l-emerald-500', badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 font-medium' },
+  { border: 'border-l-rose-500',    badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25 font-medium' },
+  { border: 'border-l-teal-500',    badge: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/25 font-medium' },
+  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/25 font-medium' },
+  { border: 'border-l-amber-500',   badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/25 font-medium' },
+  { border: 'border-l-pink-500',    badge: 'bg-pink-500/15 text-pink-700 dark:text-pink-300 border-pink-500/25 font-medium' },
 ];
 
 const taskStatusMap: Record<string, { label: string; bg: string; dot: string }> = {
-  completed: { label: 'Completed', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-500' },
-  running: { label: 'Running', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20', dot: 'bg-blue-500 animate-pulse' },
-  failed: { label: 'Failed', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20', dot: 'bg-rose-500' },
-  pending: { label: 'Pending', bg: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground' }
+  completed: { label: 'Completed', bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/25', dot: 'bg-emerald-500' },
+  running:   { label: 'Running',   bg: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/25',             dot: 'bg-blue-500 animate-pulse' },
+  failed:    { label: 'Failed',    bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/25',             dot: 'bg-rose-500' },
+  pending:   { label: 'Pending',   bg: 'bg-muted/50 text-muted-foreground border-border',                                dot: 'bg-muted-foreground' }
 };
 
 function getStepIcon(label: string) {
@@ -336,21 +342,60 @@ function getRelatedStories(item: any, allStories: any[]) {
 }
 
 const getEffectiveStatus = (item: any) => {
-  // Queue status is the live source of truth — drives the Kanban column
+  // Queue status is authoritative only while a build is actively running
   if (item.queueStatus === 'running') return 'running';
   if (item.queueStatus === 'completed') return 'done';
   if (item.queueStatus === 'failed' || item.queueStatus === 'needs-attention') return 'failed';
 
-  // Fall back to the physical YAML status
-  const activeStates = ['in-progress', 'validation', 'running', 'review'];
-  if (item.status && activeStates.includes(item.status)) return item.status;
-
-  if (item.dbStatus && item.dbStatus !== 'unknown') return item.dbStatus;
+  // YAML status is the source of truth for everything else
   if (item.status && item.status !== 'unknown') return item.status;
   return 'unknown';
 };
 
-export function NotionBoard({ initialView = 'board', onNavigateToBuild }: NotionBoardProps) {
+
+// ─── YAML Viewer ─────────────────────────────────────────────────────────────
+function YamlViewer({ content }: { content: string }) {
+  const lines = content.split('\n');
+  return (
+    <div className="p-4 font-mono text-[11px] leading-6 select-text overflow-auto">
+      {lines.map((line, i) => {
+        const isComment = line.trimStart().startsWith('#');
+        const keyMatch = !isComment && line.match(/^(\s*)([a-zA-Z0-9_\-]+)(\s*:.*)$/);
+        const isList = /^\s*-\s/.test(line);
+        if (isComment) {
+          return <div key={i} className="text-zinc-600 italic">{line || '\u00A0'}</div>;
+        }
+        if (keyMatch) {
+          const [, indent, key, rest] = keyMatch;
+          const valueRaw = rest.replace(/^\s*:\s*/, '');
+          const isStr = /^["\']/.test(valueRaw);
+          const isNum = /^[\d.]+$/.test(valueRaw);
+          const isBool = /^(true|false|yes|no|null)$/.test(valueRaw);
+          return (
+            <div key={i}>
+              <span>{indent}</span>
+              <span className="text-sky-300 font-semibold">{key}</span>
+              <span className="text-zinc-500">: </span>
+              {valueRaw ? <span className={isStr ? 'text-emerald-400' : isNum ? 'text-amber-400' : isBool ? 'text-violet-400' : 'text-zinc-200'}>{valueRaw}</span> : null}
+            </div>
+          );
+        }
+        if (isList) {
+          const m = line.match(/^(\s*-\s*)(.*)$/);
+          if (m) return (
+            <div key={i}>
+              <span className="text-zinc-500">{m[1]}</span>
+              <span className={/^["\']/.test(m[2]) ? 'text-emerald-400' : 'text-zinc-300'}>{m[2]}</span>
+            </div>
+          );
+        }
+        return <div key={i} className="text-zinc-300">{line || '\u00A0'}</div>;
+      })}
+    </div>
+  );
+}
+
+export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectRefreshKey = 0, externalOpenStoryChat, onExternalStoryChatConsumed }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
   const [loading, setLoading] = useState(true);
@@ -445,6 +490,21 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
     }
   };
 
+  // ─── Active Project Tracking ───
+  // We track the active project ID so we can detect project switches and
+  // immediately clear stale data from a different project before refetching.
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  const fetchActiveProject = useCallback(async () => {
+    try {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      setActiveProjectId(data.activeId || null);
+    } catch {
+      // Silently fail — not critical
+    }
+  }, []);
+
   // Core Data
   const [stories, setStories] = useState<PhysicalStory[]>([]);
   const [featureStories, setFeatureStories] = useState<PhysicalStory[]>([]);
@@ -521,6 +581,33 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
   const [showStoryChat, setShowStoryChat] = useState(false);
   const [activeAction, setActiveAction] = useState<{ type: string; file: string } | null>(null);
 
+  // External trigger from FAB
+  useEffect(() => {
+    if (externalOpenStoryChat) {
+      setShowStoryChat(true);
+      onExternalStoryChatConsumed?.();
+    }
+  }, [externalOpenStoryChat]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Empty-state prompt banner dismiss (persisted in localStorage)
+  const DISMISS_KEY = 'factory_empty_board_dismissed';
+  const [promptDismissed, setPromptDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(DISMISS_KEY) === 'true';
+  });
+  const [showPromptModal, setShowPromptModal] = useState(false);
+
+  const handleDismissBanner = () => {
+    setPromptDismissed(true);
+    localStorage.setItem(DISMISS_KEY, 'true');
+  };
+
+  // Reset dismiss whenever the project changes so new projects always see the banner
+  useEffect(() => {
+    setPromptDismissed(false);
+    localStorage.removeItem(DISMISS_KEY);
+  }, [projectRefreshKey]);
+
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Data Sync Hooks ───
@@ -588,7 +675,21 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
     }
   }, []);
 
-  // Combined Polling Orchestrator
+  // Detect project changes and reset stale data immediately.
+  // projectRefreshKey bumps when the user switches project from the sidebar.
+  useEffect(() => {
+    // Clear all project-scoped data so stale stories from the previous project
+    // don't appear while fresh data is loading.
+    setStories([]);
+    setFeatureStories([]);
+    setAppRollup(null);
+    setQueueItems([]);
+    setQueueRunning(false);
+    // Re-fetch the active project ID so activeProjectId stays in sync.
+    fetchActiveProject();
+  }, [projectRefreshKey, fetchActiveProject]);
+
+  // Combined Polling Orchestrator — restarts whenever the project changes.
   useEffect(() => {
     setLoading(true);
     Promise.all([fetchRollup(true), fetchStories(), fetchQueue(), fetchRunStatus()]).finally(() => setLoading(false));
@@ -607,7 +708,9 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
       clearInterval(dataInterval);
       clearInterval(runInterval);
     };
-  }, [fetchRollup, fetchStories, fetchQueue, fetchRunStatus]);
+    // Re-run when projectRefreshKey changes so the board reflects the new project immediately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchRollup, fetchStories, fetchQueue, fetchRunStatus, projectRefreshKey]);
 
   // Dedicated Queue Log Polling
   useEffect(() => {
@@ -1003,33 +1106,29 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
     }
   };
 
-  const handleValidateStory = async (file: string, kind: string) => {
+  const handleValidateStory = async (file: string, _kind: string) => {
     setActiveAction({ type: 'validate', file });
-    const toastId = toast.loading(`Validating spec model for ${file}...`);
+    const toastId = toast.loading(`Checking ${file.split('/').pop()}…`);
     try {
-      const isFeature = kind === 'FeatureStory';
-      const endpoint = isFeature ? '/api/feature-build' : '/api/validate';
-      const body = isFeature
-        ? { storyFile: file, specFile: file, action: 'validate' }
-        : { storyFile: file, specFile: file };
-
-      const res = await fetch(endpoint, {
+      // Quick validate: YAML parse + required field checks. No CLI subprocess needed.
+      const res = await fetch('/api/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ storyFile: file, specFile: file, quick: true }),
       });
       const data = await res.json();
-      const passed = isFeature ? data.success : data.passed;
-
-      if (passed) {
-        toast.success('Spec model validation PASSED!', { id: toastId });
+      if (data.passed) {
+        toast.success('Spec looks good — ready to compile.', { id: toastId });
         fetchStories();
       } else {
-        const errMessage = data.error || data.errors?.[0] || 'Validation constraints unmet';
-        toast.error(`Validation FAILED: ${errMessage}`, { id: toastId });
+        const failedChecks = (data.checks || []).filter((c: any) => !c.passed);
+        const errMessage = failedChecks.length > 0
+          ? failedChecks.map((c: any) => `${c.name}${c.message ? ': ' + c.message : ''}`).join(' · ')
+          : data.error || 'Missing required fields in spec.';
+        toast.error(errMessage, { id: toastId, duration: 6000 });
       }
     } catch {
-      toast.error('Network error validating story', { id: toastId });
+      toast.error('Could not reach validation service.', { id: toastId });
     } finally {
       setActiveAction(null);
     }
@@ -1362,6 +1461,27 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
     } catch { toast.error('Failed to delete story'); }
   };
 
+  const handleUpdateStoryStatus = async (file: string, status: string) => {
+    try {
+      const res = await fetch('/api/stories/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file, status }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Status set to “${status}”`);
+        // If file moved (done/), update selectedItem ref
+        if (data.file && data.file !== file && selectedItem) {
+          setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, file: data.file, status } } : null);
+        }
+        fetchStories();
+      } else {
+        toast.error(data.error || 'Could not update status');
+      }
+    } catch { toast.error('Failed to update status'); }
+  };
+
   // ─── Rendering Helpers ───
 
   const getStoryTitle = (item: any) => {
@@ -1389,8 +1509,10 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
 
   return (
     <div className={cn(
-      "space-y-4 relative",
-      viewMode === 'board' ? "md:h-full md:flex md:flex-col md:overflow-hidden pb-2" : "pb-6"
+      "relative",
+      viewMode === 'board'
+        ? "h-full flex flex-col overflow-hidden gap-3 pb-2"
+        : "space-y-3 pb-6"
     )}>
       {/* Visual background atmospheric lights */}
       <div className="absolute -top-20 left-10 w-96 h-96 bg-primary/5 rounded-full filter blur-[120px] pointer-events-none -z-10" />
@@ -1399,298 +1521,263 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 1. TOP HEADER CONSOLE                                                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <div className="space-y-4 pb-4 select-none shrink-0 border-b border-border/40 px-1">
+      <div className="space-y-2 md:space-y-4 pb-3 md:pb-4 select-none shrink-0 border-b border-border/40 px-1">
         {/* Main flex-row: Project Info on Left, Actions on Right */}
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div className="flex items-center justify-between gap-2">
           
-          {/* Left Column: Title, version, stack badges & description */}
-          <div className="flex flex-col gap-2 min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="text-xl md:text-2xl shrink-0">🏭</span>
-              <h1 className="text-base md:text-2xl font-extrabold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
-                {appRollup?.name || 'Loading Project...'}
-                <Badge variant="outline" className="text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 border-border bg-muted/40 uppercase shrink-0">
+          {/* Left Column: Title + version */}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-lg md:text-2xl shrink-0">🏭</span>
+            <div className="min-w-0">
+              <h1 className="text-sm md:text-xl font-extrabold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
+                <span className="truncate">{appRollup?.name || 'Loading Project...'}</span>
+                <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0.5 border-border bg-muted/40 uppercase shrink-0">
                   v{appRollup?.version || '0.0.1'}
                 </Badge>
                 {queueRunning && (
-                  <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0 ml-0.5" />
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                 )}
               </h1>
-            </div>
-
-            {/* Stack badges & Description Row */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground/80">
-              {appRollup?.stack && (
-                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                  <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 shrink-0">
-                    ⚡ {appRollup.stack.framework}
-                  </Badge>
-                  {appRollup.stack.language && (
-                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 shrink-0">
-                      🏷️ {appRollup.stack.language}
+              {/* Stack badges — hidden on mobile to save space */}
+              <div className="hidden md:flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground/80 mt-1">
+                {appRollup?.stack && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20">
+                      ⚡ {appRollup.stack.framework}
                     </Badge>
-                  )}
-                  {appRollup.stack.database && (
-                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 shrink-0">
-                      🗄️ {appRollup.stack.database}
-                    </Badge>
-                  )}
-                </div>
-              )}
-              {appRollup?.description && (
-                <span className="text-[10.5px] text-muted-foreground/60 md:border-l border-border/40 md:pl-3 max-w-xl truncate" title={appRollup.description}>
-                  {appRollup.description}
-                </span>
-              )}
+                    {appRollup.stack.language && (
+                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20">
+                        🏷️ {appRollup.stack.language}
+                      </Badge>
+                    )}
+                    {appRollup.stack.database && (
+                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20">
+                        🗄️ {appRollup.stack.database}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                {appRollup?.description && (
+                  <span className="text-[10.5px] text-muted-foreground/60 border-l border-border/40 pl-3 max-w-xl truncate" title={appRollup.description}>
+                    {appRollup.description}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right Column: Unified Actions Toolbar */}
-          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+          {/* Right: Compact Action Toolbar */}
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Dev App Server Controls Pill */}
-            <div className="flex items-center border border-border/60 rounded-md bg-background/40 backdrop-blur-xs p-0.5 h-6.5 text-[10px] select-none shrink-0">
+            <div className="flex items-center border border-border/60 rounded-md bg-background/40 backdrop-blur-xs p-0.5 h-6.5 text-[10px] select-none">
               <div className="flex items-center gap-1 px-1">
                 <Activity className={cn("h-2.5 w-2.5", runStatus === 'running' ? "text-emerald-500" : "text-muted-foreground")} />
-                <span className="font-bold text-[8.5px] uppercase tracking-wider text-muted-foreground hidden lg:inline">Server:</span>
                 <Badge className={cn(
-                  "text-[8px] font-bold px-1 h-3.5 rounded-sm flex items-center justify-center",
+                  "text-[8px] font-bold px-1 h-3.5 rounded-sm items-center justify-center hidden sm:flex",
                   runStatus === 'running' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
                   runStatus === 'starting' ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse" :
                   "bg-muted text-muted-foreground border border-border"
                 )}>
-                  {runStatus === 'running' ? `Active (:${runPort || 3000})` : runStatus}
+                  {runStatus === 'running' ? `:${runPort || 3000}` : runStatus}
                 </Badge>
               </div>
               <Separator orientation="vertical" className="h-3.5 mx-0.5" />
               {runStatus === 'stopped' ? (
-                <Button
-                  size="icon"
-                  variant="ghost"
+                <button
                   onClick={handleStartApp}
                   disabled={isActionLoading}
-                  className="h-5 w-5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-sm"
+                  className="tap-shrink h-5 w-5 flex items-center justify-center text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-sm"
                 >
-                  <Play className="h-2.5 w-2.5 fill-emerald-500/20" />
-                </Button>
+                  <Play className="h-2.5 w-2.5" />
+                </button>
               ) : (
-                <Button
-                  size="icon"
-                  variant="ghost"
+                <button
                   onClick={handleStopApp}
                   disabled={isActionLoading}
-                  className="h-5 w-5 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-sm"
+                  className="tap-shrink h-5 w-5 flex items-center justify-center text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-sm"
                 >
-                  <Square className="h-2.5 w-2.5 fill-rose-500/20" />
-                </Button>
+                  <Square className="h-2.5 w-2.5" />
+                </button>
               )}
-
-              {/* View server URL if active */}
               {runStatus === 'running' && (
                 <>
                   <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-                  <Button
-                    size="icon"
-                    variant="ghost"
+                  <button
                     onClick={() => window.open(`http://localhost:${runPort || 3000}`, '_blank')}
-                    className="h-5 w-5 text-primary hover:bg-primary/10 rounded-sm"
+                    className="tap-shrink h-5 w-5 flex items-center justify-center text-primary hover:bg-primary/10 rounded-sm"
                   >
                     <ExternalLink className="h-2.5 w-2.5" />
-                  </Button>
+                  </button>
                 </>
               )}
-
-              {/* Terminal sidebar button */}
-              <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setServerLogsOpen(!serverLogsOpen)}
-                className={cn("h-5 w-5 rounded-sm", serverLogsOpen ? "bg-muted text-foreground" : "text-muted-foreground")}
-              >
-                <Terminal className="h-3 w-3" />
-              </Button>
             </div>
 
-            {/* Refresh data button */}
-            <Button
-              variant="outline"
-              size="icon"
+            {/* Refresh */}
+            <button
               onClick={handleSyncRoadmap}
               disabled={syncing}
-              className="h-6.5 w-6.5 rounded-md text-muted-foreground hover:text-foreground shrink-0"
+              className="tap-shrink h-6.5 w-6.5 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
               title="Refresh project data"
             >
               <RefreshCw className={cn("h-3 w-3", syncing && "animate-spin")} />
-            </Button>
+            </button>
           </div>
         </div>
 
-        {/* Controls & Filter Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 select-none">
-          {/* Left side: View tabs, New Story, and Build Ready buttons */}
-          <div className="flex items-center gap-1.5 shrink-0 self-start md:self-auto w-full md:w-auto">
-            <div className="flex items-center gap-1 p-0.5 bg-muted/60 border rounded-md h-7 shrink-0">
-              <Button
-                size="sm"
-                variant="ghost"
+        {/* Controls & Filter Bar — single row on mobile, two rows on desktop */}
+        <div className="flex flex-col gap-1.5 select-none">
+          <div className="flex items-center gap-1.5 justify-between">
+            {/* Left: View tabs */}
+            <div className="flex items-center gap-0.5 p-0.5 bg-muted/60 border rounded-md h-8 shrink-0">
+              <button
                 onClick={() => setViewMode('board')}
                 className={cn(
-                  "rounded-sm text-[10px] gap-1 h-6 px-2.5",
-                  viewMode === 'board' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                  'tap-shrink rounded-sm text-[10px] gap-1 h-7 px-2.5 flex items-center',
+                  viewMode === 'board' ? 'bg-background shadow-xs text-foreground font-bold' : 'text-muted-foreground'
                 )}
               >
-                <Columns className="h-3 w-3" />
+                <Columns className="h-3.5 w-3.5" />
                 <span>Board</span>
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
+              </button>
+              <button
                 onClick={() => setViewMode('list')}
                 className={cn(
-                  "rounded-sm text-[10px] gap-1 h-6 px-2.5",
-                  viewMode === 'list' ? "bg-background shadow-xs text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                  'tap-shrink rounded-sm text-[10px] gap-1 h-7 px-2.5 flex items-center',
+                  viewMode === 'list' ? 'bg-background shadow-xs text-foreground font-bold' : 'text-muted-foreground'
                 )}
               >
-                <ListTodo className="h-3 w-3" />
-                <span>Roadmap</span>
-              </Button>
+                <ListTodo className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Roadmap</span>
+              </button>
             </div>
 
-            {/* New Story button next to tabs (Responsive) */}
-            <Button
-              size="sm"
-              onClick={() => setShowStoryChat(true)}
-              className="h-7 w-7 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm shrink-0 flex items-center justify-center ml-0.5"
-              title="New Story"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">New Story</span>
-            </Button>
+            {/* Right: actions */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              {/* Search — full width input on desktop, icon-only on mobile */}
+              <div className="relative hidden sm:flex w-36 md:w-44">
+                <Search className="absolute left-2.5 top-2 h-3 w-3 text-muted-foreground/75" />
+                <Input
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-7 h-8 text-[10px] rounded-md bg-muted/30 w-full border-border/80"
+                />
+              </div>
 
-            {/* Build Ready Stories button grouped side-by-side (Responsive) */}
-            <Button
-              onClick={handleBuildReadyStories}
-              disabled={queueRunning || syncing}
-              className={cn(
-                "h-7 w-7 sm:w-auto p-0 sm:px-2.5 text-[10px] gap-1 rounded-md font-bold transition-all duration-200 shrink-0 flex items-center justify-center",
-                queueRunning ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white hover:shadow-sm active:scale-95"
-              )}
-              title="Build Ready Stories"
-            >
-              <Rocket className={cn("h-3 w-3", queueRunning && "animate-bounce")} />
-              <span className="hidden sm:inline">Build Ready</span>
-            </Button>
-          </div>
+              {/* Mobile search button */}
+              <button
+                onClick={() => setShowMobileFilters(true)}
+                className="sm:hidden tap-shrink h-8 w-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                title="Search & Filter"
+              >
+                <Search className="h-3.5 w-3.5" />
+              </button>
 
-          {/* Right side: Search, Filters toggle */}
-          <div className="flex items-center gap-1.5 w-full md:w-auto justify-end">
-            {/* Search box */}
-            <div className="relative flex-1 md:flex-initial w-full md:w-44 shrink-0">
-              <Search className="absolute left-2.5 top-2 h-3 w-3 text-muted-foreground/75" />
-              <Input
-                placeholder="Search stories..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-7 h-7 text-[10px] rounded-md bg-muted/30 w-full border-border/80"
-              />
-            </div>
-
-            {/* Universal Filters Toggle Button (Desktop collapsible toggle / Mobile bottom sheet) */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (window.innerWidth < 768) {
-                  setShowMobileFilters(true);
-                } else {
-                  setShowDesktopFilters(!showDesktopFilters);
-                }
-              }}
-              className={cn(
-                "h-7 text-[10px] gap-1 rounded-md px-2.5 border-border bg-background hover:bg-muted/80 shrink-0 select-none",
-                (showDesktopFilters || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary bg-primary/5"
-              )}
-            >
-              <Filter className="h-3 w-3" />
-              <span>Filters</span>
-              {(epicFilter !== 'all' || statusFilter !== 'all') && (
-                <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              )}
-            </Button>
-
-            {/* Epic Color Legend Toggle — only shown in board view */}
-            {viewMode === 'board' && appRollup?.features && appRollup.features.length > 0 && (
+              {/* Filters */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowEpicLegend(v => !v)}
-                className={cn(
-                  "h-7 text-[10px] gap-1 rounded-md px-2.5 border-border bg-background hover:bg-muted/80 shrink-0 select-none",
-                  showEpicLegend && "border-primary text-primary bg-primary/5"
-                )}
-                title="Toggle epic color legend"
-              >
-                <Tag className="h-3 w-3" />
-                <span className="hidden sm:inline">Epic Colors</span>
-              </Button>
-            )}
-
-            {/* Loading indicator */}
-            {loading && (
-              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0 ml-1" />
-            )}
-          </div>
-        </div>
-
-        {/* Desktop Collapsible Inline Filters Sub-row */}
-        {showDesktopFilters && (
-          <div className="hidden md:flex items-center gap-4 px-3 py-1.5 bg-muted/15 border border-border/40 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200 mt-1 select-none">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Epic:</span>
-              <select
-                value={epicFilter}
-                onChange={e => setEpicFilter(e.target.value)}
-                className="h-6.5 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-40 cursor-pointer"
-              >
-                <option value="all">All Epics</option>
-                {appRollup?.features?.map(f => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Status:</span>
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="h-6.5 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-32 cursor-pointer"
-              >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="ready">Ready</option>
-                <option value="in-progress">In Progress</option>
-                <option value="failed">Failed</option>
-                <option value="done">Done</option>
-              </select>
-            </div>
-
-            {(epicFilter !== 'all' || statusFilter !== 'all') && (
-              <Button
-                variant="ghost"
-                size="sm"
                 onClick={() => {
-                  setEpicFilter('all');
-                  setStatusFilter('all');
+                  if (window.innerWidth < 640) {
+                    setShowMobileFilters(true);
+                  } else {
+                    setShowDesktopFilters(!showDesktopFilters);
+                  }
                 }}
-                className="h-6.5 text-[10px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1 px-2 ml-auto rounded-md"
+                className={cn(
+                  "h-8 text-[10px] gap-1 rounded-md px-2 sm:px-2.5 border-border bg-background hover:bg-muted/80 shrink-0",
+                  (showDesktopFilters || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary bg-primary/5"
+                )}
               >
-                <X className="h-3 w-3" />
-                <span>Reset Filters</span>
+                <Filter className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Filters</span>
+                {(epicFilter !== 'all' || statusFilter !== 'all') && (
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                )}
               </Button>
-            )}
+
+              {/* New Story — hidden on mobile (FAB handles it), shown on desktop */}
+              <button
+                onClick={() => setShowStoryChat(true)}
+                className="tap-shrink hidden sm:flex h-8 px-2.5 items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm text-[10px] shrink-0"
+                title="New Story"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <span>New Story</span>
+              </button>
+
+              {/* Build Ready — icon only on mobile, full label on desktop */}
+              <button
+                onClick={handleBuildReadyStories}
+                disabled={queueRunning || syncing}
+                className={cn(
+                  'tap-shrink h-8 px-2.5 flex items-center justify-center gap-1.5 rounded-md font-bold text-[10px] transition-all shrink-0',
+                  queueRunning ? 'bg-muted text-muted-foreground cursor-not-allowed' : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white'
+                )}
+                title="Build Ready Stories"
+              >
+                <Rocket className={cn('h-3.5 w-3.5 shrink-0', queueRunning && 'animate-bounce')} />
+                <span className="hidden sm:inline">Build Ready</span>
+              </button>
+
+              {/* Loading indicator */}
+              {loading && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+              )}
+
+            </div>
           </div>
-        )}
+
+          {/* Desktop Collapsible Inline Filters Sub-row */}
+          {showDesktopFilters && (
+            <div className="hidden md:flex items-center gap-4 px-3 py-1.5 bg-muted/15 border border-border/40 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200 select-none">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Epic:</span>
+                <select
+                  value={epicFilter}
+                  onChange={e => setEpicFilter(e.target.value)}
+                  className="h-6.5 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-40 cursor-pointer"
+                >
+                  <option value="all">All Epics</option>
+                  {appRollup?.features?.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-muted-foreground font-mono font-semibold uppercase tracking-wider">Status:</span>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  className="h-6.5 px-2 rounded-md border border-border/60 bg-background text-[10px] text-foreground focus:ring-1 focus:ring-primary w-32 cursor-pointer"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="ready">Ready</option>
+                  <option value="in-progress">In Progress</option>
+                  <option value="failed">Failed</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+
+              {(epicFilter !== 'all' || statusFilter !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEpicFilter('all');
+                    setStatusFilter('all');
+                  }}
+                  className="h-6.5 text-[10px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 gap-1 px-2 ml-auto rounded-md"
+                >
+                  <X className="h-3 w-3" />
+                  <span>Reset Filters</span>
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={fetchStories} />
@@ -1705,146 +1792,88 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
       )}
 
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* 3. VIEW 1: KANBAN BOARD                                               */}
+      {/* EMPTY STATE PROMPT BANNER                                              */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {viewMode === 'board' && (
-        <div className="flex-1 min-h-0 flex flex-col md:overflow-hidden overflow-y-auto space-y-6 pr-1 pb-4 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
+      {!loading && mergedStories.length === 0 && !promptDismissed && (
+        <div className="mx-1 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="relative rounded-xl border border-primary/20 bg-gradient-to-r from-primary/8 via-violet-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            {/* Dismiss button */}
+            <button
+              onClick={handleDismissBanner}
+              className="absolute top-2.5 right-2.5 text-muted-foreground hover:text-foreground transition-colors rounded-md p-0.5 hover:bg-muted"
+              aria-label="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
 
-          {/* ── Epic Color Legend Strip ── */}
-          {showEpicLegend && appRollup?.features && appRollup.features.length > 0 && (
-            <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 bg-muted/15 border border-border/40 rounded-xl animate-in fade-in slide-in-from-top-1 duration-200 select-none">
-              <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-muted-foreground/70 shrink-0">Epic Colors:</span>
-              {appRollup.features.map((f: any, idx: number) => {
-                const color = EPIC_COLORS[idx % EPIC_COLORS.length];
-                // Extract a CSS color from the Tailwind badge class for the swatch dot
-                const swatchColors = [
-                  '#8b5cf6', // violet-500
-                  '#0ea5e9', // sky-500
-                  '#f59e0b', // amber-500
-                  '#f43f5e', // rose-500
-                  '#14b8a6', // teal-500
-                  '#d946ef', // fuchsia-500
-                  '#84cc16', // lime-500
-                  '#f97316', // orange-500
-                ];
-                return (
-                  <span key={f.id} className="flex items-center gap-1.5 text-[10px] text-foreground">
-                    <span
-                      className="h-2.5 w-2.5 rounded-sm shrink-0"
-                      style={{ backgroundColor: swatchColors[idx % swatchColors.length] }}
-                    />
-                    <span className="font-medium">{f.name}</span>
-                    <Badge variant="outline" className={cn("text-[7.5px] font-bold h-3.5 px-1 rounded border ml-0.5", color.badge)}>
-                      {f.stories?.length ?? 0} stories
-                    </Badge>
-                  </span>
-                );
-              })}
+            {/* Icon */}
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/20">
+              <span className="text-lg">✦</span>
             </div>
-          )}
 
-          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch md:h-full">
-            {/* Column 1: BACKLOG / DRAFT */}
-            <KanbanColumn
-              title="Backlog"
-              description="Scaffold drafts or spec blueprints"
-              badgeColor="bg-amber-500/5 text-amber-300 border-amber-500/10"
-              stories={backlogStories}
-              epicColorMap={epicColorMap}
-              onSelect={handleOpenDrawer}
-              onValidate={handleValidateStory}
-              onBuild={handleSingleBuild}
-              activeAction={activeAction}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'draft')}
-              onDragStart={handleDragStart}
-              allStories={mergedStories}
-            />
-
-            {/* Column 2: READY TO BUILD */}
-            <KanbanColumn
-              title="Ready to Build"
-              description="Verified specifications awaiting launch"
-              badgeColor="bg-teal-500/5 text-teal-300 border-teal-500/10"
-              stories={readyStories}
-              epicColorMap={epicColorMap}
-              onSelect={handleOpenDrawer}
-              onValidate={handleValidateStory}
-              onBuild={handleSingleBuild}
-              activeAction={activeAction}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'ready')}
-              onDragStart={handleDragStart}
-              allStories={mergedStories}
-            />
-
-            {/* Column 3: BUILDING / RUNNING */}
-            <KanbanColumn
-              title="In Progress"
-              description="Actively compiling or iterating"
-              badgeColor="bg-blue-500/5 text-blue-300 border-blue-500/10"
-              stories={buildingStories}
-              epicColorMap={epicColorMap}
-              onSelect={handleOpenDrawer}
-              onValidate={handleValidateStory}
-              onBuild={handleSingleBuild}
-              activeAction={activeAction}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'in-progress')}
-              onDragStart={handleDragStart}
-              allStories={mergedStories}
-            />
-
-            {/* Column 4: COMPLETED / DONE */}
-            <KanbanColumn
-              title="Completed"
-              description="Code written and tests passed"
-              badgeColor="bg-emerald-500/5 text-emerald-300 border-emerald-500/10"
-              stories={doneStories}
-              epicColorMap={epicColorMap}
-              onSelect={handleOpenDrawer}
-              onValidate={handleValidateStory}
-              onBuild={handleSingleBuild}
-              activeAction={activeAction}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'done')}
-              onDragStart={handleDragStart}
-              allStories={mergedStories}
-            />
-          </div>
-
-          {unsyncedStories.length > 0 && (
-            <div className="space-y-3 mt-6 border border-border/60 bg-muted/20 p-5 rounded-xl shrink-0">
-              <div className="flex items-center gap-2">
-                <Info className="h-4.5 w-4.5 text-muted-foreground" />
-                <h3 className="font-bold text-sm text-foreground">Uncategorized</h3>
-                <Badge variant="outline" className="text-[10px] text-muted-foreground">{unsyncedStories.length}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
-                These story files are not mapped to any feature in your app roadmap. Click cards to edit or compile them.
+            {/* Text */}
+            <div className="flex-1 min-w-0 pr-6">
+              <p className="text-xs font-semibold text-foreground">
+                No stories yet — use an AI agent to scaffold your specs
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
-                {unsyncedStories.map(item => (
-                  <StoryKanbanCard
-                    key={item.file}
-                    item={item}
-                    onSelect={handleOpenDrawer}
-                    onValidate={handleValidateStory}
-                    onBuild={handleSingleBuild}
-                    activeAction={activeAction}
-                    onDragStart={handleDragStart}
-                    allStories={mergedStories}
-                  />
-                ))}
-              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                Copy the prompt below and paste it into any AI agent. It will read the Factory skill file
+                and walk you through creating your app spec, feature specs, and stories.
+              </p>
             </div>
-          )}
+
+            {/* CTA */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowPromptModal(true)}
+              className="shrink-0 text-xs h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/50"
+            >
+              <span>Get Prompt</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       )}
 
+      {/* Full prompt modal */}
+      <NewProjectGuide
+        open={showPromptModal}
+        projectName={appRollup?.name || 'my-project'}
+        onClose={() => setShowPromptModal(false)}
+        onStartCreating={() => {
+          setShowPromptModal(false);
+          setShowStoryChat(true);
+        }}
+      />
+
       {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 3. VIEW 1: KANBAN BOARD                                               */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'board' && (
+        <MobileKanbanBoard
+          backlogStories={backlogStories}
+          readyStories={readyStories}
+          buildingStories={buildingStories}
+          doneStories={doneStories}
+          unsyncedStories={unsyncedStories}
+          mergedStories={mergedStories}
+          epicColorMap={epicColorMap}
+          handleOpenDrawer={handleOpenDrawer}
+          handleValidateStory={handleValidateStory}
+          handleSingleBuild={handleSingleBuild}
+          activeAction={activeAction}
+          handleDragOver={handleDragOver}
+          handleDrop={handleDrop}
+          handleDragStart={handleDragStart}
+          showEpicLegend={showEpicLegend}
+          appRollup={appRollup}
+        />
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────────── */}
       {/* 4. VIEW 2: ROADMAP HIERARCHICAL LIST VIEW                              */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
         <Card className="border border-border/80 bg-background/55 backdrop-blur-md shadow-lg overflow-hidden">
           <CardHeader className="border-b border-border/50 p-5">
@@ -1853,6 +1882,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
               Organized by Epic Features. Track task checklists and check them off to automatically sync with SQLite.
             </CardDescription>
           </CardHeader>
+
           <CardContent className="p-0">
             {appRollup?.features && appRollup.features.length > 0 ? (
               <div className="divide-y divide-border/60">
@@ -2123,14 +2153,9 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
                     </Badge>
                   )}
                 </span>
-                <div className="flex items-center gap-3 shrink-0 ml-2">
-                  <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
-                    {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
-                  </span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md shrink-0 focus:outline-none" onClick={() => setBuildLogsOpen(false)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+                <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider shrink-0 ml-2">
+                  {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
+                </span>
               </div>
               <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
                 {panelLog ? (
@@ -2156,68 +2181,39 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
       {/* 6. SLIDING DETAILS DRAWER                                             */}
       {/* ────────────────────────────────────────────────────────────────────── */}
       <Sheet open={drawerOpen} onOpenChange={(open) => { setDrawerOpen(open); if (!open) { setEditMode(false); setDeleteConfirm(false); } }}>
-        <SheetContent className="w-full sm:max-w-lg bg-zinc-950 border-l border-zinc-800/60 shadow-2xl flex flex-col p-0 overflow-hidden focus:outline-none">
+        <SheetContent className="w-full sm:max-w-2xl bg-background border-l border-border/60 shadow-2xl flex flex-col p-0 overflow-hidden focus:outline-none">
           {selectedItem && (
             <div className="flex flex-col h-full min-h-0">
 
               {/* ── Header ── */}
-              <div className="shrink-0 border-b border-zinc-800/70 bg-zinc-900/50 px-5 py-4 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn(
-                      'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border',
-                      selectedItem.type === 'task'
-                        ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/25'
-                        : selectedItem.data.kind === 'FeatureStory'
-                          ? 'bg-violet-500/10 text-violet-400 border-violet-500/25'
-                          : 'bg-sky-500/10 text-sky-400 border-sky-500/25'
-                    )}>
-                      {selectedItem.type === 'task' ? 'Task' : selectedItem.data.kind === 'FeatureStory' ? 'Feature Story' : 'App Story'}
-                    </span>
+              <div className="shrink-0 border-b border-border/50 bg-muted/20 px-5 py-4 space-y-3">
+                <div className="flex items-center gap-1.5">
                     {selectedItem.type === 'story' && (
-                      <span className={cn(
-                        'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border',
-                        (storyStatusMap[getEffectiveStatus(selectedItem.data)] || storyStatusMap.unknown).bg
-                      )}>
-                        {getEffectiveStatus(selectedItem.data)}
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        {selectedItem.data.kind === 'FeatureStory' ? 'feature' : 'app story'}
                       </span>
                     )}
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 rounded-md shrink-0" onClick={() => setDrawerOpen(false)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <SheetTitle className="text-base font-bold text-white leading-snug pr-2">
+                <SheetTitle className="text-lg font-bold text-white leading-snug pr-2 tracking-tight">
                   {selectedItem.type === 'task' ? selectedItem.data.title : getStoryTitle(selectedItem.data)}
                 </SheetTitle>
-                <SheetDescription className="text-xs text-zinc-500 leading-relaxed line-clamp-2 pr-2">
-                  {selectedItem.type === 'task'
-                    ? `Part of story: ${selectedItem.parentStory?.name || 'App Spec'}`
-                    : getStoryDesc(selectedItem.data)}
-                </SheetDescription>
-                {selectedItem.type === 'story' && (
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-600">
-                    <FileText className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{selectedItem.data.file}</span>
-                  </div>
-                )}
+                {selectedItem.type === 'task' ? (
+                  <SheetDescription className="text-xs text-zinc-500 leading-relaxed line-clamp-2 pr-2">
+                    {selectedItem.parentStory?.name || ''}
+                  </SheetDescription>
+                ) : getStoryDesc(selectedItem.data) ? (
+                  <SheetDescription className="text-sm text-zinc-400 leading-relaxed line-clamp-3 pr-2 mt-1">
+                    {getStoryDesc(selectedItem.data)}
+                  </SheetDescription>
+                ) : null}
+
               </div>
 
               {/* ── Action Bar ── */}
               {selectedItem.type === 'story' && (
-                <div className="shrink-0 border-b border-zinc-800/70 bg-zinc-900/30 px-4 py-2.5 flex items-center gap-1.5 flex-wrap">
+                <div className="shrink-0 border-b border-border/40 bg-muted/10 px-4 py-2.5 flex items-center gap-1.5 flex-wrap">
                   {!editMode ? (
                     <>
-                      <Button size="sm" variant="ghost" disabled={!!activeAction}
-                        onClick={() => handleValidateStory(selectedItem.data.file, selectedItem.data.kind)}
-                        className="h-7 px-3 gap-1.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">
-                        <ShieldCheck className="h-3.5 w-3.5" /> Validate
-                      </Button>
-                      <Button size="sm"
-                        onClick={() => { setDrawerOpen(false); handleSingleBuild(selectedItem.data.file, selectedItem.data.kind || 'AppStory'); }}
-                        className="h-7 px-3 gap-1.5 text-[11px] bg-violet-600 hover:bg-violet-500 text-white font-semibold font-sans shadow-sm shadow-violet-900/30">
-                        <Rocket className="h-3.5 w-3.5" /> Compile
-                      </Button>
                       <div className="flex-1" />
                       <Button size="sm" variant="ghost" disabled={loadingYaml}
                         onClick={() => { setEditMode(true); setStoryTab('raw'); }}
@@ -2256,25 +2252,11 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
                 </div>
               )}
 
-              {/* ── Queue Related Family ── */}
-              {selectedItem.type === 'story' && (() => {
-                const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
-                const family = [selectedItem.data, ...prerequisites, ...dependents, ...peers];
-                const incompleteCount = family.filter(s => { const st = getEffectiveStatus(s); return st !== 'done' && st !== 'completed'; }).length;
-                return incompleteCount > 0 ? (
-                  <div className="shrink-0 border-b border-zinc-800/70 px-4 py-2">
-                    <Button size="sm" onClick={() => handleQueueRelatedStories(selectedItem.data)}
-                      className="w-full h-8 text-[11px] font-bold gap-2 bg-violet-700/80 hover:bg-violet-600 text-white rounded-lg font-sans">
-                      <Layers className="h-3.5 w-3.5" />
-                      Queue Related Family ({incompleteCount})
-                    </Button>
-                  </div>
-                ) : null;
-              })()}
+
 
               {/* ── Tabs ── */}
               {selectedItem.type === 'story' && (
-                <div className="shrink-0 border-b border-zinc-800/70 bg-zinc-900/20 px-4 flex items-end">
+                <div className="shrink-0 border-b border-border/40 bg-muted/10 px-4 flex items-end">
                   {([{ key: 'spec', label: 'Spec' }, { key: 'raw', label: 'YAML' }, { key: 'tasks', label: 'Tasks' }] as const).map(({ key, label }) => (
                     <button key={key} onClick={() => setStoryTab(key)}
                       className={cn('px-3 py-2.5 text-[11px] font-semibold border-b-2 transition-all font-sans',
@@ -2321,56 +2303,59 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
 
                 {/* STORY — SPEC TAB */}
                 {selectedItem.type === 'story' && storyTab === 'spec' && (
-                  <div className="p-5 space-y-5">
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-                      <div className="px-4 py-2.5 border-b border-zinc-800/60 bg-zinc-800/30">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Identity</span>
-                      </div>
-                      <div className="divide-y divide-zinc-800/50">
-                        {[
-                          { label: 'File', value: selectedItem.data.file, mono: true },
-                          { label: 'Kind', value: selectedItem.data.kind === 'FeatureStory' ? 'Feature Story' : 'App Story', mono: false },
-                          { label: 'Status', value: getEffectiveStatus(selectedItem.data), mono: false },
-                          ...(selectedItem.data.phase ? [{ label: 'Phase', value: `Phase ${selectedItem.data.phase}`, mono: false }] : []),
-                          ...(selectedItem.data.target?.app ? [{ label: 'Target App', value: selectedItem.data.target.app, mono: true }] : []),
-                        ].map(({ label, value, mono }) => (
-                          <div key={label} className="flex items-center justify-between px-4 py-2.5 gap-3">
-                            <span className="text-[11px] text-zinc-500 shrink-0">{label}</span>
-                            <span className={cn('text-[11px] text-right truncate max-w-[220px]', mono ? 'font-mono text-zinc-300' : 'font-semibold text-zinc-200')}>
-                              {value}
-                            </span>
-                          </div>
-                        ))}
-                        {selectedItem.data.dbProgress !== undefined && (
-                          <div className="px-4 py-3 space-y-1.5">
-                            <div className="flex justify-between text-[11px]">
-                              <span className="text-zinc-500">Task progress</span>
-                              <span className="font-semibold text-zinc-200 font-mono">{selectedItem.data.dbProgress}%</span>
-                            </div>
-                            <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-violet-500 transition-all" style={{ width: `${selectedItem.data.dbProgress}%` }} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                  <div className="p-6 space-y-6">
+
+                    {/* Status row */}
+                    <div>
+                      <p className="text-xs font-semibold text-zinc-400 mb-1.5">Status</p>
+                      <select
+                        value={selectedItem.data.status ?? 'draft'}
+                        onChange={e => handleUpdateStoryStatus(selectedItem.data.file, e.target.value)}
+                        className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 text-sm text-zinc-100 px-3 focus:outline-none focus:ring-1 focus:ring-violet-500/60 font-sans cursor-pointer"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="ready">Ready to build</option>
+                        <option value="review">In review</option>
+                        <option value="done">Done</option>
+                      </select>
                     </div>
 
+                    {/* Story metadata */}
+                    <div className="space-y-1">
+                      {[
+                        { label: 'File', value: selectedItem.data.file, mono: true },
+                        { label: 'Type', value: selectedItem.data.kind === 'FeatureStory' ? 'Feature' : 'App Story', mono: false },
+                        ...(selectedItem.data.phase ? [{ label: 'Build phase', value: String(selectedItem.data.phase), mono: false }] : []),
+                        ...(selectedItem.data.target?.app ? [{ label: 'Target app', value: selectedItem.data.target.app, mono: true }] : []),
+                      ].map(({ label, value, mono }) => (
+                        <div key={label} className="flex items-start justify-between py-2 border-b border-zinc-800/60 gap-4">
+                          <span className="text-[12px] text-zinc-500">{label}</span>
+                          <span className={cn('text-[12px] text-right', mono ? 'font-mono text-zinc-300 break-all' : 'font-medium text-zinc-200')}>
+                            {value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Build dependencies */}
                     {selectedItem.data.dependsOn && selectedItem.data.dependsOn.length > 0 && (
                       <div className="space-y-2">
-                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-                          <Link2 className="h-3 w-3" /> Depends On
-                        </span>
+                        <p className="text-xs font-semibold text-zinc-400">Must build first</p>
                         <div className="flex flex-wrap gap-1.5">
                           {selectedItem.data.dependsOn.map((dep: string) => {
                             const depStory = mergedStories.find((s: any) => getSlug(s.file) === dep || s.file === dep);
                             const depStatus = depStory ? getEffectiveStatus(depStory) : 'unknown';
                             const isDone = depStatus === 'done' || depStatus === 'completed';
                             return (
-                              <span key={dep} onClick={() => depStory && handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent)}
-                                className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-mono font-medium cursor-pointer transition-all',
-                                  isDone ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                              <span key={dep}
+                                onClick={() => depStory && handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent)}
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-mono cursor-pointer transition-all',
+                                  isDone
+                                    ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:border-emerald-600/60'
+                                    : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
                                 )}>
-                                {isDone ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3 text-zinc-500" />}
+                                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5 text-zinc-500" />}
                                 {dep}
                               </span>
                             );
@@ -2379,31 +2364,36 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
                       </div>
                     )}
 
+                    {/* Related stories */}
                     {(() => {
                       const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
                       const sections = [
-                        { title: 'Prerequisites', items: prerequisites },
-                        { title: 'Dependents', items: dependents },
-                        { title: 'Peers', items: peers },
+                        { title: 'Depends on', items: prerequisites },
+                        { title: 'Needed by', items: dependents },
+                        { title: 'Same feature group', items: peers },
                       ].filter(s => s.items.length > 0);
                       if (!sections.length) return null;
                       return (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           {sections.map(({ title, items }) => (
-                            <div key={title} className="space-y-1.5">
-                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-                                <Network className="h-3 w-3" /> {title} ({items.length})
-                              </span>
+                            <div key={title} className="space-y-2">
+                              <p className="text-xs font-semibold text-zinc-400">{title}</p>
                               <div className="flex flex-wrap gap-1.5">
                                 {items.map((s: any) => {
                                   const st = getEffectiveStatus(s);
                                   const isDone = st === 'done' || st === 'completed';
                                   return (
-                                    <span key={s.file} onClick={() => handleOpenDrawer(s, 'story', undefined, s.epicParent)}
-                                      className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-mono cursor-pointer transition-all',
-                                        isDone ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:border-emerald-600/60' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                                    <span key={s.file}
+                                      onClick={() => handleOpenDrawer(s, 'story', undefined, s.epicParent)}
+                                      className={cn(
+                                        'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-mono cursor-pointer transition-all',
+                                        isDone
+                                          ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:border-emerald-600/60'
+                                          : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
                                       )}>
-                                      {isDone ? <CheckCircle2 className="h-3 w-3" /> : <span className={cn('h-1.5 w-1.5 rounded-full', storyStatusMap[st]?.dot || 'bg-zinc-600')} />}
+                                      {isDone
+                                        ? <CheckCircle2 className="h-3.5 w-3.5" />
+                                        : <span className={cn('h-2 w-2 rounded-full', storyStatusMap[st]?.dot || 'bg-zinc-600')} />}
                                       {getSlug(s.file)}
                                     </span>
                                   );
@@ -2415,18 +2405,19 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
                       );
                     })()}
 
+                    {/* Deployment config */}
                     {selectedItem.data.deployment && Object.keys(selectedItem.data.deployment).length > 0 && (
-                      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-                        <div className="px-4 py-2.5 border-b border-zinc-800/60 bg-zinc-800/30">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Deployment</span>
-                        </div>
-                        <div className="divide-y divide-zinc-800/50">
-                          {Object.entries(selectedItem.data.deployment).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => (
-                            <div key={k} className="flex items-center justify-between px-4 py-2.5 gap-3">
-                              <span className="text-[11px] text-zinc-500 capitalize">{k}</span>
-                              <span className="font-mono text-[11px] text-zinc-300">{String(v)}</span>
-                            </div>
-                          ))}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-zinc-400">Deployment</p>
+                        <div className="space-y-1">
+                          {Object.entries(selectedItem.data.deployment)
+                            .filter(([, v]) => v !== undefined && v !== null)
+                            .map(([k, v]) => (
+                              <div key={k} className="flex items-center justify-between py-2 border-b border-zinc-800/60">
+                                <span className="text-[12px] text-zinc-500 capitalize">{k}</span>
+                                <span className="font-mono text-[12px] text-zinc-300">{String(v)}</span>
+                              </div>
+                            ))}
                         </div>
                       </div>
                     )}
@@ -2502,573 +2493,8 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild }: Notion
           )}
         </SheetContent>
       </Sheet>
-              {/* Header */}
-              <div className="border-b border-border/50 p-4 shrink-0 bg-muted/10 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className={cn(
-                    "text-[10px] font-bold uppercase py-0.5 rounded-md",
-                    selectedItem.type === 'task' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/25" : "bg-primary/10 text-primary border-primary/25"
-                  )}>
-                    {selectedItem.type === 'task' ? `Task: ${selectedItem.data.id}` : 'Spec Story'}
-                  </Badge>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setDrawerOpen(false)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <SheetTitle className="text-base font-bold text-foreground">
-                  {selectedItem.type === 'task' ? selectedItem.data.title : getStoryTitle(selectedItem.data)}
-                </SheetTitle>
-                <SheetDescription className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                  {selectedItem.type === 'task'
-                    ? `Part of story: ${selectedItem.parentStory?.name || 'App Spec'}`
-                    : getStoryDesc(selectedItem.data)
-                  }
-                </SheetDescription>
-              </div>
 
-              {/* Body */}
-              <ScrollArea className="flex-1 p-4 space-y-5">
-                {/* ── TASK DETAIL CARD ── */}
-                {selectedItem.type === 'task' && (
-                  <div className="space-y-4">
-                    {/* Status Dropdown Picker */}
-                    <div className="space-y-1.5 text-xs">
-                      <span className="text-muted-foreground font-semibold">Status:</span>
-                      <select
-                        value={selectedItem.data.status}
-                        onChange={e => handleUpdateTaskStatus(selectedItem.data.fullId, e.target.value as any)}
-                        className="w-full h-9 rounded-md border bg-background text-xs text-foreground px-2"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="running">Running</option>
-                        <option value="completed">Completed</option>
-                        <option value="failed">Failed</option>
-                      </select>
-                    </div>
 
-                    {/* Metadata Card */}
-                    <div className="border border-border/60 bg-muted/15 rounded-lg p-3 space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Task Full ID:</span>
-                        <span className="font-mono text-foreground font-bold">{selectedItem.data.fullId}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Feature parent:</span>
-                        <span className="font-semibold text-foreground">{selectedItem.parentFeature?.name || 'General Core'}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ── STORY DETAIL CARD ── */}
-                {selectedItem.type === 'story' && (
-                  <div className="space-y-5">
-                    {/* Core Actions Panel */}
-                    <div className="grid grid-cols-2 gap-2 select-none">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!!activeAction}
-                        onClick={() => handleValidateStory(selectedItem.data.file, selectedItem.data.kind)}
-                        className="h-8.5 text-xs font-semibold gap-1.5 border-border rounded-lg hover:bg-muted/80"
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        Validate SPEC
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setDrawerOpen(false);
-                          handleSingleBuild(selectedItem.data.file, selectedItem.data.kind || 'AppStory');
-                        }}
-                        className="h-8.5 text-xs font-bold gap-1.5 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground shadow-xs"
-                      >
-                        <Rocket className="h-3.5 w-3.5" />
-                        Compile Story
-                      </Button>
-                    </div>
-
-                    {(() => {
-                      const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
-                      const family = [selectedItem.data, ...prerequisites, ...dependents, ...peers];
-                      const incompleteFamilyCount = family.filter(s => {
-                        const status = getEffectiveStatus(s);
-                        return status !== 'done' && status !== 'completed';
-                      }).length;
-                      
-                      return incompleteFamilyCount > 0 ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleQueueRelatedStories(selectedItem.data)}
-                          className="w-full h-8.5 text-xs font-bold gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white shadow-xs select-none"
-                        >
-                          <Layers className="h-3.5 w-3.5" />
-                          Queue Related Family ({incompleteFamilyCount})
-                        </Button>
-                      ) : null;
-                    })()}
-
-                    {/* Quick Specs View */}
-                    <div className="border border-border/60 bg-muted/15 rounded-lg p-3 space-y-2 text-xs select-none">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">YAML Spec File:</span>
-                        <span className="font-mono text-foreground truncate max-w-[200px]" title={selectedItem.data.file}>{selectedItem.data.file}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Type:</span>
-                        <span className="font-bold text-foreground">{selectedItem.data.kind === 'FeatureStory' ? 'Feature' : 'App Story'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">State:</span>
-                        <Badge className={cn("text-[9px] font-bold", (storyStatusMap[getEffectiveStatus(selectedItem.data)] || storyStatusMap.unknown).bg)}>
-                          {getEffectiveStatus(selectedItem.data)}
-                        </Badge>
-                      </div>
-                      {selectedItem.data.dbProgress !== undefined && (
-                        <div className="space-y-1 pt-1.5">
-                          <div className="flex justify-between text-[10px] text-muted-foreground font-semibold">
-                            <span>Checklist Progress</span>
-                            <span>{selectedItem.data.dbProgress}%</span>
-                          </div>
-                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full bg-primary" style={{ width: `${selectedItem.data.dbProgress}%` }} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* LLM Pipeline & Gating Panel */}
-                    <div className="space-y-3 pt-2 border-t border-border/40 select-none">
-                      <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                        <Brain className="h-4 w-4 text-violet-500" />
-                        LLM Pipeline & Gating
-                      </h4>
-                      <div className="border border-border/60 bg-muted/15 rounded-lg p-3.5 space-y-4 text-xs">
-                        {/* Auto-Priority Phase */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
-                            <span>Auto-Priority Level</span>
-                            <span className={cn(
-                              "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                              selectedItem.data.kind === 'AppStory' 
-                                ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
-                                : (selectedItem.data.phase === 1 
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
-                                  : (selectedItem.data.phase === 2 
-                                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/25"
-                                    : "bg-amber-500/10 text-amber-400 border border-amber-500/25"))
-                            )}>
-                              {selectedItem.data.kind === 'AppStory' 
-                                ? 'Phase 0: Scaffold (Priority 100)' 
-                                : `Phase ${selectedItem.data.phase ?? 1}: ${
-                                    selectedItem.data.phase === 1 
-                                      ? 'Foundation (Priority 80)' 
-                                      : (selectedItem.data.phase === 2 
-                                        ? 'Core (Priority 60)' 
-                                        : 'Polish (Priority 40)')
-                                  }`}
-                            </span>
-                          </div>
-                          
-                          {/* Horizontal mini timeline of phases */}
-                          <div className="flex items-center gap-1 pt-1">
-                            {[0, 1, 2, 3].map((p) => {
-                              const currentPhase = selectedItem.data.kind === 'AppStory' ? 0 : (selectedItem.data.phase ?? 1);
-                              const isActive = currentPhase === p;
-                              const isCompleted = currentPhase > p;
-                              
-                              let color = "bg-muted";
-                              if (isActive) {
-                                color = p === 0 ? "bg-indigo-500" : (p === 1 ? "bg-emerald-500" : (p === 2 ? "bg-blue-500" : "bg-amber-500"));
-                              } else if (isCompleted) {
-                                color = "bg-foreground/45";
-                              }
-                              
-                              return (
-                                <div key={p} className="flex-1 space-y-1">
-                                  <div className={cn("h-1 rounded-full transition-all duration-300", color)} />
-                                  <div className="flex items-center justify-between text-[8px] text-muted-foreground px-0.5">
-                                    <span className={cn("font-medium", isActive && "text-foreground font-bold")}>
-                                      {p === 0 ? 'Scaffold' : p === 1 ? 'Found.' : p === 2 ? 'Core' : 'Polish'}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Scaffold & Prerequisite Gates */}
-                        <div className="space-y-2.5">
-                          {/* Scaffold Baseline Gate */}
-                          {(() => {
-                            const targetApp = selectedItem.data.target?.app;
-                            const isAppStory = selectedItem.data.kind === 'AppStory';
-                            
-                            if (isAppStory) {
-                              return (
-                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                                  <div className="space-y-0.5">
-                                    <span className="text-[11px] font-bold text-emerald-400">Scaffold Baseline: Ready</span>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                      App spec story. Acts as the baseline scaffold. No scaffolding prerequisites required.
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            
-                            if (!targetApp) {
-                              return (
-                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                                  <div className="space-y-0.5">
-                                    <span className="text-[11px] font-bold text-emerald-400">Scaffold Baseline: Ready (Unbound)</span>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                      No parent app specified. Features will be integrated in-place.
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            
-                            // Look up parent app status
-                            const parentApp = mergedStories.find(s => 
-                              s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
-                            );
-                            const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
-                            const isAppBuilt = parentStatus === 'done' || parentStatus === 'completed';
-                            
-                            if (isAppBuilt) {
-                              return (
-                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                                  <div className="space-y-0.5">
-                                    <span className="text-[11px] font-bold text-emerald-400">Scaffold Baseline: Ready</span>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                      Base app scaffold <span className="font-semibold text-foreground">&quot;{targetApp}&quot;</span> is implemented. Ready to compile feature onto it.
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            } else {
-                              return (
-                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-rose-500/5 border border-rose-500/20">
-                                  <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
-                                  <div className="space-y-0.5">
-                                    <span className="text-[11px] font-bold text-rose-400">Scaffold Baseline: Gated / Blocked</span>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                      Requires base app scaffold <span className="font-semibold text-rose-300">&quot;{targetApp}&quot;</span> to be built first. LLM cannot write features to a non-existent app!
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            }
-                          })()}
-
-                          {/* Prerequisite Dependencies Gate */}
-                          {(() => {
-                            const { prerequisites } = getRelatedStories(selectedItem.data, mergedStories);
-                            const pendingPrereqs = prerequisites.filter(p => {
-                              const s = getEffectiveStatus(p);
-                              return s !== 'done' && s !== 'completed';
-                            });
-                            const isGated = pendingPrereqs.length > 0;
-                            
-                            if (prerequisites.length === 0) {
-                              return (
-                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                                  <div className="space-y-0.5">
-                                    <span className="text-[11px] font-bold text-emerald-400">Prerequisites Gate: Ready</span>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                      No feature dependencies declared in YAML spec. Ready to queue.
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            
-                            if (!isGated) {
-                              return (
-                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                                  <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                                  <div className="space-y-0.5">
-                                    <span className="text-[11px] font-bold text-emerald-400">Prerequisites Gate: Ready</span>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                      All {prerequisites.length} prerequisite features are already built and integrated.
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            } else {
-                              return (
-                                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20">
-                                  <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                                  <div className="space-y-0.5">
-                                    <span className="text-[11px] font-bold text-amber-400">Prerequisites Gate: Blocked</span>
-                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                                      Blocked by {pendingPrereqs.length} prerequisite(s): <span className="font-mono text-amber-300">{pendingPrereqs.map(p => getSlug(p.file)).join(', ')}</span>.
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            }
-                          })()}
-                        </div>
-
-                        {/* LLM Context Payload Visualizer */}
-                        <div className="space-y-2 pt-1 border-t border-border/40">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Active LLM Context Payload</span>
-                            <Badge variant="outline" className="text-[9px] font-mono bg-violet-500/5 text-violet-400 border-violet-500/20 px-1 rounded select-none">
-                              Injected on build
-                            </Badge>
-                          </div>
-                          
-                          <div className="font-mono text-[10px] rounded-lg bg-black/60 border border-border/50 text-muted-foreground overflow-hidden p-3.5 space-y-3.5 leading-relaxed">
-                            {/* 1. Target Stack */}
-                            <div className="space-y-1">
-                              <span className="text-foreground font-bold flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 shrink-0" />
-                                1. Stack Config Context
-                              </span>
-                              {(() => {
-                                const getAppStack = () => {
-                                  const story = selectedItem.data;
-                                  if (story.kind === 'AppStory' && story.stack) {
-                                    return story.stack;
-                                  }
-                                  const targetApp = story.target?.app;
-                                  const parentApp = mergedStories.find(s => 
-                                    s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
-                                  );
-                                  if (parentApp?.stack) return parentApp.stack;
-                                  if (appRollup?.stack) return appRollup.stack;
-                                  return null;
-                                };
-                                const stack = getAppStack();
-                                if (!stack) return <span className="text-[9px] text-muted-foreground italic pl-3.5">No stack config detected.</span>;
-                                
-                                return (
-                                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 pl-3.5 text-[9px]">
-                                    <div><span className="text-muted-foreground/75">Framework:</span> <span className="text-violet-300 font-bold">{stack.framework || 'Next.js 15'}</span></div>
-                                    <div><span className="text-muted-foreground/75">Language:</span> <span className="text-sky-300 font-bold">{stack.language || 'TypeScript'}</span></div>
-                                    <div><span className="text-muted-foreground/75">Database:</span> <span className="text-amber-300 font-bold">{stack.database || 'SQLite'}</span></div>
-                                    <div><span className="text-muted-foreground/75">Styling:</span> <span className="text-emerald-300 font-bold">Tailwind CSS</span></div>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-
-                            {/* 2. Conventions & Rules */}
-                            <div className="space-y-1">
-                              <span className="text-foreground font-bold flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" />
-                                2. TOON & Conventions Rules
-                              </span>
-                              <div className="pl-3.5 text-[9px] text-muted-foreground/85 space-y-0.5">
-                                <div>✓ <span className="text-foreground/90 font-semibold">AGENTS.md</span> specifications guidelines injected.</div>
-                                <div>✓ <span className="text-foreground/90 font-semibold">@toon-format/toon</span> semantic file structure.</div>
-                                <div>✓ <span className="text-foreground/90 font-semibold">factory/scripts</span> heartbeat & auto-context scripts.</div>
-                              </div>
-                            </div>
-
-                            {/* 3. Knowledge Base Memory */}
-                            <div className="space-y-1">
-                              <span className="text-foreground font-bold flex items-center gap-1.5">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
-                                3. Knowledge Graph Memory
-                              </span>
-                              {(() => {
-                                const completedStories = mergedStories.filter(s => {
-                                  const st = getEffectiveStatus(s);
-                                  return st === 'done' || st === 'completed';
-                                });
-                                
-                                if (completedStories.length === 0) {
-                                  return (
-                                    <div className="pl-3.5 text-[9px] text-muted-foreground italic leading-normal">
-                                      No past builds. First compile (cold start).
-                                    </div>
-                                  );
-                                }
-                                
-                                return (
-                                  <div className="pl-3.5 space-y-1">
-                                    <div className="text-[9px] text-muted-foreground leading-normal">
-                                      Auto-injects details of {completedStories.length} past builds from <span className="text-emerald-300 font-mono">.factory/knowledge/</span>:
-                                    </div>
-                                    <div className="flex flex-wrap gap-1 pt-0.5 max-h-[60px] overflow-y-auto">
-                                      {completedStories.map(cs => (
-                                        <span key={cs.file} className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/40 font-mono">
-                                          {getSlug(cs.file)}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Checklist Subtasks */}
-                    <div className="space-y-2.5">
-                      <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                        <ListTodo className="h-4 w-4 text-indigo-500" />
-                        Task Checklist
-                      </h4>
-                      {selectedItem.data.checklistTasks && selectedItem.data.checklistTasks.length > 0 ? (
-                        <div className="space-y-1.5 border rounded-lg p-2.5 bg-background">
-                          {selectedItem.data.checklistTasks.map((task: Task) => {
-                            const isDone = task.status === 'completed';
-                            return (
-                              <div key={task.fullId} className="flex items-start gap-2 py-1">
-                                <button
-                                  disabled={updatingTaskId !== null}
-                                  onClick={() => handleUpdateTaskStatus(task.fullId, isDone ? 'pending' : 'completed')}
-                                  className={cn(
-                                    "h-4.5 w-4.5 rounded-md border flex items-center justify-center transition-all shrink-0 mt-0.5",
-                                    isDone ? "bg-emerald-500 border-emerald-500 text-white" : "border-border hover:border-muted-foreground"
-                                  )}
-                                >
-                                  {isDone && <Check className="h-3 w-3 stroke-[3]" />}
-                                </button>
-                                <span className={cn("text-xs text-foreground", isDone && "text-muted-foreground line-through")}>
-                                  <span className="font-mono font-bold text-[10px] text-muted-foreground bg-muted/40 px-1 border border-border/40 rounded-sm mr-1.5 select-none">{task.id}</span>
-                                  {task.title}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-muted-foreground italic py-3 text-center border rounded-lg bg-muted/5 select-none">
-                          No checklists declared. Mapped tasks will populate once synchronized.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Meta integration table */}
-                    {selectedItem.data.deployment && (
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                          <Settings className="h-4 w-4 text-muted-foreground" />
-                          Deployment Specification
-                        </h4>
-                        <div className="border rounded-lg bg-background p-2.5 space-y-1 text-xs select-text">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Port target:</span>
-                            <span className="font-semibold text-foreground">{selectedItem.data.deployment.port || '3000'}</span>
-                          </div>
-                          {selectedItem.data.deployment.region && (
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Cloud region:</span>
-                              <span className="font-semibold text-foreground">{selectedItem.data.deployment.region}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Related Family Group (Prerequisites, Dependents, Peers) */}
-                    <div className="space-y-4 pt-2 border-t border-border/40 select-none">
-                      <h4 className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                        <Network className="h-4 w-4 text-violet-500" />
-                        Related Family Group
-                      </h4>
-                      
-                      {(() => {
-                        const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
-                        const hasRelations = prerequisites.length > 0 || dependents.length > 0 || peers.length > 0;
-                        
-                        if (!hasRelations) {
-                          return (
-                            <div className="text-xs text-muted-foreground italic py-3 text-center border rounded-lg bg-muted/5 select-none">
-                              No related stories (prerequisites, dependents, or peers) found.
-                            </div>
-                          );
-                        }
-
-                        const renderBadgeList = (storiesList: any[], title: string, badgeIcon: React.ReactNode, activeGlow: string) => {
-                          if (storiesList.length === 0) return null;
-                          return (
-                            <div className="space-y-1.5">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                                {title} ({storiesList.length})
-                              </span>
-                              <div className="flex flex-wrap gap-2 p-2 rounded-lg border bg-background/50">
-                                {storiesList.map((story) => {
-                                  const slug = getSlug(story.file);
-                                  const status = getEffectiveStatus(story);
-                                  let statusBadgeColor = 'bg-muted text-muted-foreground border-border/40';
-                                  if (status === 'done' || status === 'completed') {
-                                    statusBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/35';
-                                  } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
-                                    statusBadgeColor = 'bg-blue-500/10 text-blue-400 border-blue-500/35 animate-pulse';
-                                  }
-                                  
-                                  return (
-                                    <Badge
-                                      key={slug}
-                                      variant="outline"
-                                      className={cn(
-                                        "text-[10px] font-medium py-1 px-2.5 rounded-md cursor-pointer select-none transition-all hover:bg-muted flex items-center gap-1.5",
-                                        statusBadgeColor,
-                                        activeGlow
-                                      )}
-                                      onClick={() => {
-                                        handleOpenDrawer(story, 'story', undefined, story.epicParent);
-                                      }}
-                                      title={`${title}: ${slug} (${status})`}
-                                    >
-                                      {badgeIcon}
-                                      <span>{slug}</span>
-                                      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 ml-1", storyStatusMap[status]?.dot || 'bg-muted-foreground')} />
-                                    </Badge>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        };
-
-                        return (
-                          <div className="space-y-4">
-                            {renderBadgeList(
-                              prerequisites,
-                              "Prerequisites (Depends On)",
-                              <Link2 className="h-3 w-3 text-sky-400 shrink-0" />,
-                              "hover:border-sky-500/50 hover:shadow-[0_0_10px_rgba(14,165,233,0.15)]"
-                            )}
-                            {renderBadgeList(
-                              dependents,
-                              "Dependents (Required By)",
-                              <Layers className="h-3 w-3 text-purple-400 shrink-0" />,
-                              "hover:border-purple-500/50 hover:shadow-[0_0_10px_rgba(168,85,247,0.15)]"
-                            )}
-                            {renderBadgeList(
-                              peers,
-                              "Peers (Shared Context / Target App)",
-                              <Users className="h-3 w-3 text-amber-400 shrink-0" />,
-                              "hover:border-amber-500/50 hover:shadow-[0_0_10px_rgba(245,158,11,0.15)]"
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
 
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 6. MOBILE FILTERS SHEET                                                */}
@@ -3203,6 +2629,180 @@ interface KanbanColumnProps {
   allStories?: any[];
 }
 
+// ─── MobileKanbanBoard ── unified board with reactive dots & proper height ──
+
+function MobileKanbanBoard({
+  backlogStories, readyStories, buildingStories, doneStories,
+  unsyncedStories, mergedStories, epicColorMap,
+  handleOpenDrawer, handleValidateStory, handleSingleBuild, activeAction,
+  handleDragOver, handleDrop, handleDragStart,
+  showEpicLegend, appRollup,
+}: {
+  backlogStories: any[]; readyStories: any[]; buildingStories: any[]; doneStories: any[];
+  unsyncedStories: any[]; mergedStories: any[]; epicColorMap: Map<string, any>;
+  handleOpenDrawer: any; handleValidateStory: any; handleSingleBuild: any; activeAction: any;
+  handleDragOver: any; handleDrop: any; handleDragStart: any;
+  showEpicLegend: boolean; appRollup: any;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeCol, setActiveCol] = useState(0);
+
+  const COLS = [
+    { title: 'Backlog', desc: 'Scaffold drafts or spec blueprints', badge: 'bg-amber-500/5 text-amber-300 border-amber-500/10', stories: backlogStories, status: 'draft', dot: 'bg-amber-400' },
+    { title: 'Ready to Build', desc: 'Verified specifications awaiting launch', badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10', stories: readyStories, status: 'ready', dot: 'bg-teal-400' },
+    { title: 'In Progress', desc: 'Actively compiling or iterating', badge: 'bg-blue-500/5 text-blue-300 border-blue-500/10', stories: buildingStories, status: 'in-progress', dot: 'bg-blue-400' },
+    { title: 'Completed', desc: 'Code written and tests passed', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10', stories: doneStories, status: 'done', dot: 'bg-emerald-400' },
+  ] as const;
+
+  // Update active dot based on scroll position
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const colWidth = el.scrollWidth / COLS.length;
+    const idx = Math.round(el.scrollLeft / colWidth);
+    setActiveCol(Math.max(0, Math.min(COLS.length - 1, idx)));
+  }, []);
+
+  // Scroll to a column on dot click
+  const scrollToCol = (i: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const colWidth = el.scrollWidth / COLS.length;
+    el.scrollTo({ left: i * colWidth, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      {/* Epic Legend (desktop only, mobile would be too crowded) */}
+      {showEpicLegend && appRollup?.features && appRollup.features.length > 0 && (
+        <div className="shrink-0 hidden md:flex flex-wrap items-center gap-2 px-3 py-2 mb-3 bg-muted/15 border border-border/40 rounded-xl select-none">
+          <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-muted-foreground/70 shrink-0">Epic Colors:</span>
+          {appRollup.features.map((f: any, idx: number) => {
+            const swatchColors = ['#8b5cf6','#0ea5e9','#f59e0b','#f43f5e','#14b8a6','#d946ef','#84cc16','#f97316'];
+            const color = EPIC_COLORS[idx % EPIC_COLORS.length];
+            return (
+              <span key={f.id} className="flex items-center gap-1.5 text-[10px] text-foreground">
+                <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: swatchColors[idx % swatchColors.length] }} />
+                <span className="font-medium">{f.name}</span>
+                <Badge variant="outline" className={cn('text-[7.5px] font-bold h-3.5 px-1 rounded border ml-0.5', color.badge)}>
+                  {f.stories?.length ?? 0} stories
+                </Badge>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Desktop: 4-column Kanban ── */}
+      <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-4 gap-4 flex-1 min-h-0 h-full">
+        {COLS.map((col) => (
+          <KanbanColumn
+            key={col.title}
+            title={col.title}
+            description={col.desc}
+            badgeColor={col.badge}
+            stories={col.stories}
+            epicColorMap={epicColorMap}
+            onSelect={handleOpenDrawer}
+            onValidate={handleValidateStory}
+            onBuild={handleSingleBuild}
+            activeAction={activeAction}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, col.status)}
+            onDragStart={handleDragStart}
+            allStories={mergedStories}
+          />
+        ))}
+      </div>
+
+      {/* ── Mobile: full-height horizontal snap carousel ── */}
+      <div
+        className="flex md:hidden flex-col"
+        style={{
+          height: 'calc(100dvh - 176px - 80px - env(safe-area-inset-bottom, 0px))',
+        }}
+      >
+        {/* Column dot indicator */}
+        <div className="flex items-center justify-center gap-2 pb-2 shrink-0">
+          {COLS.map((col, i) => (
+            <button
+              key={col.title}
+              onClick={() => scrollToCol(i)}
+              className="flex flex-col items-center gap-1 tap-shrink"
+            >
+              <div className={cn(
+                'rounded-full transition-all duration-300',
+                activeCol === i
+                  ? `h-2 w-6 ${col.dot}`
+                  : 'h-1.5 w-1.5 bg-muted-foreground/30'
+              )} />
+            </button>
+          ))}
+          <span className="text-[9px] text-muted-foreground/40 ml-1 font-medium">
+            {COLS[activeCol].title}
+          </span>
+        </div>
+
+        {/* Scrollable columns — each takes full screen width */}
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="flex flex-1 min-h-0 overflow-x-auto snap-x-mandatory gap-0"
+          style={{ scrollbarWidth: 'none' } as React.CSSProperties}
+        >
+          {COLS.map((col, i) => (
+            <div
+              key={col.title}
+              className="kanban-slide snap-center px-1"
+            >
+              <KanbanColumn
+                title={col.title}
+                description={col.desc}
+                badgeColor={col.badge}
+                stories={col.stories}
+                epicColorMap={epicColorMap}
+                onSelect={handleOpenDrawer}
+                onValidate={handleValidateStory}
+                onBuild={handleSingleBuild}
+                activeAction={activeAction}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, col.status)}
+                onDragStart={handleDragStart}
+                allStories={mergedStories}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Unsynced stories — shown below on both */}
+      {unsyncedStories.length > 0 && (
+        <div className="space-y-3 mt-4 border border-border/60 bg-muted/20 p-4 rounded-xl shrink-0">
+          <div className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-bold text-sm text-foreground">Uncategorized</h3>
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">{unsyncedStories.length}</Badge>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-2">
+            {unsyncedStories.map(item => (
+              <StoryKanbanCard
+                key={item.file}
+                item={item}
+                onSelect={handleOpenDrawer}
+                onValidate={handleValidateStory}
+                onBuild={handleSingleBuild}
+                activeAction={activeAction}
+                onDragStart={handleDragStart}
+                allStories={mergedStories}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KanbanColumn({
   title,
   description,
@@ -3284,10 +2884,10 @@ function KanbanColumn({
     <div
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className="flex flex-col h-[450px] md:h-full bg-zinc-950/20 dark:bg-zinc-950/30 backdrop-blur-md border border-border/20 rounded-xl overflow-hidden shadow-[inset_0_1px_1px_rgba(255,255,255,0.01),0_8px_30px_rgb(0,0,0,0.12)] flex-1 transition-all duration-300 hover:bg-zinc-950/25 dark:hover:bg-zinc-950/40"
+      className="flex flex-col h-full bg-muted/30 border border-border/40 rounded-xl overflow-hidden transition-all duration-300 hover:bg-muted/40"
     >
       {/* Header info */}
-      <div className="p-4 bg-background/20 border-b border-border/20 space-y-1 shrink-0 select-none backdrop-blur-sm">
+      <div className="p-4 bg-muted/20 border-b border-border/30 space-y-1 shrink-0 select-none">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-sm text-foreground/90 tracking-tight">{title}</h2>
           <Badge variant="outline" className={cn("text-[9px] font-bold px-2.5 h-4.5 rounded-full border backdrop-blur-md select-none", badgeColor)}>
@@ -3297,8 +2897,8 @@ function KanbanColumn({
         <p className="text-[10px] text-muted-foreground/60 leading-normal line-clamp-1">{description}</p>
       </div>
 
-      {/* Cards list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3.5 pb-6 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
+      {/* Story list */}
+      <div className="flex-1 overflow-y-auto divide-y divide-border/20 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
         {clusters.length > 0 ? (
           clusters.map((cluster, clusterIdx) => {
             if (cluster.length === 1) {
@@ -3318,20 +2918,15 @@ function KanbanColumn({
               );
             }
 
-            // Render a premium, clean, simplified group container for clusters of size > 1 (No unnecessary elements)
+            // Cluster group
             return (
-              <div
-                key={`cluster-${clusterIdx}-${cluster[0].file}`}
-                className="border border-border/15 bg-muted/5 dark:bg-muted/10 rounded-xl p-2.5 space-y-2 relative overflow-hidden transition-all duration-300"
-              >
-                {/* Clean, Minimalist Group Header */}
-                <div className="flex items-center justify-between px-1 pb-0.5 select-none text-[9px] text-muted-foreground/40 font-semibold uppercase tracking-wider">
-                  <span>Build Sequence</span>
-                  <span>{cluster.length} items</span>
+              <div key={`cluster-${clusterIdx}-${cluster[0].file}`}>
+                {/* Group label */}
+                <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 border-b border-border/30">
+                  <span className="text-[9px] text-muted-foreground/50 font-semibold uppercase tracking-wider">Build Sequence</span>
+                  <span className="text-[9px] text-muted-foreground/40">{cluster.length} items</span>
                 </div>
-                
-                {/* The cards in the cluster */}
-                <div className="space-y-2">
+                <div>
                   {cluster.map((item) => (
                     <StoryKanbanCard
                       key={item.file}
@@ -3407,104 +3002,81 @@ function StoryKanbanCard({
   const isPrereqGated = pendingPrereqs.length > 0;
 
   return (
-    <Card
+    <div
       draggable={isDraggable}
       onDragStart={(e) => isDraggable && onDragStart(e, item.file)}
       onClick={() => onSelect(item, 'story')}
       className={cn(
-        "border bg-zinc-950/20 hover:bg-zinc-950/40 hover:shadow-lg hover:-translate-y-[1.5px] active:translate-y-0 transition-all duration-300 group relative overflow-hidden rounded-lg cursor-pointer border-l-[3px]",
+        "group flex flex-col gap-1.5 px-3 py-2.5 cursor-pointer select-none transition-colors border-b border-border/30 last:border-b-0 border-l-2 hover:bg-muted/40",
         isDraggable ? "cursor-grab active:cursor-grabbing" : "",
-        item.placeholder && "border-dashed border-border opacity-70",
-        isActive && "border-indigo-500/30 bg-indigo-950/15 shadow-[0_0_12px_rgba(99,102,241,0.08)]",
-        !isActive && "border-border/25 hover:border-indigo-500/20",
-        epicColor?.border || "border-l-border/30"
+        item.placeholder && "opacity-50",
+        isActive && "bg-primary/5 border-l-primary",
+        !isActive && (epicColor?.border?.replace('border-l-', 'border-l-') || "border-l-border/40")
       )}
     >
-      <CardContent className="p-3 space-y-1.5 select-none">
-        {/* Name row */}
-        <div className="flex items-start justify-between gap-1.5">
-          <span className="font-medium text-xs text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-2 flex-1" title={name}>
-            {name.replace('features/', '')}
-          </span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
+      {/* Name + status dot */}
+      <div className="flex items-start justify-between gap-1.5">
+        <span className="font-medium text-xs text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2 flex-1" title={name}>
+          {name.replace('features/', '')}
+        </span>
+        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
+      </div>
+
+      {/* Meta row */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {item.epicParent && epicColor && (
+          <Badge variant="outline" className={cn("text-[7.5px] font-semibold h-3.5 px-1.5 rounded border leading-none shrink-0", epicColor.badge)}>
+            {item.epicParent.name}
+          </Badge>
+        )}
+        {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
+          <>
+            {isScaffoldGated && (
+              <Badge variant="outline" className="text-[7.5px] font-medium bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/25 px-1.5 h-3.5 rounded-full flex items-center gap-0.5">
+                <Lock className="h-2 w-2" /> Gated
+              </Badge>
+            )}
+            {isPrereqGated && (
+              <Badge variant="outline" className="text-[7.5px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/25 px-1.5 h-3.5 rounded-full flex items-center gap-0.5">
+                <Clock className="h-2 w-2" /> {pendingPrereqs.length} pending
+              </Badge>
+            )}
+          </>
+        )}
+        {totalTasks > 0 && (
+          <span className="text-[9px] text-muted-foreground/50 ml-auto font-mono tabular-nums">{doneTasks}/{totalTasks}</span>
+        )}
+      </div>
+
+      {/* Dependencies */}
+      {item.dependsOn && item.dependsOn.length > 0 && (
+        <div className="flex items-center gap-1 overflow-hidden">
+          <Link2 className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
+          <div className="flex flex-wrap gap-1 min-w-0">
+            {item.dependsOn.map((depSlug: string) => {
+              const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
+              const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
+              const depColor = (status === 'done' || status === 'completed')
+                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
+                : (status === 'running' || status === 'in-progress')
+                ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25'
+                : 'bg-muted/50 text-muted-foreground border-border';
+              return (
+                <Badge
+                  key={depSlug}
+                  variant="outline"
+                  className={cn("text-[8px] font-medium h-3.5 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/60 max-w-[100px] truncate", depColor)}
+                  onClick={(e) => { e.stopPropagation(); if (depStory) onSelect(depStory, 'story'); }}
+                  title={`${depSlug} (${status})`}
+                >
+                  {depSlug}
+                </Badge>
+              );
+            })}
           </div>
         </div>
-
-        {/* Description */}
-        {desc && (
-          <p className="text-[9.5px] text-muted-foreground/60 line-clamp-1 leading-normal font-light">{desc}</p>
-        )}
-
-        {/* Bottom meta */}
-        <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
-          {item.epicParent && epicColor && (
-            <Badge variant="outline" className={cn("text-[7.5px] font-semibold h-3.5 px-1.5 rounded border leading-none shrink-0", epicColor.badge)}>
-              {item.epicParent.name}
-            </Badge>
-          )}
-
-          {/* Minimalist Gating Badges */}
-          {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
-            <div className="flex items-center gap-1 shrink-0">
-              {isScaffoldGated && (
-                <Badge variant="outline" className="text-[7.5px] font-medium tracking-wide bg-rose-500/5 text-rose-400/90 border-rose-500/10 px-1.5 h-4 rounded-full backdrop-blur-md select-none flex items-center gap-0.5">
-                  <Lock className="h-2 w-2 text-rose-400/70" /> Scaffold Gated
-                </Badge>
-              )}
-              {isPrereqGated && (
-                <Badge variant="outline" className="text-[7.5px] font-medium tracking-wide bg-amber-500/5 text-amber-400/90 border-amber-500/10 px-1.5 h-4 rounded-full backdrop-blur-md select-none flex items-center gap-0.5">
-                  <Clock className="h-2 w-2 text-amber-400/70" /> Pending ({pendingPrereqs.length})
-                </Badge>
-              )}
-            </div>
-          )}
-
-          <span className="text-[9px] text-muted-foreground/50 ml-auto font-mono">
-            {totalTasks > 0 ? `${doneTasks}/${totalTasks} tasks` : 'No tasks'}
-          </span>
-        </div>
-
-        {/* Dependencies */}
-        {item.dependsOn && item.dependsOn.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-border/10 overflow-hidden">
-            <Link2 className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
-            <div className="flex flex-wrap gap-1 min-w-0">
-              {item.dependsOn.map((depSlug: string) => {
-                const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
-                const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
-                let statusBadgeColor = 'bg-muted/30 text-muted-foreground/60 border-border/10';
-                if (status === 'done' || status === 'completed') {
-                  statusBadgeColor = 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10';
-                } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
-                  statusBadgeColor = 'bg-blue-500/5 text-blue-300 border-blue-500/10 animate-pulse';
-                }
-
-                return (
-                  <Badge
-                    key={depSlug}
-                    variant="outline"
-                    className={cn(
-                      "text-[8px] font-medium h-4 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/40 max-w-[100px] truncate",
-                      statusBadgeColor
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (depStory) {
-                        onSelect(depStory, 'story');
-                      }
-                    }}
-                    title={depStory ? `Dependency: ${depSlug} (${status})` : `Dependency: ${depSlug} (not found)`}
-                  >
-                    {depSlug}
-                  </Badge>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 

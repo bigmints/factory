@@ -1,0 +1,95 @@
+project:
+  name: factory
+  status: in-development
+  readme_summary: <p align="center">   <h1 align="center">🏭 Factory</h1>   <p
+    align="center">     <strong>Autonomous app scaffolding from YAML specs —
+    plan, build, test, fix, push.</strong>   </p>   <p align="center">     <a
+    href="quick-start">Quick Start</a> •     <a href="cli-reference">CLI</a> •
+  analyzed: 2026-05-22
+package:
+  name: factory
+  description: Autonomous app scaffolding factory — generate production-ready apps
+    from YAML specs
+  version: 1.0.0
+  key_deps:
+    - "@toon-format/toon"
+    - ajv
+    - chalk
+    - commander
+    - glob
+    - yaml
+    - "@types/node"
+    - "@typescript-eslint/eslint-plugin"
+    - "@typescript-eslint/parser"
+    - eslint
+    - tsx
+    - typescript
+stack:
+  framework: node
+  packageManager: npm
+  linter: eslint
+structure:
+  - 📄 AGENTS.md
+  - 📄 CONTRIBUTING.md
+  - 📄 LICENSE
+  - 📄 Makefile
+  - 📄 README.md
+  - 📄 SKILL.md
+  - 📄 SPEC_GENERATION.md
+  - 📁 bin
+  - "  📄 factory"
+  - "  📄 factory.mjs"
+  - 📁 docs
+  - "  📁 adr"
+  - 📄 empty-mcp.json
+  - 📁 engine
+  - "  📄 autofix.ts"
+  - "  📄 blueprint.ts"
+  - "  📄 build-tools.ts"
+  - "  📄 cli.ts"
+  - "  📄 config.ts"
+  - "  📄 daemon.ts"
+  - "  📄 db.ts"
+  - "  📄 generate.ts"
+  - "  📄 health.ts"
+  - "  📄 init.ts"
+  - "  📄 log.ts"
+  - "  📄 queue.ts"
+  - "  📄 repl.ts"
+  - "  📄 rollup.ts"
+  - "  📄 skills.ts"
+  - "  📄 story.ts"
+  - "  📄 task-classifier.test.ts"
+  - "  📄 task-classifier.ts"
+  - "  📄 toon.ts"
+  - "  📄 types.ts"
+  - "  📄 worker-engine.ts"
+  - "  📄 writer.ts"
+  - 📄 eslint.config.js
+  - 📁 factory
+  - "  📁 scripts"
+  - 📄 factory-build.log
+  - 📄 factory.db
+  - 📄 install.sh
+  - 📄 package-lock.json
+  - 📄 package.json
+  - 📄 projects.example.json
+  - 📄 projects.json
+  - 📁 reference
+  - "  📁 conventions"
+  - "  📁 registry"
+  - "  📁 skills"
+  - "  📁 templates"
+  - 📁 reports
+  - 📁 runs
+  - "  📄 run-2026-05-19T22-12-32.log"
+  - "  📄 run-2026-05-19T22-12-41.log"
+  - "  📄 run-2026-05-19T22-14-34.log"
+  - "  📄 run-2026-05-20T15-22-22.log"
+  - "  📄 run-2026-05-22T07-16-20.log"
+  - "  📄 run-2026-05-22T07-17-01.log"
+  - "  📄 run-2026-05-22T07-18-58.log"
+conventions:
+  - TypeScript
+  - ESLint
+key_decisions: []

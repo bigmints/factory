@@ -154,6 +154,8 @@ export function BuildPage() {
   const [startingQueue, setStartingQueue] = useState(false);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // Mobile: toggle between queue list and logs panel
+  const [mobilePanelTab, setMobilePanelTab] = useState<'queue' | 'logs'>('queue');
   const logOffsetRef = useRef(0);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -303,19 +305,19 @@ export function BuildPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-3 h-full">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3 px-1">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+        <div className="flex items-center gap-2.5">
           <div className={cn(
-            'h-2.5 w-2.5 rounded-full ring-2 transition-all',
+            'h-2.5 w-2.5 rounded-full ring-2 transition-all shrink-0',
             queueRunning
               ? 'bg-violet-400 ring-violet-500/30 animate-pulse'
               : 'bg-zinc-600 ring-zinc-700/30'
           )} />
           <div>
-            <h1 className="text-base font-bold tracking-tight text-white font-sans">Build Pipeline</h1>
+            <h1 className="text-sm md:text-base font-bold tracking-tight text-white font-sans">Build Pipeline</h1>
             <p className="text-[11px] text-zinc-500 font-sans">
               {queueRunning
                 ? `Running — ${stats.running} active build${stats.running !== 1 ? 's' : ''}`
@@ -327,55 +329,49 @@ export function BuildPage() {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
+        <div className="flex items-center gap-1.5">
+          <button
             onClick={fetchQueue}
-            className="h-8 px-3 gap-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 text-[11px] font-sans"
+            className="tap-shrink h-8 px-2.5 flex items-center gap-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 text-[11px] font-sans"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
-          </Button>
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
 
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             disabled={stats.completed === 0}
             onClick={handleClearQueue}
-            className="h-8 px-3 gap-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 text-[11px] font-sans"
+            className="tap-shrink h-8 px-2.5 flex items-center gap-1.5 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 text-[11px] font-sans disabled:opacity-40"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Clear done
-          </Button>
+            <span className="hidden sm:inline">Clear done</span>
+          </button>
 
           {!queueRunning ? (
-            <Button
-              size="sm"
+            <button
               disabled={startingQueue || stats.pending === 0}
               onClick={handleStartQueue}
-              className="h-8 px-4 gap-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold text-[11px] font-sans shadow-lg shadow-violet-900/30"
+              className="tap-shrink h-8 px-3 flex items-center gap-1.5 rounded-md bg-violet-600 hover:bg-violet-500 text-white font-semibold text-[11px] font-sans shadow-lg shadow-violet-900/30 disabled:opacity-40"
             >
               {startingQueue
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <Play className="h-3.5 w-3.5 fill-white" />}
-              Run queue
-            </Button>
+              Run
+            </button>
           ) : (
-            <Button
-              size="sm"
+            <button
               onClick={handleStopQueue}
-              className="h-8 px-4 gap-2 bg-zinc-800 hover:bg-zinc-700 text-rose-400 font-semibold text-[11px] font-sans border border-zinc-700"
+              className="tap-shrink h-8 px-3 flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-rose-400 font-semibold text-[11px] font-sans border border-zinc-700"
             >
               <Square className="h-3.5 w-3.5 fill-rose-400" />
               Stop
-            </Button>
+            </button>
           )}
         </div>
       </div>
 
       {/* ── Stats Row ── */}
-      <div className="flex items-center gap-2 px-1">
+      <div className="flex items-center gap-1.5 md:gap-2 px-1 flex-wrap">
         <StatCard label="Pending" value={stats.pending} color="border-amber-500/15 text-amber-300 bg-amber-950/10" />
         <StatCard label="Running" value={stats.running} color="border-violet-500/15 text-violet-300 bg-violet-950/10" />
         <StatCard label="Done" value={stats.completed} color="border-emerald-500/15 text-emerald-300 bg-emerald-950/10" />
@@ -385,11 +381,44 @@ export function BuildPage() {
         )}
       </div>
 
-      {/* ── Split Layout ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
+      {/* Mobile tab toggle: Queue | Logs */}
+      <div className="flex md:hidden items-center gap-1 px-1">
+        <button
+          onClick={() => setMobilePanelTab('queue')}
+          className={cn(
+            'tap-shrink flex-1 h-8 rounded-lg text-[11px] font-semibold font-sans transition-all',
+            mobilePanelTab === 'queue'
+              ? 'bg-zinc-800 text-zinc-100 border border-zinc-700'
+              : 'text-zinc-500 hover:text-zinc-300'
+          )}
+        >
+          Queue ({filteredItems.length})
+        </button>
+        <button
+          onClick={() => { setMobilePanelTab('logs'); }}
+          className={cn(
+            'tap-shrink flex-1 h-8 rounded-lg text-[11px] font-semibold font-sans transition-all flex items-center justify-center gap-1.5',
+            mobilePanelTab === 'logs'
+              ? 'bg-zinc-800 text-zinc-100 border border-zinc-700'
+              : 'text-zinc-500 hover:text-zinc-300'
+          )}
+        >
+          <Terminal className="h-3 w-3" />
+          Logs
+          {queueRunning && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
+        </button>
+      </div>
 
-        {/* Left: Queue list */}
-        <div className="lg:col-span-4 flex flex-col border border-zinc-800 bg-zinc-950/40 rounded-xl overflow-hidden shadow-xl">
+      {/* ── Split Layout ── */}
+      {/* On mobile: toggle between queue list and log panel */}
+      {/* On desktop: side-by-side grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 flex-1 min-h-0">
+
+        {/* Left: Queue list — hidden on mobile when logs tab is active */}
+        <div className={cn(
+          'lg:col-span-4 flex flex-col border border-zinc-800 bg-zinc-950/40 rounded-xl overflow-hidden shadow-xl',
+          mobilePanelTab === 'logs' ? 'hidden lg:flex' : 'flex'
+        )}>
 
           {/* Search + filter */}
           <div className="p-2.5 border-b border-zinc-800/80 flex flex-col gap-2 bg-zinc-900/30">
@@ -445,7 +474,11 @@ export function BuildPage() {
                         ? 'bg-zinc-800/70 border-l-2 border-l-violet-500'
                         : 'border-l-2 border-l-transparent hover:bg-zinc-900/50 hover:border-l-zinc-700'
                     )}
-                    onClick={() => setSelectedId(item.id)}
+                    onClick={() => {
+                      setSelectedId(item.id);
+                      // On mobile, switch to logs tab when selecting a build
+                      setMobilePanelTab('logs');
+                    }}
                   >
                     {/* Kind icon */}
                     <div className={cn(
@@ -470,28 +503,9 @@ export function BuildPage() {
                         )}>
                           {humanName(item, idx)}
                         </span>
-                        <span className="text-[10px] text-zinc-600 font-mono shrink-0 group-hover:hidden tabular-nums">
+                        <span className="text-[10px] text-zinc-600 font-mono shrink-0 tabular-nums">
                           {formatRelativeTime(item.addedAt)}
                         </span>
-                        {/* Hover actions */}
-                        <div className="hidden group-hover:flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                          {isFailed && (
-                            <button
-                              className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-700"
-                              title="Retry"
-                              onClick={() => handleRetry(item.id)}
-                            >
-                              <RefreshCw className="h-3 w-3" />
-                            </button>
-                          )}
-                          <button
-                            className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30"
-                            title="Remove"
-                            onClick={() => handleRemove(item.id)}
-                          >
-                            <XCircle className="h-3 w-3" />
-                          </button>
-                        </div>
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
@@ -509,13 +523,51 @@ export function BuildPage() {
                         <StatusPill status={item.status} />
                       </div>
 
-                      <p className="text-[10.5px] text-zinc-600 group-hover:text-zinc-500 truncate mt-1 font-sans leading-snug">
+                      <p className="text-[10.5px] text-zinc-600 truncate mt-1 font-sans leading-snug">
                         {getLogPreview(item)}
                       </p>
+
+                      {/* Always-visible touch actions (mobile) + hover on desktop */}
+                      <div className="flex items-center gap-1 mt-2 md:hidden" onClick={e => e.stopPropagation()}>
+                        {isFailed && (
+                          <button
+                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 flex items-center gap-1"
+                            onClick={() => handleRetry(item.id)}
+                          >
+                            <RefreshCw className="h-3 w-3" /> Retry
+                          </button>
+                        )}
+                        <button
+                          className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-500 hover:text-rose-400 bg-zinc-800 hover:bg-rose-950/30 flex items-center gap-1"
+                          onClick={() => handleRemove(item.id)}
+                        >
+                          <XCircle className="h-3 w-3" /> Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Desktop hover actions */}
+                    <div className="hidden md:group-hover:flex items-center gap-1 shrink-0 absolute right-2 top-3" onClick={e => e.stopPropagation()}>
+                      {isFailed && (
+                        <button
+                          className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-700"
+                          title="Retry"
+                          onClick={() => handleRetry(item.id)}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                        </button>
+                      )}
+                      <button
+                        className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30"
+                        title="Remove"
+                        onClick={() => handleRemove(item.id)}
+                      >
+                        <XCircle className="h-3 w-3" />
+                      </button>
                     </div>
 
                     {isSelected && (
-                      <ChevronRight className="h-3.5 w-3.5 text-violet-400 shrink-0 mt-2" />
+                      <ChevronRight className="h-3.5 w-3.5 text-violet-400 shrink-0 mt-2 hidden md:block" />
                     )}
                   </div>
                 );
@@ -545,8 +597,11 @@ export function BuildPage() {
           </div>
         </div>
 
-        {/* Right: Terminal / detail panel */}
-        <div className="lg:col-span-8 border border-zinc-800 bg-zinc-950 rounded-xl shadow-xl overflow-hidden flex flex-col min-h-[500px]">
+        {/* Right: Terminal / detail panel — hidden on mobile when queue tab is active */}
+        <div className={cn(
+          'lg:col-span-8 border border-zinc-800 bg-zinc-950 rounded-xl shadow-xl overflow-hidden flex flex-col min-h-[300px] md:min-h-[500px]',
+          mobilePanelTab === 'queue' ? 'hidden lg:flex' : 'flex'
+        )}>
 
           {selectedItem ? (
             <>

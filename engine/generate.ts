@@ -2027,6 +2027,23 @@ async function runCLISingleShot(
     const appYamlReminder = isApp
         ? '\nMake sure that `.factory/app.yaml` is created/updated, added to your implementation plan, and written to disk as required.\n'
         : '';
+
+    // Derive required page files from the story so the CLI agent can't skip them
+    let requiredPagesBlock = '';
+    if (isApp) {
+        const appStory = story as AppStory;
+        const framework = (appStory.stack?.framework || '').toLowerCase();
+        const isNextJs = framework.includes('next');
+        const pageNames = appStory.pages ? Object.keys(appStory.pages) : [];
+        if (pageNames.length > 0 && isNextJs) {
+            const pageFilePaths = pageNames.map(p => {
+                const slug = p === 'dashboard' || p === 'home' || p === 'index' ? '' : `/${p}`;
+                return `src/app${slug}/page.tsx`;
+            });
+            requiredPagesBlock = `\n## Required Page Files (MUST exist on disk when you finish)\n${pageFilePaths.map(f => `- ${f}`).join('\n')}\nThese files must contain real, functional React component code — not placeholders.\n`;
+        }
+    }
+
     const prompt = `${systemPrompt}
 
 ## Your Task
@@ -2038,7 +2055,7 @@ Use your file tools to write ALL necessary files directly to this directory.
 Do not output file contents as text — write them to disk using your tools.
 When complete, run: npx tsc --noEmit (if TypeScript) to verify there are no errors.
 Fix any errors found before finishing.
-`;
+${requiredPagesBlock}`;
 
     const yoloFlags = CLI_FLAGS[cli] || [];
     log('●', `CLI single-shot build: ${name} (${cli})`);
@@ -2299,8 +2316,41 @@ Fix any errors found before finishing.
 
     log('→', `Scanned ${files.length} generated file(s)`);
 
+    // ── Post-scan validation: check required page files exist ────────────────
+    // For Next.js app stories, every page defined in the story must have a
+    // corresponding page.tsx on disk. If any are missing the build is a failure
+    // regardless of what the CLI exit code said.
+    const postScanErrors: string[] = [];
+    if (isApp) {
+        const appStory = story as AppStory;
+        const framework = (appStory.stack?.framework || '').toLowerCase();
+        const isNextJs = framework.includes('next');
+        const pageNames = appStory.pages ? Object.keys(appStory.pages) : [];
+        if (isNextJs && pageNames.length > 0) {
+            const fileSet = new Set(files.map(f => f.filename));
+            for (const p of pageNames) {
+                const slug = p === 'dashboard' || p === 'home' || p === 'index' ? '' : `/${p}`;
+                const required = `src/app${slug}/page.tsx`;
+                if (!fileSet.has(required)) {
+                    postScanErrors.push(`Missing required page: ${required} (story page "${p}" was never written to disk)`);
+                    log('✗', `Required page missing: ${required}`);
+                }
+            }
+        }
+    }
+
+    const finalSuccess = success && postScanErrors.length === 0;
+    const allErrors: string[] = [
+        ...(success ? [] : [spawnError ? `CLI error: ${spawnError.message}` : `CLI exited with code ${exitCode}`]),
+        ...postScanErrors,
+    ];
+
+    if (!finalSuccess && postScanErrors.length > 0) {
+        logError(`Build failed post-scan validation: ${postScanErrors.join('; ')}`);
+    }
+
     return {
-        success,
+        success: finalSuccess,
         files,
         plan: {
             files: files.map(f => f.filename),
@@ -2308,7 +2358,7 @@ Fix any errors found before finishing.
             decisions: [`engine:cli:${cli}`],
         },
         iterations: 1,
-        errors: success ? undefined : [spawnError ? `CLI error: ${spawnError.message}` : `CLI exited with code ${exitCode}`],
+        errors: allErrors.length > 0 ? allErrors : undefined,
         model: 'cli',
         provider: cli,
     };

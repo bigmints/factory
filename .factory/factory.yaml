@@ -1,8 +1,13 @@
 version: 1
 name: factory
-description: Factory — autonomous agentic build engine
+description: Bridge for factory
 factory_home: /Users/pretheesh/Projects/factory
+stack:
+  framework: node
+  packageManager: npm
+  linter: eslint
 agentic:
+  blueprint_dir: .factory/blueprint
   context_dir: .factory/context
   task_queue: .factory/task-manager/todo.yaml
   skill_index: .factory/skill-index.yaml

@@ -293,11 +293,15 @@ function copyManageSh(factoryRoot: string, factoryDir: string): { path: string; 
 }
 
 
-/** Generate a completed app.yaml spec from an existing codebase */
+/** Generate an app.yaml spec from an existing codebase.
+ *  For brand-new/empty projects: stories are created as 'draft' (not 'done').
+ *  For existing codebases (has src/, app/, components/, or ≥5 package deps): stories are marked 'done'.
+ */
 export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
     const name = basename(repoPath);
     let description = `Existing codebase for ${name}`;
     let version = '1.0.0';
+    let pkgDepsCount = 0;
 
     const pkgPath = join(repoPath, 'package.json');
     if (existsSync(pkgPath)) {
@@ -305,8 +309,18 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
             const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
             if (pkg.description) description = pkg.description;
             if (pkg.version) version = pkg.version;
+            pkgDepsCount = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length;
         } catch {}
     }
+
+    // Detect whether this is a real existing codebase or a brand-new empty project.
+    // Evidence of an existing codebase: has src/, app/, or components/ dirs, or ≥5 package.json deps.
+    const hasSrcDir = existsSync(join(repoPath, 'src'));
+    const hasAppDir = existsSync(join(repoPath, 'app'));
+    const hasComponentsDir =
+        existsSync(join(repoPath, 'src', 'components')) ||
+        existsSync(join(repoPath, 'components'));
+    const isExistingCodebase = hasSrcDir || hasAppDir || hasComponentsDir || pkgDepsCount >= 5;
 
     const stack = detectStack(repoPath) || { framework: 'node', packageManager: 'npm' };
 
@@ -339,19 +353,22 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
     }
 
     const features: FeatureEpicSpec[] = [];
+    const epicStatus  = isExistingCodebase ? 'completed' : 'pending';
+    const storyStatus = isExistingCodebase ? 'done' : 'draft';
+    const taskStatus  = isExistingCodebase ? 'completed' : 'pending';
 
     // 1. Foundational Scaffold Feature
     features.push({
         name: 'Project Foundation',
         description: 'Scaffold and baseline project setup.',
-        status: 'completed',
+        status: epicStatus as any,
         stories: [
             {
                 name: 'Scaffold Environment',
                 file: `stories/apps/${name}.yaml`,
-                status: 'done',
+                status: storyStatus,
                 tasks: [
-                    { id: 'task-init-setup', title: 'Initialize project, configurations, and environment dependencies', status: 'completed' }
+                    { id: 'task-init-setup', title: 'Initialize project, configurations, and environment dependencies', status: taskStatus }
                 ]
             }
         ]
@@ -366,13 +383,13 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
         features.push({
             name: 'Database Layer',
             description: `Database connectivity, schema validation, and ORM layer configuration using ${dbTech}.`,
-            status: 'completed',
+            status: epicStatus as any,
             stories: [
                 {
                     name: `${dbTech} Configuration`,
-                    status: 'done',
+                    status: storyStatus,
                     tasks: [
-                        { id: 'task-db-setup', title: `Setup ${dbTech} ORM, configure database credentials, and seed initial schemas`, status: 'completed' }
+                        { id: 'task-db-setup', title: `Setup ${dbTech} ORM, configure database credentials, and seed initial schemas`, status: taskStatus }
                     ]
                 }
             ]
@@ -385,9 +402,9 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
             const routeName = route.charAt(0).toUpperCase() + route.slice(1);
             return {
                 name: `${routeName} Page`,
-                status: 'done',
+                status: storyStatus,
                 tasks: [
-                    { id: `task-route-${route}`, title: `Implement ${route} page layout and visual route components`, status: 'completed' }
+                    { id: `task-route-${route}`, title: `Implement ${route} page layout and visual route components`, status: taskStatus }
                 ]
             };
         });
@@ -395,7 +412,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
         features.push({
             name: 'Application Pages & Routing',
             description: 'Core user-facing layout views and page route handlers.',
-            status: 'completed',
+            status: epicStatus as any,
             stories: routeStories
         });
     } else {
@@ -403,13 +420,13 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
         features.push({
             name: 'Core Application Pages',
             description: 'Main user-facing layouts and pages.',
-            status: 'completed',
+            status: epicStatus as any,
             stories: [
                 {
                     name: 'Root Application Page',
-                    status: 'done',
+                    status: storyStatus,
                     tasks: [
-                        { id: 'task-root-page', title: 'Scaffold application root homepage view and components', status: 'completed' }
+                        { id: 'task-root-page', title: 'Scaffold application root homepage view and components', status: taskStatus }
                     ]
                 }
             ]
@@ -417,17 +434,17 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
     }
 
     // 4. UI Components Feature (if components dir exists)
-    if (existsSync(join(repoPath, 'src', 'components')) || existsSync(join(repoPath, 'components'))) {
+    if (hasComponentsDir) {
         features.push({
             name: 'UI Components Library',
             description: 'Reusable structural layout components and design tokens.',
-            status: 'completed',
+            status: epicStatus as any,
             stories: [
                 {
                     name: 'Common Design System',
-                    status: 'done',
+                    status: storyStatus,
                     tasks: [
-                        { id: 'task-common-ui', title: 'Scaffold responsive common layout component wrappers and UI elements', status: 'completed' }
+                        { id: 'task-common-ui', title: 'Scaffold responsive common layout component wrappers and UI elements', status: taskStatus }
                     ]
                 }
             ]
@@ -456,8 +473,8 @@ ${description}
         version,
         stack: stack as any,
         features,
-        status: 'done',
-        progressPercent: 100
+        status: isExistingCodebase ? 'done' : 'draft',
+        progressPercent: isExistingCodebase ? 100 : 0
     } as any;
 }
 

@@ -14,10 +14,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const userAllowedStatuses = ['draft', 'ready'];
+    // Allow user-settable statuses. Engine manages in-progress/validation automatically.
+    const userAllowedStatuses = ['draft', 'ready', 'review', 'done'];
     if (!userAllowedStatuses.includes(status)) {
       return NextResponse.json(
-        { error: `Status "${status}" is managed automatically by the build engine and cannot be set manually.` },
+        { error: `Invalid status "${status}". Use: draft, ready, review, or done.` },
         { status: 400 }
       );
     }

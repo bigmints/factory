@@ -1,0 +1,46 @@
+apiVersion: factory.com/v1alpha1
+kind: App
+name: factory
+description: Autonomous app scaffolding factory — generate production-ready apps from YAML specs
+brd: |-
+  # factory (BRD)
+
+  Autonomous app scaffolding factory — generate production-ready apps from YAML specs
+
+  ## Core Requirements & Integrations
+  - **Framework**: node
+  - **Package Manager**: npm
+  - **Detected Routes**: None (Single landing page)
+version: 1.0.0
+stack:
+  framework: node
+  packageManager: npm
+  linter: eslint
+features:
+  - name: Project Foundation
+    description: Scaffold and baseline project setup.
+    status: completed
+    stories:
+      - name: Scaffold Environment
+        file: stories/apps/factory.yaml
+        status: done
+        tasks:
+          - id: task-init-setup
+            title: Initialize project, configurations, and environment dependencies
+            status: completed
+        progressPercent: 100
+    progressPercent: 100
+  - name: Core Application Pages
+    description: Main user-facing layouts and pages.
+    status: completed
+    stories:
+      - name: Root Application Page
+        status: done
+        tasks:
+          - id: task-root-page
+            title: Scaffold application root homepage view and components
+            status: completed
+        progressPercent: 100
+    progressPercent: 100
+status: done
+progressPercent: 100

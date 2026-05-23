@@ -18,6 +18,9 @@ import {
   Globe,
   Brain,
   BarChart3,
+  MoreHorizontal,
+  X,
+  Sparkles,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import {
@@ -221,111 +224,198 @@ export function Sidebar({
   );
 }
 
+// ─── Mobile: Top Header + Bottom Tab Bar ─────────────────────────────────────
+
 export function MobileNav({
   activeTab,
   onTabChange,
   onAddProject,
   projectRefreshKey,
+  onNewStory,
 }: {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onAddProject: () => void;
   projectRefreshKey?: number;
+  onNewStory?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [fabPressed, setFabPressed] = useState(false);
+
+  const handleNavChange = (tab: string) => {
+    if (tab === 'projects') {
+      onAddProject();
+    } else {
+      onTabChange(tab);
+    }
+    setDrawerOpen(false);
+  };
+
+  // Current active label for header title
+  const allNavItems = [...sdlcNav, ...secondaryNav, ...manageNav];
+  const activeLabel = allNavItems.find(n => n.id === activeTab)?.label ?? 'Factory';
+  const ActiveIcon = allNavItems.find(n => n.id === activeTab)?.icon;
 
   return (
     <>
-      {/* Top Mobile Header */}
-      <header className="fixed top-0 left-0 right-0 z-40 flex h-16 border-b border-border bg-background/80 backdrop-blur-md md:hidden items-center justify-between px-4">
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <button className="tap-shrink flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted/30 hover:bg-accent text-foreground focus:outline-none">
-              <Menu className="h-5 w-5" />
-            </button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-[280px] sm:w-[320px] p-0 flex flex-col h-full bg-background border-r border-border">
-            <div className="flex items-center gap-3 px-6 py-5 shrink-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-                <Factory className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-sm font-bold tracking-tight text-foreground">Factory</p>
-                <p className="text-[10px] text-muted-foreground font-medium tracking-wide uppercase">Build Engine</p>
-              </div>
-            </div>
+      {/* ── Mobile Top Header ── */}
+      <header className="fixed top-0 left-0 right-0 z-40 flex h-12 border-b border-border/50 bg-background/80 backdrop-blur-xl md:hidden items-center px-3 gap-3">
+        {/* Hamburger */}
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="tap-shrink h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          aria-label="Open menu"
+        >
+          <Menu className="h-[18px] w-[18px]" strokeWidth={2} />
+        </button>
 
-            <Separator className="opacity-60 shrink-0" />
-
-            <div className="px-4 py-4 shrink-0">
-              <ProjectSwitcher 
-                onAddProject={() => { 
-                  setOpen(false); 
-                  onAddProject(); 
-                }} 
-                refreshKey={projectRefreshKey} 
-              />
-            </div>
-
-            <Separator className="opacity-60 shrink-0" />
-
-            <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1 scrollbar-thin">
-              <p className="px-4 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Workflow</p>
-              {sdlcNav.map((item) => (
-                <NavItem
-                  key={item.id}
-                  {...item}
-                  active={activeTab === item.id}
-                  onClick={() => { onTabChange(item.id); setOpen(false); }}
-                />
-              ))}
-
-              <div className="py-2"><Separator className="opacity-40" /></div>
-
-              {secondaryNav.map((item) => (
-                <NavItem
-                  key={item.id}
-                  {...item}
-                  active={activeTab === item.id}
-                  onClick={() => { onTabChange(item.id); setOpen(false); }}
-                />
-              ))}
-
-              <SectionLabel label="Configure" />
-              {manageNav.map((item) => (
-                <NavItem
-                  key={item.id}
-                  {...item}
-                  active={activeTab === item.id}
-                  onClick={() => {
-                    if (item.id === 'projects') { onAddProject(); }
-                    else { onTabChange(item.id); }
-                    setOpen(false);
-                  }}
-                />
-              ))}
-            </nav>
-
-            <div className="border-t border-border px-5 py-4 flex items-center justify-between bg-muted shrink-0">
-              <p className="text-[10px] font-mono text-muted-foreground font-semibold">factory v1.1.0</p>
-              <div className="flex items-center gap-1.5 text-[9px] font-bold font-mono text-muted-foreground uppercase">
-                <Terminal className="h-3 w-3" /> ONLINE
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
-
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <Factory className="h-4 w-4" />
-          </div>
-          <span className="font-bold text-sm tracking-tight text-foreground">Factory</span>
+        {/* Active tab indicator — icon + label */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {ActiveIcon && <ActiveIcon className="h-4 w-4 text-primary shrink-0" strokeWidth={2.5} />}
+          <span className="text-sm font-bold text-foreground truncate">{activeLabel}</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-        </div>
+        <ThemeToggle />
       </header>
+
+      {/* ── FAB — bottom-right, create new story ── */}
+      <button
+        onPointerDown={() => setFabPressed(true)}
+        onPointerUp={() => setFabPressed(false)}
+        onPointerLeave={() => setFabPressed(false)}
+        onClick={() => onNewStory?.()}
+        aria-label="New Story"
+        className="fixed z-[60] md:hidden focus:outline-none rounded-full"
+        style={{
+          bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
+          right: 20,
+          width: 56,
+          height: 56,
+          background: 'linear-gradient(135deg, hsl(262 83% 58%), hsl(210 98% 55%))',
+          boxShadow: '0 8px 32px hsl(262 83% 58% / 0.5), 0 2px 8px rgba(0,0,0,0.4)',
+          transform: fabPressed ? 'scale(0.88)' : 'scale(1)',
+          transition: 'transform 100ms ease',
+        }}
+      >
+        <span className="absolute inset-0 rounded-full bg-white/10 pointer-events-none" />
+        <Sparkles className="h-6 w-6 text-white m-auto" strokeWidth={2} />
+      </button>
+
+      {/* ── Left Drawer ── */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent
+          side="left"
+          className="w-[80vw] max-w-[320px] p-0 flex flex-col border-r border-border/50 bg-background/98 backdrop-blur-2xl"
+        >
+          {/* Drawer header */}
+          <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border/30 shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30">
+              <Factory className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold leading-tight">Factory</p>
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">Build Engine</p>
+            </div>
+          </div>
+
+          {/* Project Switcher */}
+          <div className="px-4 py-3 border-b border-border/30 shrink-0">
+            <ProjectSwitcher
+              onAddProject={() => { setDrawerOpen(false); onAddProject(); }}
+              refreshKey={projectRefreshKey}
+            />
+          </div>
+
+          {/* Nav */}
+          <div className="overflow-y-auto flex-1 px-3 py-3">
+            {/* SDLC primary */}
+            <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Workflow</p>
+            {sdlcNav.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavChange(item.id)}
+                  className={cn(
+                    'tap-shrink w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5',
+                    isActive ? 'bg-primary/12 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                  )}
+                >
+                  <div className={cn(
+                    'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all',
+                    isActive ? 'bg-primary/15' : 'bg-muted/50'
+                  )}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span>{item.label}</span>
+                  {isActive && (
+                    <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Secondary nav */}
+            <p className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Analytics</p>
+            {secondaryNav.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavChange(item.id)}
+                  className={cn(
+                    'tap-shrink w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5',
+                    isActive ? 'bg-primary/12 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                  )}
+                >
+                  <div className={cn('h-8 w-8 rounded-lg flex items-center justify-center shrink-0', isActive ? 'bg-primary/15' : 'bg-muted/50')}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span>{item.label}</span>
+                  {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+                </button>
+              );
+            })}
+
+            {/* Manage nav */}
+            <p className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Configure</p>
+            {manageNav.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id || (item.id === 'projects' && activeTab === 'projects');
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavChange(item.id)}
+                  className={cn(
+                    'tap-shrink w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5',
+                    isActive ? 'bg-primary/12 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                  )}
+                >
+                  <div className={cn('h-8 w-8 rounded-lg flex items-center justify-center shrink-0', isActive ? 'bg-primary/15' : 'bg-muted/50')}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span>{item.label}</span>
+                  {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div
+            className="border-t border-border/30 px-5 py-4 flex items-center justify-between bg-muted/10 shrink-0"
+            style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <p className="text-[10px] font-mono text-muted-foreground/50 font-semibold">factory v1.1.0</p>
+            <div className="flex items-center gap-1.5 text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[9px] font-bold font-mono uppercase">Online</span>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

@@ -164,6 +164,56 @@
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.3);
   }
+}
 
+/* ── Safe-area / Bottom nav utilities ── */
+:root {
+  --bottom-nav-height: 60px;
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-top: env(safe-area-inset-top, 0px);
+}
+
+/* Tap-shrink: native press feedback */
+.tap-shrink {
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+.tap-shrink:active {
+  transform: scale(0.93);
+  opacity: 0.85;
+}
+
+/* Horizontal scroll snap container for mobile kanban */
+.snap-x-mandatory {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.snap-center-child > * {
+  scroll-snap-align: center;
+}
+
+/* Mobile kanban carousel */
+@media (max-width: 767px) {
+  /* Each snap slide — takes full width + height of carousel */
+  .kanban-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+/* Bottom nav safe area padding */
+.pb-safe-nav {
+  padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+}
+
+/* Top safe area for mobile content */
+.pt-safe {
+  padding-top: var(--safe-area-top);
+}
+
+/* Bottom sheet scroll lock */
+.scroll-lock {
+  overflow: hidden;
+  height: 100%;
 }
 

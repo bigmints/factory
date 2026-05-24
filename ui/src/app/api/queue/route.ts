@@ -181,7 +181,9 @@ export async function GET() {
  * Helper to normalize story file paths and kinds
  */
 function normalizeStoryFilePath(fileRaw: string, projectPath: string): { file: string; kind: 'AppStory' | 'FeatureStory' } {
-  const filename = fileRaw.replace(/^(features|apps|done)\//, '');
+  // Strip any leading path including .factory/stories/
+  const cleanFile = fileRaw.replace(/^.*?\.factory\/stories\//, '');
+  const filename = cleanFile.replace(/^(features|apps|done)\//, '');
   const featuresPath = join(projectPath, '.factory', 'stories', 'features', filename);
   const appsPath = join(projectPath, '.factory', 'stories', 'apps', filename);
   const donePath = join(projectPath, '.factory', 'stories', 'done', filename);
@@ -198,7 +200,7 @@ function normalizeStoryFilePath(fileRaw: string, projectPath: string): { file: s
       return { file: `done/${filename}`, kind: isFeature ? 'FeatureStory' : 'AppStory' };
     } catch {}
   }
-  return { file: fileRaw, kind: fileRaw.startsWith('features/') ? 'FeatureStory' : 'AppStory' };
+  return { file: cleanFile, kind: cleanFile.startsWith('features/') ? 'FeatureStory' : 'AppStory' };
 }
 
 interface EnqueueItemDescriptor {
@@ -233,9 +235,13 @@ function resolveAllDependencies(
         const fullPath = join(dir, f);
         const raw = readFileSync(fullPath, 'utf-8');
         const parsed = parseYaml(raw) as any;
-        const relativeFile = dir.endsWith('done') ? `done/${f}` : (defaultKind === 'FeatureStory' ? `features/${f}` : f);
         
-        const isFeature = defaultKind === 'FeatureStory' || (dir.endsWith('done') && parsed && (parsed.feature || parsed.target || 'phase' in parsed));
+        const dirName = dir.split(/[\\/]/).pop() || '';
+        const relativeFile = dirName === 'done' 
+          ? `done/${f}` 
+          : (dirName === 'apps' ? `apps/${f}` : `features/${f}`);
+        
+        const isFeature = defaultKind === 'FeatureStory' || (dirName === 'done' && parsed && (parsed.feature || parsed.target || 'phase' in parsed));
         const storyKind = isFeature ? 'FeatureStory' : 'AppStory';
         
         const slug = parsed.feature?.slug || parsed.metadata?.slug || f.replace(/\.ya?ml$/, '');

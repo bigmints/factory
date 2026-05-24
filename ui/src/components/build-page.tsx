@@ -412,7 +412,7 @@ export function BuildPage() {
       {/* ── Split Layout ── */}
       {/* On mobile: toggle between queue list and log panel */}
       {/* On desktop: side-by-side grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 h-[calc(100vh-220px)] lg:h-[calc(100vh-170px)] min-h-0">
 
         {/* Left: Queue list — hidden on mobile when logs tab is active */}
         <div className={cn(
@@ -599,7 +599,7 @@ export function BuildPage() {
 
         {/* Right: Terminal / detail panel — hidden on mobile when queue tab is active */}
         <div className={cn(
-          'lg:col-span-8 border border-zinc-800 bg-zinc-950 rounded-xl shadow-xl overflow-hidden flex flex-col min-h-[300px] md:min-h-[500px]',
+          'lg:col-span-8 border border-zinc-800 bg-zinc-950 rounded-xl shadow-xl overflow-hidden flex flex-col min-h-0',
           mobilePanelTab === 'queue' ? 'hidden lg:flex' : 'flex'
         )}>
 

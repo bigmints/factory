@@ -1296,7 +1296,7 @@ export function AppDashboard() {
                   <div className="text-muted-foreground font-medium">Assignee</div>
                   <div className="col-span-2 text-foreground flex items-center gap-1.5">
                     <User className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <span>Gemini Builder Agent 🤖</span>
+                    <span>Gemini Builder Agent</span>
                   </div>
 
                   <div className="text-muted-foreground font-medium">Linked Epic</div>

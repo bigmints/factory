@@ -19,7 +19,7 @@ export function PWARegister() {
           for (const registration of registrations) {
             registration.unregister().then((success) => {
               if (success) {
-                console.log('⚡ [PWA] Stale development service worker unregistered successfully.');
+                console.log('[PWA] Stale development service worker unregistered successfully.');
               }
             });
           }
@@ -30,7 +30,7 @@ export function PWARegister() {
           window.caches.keys().then((keys) => {
             return Promise.all(keys.map((key) => window.caches.delete(key)));
           }).then(() => {
-            console.log('⚡ [PWA] Development caches purged successfully.');
+            console.log('[PWA] Development caches purged successfully.');
           }).catch((err) => {
             console.warn('[PWA] Failed to clear caches:', err);
           });
@@ -92,7 +92,7 @@ export function PWARegister() {
           onClick={() => setShowInstall(false)}
           className="rounded p-1 text-muted-foreground hover:text-foreground"
         >
-          ✕
+          x
         </button>
       </div>
     </div>

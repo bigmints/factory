@@ -211,7 +211,7 @@ function formatRepoBlueprint(ctx: any): string {
     lines.push(ctx.agentInstructions);
     lines.push(`=== END PROJECT INSTRUCTIONS ===`);
   } else {
-    lines.push(`\n⚠️ WARNING: No agents.md found in the project. Generated stories may not align with project conventions.`);
+    lines.push(`\nWARNING: No agents.md found in the project. Generated stories may not align with project conventions.`);
   }
 
   // Stack

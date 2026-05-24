@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CheckCircle2, Wrench, ChevronRight, Factory } from 'lucide-react';
 
 type Step = 'path' | 'detect' | 'init' | 'confirm';
 
@@ -20,10 +21,10 @@ interface FileEvent {
     action: 'created' | 'patched' | 'skipped';
 }
 
-const ACTION_ICON: Record<string, string> = {
-    created: '✅',
-    patched: '🔧',
-    skipped: '⏭️',
+const ACTION_ICON: Record<string, React.ReactNode> = {
+    created: <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />,
+    patched: <Wrench className="h-4 w-4 text-blue-500 shrink-0" />,
+    skipped: <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />,
 };
 
 export function ProjectInitWizard() {
@@ -182,7 +183,7 @@ export function ProjectInitWizard() {
                             )}
                             {fileEvents.map((ev, i) => (
                                 <div key={i} className="flex items-center gap-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
-                                    <span>{ACTION_ICON[ev.action] ?? '⬜'}</span>
+                                    {ACTION_ICON[ev.action] ?? <div className="h-4 w-4 bg-muted rounded shrink-0" />}
                                     <span className={ev.action === 'skipped' ? 'text-muted-foreground' : ''}>
                                         {ev.file}
                                     </span>
@@ -196,7 +197,7 @@ export function ProjectInitWizard() {
                 {/* Step 4: Done */}
                 {step === 'confirm' && (
                     <div className="text-center space-y-3">
-                        <div className="text-4xl">🏭</div>
+                        <Factory className="h-10 w-10 text-primary mx-auto" />
                         <p className="font-medium">Bridge initialized!</p>
                         {initSummary && (
                             <p className="text-sm text-muted-foreground">
@@ -207,7 +208,7 @@ export function ProjectInitWizard() {
                             <div className="max-h-40 overflow-y-auto rounded-md border p-3 bg-muted font-mono text-xs text-left space-y-1">
                                 {fileEvents.map((ev, i) => (
                                     <div key={i} className="flex items-center gap-2">
-                                        <span>{ACTION_ICON[ev.action] ?? '⬜'}</span>
+                                        {ACTION_ICON[ev.action] ?? <div className="h-4 w-4 bg-muted rounded shrink-0" />}
                                         <span className={ev.action === 'skipped' ? 'text-muted-foreground' : ''}>{ev.file}</span>
                                     </div>
                                 ))}

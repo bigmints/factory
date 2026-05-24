@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import {
   ChevronDown,
   ChevronUp,
+  Package,
+  Layers,
 } from 'lucide-react';
 
 interface StoryData {
@@ -76,7 +78,11 @@ export function StoryCard({
   const isFeature = story.kind === 'FeatureStory' || story.kind === 'FeatureSpec' || !!story.feature;
   const name = isFeature ? (story.feature?.name || story.file) : (story.metadata?.name || story.file);
   const slug = isFeature ? `→ ${story.target?.app || 'app'}` : `@factory/${story.metadata?.slug || 'app'}`;
-  const icon = isFeature ? (story.metadata?.icon || '🧩') : (story.metadata?.icon || '📦');
+  const icon = isFeature ? (
+    <Layers className="h-4 w-4 text-purple-500 shrink-0" />
+  ) : (
+    <Package className="h-4 w-4 text-primary shrink-0" />
+  );
   const description = isFeature ? story.feature?.description : story.metadata?.description;
   const isSequenced = isFeature && !!(story.phase || (story.dependsOn && story.dependsOn.length > 0));
 
@@ -91,7 +97,7 @@ export function StoryCard({
             story.status === 'in-progress' || story.status === 'running' ? "bg-blue-500 animate-pulse" :
             story.status === 'failed' ? "bg-red-500" : "bg-muted-foreground/30"
           )} />
-          <span className="text-lg shrink-0 select-none">{icon}</span>
+          <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-muted/40">{icon}</div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-foreground truncate">{name}</span>

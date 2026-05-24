@@ -18,7 +18,7 @@ import {
   Search, Filter, Tag, Columns, Layers, FileCode2, Brain, FlaskConical, Wrench,
   ShieldCheck, FolderOpen, RefreshCw, Sliders, X, Check, Package, ListTodo, Info,
   BookOpen, Code, TerminalSquare, Link2, Users, Network, Lock, Clock,
-  Pencil, Trash2, Eye, FileText, Save, Copy
+  Pencil, Trash2, Eye, FileText, Save, Copy, Factory, Zap, Database, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
@@ -473,84 +473,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
   const handleDragStart = (_e: React.DragEvent, _file: string) => {};
   const handleDragOver = (_e: React.DragEvent) => {};
 
-  const handleDrop = async (e: React.DragEvent, targetStatus: string) => {
-    e.preventDefault();
-    const file = e.dataTransfer.getData('text/plain') || draggingFile;
-    setDraggingFile(null);
-
-    if (!file) return;
-
-    if (targetStatus !== 'ready' && targetStatus !== 'draft') {
-      toast.error("Stories can only be manually moved to 'Ready to Build' or 'Backlog'. Other columns are managed automatically by the Factory engine.");
-      return;
-    }
-
-    // Identify the dropped story
-    const droppedStory = mergedStories.find(s => s.file === file || getSlug(s.file) === getSlug(file));
-    let relatedStoriesToUpdate: any[] = [];
-    if (droppedStory && targetStatus === 'ready') {
-      const { prerequisites, dependents, peers } = getRelatedStories(droppedStory, mergedStories);
-      const family = [...prerequisites, ...dependents, ...peers];
-      
-      // Filter out any stories that are already completed ('done' or 'completed') or already 'ready' or 'in-progress'
-      relatedStoriesToUpdate = family.filter(s => {
-        const status = getEffectiveStatus(s);
-        return (
-          status !== 'done' &&
-          status !== 'completed' &&
-          status !== 'ready' &&
-          status !== 'in-progress' &&
-          status !== 'running' &&
-          status !== 'validation'
-        );
-      });
-    }
-
-    const toastId = toast.loading(
-      relatedStoriesToUpdate.length > 0
-        ? `Updating "${droppedStory?.metadata?.name || file}" and ${relatedStoriesToUpdate.length} related stories...`
-        : `Updating story status to ${targetStatus}...`
-    );
-
-    try {
-      const res = await fetch('/api/stories/update-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file, status: targetStatus })
-      });
-
-      if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error || 'Failed to update status');
-      }
-
-      // If we have related stories to update, update them as well in parallel
-      if (relatedStoriesToUpdate.length > 0) {
-        await Promise.all(relatedStoriesToUpdate.map(s =>
-          fetch('/api/stories/update-status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ file: s.file, status: 'ready' })
-          }).then(async (r) => {
-            if (!r.ok) {
-              const body = await r.json().catch(() => ({}));
-              console.error(`Failed to update ${s.file}`, body);
-            }
-          })
-        ));
-      }
-
-      toast.success(
-        relatedStoriesToUpdate.length > 0
-          ? `Moved "${droppedStory?.metadata?.name || file}" and grouped ${relatedStoriesToUpdate.length} related stories to Ready to Build!`
-          : `Successfully updated status to "${targetStatus}"`,
-        { id: toastId }
-      );
-      await Promise.all([fetchStories(), fetchRollup(true), fetchQueue()]);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update status', { id: toastId });
-    }
-  };
+  const handleDrop = async (_e: React.DragEvent, _targetStatus: string) => {};
 
   // ─── Active Project Tracking ───
   // We track the active project ID so we can detect project switches and
@@ -990,8 +913,8 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
     // Bootstrap gate: block FeatureStory builds until scaffold is built
     if (kind === 'FeatureStory' && !bootstrapped) {
-      toast.error('⚠️ Scaffold not built yet', {
-        description: 'Build the "⚙️ Scaffold & Foundation" epic first. Feature stories cannot compile without a base app scaffold.',
+      toast.error('Scaffold not built yet', {
+        description: 'Build the "Scaffold & Foundation" epic first. Feature stories cannot compile without a base app scaffold.',
         duration: 6000,
         action: scaffoldStoryFile
           ? {
@@ -1140,7 +1063,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
     });
 
     if (unbuilt.length === 0) {
-      toast.success(`All stories in “${feature.name}” are already done! ✓`);
+      toast.success(`All stories in “${feature.name}” are already done!`);
       return;
     }
 
@@ -1657,9 +1580,9 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
   const getStoryIcon = (item: any) => {
     if (item.kind === 'FeatureStory' || !!item.feature) {
-      return item.metadata?.icon || '🧩';
+      return 'Feature';
     }
-    return item.metadata?.icon || '📦';
+    return 'App';
   };
 
   const getStoryDesc = (item: any) => {
@@ -1686,7 +1609,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
           
           {/* Left Column: Title + version */}
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <span className="text-lg md:text-2xl shrink-0">🏭</span>
+            <Factory className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0 animate-pulse" />
             <div className="min-w-0">
               <h1 className="text-sm md:text-xl font-extrabold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
                 <span className="truncate">{appRollup?.name || 'Loading Project...'}</span>
@@ -1701,17 +1624,17 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
               <div className="hidden md:flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground/80 mt-1">
                 {appRollup?.stack && (
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20">
-                      ⚡ {appRollup.stack.framework}
+                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
+                      <Zap className="h-2.5 w-2.5 text-amber-500 shrink-0" /> {appRollup.stack.framework}
                     </Badge>
                     {appRollup.stack.language && (
-                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20">
-                        🏷️ {appRollup.stack.language}
+                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
+                        <Tag className="h-2.5 w-2.5 text-blue-500 shrink-0" /> {appRollup.stack.language}
                       </Badge>
                     )}
                     {appRollup.stack.database && (
-                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20">
-                        🗄️ {appRollup.stack.database}
+                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
+                        <Database className="h-2.5 w-2.5 text-purple-500 shrink-0" /> {appRollup.stack.database}
                       </Badge>
                     )}
                   </div>
@@ -2608,7 +2531,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                   <div className="flex flex-col" style={{ minHeight: '400px' }}>
                     <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-zinc-800/60 bg-zinc-900/20">
                       <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider font-semibold">
-                        {editMode ? '● editing' : selectedItem.data.file}
+                        {editMode ? 'Editing...' : selectedItem.data.file}
                       </span>
                       {!editMode && yamlContent && (
                         <button onClick={() => { navigator.clipboard.writeText(yamlContent); setCopiedYaml(true); setTimeout(() => setCopiedYaml(false), 1500); }}
@@ -3051,7 +2974,7 @@ function KanbanColumn({
       {/* Scaffold banner — shown only in Ready to Build when project is not bootstrapped */}
       {title === 'Ready to Build' && !bootstrapped && (
         <div className="shrink-0 flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border-b border-amber-500/25 select-none">
-          <span className="text-amber-400 text-base leading-none mt-0.5">⚙️</span>
+          <Wrench className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-bold text-amber-300 leading-tight">Scaffold required first</p>
             <p className="text-[10px] text-amber-400/70 leading-snug mt-0.5">
@@ -3191,6 +3114,16 @@ function StoryKanbanCard({
         {item.epicParent && epicColor && (
           <Badge variant="outline" className={cn("text-[7.5px] font-semibold h-3.5 px-1.5 rounded border leading-none shrink-0", epicColor.badge)}>
             {item.epicParent.name}
+          </Badge>
+        )}
+        {item.phase !== undefined && (
+          <Badge variant="outline" className="text-[7.5px] font-semibold h-3.5 px-1 rounded border-border bg-muted/20 shrink-0 leading-none flex items-center">
+            Phase {item.phase}
+          </Badge>
+        )}
+        {item.priority !== undefined && (
+          <Badge variant="outline" className="text-[7.5px] font-extrabold h-3.5 px-1 rounded border-amber-500/20 text-amber-500 bg-amber-500/5 shrink-0 leading-none flex items-center">
+            P{item.priority}
           </Badge>
         )}
         {/* Dependency tree badge — replaces 'Gated' / 'N pending' labels */}
@@ -3334,6 +3267,18 @@ function ListStoryRow({
             </span>
           )}
         </span>
+
+        {/* Prioritization */}
+        {item.phase !== undefined && (
+          <Badge variant="outline" className="text-[8px] font-semibold h-4 px-1.5 rounded border-border bg-muted/20 shrink-0 select-none leading-none flex items-center text-muted-foreground/80">
+            Phase {item.phase}
+          </Badge>
+        )}
+        {item.priority !== undefined && (
+          <Badge variant="outline" className="text-[8px] font-bold h-4 px-1.5 rounded border-amber-500/20 text-amber-500 bg-amber-500/5 shrink-0 select-none leading-none flex items-center">
+            P{item.priority}
+          </Badge>
+        )}
 
         {/* Status badge */}
         <Badge className={cn("text-[8px] font-bold h-4 px-1.5 rounded border shrink-0 select-none", statusCfg.bg)}>

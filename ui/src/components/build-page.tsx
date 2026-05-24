@@ -623,7 +623,29 @@ export function BuildPage() {
                       {humanName(selectedItem, queueItems.indexOf(selectedItem))}
                     </h2>
                   </div>
-                  <StatusPill status={selectedItem.status} />
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedItem.status === 'failed' || selectedItem.status === 'blocked' ? (
+                      <Button
+                        size="sm"
+                        onClick={() => handleRetry(selectedItem.id)}
+                        className="h-7 px-2.5 gap-1 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-sans border border-zinc-700 font-medium"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                      </Button>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleRemove(selectedItem.id)}
+                      className="h-7 px-2 text-[10px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 font-sans font-medium flex items-center gap-1"
+                      title="Remove build from queue"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Remove</span>
+                    </Button>
+                    <StatusPill status={selectedItem.status} />
+                  </div>
                 </div>
 
                 {/* Build meta */}
@@ -656,28 +678,7 @@ export function BuildPage() {
                   </span>
                 </div>
 
-                {/* Action bar */}
-                <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-zinc-800/60">
-                  {selectedItem.status === 'failed' || selectedItem.status === 'blocked' ? (
-                    <Button
-                      size="sm"
-                      onClick={() => handleRetry(selectedItem.id)}
-                      className="h-7 px-3 gap-1.5 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-sans border border-zinc-700"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Retry build
-                    </Button>
-                  ) : null}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleRemove(selectedItem.id)}
-                    className="h-7 px-3 gap-1.5 text-[11px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 font-sans"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Remove
-                  </Button>
-                </div>
+
               </div>
 
               {/* Terminal output */}

@@ -189,7 +189,7 @@ function normalizeStoryFilePath(fileRaw: string, projectPath: string): { file: s
   if (existsSync(featuresPath)) {
     return { file: `features/${filename}`, kind: 'FeatureStory' };
   } else if (existsSync(appsPath)) {
-    return { file: filename, kind: 'AppStory' };
+    return { file: `apps/${filename}`, kind: 'AppStory' };
   } else if (existsSync(donePath)) {
     try {
       const raw = readFileSync(donePath, 'utf-8');

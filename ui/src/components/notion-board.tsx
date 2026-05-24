@@ -3226,20 +3226,31 @@ function StoryKanbanCard({
             {item.epicParent.name}
           </Badge>
         )}
-        {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
-          <>
-            {isScaffoldGated && (
-              <Badge variant="outline" className="text-[7.5px] font-medium bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/25 px-1.5 h-3.5 rounded-full flex items-center gap-0.5">
-                <Lock className="h-2 w-2" /> Gated
-              </Badge>
-            )}
-            {isPrereqGated && (
-              <Badge variant="outline" className="text-[7.5px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/25 px-1.5 h-3.5 rounded-full flex items-center gap-0.5">
-                <Clock className="h-2 w-2" /> {pendingPrereqs.length} pending
-              </Badge>
-            )}
-          </>
-        )}
+        {/* Dependency tree badge — replaces 'Gated' / 'N pending' labels */}
+        {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (() => {
+          // Total unbuilt deps = scaffold (1 if gated) + pending prereqs
+          const total = (isScaffoldGated ? 1 : 0) + pendingPrereqs.length;
+          return (
+            <span
+              className="inline-flex items-center gap-0.5 text-[8px] font-semibold text-amber-400/90 shrink-0"
+              title={[
+                isScaffoldGated ? 'Scaffold not built yet' : '',
+                pendingPrereqs.length > 0 ? `${pendingPrereqs.length} prerequisite${pendingPrereqs.length > 1 ? 's' : ''} pending` : '',
+              ].filter(Boolean).join(' · ')}
+            >
+              {/* Minimal tree icon */}
+              <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 fill-amber-400/80" aria-hidden>
+                <circle cx="6" cy="2" r="1.5"/>
+                <circle cx="2.5" cy="8" r="1.5"/>
+                <circle cx="9.5" cy="8" r="1.5"/>
+                <line x1="6" y1="3.5" x2="6" y2="6" stroke="currentColor" strokeWidth="1"/>
+                <line x1="6" y1="6" x2="2.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
+                <line x1="6" y1="6" x2="9.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
+              </svg>
+              {total}
+            </span>
+          );
+        })()}
         {totalTasks > 0 && (
           <span className="text-[9px] text-muted-foreground/50 ml-auto font-mono tabular-nums">{doneTasks}/{totalTasks}</span>
         )}
@@ -3361,21 +3372,32 @@ function ListStoryRow({
               {item.file}
             </span>
 
-            {/* Architect Gating Warnings */}
-            {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (
-              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                {isScaffoldGated && (
-                  <Badge variant="outline" className="text-[8px] font-medium tracking-wide bg-rose-500/5 text-rose-400/90 border-rose-500/10 px-2 h-5 rounded-full backdrop-blur-sm select-none flex items-center gap-1">
-                    <Lock className="h-2.5 w-2.5 text-rose-400/70" /> Scaffold Baseline Missing
-                  </Badge>
-                )}
-                {isPrereqGated && (
-                  <Badge variant="outline" className="text-[8px] font-medium tracking-wide bg-amber-500/5 text-amber-400/90 border-amber-500/10 px-2 h-5 rounded-full backdrop-blur-sm select-none flex items-center gap-1">
-                    <Clock className="h-2.5 w-2.5 text-amber-400/70" /> Prerequisite Dependencies Pending ({pendingPrereqs.length})
-                  </Badge>
-                )}
-              </div>
-            )}
+            {/* Dependency tree indicator — replaces 'Gated' / 'Prerequisite Dependencies Pending' labels */}
+            {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (() => {
+              const total = (isScaffoldGated ? 1 : 0) + pendingPrereqs.length;
+              const tipParts = [
+                isScaffoldGated ? 'Scaffold not built yet' : '',
+                pendingPrereqs.length > 0
+                  ? `${pendingPrereqs.length} prerequisite${pendingPrereqs.length > 1 ? 's' : ''} pending: ${pendingPrereqs.map(p => p.name || getBasename(p.file)).join(', ')}`
+                  : '',
+              ].filter(Boolean);
+              return (
+                <span
+                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-400/90 mt-1 select-none"
+                  title={tipParts.join(' · ')}
+                >
+                  <svg viewBox="0 0 12 12" className="h-3 w-3 fill-amber-400/80 shrink-0" aria-hidden>
+                    <circle cx="6" cy="2" r="1.5"/>
+                    <circle cx="2.5" cy="8" r="1.5"/>
+                    <circle cx="9.5" cy="8" r="1.5"/>
+                    <line x1="6" y1="3.5" x2="6" y2="6" stroke="currentColor" strokeWidth="1"/>
+                    <line x1="6" y1="6" x2="2.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
+                    <line x1="6" y1="6" x2="9.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
+                  </svg>
+                  {total} dep{total > 1 ? 's' : ''} pending
+                </span>
+              );
+            })()}
 
             {/* Dependencies in List View */}
             {item.dependsOn && item.dependsOn.length > 0 && (

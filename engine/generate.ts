@@ -1787,16 +1787,27 @@ Feature Epic Description: ${matchingFeature.description || 'No description provi
     }
 
     let isNativeTools = false;
+    let isLocalOrCompat = false;
     try {
         const { provider } = requireActiveProvider();
         if (provider) {
             isNativeTools = provider.id === 'gemini' || provider.id === 'openai' || provider.kind === 'openai-compat';
+            isLocalOrCompat = provider.kind === 'openai-compat' || provider.id === 'ollama';
         }
     } catch {}
 
     const toolCallingBlock = isNativeTools
         ? `## Tool Calling Format
-You MUST invoke tools using the native function-calling interface provided by the model environment. Do NOT wrap tool calls in XML tags, markdown code blocks, or custom text format.
+You can invoke tools using the native function-calling interface provided by the model environment.
+${isLocalOrCompat ? `
+Alternatively, if your environment or model struggles with native tool calling, you MUST invoke tools using this XML format:
+<tool_call>{"name": "tool_name", "arguments": {"arg1": "val1"}}</tool_call>
+
+For example:
+<tool_call>{"name": "read_story", "arguments": {}}</tool_call>
+<tool_call>{"name": "write_file", "arguments": {"path": "src/app.ts", "content": "console.log('hello');"}}</tool_call>
+
+Make sure to format all your tool calls exactly like this inside your response if you use the XML format.` : 'Do NOT wrap tool calls in XML tags, markdown code blocks, or custom text format.'}
 Always provide the exact arguments required by each tool's schema, such as "path" and "content" for write_file/patch_file (do NOT use "filename", use "path").`
         : `## Tool Calling Format
 You MUST invoke tools using this XML format:
@@ -2183,6 +2194,28 @@ ${requiredPagesBlock}`;
             }
         }, 1000);
     }
+    // Scan directory state BEFORE spawning CLI
+    const beforeFiles = new Map<string, { mtime: number; size: number }>();
+    const { readdirSync: rdsBefore, statSync: stsBefore } = await import('node:fs');
+    function scanBefore(dir: string, prefix: string): void {
+        let entries: import('node:fs').Dirent[];
+        try { entries = rdsBefore(dir, { withFileTypes: true, encoding: 'utf8' }) as import('node:fs').Dirent[]; } catch { return; }
+        for (const entry of entries) {
+            const eName = entry.name as string;
+            if (['node_modules', '.git', '.factory', '.DS_Store'].includes(eName)) continue;
+            const relPath = prefix ? `${prefix}/${eName}` : eName;
+            const fullPath = `${dir}/${eName}`;
+            if (entry.isDirectory()) {
+                scanBefore(fullPath, relPath);
+            } else {
+                try {
+                    const st = stsBefore(fullPath);
+                    beforeFiles.set(relPath, { mtime: st.mtimeMs, size: st.size });
+                } catch {}
+            }
+        }
+    }
+    scanBefore(targetDir, '');
 
     await new Promise<void>((resolvePromise) => {
         const cleanEnv = { ...process.env };
@@ -2316,11 +2349,38 @@ ${requiredPagesBlock}`;
 
     log('→', `Scanned ${files.length} generated file(s)`);
 
+    // Compare with pre-run scan state
+    const { statSync: stsAfter } = await import('node:fs');
+    let modifiedOrCreatedCount = 0;
+    const modifiedOrCreatedPaths: string[] = [];
+    for (const file of files) {
+        const before = beforeFiles.get(file.filename);
+        if (!before) {
+            modifiedOrCreatedCount++;
+            modifiedOrCreatedPaths.push(file.filename);
+        } else {
+            try {
+                const fullPath = `${targetDir}/${file.filename}`;
+                const st = stsAfter(fullPath);
+                if (st.size !== before.size || st.mtimeMs !== before.mtime) {
+                    modifiedOrCreatedCount++;
+                    modifiedOrCreatedPaths.push(file.filename);
+                }
+            } catch {}
+        }
+    }
+
+    log('→', `Detected ${modifiedOrCreatedCount} modified/created file(s) by CLI`);
+
     // ── Post-scan validation: check required page files exist ────────────────
     // For Next.js app stories, every page defined in the story must have a
     // corresponding page.tsx on disk. If any are missing the build is a failure
     // regardless of what the CLI exit code said.
     const postScanErrors: string[] = [];
+    if (success && modifiedOrCreatedCount === 0) {
+        postScanErrors.push(`No files were created or modified during the CLI build session (conversational or empty tool-call exit detected)`);
+        log('✗', `No files created or modified during CLI build session`);
+    }
     if (isApp) {
         const appStory = story as AppStory;
         const framework = (appStory.stack?.framework || '').toLowerCase();

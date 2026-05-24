@@ -89,7 +89,15 @@ function kindLabel(kind: string): string {
 
 // ─── Status Pill ─────────────────────────────────────────────────────────────
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ 
+  status, 
+  startedAt, 
+  durationMs 
+}: { 
+  status: string; 
+  startedAt?: string | null; 
+  durationMs?: number | null; 
+}) {
   const map: Record<string, string> = {
     running: 'bg-violet-500/15 text-violet-300 border-violet-500/30 animate-pulse',
     pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
@@ -98,16 +106,22 @@ function StatusPill({ status }: { status: string }) {
     blocked: 'bg-zinc-700/40 text-zinc-400 border-zinc-600/30',
     'needs-attention': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
   };
+  const duration = durationMs ? formatDuration(durationMs) : null;
   return (
-    <span className={cn(
-      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border font-mono',
-      map[status] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'
-    )}>
-      {status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
-      {status === 'completed' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
-      {status === 'failed' && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
-      {status}
-    </span>
+    <div className="flex items-center gap-1.5">
+      <span className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border font-mono',
+        map[status] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'
+      )}>
+        {status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
+        {status === 'completed' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+        {status === 'failed' && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
+        {status}
+      </span>
+      {duration && (
+        <span className="text-[10px] text-zinc-500 font-mono">({duration})</span>
+      )}
+    </div>
   );
 }
 

@@ -15,7 +15,7 @@ FACTORY_DIR="$HOME/.factory"
 mkdir -p "$FACTORY_DIR/ui"
 
 # Find standalone output directory dynamically (handles Next.js monorepo nesting)
-STANDALONE_DIR=$(dirname "$(find ui/.next/standalone -name server.js | head -n 1)")
+STANDALONE_DIR=$(dirname "$(find ui/.next/standalone -not -path "*/node_modules/*" -name server.js | head -n 1)")
 
 # Copy standalone build to ~/.factory/ui
 echo "🚚 Copying UI from $STANDALONE_DIR to $FACTORY_DIR/ui..."

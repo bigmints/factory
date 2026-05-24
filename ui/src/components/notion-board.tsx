@@ -353,6 +353,73 @@ const getEffectiveStatus = (item: any) => {
   return 'unknown';
 };
 
+// ─── Topological Dependency Sort ─────────────────────────────────────────────
+
+/**
+ * Returns stories sorted so every story appears AFTER all its unbuilt prerequisites.
+ *
+ * Algorithm: recursive DFS — for each story in `targets`, first visit its
+ * dependsOn stories (looking them up in `allStories`), then emit the story
+ * itself. Stories already at a "done" status are skipped (they don't need to
+ * be re-built). Cycles are broken by the `visiting` guard set.
+ *
+ * @param targets  The stories the caller wants to build (subset of allStories)
+ * @param allStories  Full story pool used for dependency lookup
+ * @returns Deduplicated, topologically-ordered list ready for sequential queuing
+ */
+function topoSort(targets: any[], allStories: any[]): any[] {
+  const DONE_STATUSES = new Set(['done', 'completed']);
+  const visited  = new Set<string>();   // fully processed
+  const visiting = new Set<string>();   // in the current DFS stack (cycle guard)
+  const result: any[] = [];
+
+  function visit(story: any) {
+    const key = story.file;
+    if (visited.has(key)) return;
+    if (visiting.has(key)) return; // cycle — skip to avoid infinite loop
+
+    visiting.add(key);
+
+    // Recurse into each unbuilt prerequisite first
+    const deps: string[] = story.dependsOn || [];
+    for (const dep of deps) {
+      // Find the story that matches this dep slug
+      const depStory = allStories.find(s => {
+        const slugs = getStorySlugs(s);
+        return slugs.includes(dep);
+      });
+      if (depStory && !DONE_STATUSES.has(getEffectiveStatus(depStory))) {
+        visit(depStory);
+      }
+    }
+
+    visiting.delete(key);
+    visited.add(key);
+
+    // Only emit if not already done
+    if (!DONE_STATUSES.has(getEffectiveStatus(story))) {
+      result.push(story);
+    }
+  }
+
+  for (const story of targets) {
+    visit(story);
+  }
+
+  return result;
+}
+
+/**
+ * For a single story: returns the full ordered chain of unbuilt prerequisites
+ * followed by the story itself.  If story is already done, returns [].
+ */
+function resolveDependencyChain(story: any, allStories: any[]): any[] {
+  if (!story) return [];
+  const DONE_STATUSES = new Set(['done', 'completed']);
+  if (DONE_STATUSES.has(getEffectiveStatus(story))) return [];
+  return topoSort([story], allStories);
+}
+
 
 // ─── YAML Viewer ─────────────────────────────────────────────────────────────
 function YamlViewer({ content }: { content: string }) {
@@ -942,6 +1009,56 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
       return;
     }
 
+    // ─── Dependency resolution ──────────────────────────────────────────────────────
+    // Find the story object so we can resolve its dependency chain.
+    const storyObj = mergedStories.find(s => s.file === file || getSlug(s.file) === getSlug(file));
+    const chain = storyObj ? resolveDependencyChain(storyObj, mergedStories) : [];
+
+    // If chain > 1, there are unbuilt prerequisites — queue the whole chain.
+    if (chain.length > 1) {
+      const prereqs = chain.slice(0, -1); // everything before the target story
+      const prereqNames = prereqs.map(s => s.name || getBasename(s.file)).join(', ');
+      const toastId = toast.loading(`Resolving ${prereqs.length} prerequisite${prereqs.length > 1 ? 's' : ''}...`);
+
+      try {
+        let allEnqueued = 0;
+        for (const s of chain) {
+          const res = await fetch('/api/queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              storyFile: s.file, specFile: s.file,
+              kind: s.kind || kind,
+              phase: s.phase,
+              dependsOn: s.dependsOn,
+              engine: 'factory',
+            }),
+          });
+          if (res.ok) allEnqueued++;
+        }
+        if (allEnqueued === 0) { toast.error('Failed to enqueue', { id: toastId }); return; }
+
+        toast.success(`Queued ${baseName} + auto-added ${prereqs.length} prerequisite${prereqs.length > 1 ? 's' : ''}`, {
+          id: toastId,
+          description: `→ ${prereqNames}`,
+          duration: 7000,
+        });
+        fetchQueue();
+        const startRes = await fetch('/api/queue/start', { method: 'POST' });
+        if (startRes.ok) {
+          fetchBootstrapStatus();
+          if (onNavigateToBuild) { onNavigateToBuild(); }
+          else { setViewMode('queue'); setBuildLogsOpen(true); }
+        } else {
+          toast.error('Failed to launch pipeline');
+        }
+      } catch {
+        toast.error('Network error building story');
+      }
+      return;
+    }
+
+    // No unbuilt prerequisites — simple single-story build path.
     toast.info(`Preparing build for ${baseName}...`);
     try {
       const enqueued = await handleEnqueue(file, kind);
@@ -950,14 +1067,9 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
       if (res.ok) {
         toast.success('Build pipeline running...');
         fetchQueue();
-        // Refresh bootstrap status after a build starts (AppStory might complete)
         fetchBootstrapStatus();
-        if (onNavigateToBuild) {
-          onNavigateToBuild();
-        } else {
-          setViewMode('queue');
-          setBuildLogsOpen(true);
-        }
+        if (onNavigateToBuild) { onNavigateToBuild(); }
+        else { setViewMode('queue'); setBuildLogsOpen(true); }
       } else {
         const err = await res.json();
         toast.error('Failed to launch pipeline', { description: err.error });
@@ -969,64 +1081,36 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
 
   // Rocket Build Ready Action
   const handleBuildReadyStories = async () => {
-    // Collect all stories from specs and roadmap that are ready, failed, or review
-    const readySpecs: Array<{ file: string; kind: string; phase?: number; dependsOn?: string[]; epicId?: string; epicIndex: number }> = [];
-
-    // Build an epic → stable index map so we can group by epic
-    const epicIndexMap = new Map<string, number>();
-    (appRollup?.features || []).forEach((f: any, idx: number) => {
-      epicIndexMap.set(f.id, idx);
-    });
-
-    mergedStories.forEach(item => {
+    // Collect all non-done stories that are ready, failed, or review
+    const readyStories = mergedStories.filter(item => {
       const status = getEffectiveStatus(item);
-      if (status === 'ready' || status === 'failed' || status === 'review') {
-        const epicId = item.epicParent?.id;
-        readySpecs.push({
-          file: item.file,
-          kind: item.kind,
-          phase: item.phase,
-          dependsOn: item.dependsOn,
-          epicId,
-          // Stories without an epic go last (epicIndex = 999)
-          epicIndex: epicId !== undefined ? (epicIndexMap.get(epicId) ?? 999) : 999
-        });
-      }
+      return status === 'ready' || status === 'failed' || status === 'review';
     });
 
-    if (readySpecs.length === 0) {
+    if (readyStories.length === 0) {
       toast.info('All stories are fully built or clean! No pending items found.');
       return;
     }
 
-    // Sort so same-epic stories appear consecutively:
-    //   1. epicIndex ASC (group epics together)
-    //   2. phase ASC within each epic (respect build ordering)
-    //   3. file name ASC as a stable tie-breaker
-    readySpecs.sort((a, b) => {
-      if (a.epicIndex !== b.epicIndex) return a.epicIndex - b.epicIndex;
-      const phaseA = a.phase ?? 0;
-      const phaseB = b.phase ?? 0;
-      if (phaseA !== phaseB) return phaseA - phaseB;
-      return a.file.localeCompare(b.file);
-    });
+    // Topological sort: dependencies always appear before dependents.
+    // Also pulls in any unbuilt prerequisites of the ready stories.
+    const ordered = topoSort(readyStories, mergedStories);
 
-    const toastId = toast.loading(`Enqueuing ${readySpecs.length} stories into pipeline...`);
+    const toastId = toast.loading(`Enqueuing ${ordered.length} stories into pipeline...`);
     let enqueued = 0;
     try {
-      for (const spec of readySpecs) {
+      for (const story of ordered) {
         const res = await fetch('/api/queue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            storyFile: spec.file,
-            specFile: spec.file,
-            kind: spec.kind,
-            phase: spec.phase,
-            dependsOn: spec.dependsOn,
-            buildAll: true, // skip individual dependency pre-check; engine handles ordering
-            engine: 'factory'
-          })
+            storyFile: story.file,
+            specFile: story.file,
+            kind: story.kind || 'FeatureStory',
+            phase: story.phase,
+            dependsOn: story.dependsOn,
+            engine: 'factory',
+          }),
         });
         if (res.ok) enqueued++;
       }
@@ -1035,14 +1119,10 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
         toast.loading(`Starting execution loop for ${enqueued} items...`, { id: toastId });
         const startRes = await fetch('/api/queue/start', { method: 'POST' });
         if (startRes.ok) {
-          toast.success(`Success! Launched build for ${enqueued} stories.`, { id: toastId });
+          toast.success(`Launched ${enqueued} stories in dependency order.`, { id: toastId });
           fetchQueue();
-          if (onNavigateToBuild) {
-            onNavigateToBuild();
-          } else {
-            setViewMode('queue');
-            setBuildLogsOpen(true);
-          }
+          if (onNavigateToBuild) { onNavigateToBuild(); }
+          else { setViewMode('queue'); setBuildLogsOpen(true); }
         } else {
           toast.error('Failed to trigger execution runner', { id: toastId });
         }
@@ -1051,6 +1131,63 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
       }
     } catch {
       toast.error('Error starting ready builds', { id: toastId });
+    }
+  };
+
+  // Build Epic Action — queues ALL non-done stories in one epic in topo order
+  const handleBuildEpic = async (feature: any) => {
+    if (!feature) return;
+
+    // Collect all non-done stories that belong to this epic
+    const epicStories = mergedStories.filter(s => s.epicParent?.id === feature.id);
+    const unbuilt = epicStories.filter(s => {
+      const st = getEffectiveStatus(s);
+      return st !== 'done' && st !== 'completed';
+    });
+
+    if (unbuilt.length === 0) {
+      toast.success(`All stories in “${feature.name}” are already done! ✓`);
+      return;
+    }
+
+    // Topo-sort the epic stories — also pulls in cross-epic prerequisites
+    const ordered = topoSort(unbuilt, mergedStories);
+
+    const toastId = toast.loading(`Queuing ${ordered.length} stories in “${feature.name}”...`);
+    let enqueued = 0;
+    try {
+      for (const story of ordered) {
+        const res = await fetch('/api/queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storyFile: story.file,
+            specFile: story.file,
+            kind: story.kind || 'FeatureStory',
+            phase: story.phase,
+            dependsOn: story.dependsOn,
+            engine: 'factory',
+          }),
+        });
+        if (res.ok) enqueued++;
+      }
+
+      if (enqueued > 0) {
+        toast.loading(`Starting pipeline for ${enqueued} stories...`, { id: toastId });
+        const startRes = await fetch('/api/queue/start', { method: 'POST' });
+        if (startRes.ok) {
+          toast.success(`Building “${feature.name}” — ${enqueued} stories in order.`, { id: toastId, duration: 6000 });
+          fetchQueue();
+          if (onNavigateToBuild) { onNavigateToBuild(); }
+          else { setViewMode('queue'); setBuildLogsOpen(true); }
+        } else {
+          toast.error('Failed to start pipeline', { id: toastId });
+        }
+      } else {
+        toast.error('Nothing was queued', { id: toastId });
+      }
+    } catch {
+      toast.error('Network error starting epic build');
     }
   };
 
@@ -1954,7 +2091,29 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-5 shrink-0 ml-4">
+                          <div className="flex items-center gap-3 shrink-0 ml-4">
+                            {/* Build Epic button — shown when there are unbuilt stories */}
+                            {featureStoriesList.some(s => {
+                              const st = getEffectiveStatus(s);
+                              return st !== 'done' && st !== 'completed';
+                            }) && (
+                              <button
+                                className={cn(
+                                  "hidden sm:flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border transition-all duration-150",
+                                  "bg-indigo-500/10 border-indigo-500/30 text-indigo-300",
+                                  "hover:bg-indigo-500/20 hover:border-indigo-500/50 hover:text-indigo-200",
+                                  "active:scale-95"
+                                )}
+                                onClick={(e) => { e.stopPropagation(); handleBuildEpic(feature); }}
+                                title={`Queue all unbuilt stories in "${feature.name}" in dependency order`}
+                              >
+                                <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+                                  <path d="M5 3.5l7 4.5-7 4.5V3.5z"/>
+                                </svg>
+                                Build Epic
+                              </button>
+                            )}
+
                             {/* Epic Progress */}
                             <div className="hidden sm:flex flex-col items-end gap-1 select-none">
                               <span className="text-[10px] font-semibold text-muted-foreground uppercase">Progress</span>

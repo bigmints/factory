@@ -370,16 +370,7 @@ export function BuildPage() {
         </div>
       </div>
 
-      {/* ── Stats Row ── */}
-      <div className="flex items-center gap-1.5 md:gap-2 px-1 flex-wrap">
-        <StatCard label="Pending" value={stats.pending} color="border-amber-500/15 text-amber-300 bg-amber-950/10" />
-        <StatCard label="Running" value={stats.running} color="border-violet-500/15 text-violet-300 bg-violet-950/10" />
-        <StatCard label="Done" value={stats.completed} color="border-emerald-500/15 text-emerald-300 bg-emerald-950/10" />
-        <StatCard label="Failed" value={stats.failed} color="border-rose-500/15 text-rose-300 bg-rose-950/10" />
-        {stats.blocked > 0 && (
-          <StatCard label="Blocked" value={stats.blocked} color="border-zinc-600/40 text-zinc-400 bg-zinc-800/30" />
-        )}
-      </div>
+
 
       {/* Mobile tab toggle: Queue | Logs */}
       <div className="flex md:hidden items-center gap-1 px-1">
@@ -412,7 +403,7 @@ export function BuildPage() {
       {/* ── Split Layout ── */}
       {/* On mobile: toggle between queue list and log panel */}
       {/* On desktop: side-by-side grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 h-[calc(100vh-220px)] lg:h-[calc(100vh-170px)] min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 h-[calc(100vh-170px)] lg:h-[calc(100vh-120px)] min-h-0">
 
         {/* Left: Queue list — hidden on mobile when logs tab is active */}
         <div className={cn(
@@ -433,26 +424,35 @@ export function BuildPage() {
               />
             </div>
             <div className="flex items-center gap-1">
-              {(['all', 'active', 'completed', 'failed'] as StatusFilter[]).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilterStatus(f)}
-                  className={cn(
-                    'px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wide transition-all font-sans',
-                    filterStatus === f
-                      ? 'bg-zinc-700 text-zinc-100'
-                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-                  )}
-                >
-                  {f}
-                  {f === 'active' && (stats.running + stats.pending) > 0 && (
-                    <span className="ml-1 text-violet-400">{stats.running + stats.pending}</span>
-                  )}
-                  {f === 'failed' && (stats.failed + stats.blocked) > 0 && (
-                    <span className="ml-1 text-rose-400">{stats.failed + stats.blocked}</span>
-                  )}
-                </button>
-              ))}
+              {(['all', 'active', 'completed', 'failed'] as StatusFilter[]).map(f => {
+                const label = f === 'all' ? 'All' : f === 'active' ? 'Active' : f === 'completed' ? 'Completed' : 'Failed';
+                const count = f === 'all' ? stats.total
+                  : f === 'active' ? (stats.running + stats.pending)
+                  : f === 'completed' ? stats.completed
+                  : (stats.failed + stats.blocked);
+                const countColor = f === 'active' ? 'text-violet-400'
+                  : f === 'completed' ? 'text-emerald-400'
+                  : f === 'failed' ? 'text-rose-400'
+                  : 'text-zinc-400';
+
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setFilterStatus(f)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wide transition-all font-sans flex items-center gap-1',
+                      filterStatus === f
+                        ? 'bg-zinc-700 text-zinc-100'
+                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                    )}
+                  >
+                    <span>{label}</span>
+                    <span className={cn('font-mono font-bold', countColor)}>
+                      ({count})
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -613,7 +613,7 @@ export function BuildPage() {
                       <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider font-semibold">
                         {kindLabel(selectedItem.kind)}
                       </span>
-                      {selectedItem.phase && selectedItem.phase > 0 && (
+                      {selectedItem.phase !== undefined && selectedItem.phase > 0 && (
                         <span className="text-[10px] font-mono text-zinc-600">
                           · phase {selectedItem.phase}
                         </span>
@@ -681,23 +681,6 @@ export function BuildPage() {
               </div>
 
               {/* Terminal output */}
-              <div className="flex items-center justify-between px-4 py-1.5 border-b border-zinc-800/50 bg-zinc-900/20 shrink-0">
-                <div className="flex items-center gap-2">
-                  <Terminal className="h-3.5 w-3.5 text-zinc-500" />
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider font-semibold">
-                    {isSelectedRunning ? 'Live output' : 'Build log'}
-                  </span>
-                  {isSelectedRunning && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
-                  )}
-                </div>
-                {selectedItem.status === 'failed' && (
-                  <div className="flex items-center gap-1 text-[10px] text-rose-400 font-mono">
-                    <AlertTriangle className="h-3 w-3" />
-                    Build failed
-                  </div>
-                )}
-              </div>
 
               <div className="flex-1 overflow-y-auto p-4 scrollbar-thin min-h-0">
                 {panelLog ? (

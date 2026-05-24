@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-24T10:30:31Z"
+  last_seen: "2026-05-24T10:39:04Z"
   host: "BigMac-2"
-  task: "post-commit: feat(security): secure path containment and command execution allowlist with task capability gating"
+  task: "post-commit: feat(ui): display story prioritization & replace all unicode icons with Lucide components"
   status: alive

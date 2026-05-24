@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-24T10:50:34Z"
-  host: "BigMac-2"
-  task: "post-commit: style(ui): integrate time elapsed into StatusPill and merge metadata row into sub-header to maximize terminal space"
+  last_seen: "2026-05-24T11:36:47Z"
+  host: "192"
+  task: "post-commit: fix(ui): resolve StatusPill type error in build-page.tsx"
   status: alive

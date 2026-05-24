@@ -140,7 +140,7 @@ async function runOrchestratorLoop(
 
     mkdirSync(targetDir, { recursive: true });
 
-    const systemPrompt = buildSystemPrompt(story, blueprint, cliName);
+    const systemPrompt = buildSystemPrompt(story, blueprint, targetDir, cliName);
 
     const messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }> = [
         { role: 'system', content: systemPrompt },
@@ -241,6 +241,7 @@ async function runOrchestratorLoop(
 function buildSystemPrompt(
     story: AppStory | FeatureStory,
     blueprint: ProjectBlueprint,
+    targetDir: string,
     cliName: string,
 ): string {
     const sections: string[] = [];
@@ -248,6 +249,11 @@ function buildSystemPrompt(
     sections.push(`You are Factory, an autonomous build orchestrator.
 Your job: deliver the story below by delegating to the configured CLI agent.
 You do NOT write code yourself. You write prompts for the CLI agent and verify its work.`);
+
+    // ── Target Directory ──
+    sections.push(`## Target Directory
+All files must be generated and checks executed inside the target directory:
+\`${targetDir}\``);
 
     // ── Configured CLI ──
     sections.push(`## Configured CLI

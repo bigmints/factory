@@ -606,22 +606,32 @@ export function BuildPage() {
           {selectedItem ? (
             <>
               {/* Build header */}
-              <div className="border-b border-zinc-800 bg-zinc-900/30 px-5 py-4 shrink-0">
-                <div className="flex items-start justify-between gap-4 mb-3">
+              <div className="border-b border-zinc-800 bg-zinc-900/30 px-5 py-3 shrink-0">
+                <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider font-semibold">
-                        {kindLabel(selectedItem.kind)}
-                      </span>
-                      {selectedItem.phase !== undefined && selectedItem.phase > 0 && (
-                        <span className="text-[10px] font-mono text-zinc-600">
-                          · phase {selectedItem.phase}
-                        </span>
-                      )}
-                    </div>
                     <h2 className="text-base font-bold text-white leading-tight font-sans truncate">
                       {humanName(selectedItem, queueItems.indexOf(selectedItem))}
                     </h2>
+                    
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-zinc-500 font-mono mt-1">
+                      <span className="uppercase tracking-wider font-bold text-zinc-400">
+                        {kindLabel(selectedItem.kind)}
+                      </span>
+                      {selectedItem.phase !== undefined && selectedItem.phase > 0 && (
+                        <span>· phase {selectedItem.phase}</span>
+                      )}
+                      {selectedItem.engine && (
+                        <span>· engine: {selectedItem.engine}</span>
+                      )}
+                      {selectedItem.dependsOn && selectedItem.dependsOn.length > 0 && (
+                        <span className="text-zinc-600">
+                          · depends on: {selectedItem.dependsOn.join(', ')}
+                        </span>
+                      )}
+                      <span className="text-zinc-700">
+                        · id: {selectedItem.id.replace('q_', '').slice(0, 8)}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {selectedItem.status === 'failed' || selectedItem.status === 'blocked' ? (
@@ -644,39 +654,15 @@ export function BuildPage() {
                       <Trash2 className="h-3.5 w-3.5" />
                       <span>Remove</span>
                     </Button>
-                    <StatusPill status={selectedItem.status} />
+                    <StatusPill 
+                      status={selectedItem.status} 
+                      startedAt={selectedItem.startedAt}
+                      durationMs={selectedItem.durationMs}
+                    />
                   </div>
                 </div>
 
-                {/* Build meta */}
-                <div className="flex items-center gap-4 flex-wrap text-[11px] text-zinc-500 font-mono">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {selectedItem.startedAt
-                      ? `Started ${formatRelativeTime(selectedItem.startedAt)}`
-                      : `Queued ${formatRelativeTime(selectedItem.addedAt)}`}
-                  </span>
-                  {selectedItem.durationMs && (
-                    <span className="flex items-center gap-1 text-zinc-400">
-                      <Zap className="h-3 w-3 text-amber-500" />
-                      {formatDuration(selectedItem.durationMs)}
-                    </span>
-                  )}
-                  {selectedItem.engine && (
-                    <span className="flex items-center gap-1">
-                      <GitBranch className="h-3 w-3" />
-                      {selectedItem.engine}
-                    </span>
-                  )}
-                  {selectedItem.dependsOn && selectedItem.dependsOn.length > 0 && (
-                    <span className="text-zinc-600">
-                      depends on: {selectedItem.dependsOn.join(', ')}
-                    </span>
-                  )}
-                  <span className="text-zinc-700 text-[10px]">
-                    id: {selectedItem.id.replace('q_', '').slice(0, 12)}
-                  </span>
-                </div>
+
 
 
               </div>

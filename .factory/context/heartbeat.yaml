@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-24T07:52:26Z"
+  last_seen: "2026-05-24T10:09:27Z"
   host: "BigMac-2"
-  task: "post-commit: fix(queue): strip .factory/stories/ prefix and map AppStory relative paths correctly"
+  task: "post-commit: feat(scripts): add stamp-story-order.ts — stamp phase/priority/dependsOn from scaffold.yaml"
   status: alive

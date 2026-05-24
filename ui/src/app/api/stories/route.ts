@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, basename } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
@@ -28,9 +28,9 @@ function sanitizeYaml(raw: string): { content: string; fixed: boolean } {
 }
 
 /**
- * Resolve the stories directories — active project's .factory/stories/.
+ * Resolve the active project's path
  */
-function getStoriesDirs(): { apps: string; features: string; done: string; source: string } {
+function getActiveProjectPath(): string | null {
   try {
     const projectsPath = join(FACTORY_ROOT, 'projects.json');
     if (existsSync(projectsPath)) {
@@ -40,17 +40,92 @@ function getStoriesDirs(): { apps: string; features: string; done: string; sourc
           (p: any) => p.id === config.activeProject
         );
         if (project) {
-          const projectApps = join(project.path, '.factory', 'stories', 'apps');
-          const projectFeatures = join(project.path, '.factory', 'stories', 'features');
-          const projectDone = join(project.path, '.factory', 'stories', 'done');
-          return {
-            apps: projectApps,
-            features: projectFeatures,
-            done: projectDone,
-            source: project.name,
-          };
+          return project.path;
         }
       }
+    }
+  } catch {}
+  return null;
+}
+
+interface ScaffoldStoryMeta {
+  phase: number;
+  priority: number;
+  dependsOn: string[];
+}
+
+/**
+ * Parses scaffold.yaml and returns metadata for each story to preserve planning order
+ */
+function loadScaffoldStoryMeta(projectPath: string): Map<string, ScaffoldStoryMeta> {
+  const metaMap = new Map<string, ScaffoldStoryMeta>();
+  const scaffoldPath = join(projectPath, '.factory', 'scaffold.yaml');
+  if (!existsSync(scaffoldPath)) return metaMap;
+
+  try {
+    const raw = readFileSync(scaffoldPath, 'utf-8');
+    const parsed = parseYaml(raw) as any;
+    if (parsed && Array.isArray(parsed.features)) {
+      const globalStoriesList: { file: string; slug: string; epicIndex: number; storyIndex: number }[] = [];
+
+      parsed.features.forEach((feature: any, epicIndex: number) => {
+        if (feature && Array.isArray(feature.stories)) {
+          feature.stories.forEach((story: any, storyIndex: number) => {
+            if (story && story.file) {
+              // Normalize path
+              const cleanPath = story.file
+                .replace(/^.*?\.factory\/stories\//, '')
+                .replace(/^\.?\//, '');
+              
+              const slug = cleanPath.split('/').pop()?.replace(/\.ya?ml$/i, '') || '';
+              globalStoriesList.push({
+                file: cleanPath,
+                slug,
+                epicIndex,
+                storyIndex
+              });
+            }
+          });
+        }
+      });
+
+      // Assign phase, priority, and dependsOn sequentially
+      globalStoriesList.forEach((story, idx) => {
+        const dependsOn: string[] = [];
+        if (idx > 0) {
+          dependsOn.push(globalStoriesList[idx - 1].slug);
+        }
+
+        metaMap.set(story.file, {
+          phase: story.epicIndex,
+          priority: 100 - story.storyIndex,
+          dependsOn
+        });
+      });
+    }
+  } catch (e) {
+    console.error('Error parsing scaffold.yaml for story meta:', e);
+  }
+
+  return metaMap;
+}
+
+/**
+ * Resolve the stories directories — active project's .factory/stories/.
+ */
+function getStoriesDirs(): { apps: string; features: string; done: string; source: string } {
+  try {
+    const projectPath = getActiveProjectPath();
+    if (projectPath) {
+      const projectApps = join(projectPath, '.factory', 'stories', 'apps');
+      const projectFeatures = join(projectPath, '.factory', 'stories', 'features');
+      const projectDone = join(projectPath, '.factory', 'stories', 'done');
+      return {
+        apps: projectApps,
+        features: projectFeatures,
+        done: projectDone,
+        source: basename(projectPath),
+      };
     }
   } catch {}
 
@@ -60,6 +135,8 @@ function getStoriesDirs(): { apps: string; features: string; done: string; sourc
 export async function GET() {
   try {
     const { apps: APPS_DIR, features: FEATURES_DIR, done: DONE_DIR, source } = getStoriesDirs();
+    const projectPath = getActiveProjectPath();
+    const scaffoldMeta = projectPath ? loadScaffoldStoryMeta(projectPath) : new Map<string, ScaffoldStoryMeta>();
 
     let stories: any[] = [];
     let featureStories: any[] = [];
@@ -78,6 +155,7 @@ export async function GET() {
             try { writeFileSync(join(APPS_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
           }
           const parsed = parseYaml(sanitized) as any;
+          const meta = scaffoldMeta.get(`apps/${file}`) || scaffoldMeta.get(file);
           return {
             file,
             kind: 'AppStory' as const,
@@ -88,6 +166,9 @@ export async function GET() {
             database: parsed.database || {},
             api: parsed.api || {},
             features: parsed.features || {},
+            phase: meta ? meta.phase : 0,
+            dependsOn: meta ? meta.dependsOn : [],
+            priority: meta ? meta.priority : 100
           };
         } catch {
           return { file, kind: 'AppStory' as const, valid: false, error: 'Failed to parse' };
@@ -109,6 +190,7 @@ export async function GET() {
             try { writeFileSync(join(FEATURES_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
           }
           const parsed = parseYaml(sanitized) as any;
+          const meta = scaffoldMeta.get(`features/${file}`) || scaffoldMeta.get(file);
           return {
             file: `features/${file}`,
             kind: 'FeatureStory' as const,
@@ -120,8 +202,9 @@ export async function GET() {
             pages: parsed.pages || [],
             model: parsed.model || {},
             navigation: parsed.navigation || {},
-            phase: parsed.phase ?? 0,
-            dependsOn: parsed.dependsOn ?? [],
+            phase: meta ? meta.phase : (parsed.phase ?? 1),
+            dependsOn: meta ? meta.dependsOn : (parsed.dependsOn ?? []),
+            priority: meta ? meta.priority : 0
           };
         } catch {
           return { file: `features/${file}`, kind: 'FeatureStory' as const, valid: false, error: 'Failed to parse' };
@@ -147,6 +230,7 @@ export async function GET() {
           // Determine if it is a FeatureStory or AppStory
           const isFeature = parsed && (parsed.feature || parsed.target || 'phase' in parsed);
           if (isFeature) {
+            const meta = scaffoldMeta.get(`done/${file}`) || scaffoldMeta.get(`features/${file}`) || scaffoldMeta.get(file);
             featureStories.push({
               file: `done/${file}`,
               kind: 'FeatureStory' as const,
@@ -158,10 +242,12 @@ export async function GET() {
               pages: parsed.pages || [],
               model: parsed.model || {},
               navigation: parsed.navigation || {},
-              phase: parsed.phase ?? 0,
-              dependsOn: parsed.dependsOn ?? [],
+              phase: meta ? meta.phase : (parsed.phase ?? 1),
+              dependsOn: meta ? meta.dependsOn : (parsed.dependsOn ?? []),
+              priority: meta ? meta.priority : 0
             });
           } else {
+            const meta = scaffoldMeta.get(`done/${file}`) || scaffoldMeta.get(`apps/${file}`) || scaffoldMeta.get(file);
             stories.push({
               file: `done/${file}`,
               kind: 'AppStory' as const,
@@ -172,6 +258,9 @@ export async function GET() {
               database: parsed.database || {},
               api: parsed.api || {},
               features: parsed.features || {},
+              phase: meta ? meta.phase : 0,
+              dependsOn: meta ? meta.dependsOn : [],
+              priority: meta ? meta.priority : 100
             });
           }
         } catch {
@@ -179,6 +268,12 @@ export async function GET() {
         }
       }
     }
+
+    // Sort featureStories by phase (epic order), then by priority DESC (story order within epic)
+    featureStories.sort((a, b) => {
+      if (a.phase !== b.phase) return a.phase - b.phase;
+      return b.priority - a.priority;
+    });
 
     return NextResponse.json({ stories, featureStories, source });
   } catch {

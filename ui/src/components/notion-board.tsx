@@ -463,21 +463,15 @@ function YamlViewer({ content }: { content: string }) {
   );
 }
 
-export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectRefreshKey = 0, externalOpenStoryChat, onExternalStoryChatConsumed, className }: NotionBoardProps) {
+export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRefreshKey = 0, externalOpenStoryChat, onExternalStoryChatConsumed, className }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [draggingFile, setDraggingFile] = useState<string | null>(null);
 
-  const handleDragStart = (e: React.DragEvent, file: string) => {
-    e.dataTransfer.setData('text/plain', file);
-    setDraggingFile(file);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  // Drag-and-drop removed — Board is view-only
+  const handleDragStart = (_e: React.DragEvent, _file: string) => {};
+  const handleDragOver = (_e: React.DragEvent) => {};
 
   const handleDrop = async (e: React.DragEvent, targetStatus: string) => {
     e.preventDefault();
@@ -1795,16 +1789,6 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
             {/* Left: View tabs */}
             <div className="flex items-center gap-0.5 p-0.5 bg-muted/60 border rounded-md h-8 shrink-0">
               <button
-                onClick={() => setViewMode('board')}
-                className={cn(
-                  'tap-shrink rounded-sm text-[10px] gap-1 h-7 px-2.5 flex items-center',
-                  viewMode === 'board' ? 'bg-background shadow-xs text-foreground font-bold' : 'text-muted-foreground'
-                )}
-              >
-                <Columns className="h-3.5 w-3.5" />
-                <span>Board</span>
-              </button>
-              <button
                 onClick={() => setViewMode('list')}
                 className={cn(
                   'tap-shrink rounded-sm text-[10px] gap-1 h-7 px-2.5 flex items-center',
@@ -1813,6 +1797,16 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
               >
                 <ListTodo className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Roadmap</span>
+              </button>
+              <button
+                onClick={() => setViewMode('board')}
+                className={cn(
+                  'tap-shrink rounded-sm text-[10px] gap-1 h-7 px-2.5 flex items-center',
+                  viewMode === 'board' ? 'bg-background shadow-xs text-foreground font-bold' : 'text-muted-foreground'
+                )}
+              >
+                <Columns className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Sprint</span>
               </button>
             </div>
 
@@ -2027,9 +2021,6 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
           handleValidateStory={handleValidateStory}
           handleSingleBuild={handleSingleBuild}
           activeAction={activeAction}
-          handleDragOver={handleDragOver}
-          handleDrop={handleDrop}
-          handleDragStart={handleDragStart}
           showEpicLegend={showEpicLegend}
           appRollup={appRollup}
           bootstrapped={bootstrapped}
@@ -2811,9 +2802,6 @@ interface KanbanColumnProps {
   onValidate: (file: string, kind: string) => void;
   onBuild: (file: string, kind: string) => void;
   activeAction: { type: string; file: string } | null;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent) => void;
-  onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
   /** When false, show a scaffold-first banner in the Ready to Build column */
   bootstrapped?: boolean;
@@ -2826,13 +2814,11 @@ function MobileKanbanBoard({
   backlogStories, readyStories, buildingStories, doneStories,
   mergedStories, epicColorMap,
   handleOpenDrawer, handleValidateStory, handleSingleBuild, activeAction,
-  handleDragOver, handleDrop, handleDragStart,
   showEpicLegend, appRollup, bootstrapped, scaffoldStoryFile,
 }: {
   backlogStories: any[]; readyStories: any[]; buildingStories: any[]; doneStories: any[];
   mergedStories: any[]; epicColorMap: Map<string, any>;
   handleOpenDrawer: any; handleValidateStory: any; handleSingleBuild: any; activeAction: any;
-  handleDragOver: any; handleDrop: any; handleDragStart: any;
   showEpicLegend: boolean; appRollup: any;
   bootstrapped: boolean; scaffoldStoryFile: string | null;
 }) {
@@ -2886,7 +2872,7 @@ function MobileKanbanBoard({
         </div>
       )}
 
-      {/* ── Desktop: 4-column Kanban ── */}
+      {/* ── Desktop: 4-column Kanban (view-only) ── */}
       <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-4 gap-4" style={{ height: 'calc(100vh - 220px)' }}>
         {COLS.map((col) => (
           <KanbanColumn
@@ -2900,9 +2886,6 @@ function MobileKanbanBoard({
             onValidate={handleValidateStory}
             onBuild={handleSingleBuild}
             activeAction={activeAction}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, col.status)}
-            onDragStart={handleDragStart}
             allStories={mergedStories}
             bootstrapped={bootstrapped}
             scaffoldStoryFile={scaffoldStoryFile}
@@ -2960,9 +2943,6 @@ function MobileKanbanBoard({
                 onValidate={handleValidateStory}
                 onBuild={handleSingleBuild}
                 activeAction={activeAction}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, col.status)}
-                onDragStart={handleDragStart}
                 allStories={mergedStories}
                 bootstrapped={bootstrapped}
                 scaffoldStoryFile={scaffoldStoryFile}
@@ -2987,9 +2967,6 @@ function KanbanColumn({
   onValidate,
   onBuild,
   activeAction,
-  onDragOver,
-  onDrop,
-  onDragStart,
   allStories,
   bootstrapped = true,
   scaffoldStoryFile,
@@ -3058,8 +3035,6 @@ function KanbanColumn({
 
   return (
     <div
-      onDragOver={onDragOver}
-      onDrop={onDrop}
       className="flex flex-col h-full bg-muted/30 border border-border/40 rounded-xl overflow-hidden transition-all duration-300 hover:bg-muted/40"
     >
       {/* Header info */}
@@ -3109,7 +3084,6 @@ function KanbanColumn({
                   onValidate={onValidate}
                   onBuild={onBuild}
                   activeAction={activeAction}
-                  onDragStart={onDragStart}
                   allStories={allStories}
                 />
               );
@@ -3133,7 +3107,6 @@ function KanbanColumn({
                       onValidate={onValidate}
                       onBuild={onBuild}
                       activeAction={activeAction}
-                      onDragStart={onDragStart}
                       allStories={allStories}
                     />
                   ))}
@@ -3158,7 +3131,6 @@ function StoryKanbanCard({
   onValidate,
   onBuild,
   activeAction,
-  onDragStart,
   allStories
 }: {
   item: any;
@@ -3167,7 +3139,6 @@ function StoryKanbanCard({
   onValidate: (file: string, kind: string) => void;
   onBuild: (file: string, kind: string) => void;
   activeAction: { type: string; file: string } | null;
-  onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
 }) {
   const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
@@ -3176,7 +3147,6 @@ function StoryKanbanCard({
   const totalTasks = item.checklistTasks ? item.checklistTasks.length : 0;
   const doneTasks = item.checklistTasks ? item.checklistTasks.filter((t: any) => t.status === 'completed').length : 0;
   const desc = item.metadata?.description || item.feature?.description || '';
-  const isDraggable = effectiveStatus === 'draft' || effectiveStatus === 'ready';
   const isActive = effectiveStatus === 'running' || effectiveStatus === 'validation';
 
   // Architect-level Gating Visualizer: Check if base app scaffold exists and if there are pending prerequisites
@@ -3200,12 +3170,9 @@ function StoryKanbanCard({
 
   return (
     <div
-      draggable={isDraggable}
-      onDragStart={(e) => isDraggable && onDragStart(e, item.file)}
       onClick={() => onSelect(item, 'story')}
       className={cn(
         "group flex flex-col gap-1.5 px-3 py-2.5 cursor-pointer select-none transition-colors border-b border-border/30 last:border-b-0 border-l-2 hover:bg-muted/40",
-        isDraggable ? "cursor-grab active:cursor-grabbing" : "",
         item.placeholder && "opacity-50",
         isActive && "bg-primary/5 border-l-primary",
         !isActive && (epicColor?.border?.replace('border-l-', 'border-l-') || "border-l-border/40")
@@ -3315,235 +3282,111 @@ function ListStoryRow({
 }: ListStoryRowProps) {
   const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
-  const icon = item.metadata?.icon || (isFeature ? '🧩' : '📦');
   const effectiveStatus = getEffectiveStatus(item);
   const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
-  const progress = item.dbProgress !== undefined ? item.dbProgress : 0;
   const hasTasks = item.checklistTasks && item.checklistTasks.length > 0;
   const isActionLoading = !!(activeAction && activeAction.file === item.file);
+  const isDone = effectiveStatus === 'done' || effectiveStatus === 'completed';
 
-  // Architect-level Gating Visualizer: Check if base app scaffold exists and if there are pending prerequisites
-  const targetApp = item.target?.app || item.targetApp;
-  let isScaffoldGated = false;
-  if (isFeature && targetApp) {
-    const parentApp = allStories?.find(s => 
-      s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
-    );
-    const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
-    isScaffoldGated = parentStatus !== 'done' && parentStatus !== 'completed';
-  }
-
+  // Pending deps — shown inline in name only
   const { prerequisites } = getRelatedStories(item, allStories || []);
   const pendingPrereqs = prerequisites.filter(p => {
     const s = getEffectiveStatus(p);
     return s !== 'done' && s !== 'completed';
   });
-  const isPrereqGated = pendingPrereqs.length > 0;
+  const targetApp = item.target?.app || item.targetApp;
+  let isScaffoldGated = false;
+  if (isFeature && targetApp) {
+    const parentApp = allStories?.find(s =>
+      s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
+    );
+    const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
+    isScaffoldGated = parentStatus !== 'done' && parentStatus !== 'completed';
+  }
+  const totalPendingDeps = (isScaffoldGated ? 1 : 0) + pendingPrereqs.length;
 
   return (
-    <div
-      className="border border-border/50 bg-background/55 rounded-lg overflow-hidden transition-all duration-300"
-    >
-      {/* Row Header */}
-      <div className="flex items-center justify-between p-3 gap-3 flex-wrap sm:flex-nowrap">
-        {/* Story Title & File */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {hasTasks ? (
-            <button
-              onClick={onToggleExpand}
-              className="h-6 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/60"
-            >
-              {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
-          ) : (
-            <div className="w-6" />
-          )}
-
-          <span className="text-base shrink-0 select-none">{icon}</span>
-          <div className="min-w-0 flex-1">
-            <span
-              onClick={() => onSelect(item, 'story')}
-              className="font-bold text-xs text-foreground hover:text-primary hover:underline cursor-pointer truncate max-w-[240px] block"
-              title={name}
-            >
-              {name.replace('features/', '')}
-            </span>
-            <span className="text-[10px] text-muted-foreground font-mono block truncate max-w-[180px]" title={item.file}>
-              {item.file}
-            </span>
-
-            {/* Dependency tree indicator — replaces 'Gated' / 'Prerequisite Dependencies Pending' labels */}
-            {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (() => {
-              const total = (isScaffoldGated ? 1 : 0) + pendingPrereqs.length;
-              const tipParts = [
-                isScaffoldGated ? 'Scaffold not built yet' : '',
-                pendingPrereqs.length > 0
-                  ? `${pendingPrereqs.length} prerequisite${pendingPrereqs.length > 1 ? 's' : ''} pending: ${pendingPrereqs.map(p => p.name || getBasename(p.file)).join(', ')}`
-                  : '',
-              ].filter(Boolean);
-              return (
-                <span
-                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-400/90 mt-1 select-none"
-                  title={tipParts.join(' · ')}
-                >
-                  <svg viewBox="0 0 12 12" className="h-3 w-3 fill-amber-400/80 shrink-0" aria-hidden>
-                    <circle cx="6" cy="2" r="1.5"/>
-                    <circle cx="2.5" cy="8" r="1.5"/>
-                    <circle cx="9.5" cy="8" r="1.5"/>
-                    <line x1="6" y1="3.5" x2="6" y2="6" stroke="currentColor" strokeWidth="1"/>
-                    <line x1="6" y1="6" x2="2.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
-                    <line x1="6" y1="6" x2="9.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
-                  </svg>
-                  {total} dep{total > 1 ? 's' : ''} pending
-                </span>
-              );
-            })()}
-
-            {/* Dependencies in List View */}
-            {item.dependsOn && item.dependsOn.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <Link2 className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
-                {item.dependsOn.map((depSlug: string) => {
-                  const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
-                  const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
-                  let statusBadgeColor = 'bg-muted/30 text-muted-foreground/60 border-border/10';
-                  if (status === 'done' || status === 'completed') {
-                    statusBadgeColor = 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10';
-                  } else if (status === 'running' || status === 'validation' || status === 'in-progress' || status === 'review') {
-                    statusBadgeColor = 'bg-blue-500/5 text-blue-300 border-blue-500/10 animate-pulse';
-                  }
-
-                  return (
-                    <Badge
-                      key={depSlug}
-                      variant="outline"
-                      className={cn(
-                        "text-[8px] font-medium h-4 px-1.5 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/40 truncate max-w-[120px]",
-                        statusBadgeColor
-                      )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (depStory) {
-                          onSelect(depStory, 'story');
-                        }
-                      }}
-                      title={depStory ? `Dependency: ${depSlug} (${status})` : `Dependency: ${depSlug} (not found)`}
-                    >
-                      {depSlug}
-                    </Badge>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Task progress percentage — only show if not done */}
-        {hasTasks && effectiveStatus !== 'done' && effectiveStatus !== 'completed' && (
-          <div className="hidden md:flex items-center gap-2 select-none shrink-0 w-36">
-            <div className="h-1 bg-muted rounded-full overflow-hidden w-20 shrink-0 border border-border/30">
-              <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
-            </div>
-            <span className="text-[10px] font-bold text-muted-foreground">{progress}% checklist</span>
-          </div>
+    <div className="overflow-hidden">
+      {/* ── Single-line row ── */}
+      <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/20 transition-colors group">
+        {/* Expand chevron */}
+        {hasTasks ? (
+          <button
+            onClick={onToggleExpand}
+            className="h-4 w-4 flex items-center justify-center text-muted-foreground/40 hover:text-foreground shrink-0"
+          >
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+        ) : (
+          <div className="w-4 shrink-0" />
         )}
 
-        <div className="flex items-center gap-1.5 shrink-0 select-none">
-          {/* Status indicator */}
-          <Badge className={cn("text-[8px] font-extrabold h-4.5 px-1.5 py-0.5 rounded-sm border shrink-0 select-none", statusCfg.bg)}>
-            {statusCfg.label}
-          </Badge>
-        </div>
+        {/* Name */}
+        <span
+          onClick={() => onSelect(item, 'story')}
+          className="flex-1 text-xs font-medium text-foreground hover:text-primary cursor-pointer truncate min-w-0"
+          title={name}
+        >
+          {name.replace('features/', '')}
+          {totalPendingDeps > 0 && !isDone && (
+            <span className="ml-1.5 text-[9px] text-amber-400/60 font-normal">
+              · {totalPendingDeps} dep{totalPendingDeps > 1 ? 's' : ''} pending
+            </span>
+          )}
+        </span>
 
-        {/* Row Actions */}
-        <div className="flex items-center gap-1 shrink-0 ml-2 select-none">
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={isActionLoading}
-            onClick={() => onValidate(item.file, item.kind)}
-            className="h-7.5 w-7.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/80"
-          >
-            {isActionLoading && activeAction?.type === 'validate' ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <ShieldCheck className="h-3.5 w-3.5" />
-            )}
-          </Button>
+        {/* Status badge */}
+        <Badge className={cn("text-[8px] font-bold h-4 px-1.5 rounded border shrink-0 select-none", statusCfg.bg)}>
+          {statusCfg.label}
+        </Badge>
 
-          <Button
-            size="icon"
-            variant="ghost"
+        {/* Rocket — hover-only, hidden when done */}
+        {!isDone ? (
+          <button
             disabled={isActionLoading}
             onClick={() => onBuild(item.file, item.kind || 'AppStory')}
-            className="h-7.5 w-7.5 text-primary hover:bg-primary/10 rounded-md"
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground/30 hover:text-primary hover:bg-primary/10 transition-all shrink-0 opacity-0 group-hover:opacity-100"
+            title="Build"
           >
-            {isActionLoading && activeAction?.type === 'build' ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Rocket className="h-3.5 w-3.5" />
-            )}
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onSelect(item, 'story')}
-            className="h-7.5 text-[10px] px-2 rounded-md font-medium border-border"
-          >
-            Open Specs
-          </Button>
-        </div>
+            {isActionLoading && activeAction?.type === 'build'
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <Rocket className="h-3 w-3" />}
+          </button>
+        ) : (
+          <div className="w-5 shrink-0" />
+        )}
       </div>
 
-      {/* Checklist expanded panel */}
+      {/* ── Expanded checklist panel ── */}
       {expanded && hasTasks && (
-        <div className="px-4 pb-3 pt-1 bg-muted/10 border-t border-border/30 space-y-2 select-none">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <ListTodo className="h-3.5 w-3.5" />
-            Subtask Checklists ({item.checklistTasks.length})
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {item.checklistTasks.map((task: Task) => {
-              const isComp = task.status === 'completed';
-              const statusCfg = taskStatusMap[task.status] || taskStatusMap.pending;
-
-              return (
-                <div
-                  key={task.fullId}
-                  className="flex items-start gap-2.5 p-2 rounded-md border bg-background/55 hover:bg-background/90 group"
+        <div className="px-8 pb-2 pt-1 bg-muted/10 border-t border-border/20 space-y-0.5">
+          {item.checklistTasks.map((task: Task) => {
+            const isComp = task.status === 'completed';
+            return (
+              <div key={task.fullId} className="flex items-center gap-2 py-0.5">
+                <button
+                  disabled={updatingTaskId !== null}
+                  onClick={() => onToggleTask(task.fullId, isComp ? 'pending' : 'completed')}
+                  className={cn(
+                    "h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 transition-all",
+                    isComp ? "bg-emerald-500 border-emerald-500 text-white" : "border-border/60 hover:border-muted-foreground"
+                  )}
                 >
-                  <button
-                    disabled={updatingTaskId !== null}
-                    onClick={() => onToggleTask(task.fullId, isComp ? 'pending' : 'completed')}
-                    className={cn(
-                      "h-4 w-4 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-all",
-                      isComp ? "bg-emerald-500 border-emerald-500 text-white" : "border-border hover:border-muted-foreground"
-                    )}
-                  >
-                    {isComp && <Check className="h-2.5 w-2.5 stroke-[3]" />}
-                  </button>
-
-                  <div className="min-w-0 flex-1 leading-normal">
-                    <span
-                      onClick={() => onSelect(task, 'task', item, item.epicParent)}
-                      className={cn(
-                        "text-[11px] font-medium text-foreground hover:underline cursor-pointer block truncate",
-                        isComp && "text-muted-foreground line-through"
-                      )}
-                    >
-                      <span className="font-mono text-[9px] font-bold text-muted-foreground bg-muted/40 px-1 border border-border/40 rounded-xs mr-1">{task.id}</span>
-                      {task.title}
-                    </span>
-                  </div>
-
-                  <Badge className={cn("text-[7px] font-extrabold px-1 rounded-sm py-0 shrink-0", statusCfg.bg)}>
-                    {statusCfg.label}
-                  </Badge>
-                </div>
-              );
-            })}
-          </div>
+                  {isComp && <Check className="h-2 w-2 stroke-[3]" />}
+                </button>
+                <span
+                  onClick={() => onSelect(task, 'task', item, item.epicParent)}
+                  className={cn(
+                    "text-[10px] cursor-pointer truncate flex-1",
+                    isComp ? "text-muted-foreground/40 line-through" : "text-foreground hover:text-primary"
+                  )}
+                >
+                  <span className="font-mono text-[8px] text-muted-foreground/30 mr-1">{task.id}</span>
+                  {task.title}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

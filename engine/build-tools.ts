@@ -6,9 +6,10 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, resolve, sep, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadMcpConfig } from './config.ts';
+import type { TaskProfile } from './types.ts';
 
 // ─── Constants ───────────────────────────────────────────
 
@@ -40,6 +41,8 @@ export interface BuildToolBlueprint {
         conventions?: string;
         knowledge?: string;
     };
+    /** Current task classification profile (gates capability checks) */
+    taskProfile?: TaskProfile;
 }
 
 /** Result from a tool call — never throws, errors in isError */
@@ -381,6 +384,56 @@ async function execRunCommand(args: Record<string, unknown>, ctx: BuildToolBluep
         const command = args.command as string;
         if (!command) { resolve({ content: '"command" is required for run_command', isError: true }); return; }
 
+        // 1. Security Check: Validate Command Executables Allowlist
+        if (!isCommandSafe(command)) {
+            resolve({
+                content: `Security Error: Command execution blocked. Command "${command}" uses a non-allowlisted executable. Allowed: npm, npx, node, tsc, eslint, biome, prettier, vitest, jest, git, pnpm, yarn, bun, next, vite`,
+                isError: true,
+            });
+            return;
+        }
+
+        // 2. Gate Flag Check: Enforce Task Profile Gates
+        if (ctx.taskProfile) {
+            const cmdLower = command.toLowerCase();
+
+            // Block dependency installation if disabled
+            if (!ctx.taskProfile.needsInstall && (cmdLower.includes('install') || cmdLower.includes('npm i') || cmdLower.includes('npm ci') || cmdLower.includes('pnpm i') || cmdLower.includes('yarn add') || cmdLower.includes('bun add'))) {
+                resolve({
+                    content: `Security Error: Dependency installation is disabled for the current task profile (${ctx.taskProfile.type}).`,
+                    isError: true,
+                });
+                return;
+            }
+
+            // Block TypeScript type check if disabled
+            if (!ctx.taskProfile.needsTypeCheck && cmdLower.includes('tsc')) {
+                resolve({
+                    content: `Security Error: TypeScript type checking is disabled for the current task profile (${ctx.taskProfile.type}).`,
+                    isError: true,
+                });
+                return;
+            }
+
+            // Block linting/formatting if disabled
+            if (!ctx.taskProfile.needsLint && (cmdLower.includes('lint') || cmdLower.includes('eslint') || cmdLower.includes('biome') || cmdLower.includes('prettier'))) {
+                resolve({
+                    content: `Security Error: Code linting/formatting is disabled for the current task profile (${ctx.taskProfile.type}).`,
+                    isError: true,
+                });
+                return;
+            }
+
+            // Block tests if disabled
+            if (!ctx.taskProfile.needsTest && (cmdLower.includes('test') || cmdLower.includes('vitest') || cmdLower.includes('jest'))) {
+                resolve({
+                    content: `Security Error: Testing is disabled for the current task profile (${ctx.taskProfile.type}).`,
+                    isError: true,
+                });
+                return;
+            }
+        }
+
         const cwd = resolvePath((args.cwd as string) || '.', ctx);
         const timeout = (args.timeout as number) || 120_000;
 
@@ -498,10 +551,62 @@ function execMarkFailed(args: Record<string, unknown>, ctx: BuildToolBlueprint):
  * Resolve a path — relative paths are resolved against targetDir.
  * An empty string or '.' returns targetDir itself.
  */
+/**
+ * Verifies that a shell command only runs allowed, safe project executables.
+ * Handles sub-command chaining via shell operators (&&, ||, ;, |).
+ */
+export function isCommandSafe(command: string): boolean {
+    const allowedExecutables = [
+        'npm', 'npx', 'node', 'tsc', 'eslint', 'biome', 
+        'prettier', 'vitest', 'jest', 'git', 'pnpm', 
+        'yarn', 'bun', 'next', 'vite'
+    ];
+
+    // Split the command into individual statements by shell chaining operators
+    const segments = command.split(/&&|\|\||;|\|/);
+    for (const segment of segments) {
+        const trimmed = segment.trim();
+        if (!trimmed) continue;
+
+        // Extract the executable (first word of the command segment)
+        const firstWord = trimmed.split(/\s+/)[0];
+        
+        // Remove simple local directory execution prefixes if present (e.g. ./node_modules/.bin/tsc)
+        const baseExec = firstWord.replace(/^(\.\/|\.\.\/)+/, '');
+
+        if (!allowedExecutables.some(allowed => baseExec === allowed || baseExec.endsWith('/' + allowed) || baseExec.endsWith('\\' + allowed))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Resolve a path — relative and absolute paths are strictly resolved and normalized
+ * against targetDir to prevent directory traversal and system escapes.
+ */
 export function resolvePath(path: string, ctx: BuildToolBlueprint): string {
-    if (!path || path === '.') return ctx.targetDir;
-    if (path.startsWith('/')) return path;
-    return join(ctx.targetDir, path);
+    const targetAbsolute = resolve(ctx.targetDir);
+    let resolved: string;
+
+    if (!path || path === '.') {
+        resolved = targetAbsolute;
+    } else if (path.startsWith('/')) {
+        resolved = resolve(path);
+    } else {
+        resolved = resolve(ctx.targetDir, path);
+    }
+
+    // Standardize and normalize to clean up any traversal sequences (e.g. '/../')
+    resolved = normalize(resolved);
+
+    // Enforce strict containment within the target directory
+    const isContained = resolved === targetAbsolute || resolved.startsWith(targetAbsolute + sep);
+    if (!isContained) {
+        throw new Error(`Security Error: Access denied. Path "${path}" resolves to "${resolved}", which is outside target directory "${ctx.targetDir}".`);
+    }
+
+    return resolved;
 }
 
 function listDirRecursive(dir: string, prefix = ''): string[] {

@@ -66,7 +66,8 @@ export async function runPipeline(
         log('!', `Warning: Failed to pre-scaffold baseline scaffold.yaml: ${e}`);
     }
 
-    const result = await runToolSession(story, blueprint, targetDir, storyFile);
+    const taskProfile = classifyTask(story);
+    const result = await runToolSession(story, blueprint, targetDir, storyFile, undefined, taskProfile);
 
     // Intercept result: ensure .factory/scaffold.yaml is explicitly tracked in result.files
     try {
@@ -112,7 +113,8 @@ export async function runFeaturePipeline(
 ): Promise<BuildResult> {
     log('●', `Starting tool-calling build session for feature: ${story.feature.name}`);
     const appBlueprint = gatherAppBlueprint(blueprint.repoPath, blueprint.bridge, story.target.app);
-    return runToolSession(story, blueprint, targetDir, storyFile, appBlueprint);
+    const taskProfile = classifyFeatureTask();
+    return runToolSession(story, blueprint, targetDir, storyFile, appBlueprint, taskProfile);
 }
 
 // ─── Plan ────────────────────────────────────────────────
@@ -1672,6 +1674,7 @@ export function buildToolSystemPrompt(
     targetDir: string,
     appBlueprint?: AppIntegrationBlueprint,
     storyFile?: string,
+    taskProfile?: TaskProfile,
 ): string {
     const isApp = 'appName' in story;
     const storyBlock = isApp ? formatStory(story as AppStory) : formatFeatureStory(story as FeatureStory);
@@ -1758,6 +1761,21 @@ Feature Epic Description: ${matchingFeature.description || 'No description provi
         ? `\n## Project Skills\n${blueprint.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
         : '';
 
+    // Resolve file-based skills from .factory/skills/*.md and inject top matches
+    seedDefaultSkills();
+    const scoredSkills = 'appName' in story
+        ? resolveSkillsForBuild(story as AppStory, blueprint)
+        : [];
+    const fileSkillsBlock = formatSkillsForPrompt(scoredSkills.slice(0, 5));
+
+    // Inject prior queue build context (graceful no-op for single factory build calls)
+    const priorBuilds = loadQueueBlueprint(blueprint.repoPath);
+    const queueContextBlock = priorBuilds.length > 0
+        ? `\n## Prior Builds in This Queue Run\n${priorBuilds
+            .map(b => `- ${b.kind}: \`${b.targetApp}\` (${b.generatedFiles.length} files)`)
+            .join('\n')}\n`
+        : '';
+
     let appBlueprintBlock = '';
     if (appBlueprint) {
         const parts: string[] = [];
@@ -1828,6 +1846,39 @@ Make sure to format all your tool calls exactly like this inside your response. 
         ? '\n7. You MUST create a comprehensive roadmap and status specification file at `.factory/scaffold.yaml` inside the application directory. This file must be added to your implementation plan/files checklist, and successfully written to disk before calling mark_complete.'
         : '';
 
+    const needsInstall = taskProfile ? taskProfile.needsInstall : true;
+    const needsTypeCheck = taskProfile ? taskProfile.needsTypeCheck : true;
+    const needsLint = taskProfile ? taskProfile.needsLint : true;
+    const needsTest = taskProfile ? taskProfile.needsTest : true;
+
+    const workflowSteps: string[] = [
+        '1. Call read_story to fully understand the build requirements.',
+        '2. Call list_dir(recursive=true) to explore what already exists.',
+        '3. Read key files with read_blueprint(type=\'package_json\') and read_blueprint(type=\'tsconfig\').',
+        '4. Write files using write_file. Use patch_file for targeted edits to existing files.'
+    ];
+
+    let stepNum = 5;
+    const checkActions: string[] = [];
+    if (needsInstall) checkActions.push('install deps (e.g. npm install)');
+    if (needsTypeCheck) checkActions.push('type-check (npx tsc --noEmit)');
+    if (needsLint) checkActions.push('lint (npm run lint)');
+    if (needsTest) checkActions.push('run tests (npm run test)');
+
+    if (checkActions.length > 0) {
+        workflowSteps.push(`${stepNum++}. Call run_command to ${checkActions.join(' and ')}.`);
+        workflowSteps.push(`${stepNum++}. Fix any errors using patch_file or write_file, then re-run checks.`);
+    }
+
+    workflowSteps.push(`${stepNum++}. When all checks pass, call mark_complete with a clear summary.`);
+    workflowSteps.push(`${stepNum++}. If you cannot proceed after exhausting all fixes, call mark_failed with the reason.`);
+
+    const workflowBlock = workflowSteps.join('\n');
+
+    const rule3 = needsInstall
+        ? '3. Every import from a package must exist in package.json. If you need to install a dependency, do so.'
+        : '3. Every import from a package must exist in package.json. Do NOT install new dependencies (dependency installation is disabled for this task profile).';
+
     return `You are an autonomous code generation engine with access to tools for reading, writing, and executing commands.
 
 ## Target Directory
@@ -1836,25 +1887,18 @@ ${targetDir}
 ${toolCallingBlock}
 
 ## Recommended Workflow
-1. Call read_story to fully understand the build requirements.
-2. Call list_dir(recursive=true) to explore what already exists.
-3. Read key files with read_blueprint(type='package_json') and read_blueprint(type='tsconfig').
-4. Write files using write_file. Use patch_file for targeted edits to existing files.
-5. Call run_command to install deps (e.g. npm install) and type-check (npx tsc --noEmit).
-6. Fix any errors using patch_file or write_file, then re-run checks.
-7. When all checks pass, call mark_complete with a clear summary.
-8. If you cannot proceed after exhausting all fixes, call mark_failed with the reason.
+${workflowBlock}
 
 ## Rules
 1. Always call read_file before modifying — never assume a file's current contents.
 2. Generate production-ready code — no placeholders, no TODOs, no stubs.
-3. Every import from a package must exist in package.json.
+${rule3}
 4. Match the coding style and patterns from the story and existing code.
 5. Use log_step(info/warn/error) to track progress.
 6. Only call mark_failed after genuinely exhausting all remediation options.${scaffoldYamlRule}
 ${storyBlock}
 ${roadmapBlock}
-${toonBlueprint}${skillsBlock}${appBlueprintBlock}
+${toonBlueprint}${skillsBlock}${fileSkillsBlock ? '\n' + fileSkillsBlock + '\n' : ''}${queueContextBlock}${appBlueprintBlock}
 ## Available Tools
 ${[...TOOL_DEFINITIONS, ...getDynamicMcpTools()].map(t => `- **${t.name}**: ${t.description}`).join('\n')}
 
@@ -1874,6 +1918,7 @@ export function buildCLISystemPrompt(
     targetDir: string,
     appBlueprint?: AppIntegrationBlueprint,
     storyFile?: string,
+    taskProfile?: TaskProfile,
 ): string {
     const isApp = 'appName' in story;
     const storyBlock = isApp ? formatStory(story as AppStory) : formatFeatureStory(story as FeatureStory);
@@ -1959,6 +2004,21 @@ Feature Epic Description: ${matchingFeature.description || 'No description provi
         ? `\n## Project Skills\n${blueprint.projectSkills.map(s => `- ${s.name}: ${s.description}`).join('\n')}\n`
         : '';
 
+    // Resolve file-based skills from .factory/skills/*.md and inject top matches
+    seedDefaultSkills();
+    const scoredSkillsCLI = 'appName' in story
+        ? resolveSkillsForBuild(story as AppStory, blueprint)
+        : [];
+    const fileSkillsBlockCLI = formatSkillsForPrompt(scoredSkillsCLI.slice(0, 5));
+
+    // Inject prior queue build context (graceful no-op for single factory build calls)
+    const priorBuildsCLI = loadQueueBlueprint(blueprint.repoPath);
+    const queueContextBlockCLI = priorBuildsCLI.length > 0
+        ? `\n## Prior Builds in This Queue Run\n${priorBuildsCLI
+            .map(b => `- ${b.kind}: \`${b.targetApp}\` (${b.generatedFiles.length} files)`)
+            .join('\n')}\n`
+        : '';
+
     let appBlueprintBlock = '';
     if (appBlueprint) {
         const parts: string[] = [];
@@ -1991,6 +2051,11 @@ Feature Epic Description: ${matchingFeature.description || 'No description provi
         ? '\n5. You MUST create a comprehensive roadmap and status specification file at `.factory/scaffold.yaml` inside the application directory. This file must be added to your implementation plan and files checklist, and successfully written to disk before completion.'
         : '';
 
+    const needsInstall = taskProfile ? taskProfile.needsInstall : true;
+    const rule3 = needsInstall
+        ? '3. Every import from a package must exist in package.json. If you need to install a dependency, do so.'
+        : '3. Every import from a package must exist in package.json. Do NOT install new dependencies (dependency installation is disabled for this task profile).';
+
     return `You are an expert autonomous software engineer agent with complete capabilities to read/write/edit files and run terminal commands using your own built-in tools.
 You are tasked with building a feature or application story in the target directory.
 
@@ -2000,12 +2065,12 @@ ${targetDir}
 ## Rules
 1. Examine the current folder structure, package.json, and tsconfig.json to orient yourself before starting.
 2. Generate production-ready code — no placeholders, no TODOs, no stubs.
-3. Every import from a package must exist in package.json. If you need to install a dependency, do so.
+${rule3}
 4. Match the coding style and patterns from the story and existing files.${scaffoldYamlRule}
 
 ${storyBlock}
 ${roadmapBlock}
-${toonBlueprint}${skillsBlock}${appBlueprintBlock}
+${toonBlueprint}${skillsBlock}${fileSkillsBlockCLI ? '\n' + fileSkillsBlockCLI + '\n' : ''}${queueContextBlockCLI}${appBlueprintBlock}
 `;
 }
 
@@ -2025,6 +2090,7 @@ async function runCLISingleShot(
     targetDir: string,
     storyFile: string,
     appBlueprint?: AppIntegrationBlueprint,
+    taskProfile?: TaskProfile,
 ): Promise<BuildResult> {
     const isApp = isAppStory(story);
     const name = isApp ? (story as AppStory).appName : (story as FeatureStory).feature.name;
@@ -2034,7 +2100,7 @@ async function runCLISingleShot(
     mkd(targetDir, { recursive: true });
 
     // Build a rich, self-contained prompt the CLI can act on directly
-    const systemPrompt = buildCLISystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
+    const systemPrompt = buildCLISystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile, taskProfile);
     const scaffoldYamlReminder = isApp
         ? '\nMake sure that `.factory/scaffold.yaml` is created/updated, added to your implementation plan, and written to disk as required.\n'
         : '';
@@ -2431,6 +2497,7 @@ export async function runToolSession(
     targetDir: string,
     storyFile: string,
     appBlueprint?: AppIntegrationBlueprint,
+    taskProfile?: TaskProfile,
 ): Promise<BuildResult> {
     const { provider, model } = requireActiveProvider();
 
@@ -2439,12 +2506,12 @@ export async function runToolSession(
     // Don't try to parse XML tool calls from them — let them operate directly
     // in the target directory and scan the results.
     if (provider.kind === 'cli') {
-        return runCLISingleShot(provider.id, story, blueprint, targetDir, storyFile, appBlueprint);
+        return runCLISingleShot(provider.id, story, blueprint, targetDir, storyFile, appBlueprint, taskProfile);
     }
     // ─────────────────────────────────────────────────────────────────────────
 
     const isNativeTools = provider && (provider.id === 'gemini' || provider.id === 'openai' || provider.kind === 'openai-compat');
-    const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile);
+    const systemPrompt = buildToolSystemPrompt(story, blueprint, targetDir, appBlueprint, storyFile, taskProfile);
 
     const ctx: BuildToolBlueprint = {
         targetDir,
@@ -2459,6 +2526,7 @@ export async function runToolSession(
                 ? blueprint.knowledgeFiles.map(k => `### ${k.app} (${k.filename})\n${k.content}`).join('\n\n')
                 : undefined,
         },
+        taskProfile,
     };
 
     const messages: Array<{ role: string; content: string; tool_calls?: any[]; tool_call_id?: string }> = [
@@ -2470,7 +2538,9 @@ export async function runToolSession(
         },
     ];
 
-    const MAX_TURNS = 50;
+    // Drive MAX_TURNS from task profile: config=10, scaffold=20, frontend=40, full-app=50
+    // Falls back to 50 if no profile provided (e.g. direct runToolSession calls).
+    const MAX_TURNS = taskProfile ? Math.max(10, taskProfile.maxIterations * 10) : 50;
     const TOKEN_GUARD_AT = 20;
     const KEEP_LAST = 15;
     const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes

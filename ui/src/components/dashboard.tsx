@@ -627,7 +627,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'plan' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} className="flex-1 min-h-0" />}
+            {activeTab === 'plan' && <NotionBoard initialView="list" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} className="flex-1 min-h-0" />}
             {activeTab === 'build' && <BuildPage />}
             {activeTab === 'test' && <TestPlaceholder />}
             {activeTab === 'deploy' && <DeployPlaceholder />}

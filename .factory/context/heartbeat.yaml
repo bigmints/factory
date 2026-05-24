@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-24T10:09:27Z"
+  last_seen: "2026-05-24T10:10:02Z"
   host: "BigMac-2"
-  task: "post-commit: feat(scripts): add stamp-story-order.ts — stamp phase/priority/dependsOn from scaffold.yaml"
+  task: "post-commit: fix(stories/api): read phase+priority+dependsOn from scaffold.yaml; add basename import"
   status: alive

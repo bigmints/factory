@@ -393,10 +393,8 @@ export function seedDefaultSkills(): void {
     const existing = readdirSync(dir).filter((f: string) => f.endsWith('.md'));
     if (existing.length > 0) return;
 
-    // Locate the packaged defaults relative to the engine directory
-    const engineDir = new URL('.', import.meta.url).pathname;
-    const repoRoot = join(engineDir, '..');
-    const defaultsDir = join(repoRoot, 'skills', 'defaults');
+    // Locate the packaged defaults relative to the repo root (FACTORY_ROOT is already the repo root)
+    const defaultsDir = join(FACTORY_ROOT, 'skills', 'defaults');
 
     if (!existsSync(defaultsDir)) {
         log('!', `Default skills directory not found at ${defaultsDir}`);

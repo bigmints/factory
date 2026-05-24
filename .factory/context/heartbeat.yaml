@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-24T10:47:21Z"
+  last_seen: "2026-05-24T10:50:34Z"
   host: "BigMac-2"
-  task: "post-commit: style(ui): relocate action buttons next to status pill to eliminate action bar row"
+  task: "post-commit: style(ui): integrate time elapsed into StatusPill and merge metadata row into sub-header to maximize terminal space"
   status: alive

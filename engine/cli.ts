@@ -20,14 +20,13 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
-import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory, resolveStoryPath } from './story.ts';
+import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from './story.ts';
 import { updateStoryStatusInApp } from './rollup.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherBlueprint, syncBlueprint } from './blueprint.ts';
 import { runPipeline, runFeaturePipeline } from './generate.ts';
-import { runWorkerBuild, runWorkerFeatureBuild } from './worker-engine.ts';
-import { writeFiles, setupProject, gitCommit, gitPush, writeKnowledgeEntry, writeAppAgentsMd, buildDebrief } from './writer.ts';
-import { autoFixStory } from './autofix.ts';
+import { gitCommit, gitPush, buildDebrief } from './writer.ts';
+// autofix.ts removed — the CLI agent self-heals via the orchestrator
 import { log, logHeader, logStep, logError } from './log.ts';
 import { storySlug, storyPort, type ProjectStack } from './types.ts';
 import {
@@ -38,7 +37,7 @@ import {
     loadQueue, saveQueue,
 } from './queue.ts';
 import { closeDb, logBuild } from './db.ts';
-import { performStateAudit, updateHeartbeat, withRetry, categorizeError } from './health.ts';
+import { performStateAudit, updateHeartbeat, categorizeError } from './health.ts';
 
 // Clean process.env to avoid leaking Next.js internal variables from parent Next.js processes
 for (const key of Object.keys(process.env)) {
@@ -125,7 +124,7 @@ async function handleBuild(storyPath?: string): Promise<void> {
     logHeader(`Build: ${story.appName}`);
 
     // Step 1: Validate
-    logStep(1, 7, 'Validating story...');
+    logStep(1, 4, 'Validating story...');
     const validation = validateStory(story);
     if (!validation.passed) {
         logError('Story validation failed:');
@@ -136,49 +135,32 @@ async function handleBuild(storyPath?: string): Promise<void> {
     }
     log('✓', 'Story is valid');
 
-    // Step 2: Gather blueprint
-    logStep(2, 7, 'Gathering blueprint...');
+    // Step 2: Gather blueprint (TOON state, knowledgebase, conventions)
+    logStep(2, 4, 'Gathering blueprint...');
     const bridge = loadBridgeConfig(project.path);
     const blueprint = gatherBlueprint(project.path, bridge);
-
-    // Steps 3-5: Plan → Build → Test → Iterate (or minions engine)
-    const engineFlag = parseFlags(args.slice(2)).engine as string | undefined;
-    const effectiveEngine = engineFlag || story.engine || 'factory';
-    const useWorker = effectiveEngine === 'worker';
 
     const slug = storySlug(story);
     const targetDir = bridge.apps_dir
         ? resolve(project.path, bridge.apps_dir, slug)
         : resolve(project.path, slug);
 
-    let result;
-    if (useWorker) {
-        logStep(3, 7, 'Generating with worker engine...');
-        result = await runWorkerBuild(story, blueprint, targetDir);
-    } else {
-        result = await runPipeline(story, blueprint, targetDir, storyPath!);
-    }
+    // Step 3: Run orchestrator — LLM delegates to the configured CLI
+    // The CLI agent writes files directly; no post-pipeline writeFiles() needed.
+    logStep(3, 4, 'Orchestrating build...');
+    const result = await runPipeline(story, blueprint, targetDir, storyPath!);
 
-    // Step 6: Write files
-    logStep(6, 7, 'Writing files to repo...');
-    writeFiles(targetDir, result.files);
-    setupProject(targetDir, story.stack.packageManager);
-
-    // Knowledge feedback + AGENTS.md
-    writeKnowledgeEntry(project.path, story.appName, result, story.stack, storyPath!);
-    writeAppAgentsMd(targetDir, story.appName, story.stack, result.files);
-
-    // Step 7: Git commit + push
-    logStep(7, 7, 'Committing and pushing...');
-    gitCommit(project.path, `factory: generate ${story.appName}`);
+    // Step 4: Git commit + push
+    logStep(4, 4, 'Committing and pushing...');
+    gitCommit(project.path, `factory: ${story.appName}`);
     gitPush(project.path);
 
-    // Step 8: Write build metadata back into story + archive
+    // Write build metadata back into story + archive
     updateStoryBuildMeta(storyPath!, {
         outputDir: targetDir,
         filesGenerated: result.files.length,
         iterations: result.iterations,
-        taskType: result.plan.decisions[0] || 'unknown',
+        taskType: result.plan.decisions.find(d => d.startsWith('cli:')) || 'orchestrator',
     }, project.path);
     if (result.success) {
         archiveStory(storyPath!);
@@ -190,10 +172,10 @@ async function handleBuild(storyPath?: string): Promise<void> {
     log('✓', `Build ${result.success ? 'COMPLETE' : 'DONE (with warnings)'}`);
     log('→', `App: ${story.appName} (${slug})`);
     log('→', `Files: ${result.files.length}`);
-    log('→', `Iterations: ${result.iterations}`);
     log('→', `Output: ${targetDir}`);
     if (result.errors && result.errors.length > 0) {
         log('!', `${result.errors.length} warning(s) remaining`);
+        for (const e of result.errors.slice(0, 3)) log('  ', `  • ${e.slice(0, 120)}`);
     }
     console.log('');
 
@@ -571,30 +553,12 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             const bridge = loadBridgeConfig(project.path);
             const blueprint = gatherBlueprint(project.path, bridge);
 
-            // Check for --engine flag
-            const featureFlags = parseFlags(args.slice(3));
-            const effectiveFeatureEngine = featureFlags.engine || story.engine || 'factory';
-            const useWorkerFeature = effectiveFeatureEngine === 'worker';
-
             const targetDir = bridge.apps_dir
                 ? resolve(project.path, bridge.apps_dir, story.target.app)
                 : resolve(project.path, story.target.app);
 
-            let result;
-            if (useWorkerFeature) {
-                log('→', 'Using worker engine for feature...');
-                result = await runWorkerFeatureBuild(story, blueprint, targetDir);
-            } else {
-                result = await runFeaturePipeline(story, blueprint, targetDir, storyPath);
-                writeFiles(targetDir, result.files);
-                setupProject(targetDir, bridge.stack?.packageManager);
-            }
-
-            const featureStack = bridge.stack || { framework: 'unknown', packageManager: 'npm' };
-            const featureKbName = `${story.target.app}--${story.feature.slug}`;
-
-            writeKnowledgeEntry(project.path, featureKbName, result, featureStack, storyPath);
-            writeAppAgentsMd(targetDir, story.feature.name, featureStack, result.files);
+            // Orchestrator delegates to the configured CLI — no writeFiles() needed after.
+            const result = await runFeaturePipeline(story, blueprint, targetDir, storyPath);
 
             // Archive completed story + update status
             updateStoryStatus(storyPath, 'done');
@@ -602,7 +566,7 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             archiveStory(storyPath);
 
             // Git commit + push
-            gitCommit(project.path, `factory: add feature ${story.feature.name} to ${story.target.app}`);
+            gitCommit(project.path, `factory: feature ${story.feature.name} → ${story.target.app}`);
             gitPush(project.path);
 
             log('✓', `Feature built: ${result.files.length} files`);
@@ -811,83 +775,16 @@ async function handleQueueStart(): Promise<void> {
 
             try {
                 if (current.kind === 'FeatureStory') {
-                    // Feature build — validate YAML first, auto-fix if broken
-                    let story;
-                    try {
-                        story = loadFeatureStory(current.storyFile);
-                    } catch (parseErr) {
-                        const errMsg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-                        log('⚠', `YAML parse error in ${current.storyFile}: ${errMsg}`);
-
-                        // Try LLM auto-fix
-                        const storyAbsPath = resolveStoryPath(current.storyFile);
-                        const fixResult = await withRetry(
-                            () => autoFixStory(storyAbsPath, errMsg),
-                            { maxAttempts: 3, delayMs: 2000, name: 'Auto-fix' }
-                        );
-
-                        if (fixResult.fixed) {
-                            // Retry loading the fixed story
-                            try {
-                                story = loadFeatureStory(current.storyFile);
-                                log('✓', `Story auto-fixed and reloaded: ${current.storyFile}`);
-                            } catch (retryErr) {
-                                const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-                                const durationMs = Date.now() - startTime;
-                                markFailed(current.id, `YAML still broken after auto-fix: ${retryMsg}`, '', durationMs);
-                                logBuild(current.storyFile, 'FeatureStory', 'failed', `# Build Debrief\n\n> YAML Parse Error (auto-fix failed)\n\n## Error\n\n${retryMsg}`, [], durationMs, {
-                                    errorSource: 'engine',
-                                    tokensIn: fixResult.tokensIn,
-                                    tokensOut: fixResult.tokensOut,
-                                    engine: current.engine,
-                                    errorCategory: categorizeError(retryMsg),
-                                    });
-                                updateStoryStatus(current.storyFile, 'review');
-                                await updateStoryStatusInApp(current.storyFile, 'review');
-                                failed++;
-                                item = dequeue();
-                                continue;
-                            }
-                        } else {
-                            const durationMs = Date.now() - startTime;
-                            markFailed(current.id, `YAML parse error (auto-fix exhausted): ${errMsg}`, '', durationMs);
-                            logBuild(current.storyFile, 'FeatureStory', 'failed', `# Build Debrief\n\n> YAML Parse Error\n\nAuto-fix was attempted but failed.\n\n## Original Error\n\n${errMsg}`, [], durationMs, {
-                                errorSource: 'engine',
-                                tokensIn: fixResult.tokensIn,
-                                tokensOut: fixResult.tokensOut,
-                                engine: current.engine,
-                                errorCategory: categorizeError(parseErr),
-                                });
-                            updateStoryStatus(current.storyFile, 'review');
-                            await updateStoryStatusInApp(current.storyFile, 'review');
-                            failed++;
-                            item = dequeue();
-                            continue;
-                        }
-                    }
+                    // Feature build
+                    const story = loadFeatureStory(current.storyFile);
                     const targetDir = bridge.apps_dir
                         ? resolve(project.path, bridge.apps_dir, story.target.app)
                         : resolve(project.path, story.target.app);
-                    const result = await withRetry(
-                        () => (current.engine === 'worker')
-                            ? runWorkerFeatureBuild(story, blueprint, targetDir)
-                            : runFeaturePipeline(story, blueprint, targetDir, current.storyFile),
-                        { maxAttempts: 3, delayMs: 5000, name: 'Feature Pipeline' }
-                    );
-
-                    if (current.engine !== 'worker') {
-                        writeFiles(targetDir, result.files);
-                        setupProject(targetDir, bridge.stack?.packageManager);
-                    }
-
-                    // Knowledge feedback + AGENTS.md
-                    const featureStack = bridge.stack || { framework: 'unknown', packageManager: 'npm' };
-                    const featureKbName = `${story.target.app}--${story.feature.slug}`;
-                    writeKnowledgeEntry(project.path, featureKbName, result, featureStack, current.storyFile);
-                    writeAppAgentsMd(targetDir, story.feature.name, featureStack, result.files);
+                    
+                    const result = await runFeaturePipeline(story, blueprint, targetDir, current.storyFile);
 
                     const durationMs = Date.now() - startTime;
-                    const featureSummary = buildDebrief(story.feature.name, result, featureStack, current.storyFile, durationMs);
+                    const featureSummary = buildDebrief(story.feature.name, result, bridge.stack || { framework: 'unknown', packageManager: 'npm' }, current.storyFile, durationMs);
 
                     if (result.success) {
                         markCompleted(current.id, `${result.files.length} files generated`, durationMs);
@@ -928,67 +825,14 @@ async function handleQueueStart(): Promise<void> {
                     const validation = validateStory(story);
 
                     if (!validation.passed) {
-                        // Try LLM auto-fix on the story
-                        log('⚠', `AppStory validation failed: ${validation.errors.join(', ')}`);
-                        const storyAbsPath = resolveStoryPath(current.storyFile);
-                        const fixResult = await withRetry(
-                            () => autoFixStory(storyAbsPath, `Validation errors: ${validation.errors.join('; ')}`),
-                            { maxAttempts: 3, delayMs: 2000, name: 'Auto-fix' }
-                        );
-
-                        if (fixResult.fixed) {
-                            // Retry validation with fixed story
-                            try {
-                                const fixedStory = loadStory(current.storyFile);
-                                const reValidation = validateStory(fixedStory);
-                                if (reValidation.passed) {
-                                    log('✓', `AppStory auto-fixed and re-validated: ${current.storyFile}`);
-                                    // Replace story variable and continue with the pipeline
-                                    Object.assign(story, fixedStory);
-                                } else {
-                                    const durationMs = Date.now() - startTime;
-                                    markFailed(current.id, `Validation still fails after auto-fix: ${reValidation.errors.join(', ')}`, '', durationMs);
-                                    logBuild(current.storyFile, 'AppStory', 'failed', `# Build Debrief\n\n> Validation failed (auto-fix didn't resolve)\n\n## Issues\n\n${reValidation.errors.map(e => `- ${e}`).join('\n')}`, [], durationMs, {
-                                        errorSource: 'engine',
-                                        tokensIn: fixResult.tokensIn,
-                                        tokensOut: fixResult.tokensOut,
-                                        engine: current.engine,
-                                        errorCategory: categorizeError(reValidation.errors),
-                                        });
-                                    updateStoryStatus(current.storyFile, 'review');
-                                    await updateStoryStatusInApp(current.storyFile, 'review');
-                                    failed++;
-                                    item = dequeue();
-                                    continue;
-                                }
-                            } catch {
-                                const durationMs = Date.now() - startTime;
-                                markFailed(current.id, `Auto-fix broke the story further`, '', durationMs);
-                                logBuild(current.storyFile, 'AppStory', 'failed', `# Build Debrief\n\n> Auto-fix produced invalid YAML`, [], durationMs, {
-                                    errorSource: 'engine',
-                                });
-                                updateStoryStatus(current.storyFile, 'review');
-                                await updateStoryStatusInApp(current.storyFile, 'review');
-                                failed++;
-                                item = dequeue();
-                                continue;
-                            }
-                        } else {
-                            const durationMs = Date.now() - startTime;
-                            markFailed(current.id, `Validation failed (auto-fix exhausted): ${validation.errors.join(', ')}`, '', durationMs);
-                            logBuild(current.storyFile, 'AppStory', 'failed', `# Build Debrief\n\n> Validation failed\n\nAuto-fix was attempted but failed.\n\n## Issues\n\n${validation.errors.map(e => `- ${e}`).join('\n')}`, [], durationMs, {
-                                errorSource: 'engine',
-                                tokensIn: fixResult.tokensIn,
-                                tokensOut: fixResult.tokensOut,
-                                engine: current.engine,
-                                errorCategory: categorizeError(validation.errors),
-                                });
-                            updateStoryStatus(current.storyFile, 'review');
-                            await updateStoryStatusInApp(current.storyFile, 'review');
-                            failed++;
-                            item = dequeue();
-                            continue;
-                        }
+                        const durationMs = Date.now() - startTime;
+                        const errMsg = `Validation failed: ${validation.errors.join(', ')}`;
+                        markFailed(current.id, errMsg, '', durationMs);
+                        updateStoryStatus(current.storyFile, 'review');
+                        await updateStoryStatusInApp(current.storyFile, 'review');
+                        failed++;
+                        item = dequeue();
+                        continue;
                     }
 
                     // Mark as validating
@@ -1000,21 +844,8 @@ async function handleQueueStart(): Promise<void> {
                         ? resolve(project.path, bridge.apps_dir, slug)
                         : resolve(project.path, slug);
 
-                    const result = await withRetry(
-                        () => (current.engine === 'worker')
-                            ? runWorkerBuild(story, blueprint)
-                            : runPipeline(story, blueprint, targetDir, current.storyFile),
-                        { maxAttempts: 3, delayMs: 5000, name: 'App Pipeline' }
-                    );
-
-                    if (current.engine !== 'worker') {
-                        writeFiles(targetDir, result.files);
-                        setupProject(targetDir, story.stack.packageManager);
-                    }
-
-                    // Knowledge feedback + AGENTS.md
-                    writeKnowledgeEntry(project.path, story.appName, result, story.stack, current.storyFile);
-                    writeAppAgentsMd(targetDir, story.appName, story.stack, result.files);
+                    // Orchestrator writes files directly — no writeFiles() needed
+                    const result = await runPipeline(story, blueprint, targetDir, current.storyFile);
 
                     const durationMs = Date.now() - startTime;
                     const fileNames = result.files.map(f => f.filename);
@@ -1831,7 +1662,7 @@ async function handleWatch(watchDir?: string): Promise<void> {
     }
 
     const { watch } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
+    const { join } = await import('node:path');
     const { resolve } = await import('node:path');
 
     const resolvedDir = resolve(watchDir);

@@ -515,6 +515,10 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string | null>(null);
   const [buildLogsOpen, setBuildLogsOpen] = useState(false);
 
+  // Bootstrap / scaffold gate
+  const [bootstrapped, setBootstrapped] = useState<boolean>(true); // default true = don’t block
+  const [scaffoldStoryFile, setScaffoldStoryFile] = useState<string | null>(null);
+
   // Dev Server Controls
   const [runStatus, setRunStatus] = useState<'stopped' | 'starting' | 'running'>('stopped');
   const [runPid, setRunPid] = useState<number | null>(null);
@@ -676,6 +680,20 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
     }
   }, []);
 
+  // Fetch bootstrap status (does scaffold need to be built first?)
+  const fetchBootstrapStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/bootstrap-status');
+      if (res.ok) {
+        const data = await res.json();
+        setBootstrapped(data.bootstrapped ?? true);
+        setScaffoldStoryFile(data.scaffoldStory ?? null);
+      }
+    } catch {
+      // Non-fatal — default remains true (don’t block)
+    }
+  }, []);
+
   // Detect project changes and reset stale data immediately.
   // projectRefreshKey bumps when the user switches project from the sidebar.
   useEffect(() => {
@@ -693,7 +711,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
   // Combined Polling Orchestrator — restarts whenever the project changes.
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchRollup(true), fetchStories(), fetchQueue(), fetchRunStatus()]).finally(() => setLoading(false));
+    Promise.all([fetchRollup(true), fetchStories(), fetchQueue(), fetchRunStatus(), fetchBootstrapStatus()]).finally(() => setLoading(false));
 
     const dataInterval = setInterval(() => {
       fetchRollup(true);
@@ -711,7 +729,7 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
     };
     // Re-run when projectRefreshKey changes so the board reflects the new project immediately.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchRollup, fetchStories, fetchQueue, fetchRunStatus, projectRefreshKey]);
+  }, [fetchRollup, fetchStories, fetchQueue, fetchRunStatus, fetchBootstrapStatus, projectRefreshKey]);
 
   // Dedicated Queue Log Polling
   useEffect(() => {
@@ -908,6 +926,22 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
 
   const handleSingleBuild = async (file: string, kind: string) => {
     const baseName = getBasename(file);
+
+    // Bootstrap gate: block FeatureStory builds until scaffold is built
+    if (kind === 'FeatureStory' && !bootstrapped) {
+      toast.error('⚠️ Scaffold not built yet', {
+        description: 'Build the "⚙️ Scaffold & Foundation" epic first. Feature stories cannot compile without a base app scaffold.',
+        duration: 6000,
+        action: scaffoldStoryFile
+          ? {
+              label: 'Build Scaffold',
+              onClick: () => handleSingleBuild(scaffoldStoryFile, 'AppStory'),
+            }
+          : undefined,
+      });
+      return;
+    }
+
     toast.info(`Preparing build for ${baseName}...`);
     try {
       const enqueued = await handleEnqueue(file, kind);
@@ -916,6 +950,8 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
       if (res.ok) {
         toast.success('Build pipeline running...');
         fetchQueue();
+        // Refresh bootstrap status after a build starts (AppStory might complete)
+        fetchBootstrapStatus();
         if (onNavigateToBuild) {
           onNavigateToBuild();
         } else {
@@ -1859,6 +1895,8 @@ export function NotionBoard({ initialView = 'board', onNavigateToBuild, projectR
           handleDragStart={handleDragStart}
           showEpicLegend={showEpicLegend}
           appRollup={appRollup}
+          bootstrapped={bootstrapped}
+          scaffoldStoryFile={scaffoldStoryFile}
         />
       )}
 
@@ -2618,6 +2656,9 @@ interface KanbanColumnProps {
   onDrop: (e: React.DragEvent) => void;
   onDragStart: (e: React.DragEvent, file: string) => void;
   allStories?: any[];
+  /** When false, show a scaffold-first banner in the Ready to Build column */
+  bootstrapped?: boolean;
+  scaffoldStoryFile?: string | null;
 }
 
 // ─── MobileKanbanBoard ── unified board with reactive dots & proper height ──
@@ -2627,13 +2668,14 @@ function MobileKanbanBoard({
   mergedStories, epicColorMap,
   handleOpenDrawer, handleValidateStory, handleSingleBuild, activeAction,
   handleDragOver, handleDrop, handleDragStart,
-  showEpicLegend, appRollup,
+  showEpicLegend, appRollup, bootstrapped, scaffoldStoryFile,
 }: {
   backlogStories: any[]; readyStories: any[]; buildingStories: any[]; doneStories: any[];
   mergedStories: any[]; epicColorMap: Map<string, any>;
   handleOpenDrawer: any; handleValidateStory: any; handleSingleBuild: any; activeAction: any;
   handleDragOver: any; handleDrop: any; handleDragStart: any;
   showEpicLegend: boolean; appRollup: any;
+  bootstrapped: boolean; scaffoldStoryFile: string | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeCol, setActiveCol] = useState(0);
@@ -2703,6 +2745,8 @@ function MobileKanbanBoard({
             onDrop={(e) => handleDrop(e, col.status)}
             onDragStart={handleDragStart}
             allStories={mergedStories}
+            bootstrapped={bootstrapped}
+            scaffoldStoryFile={scaffoldStoryFile}
           />
         ))}
       </div>
@@ -2761,6 +2805,8 @@ function MobileKanbanBoard({
                 onDrop={(e) => handleDrop(e, col.status)}
                 onDragStart={handleDragStart}
                 allStories={mergedStories}
+                bootstrapped={bootstrapped}
+                scaffoldStoryFile={scaffoldStoryFile}
               />
             </div>
           ))}
@@ -2785,7 +2831,9 @@ function KanbanColumn({
   onDragOver,
   onDrop,
   onDragStart,
-  allStories
+  allStories,
+  bootstrapped = true,
+  scaffoldStoryFile,
 }: KanbanColumnProps) {
   // Group stories into clusters of related items using their prerequisite, dependent, and peer links
   const clusters = useMemo(() => {
@@ -2865,6 +2913,27 @@ function KanbanColumn({
         </div>
         <p className="text-[10px] text-muted-foreground/60 leading-normal line-clamp-1">{description}</p>
       </div>
+
+      {/* Scaffold banner — shown only in Ready to Build when project is not bootstrapped */}
+      {title === 'Ready to Build' && !bootstrapped && (
+        <div className="shrink-0 flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border-b border-amber-500/25 select-none">
+          <span className="text-amber-400 text-base leading-none mt-0.5">⚙️</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-amber-300 leading-tight">Scaffold required first</p>
+            <p className="text-[10px] text-amber-400/70 leading-snug mt-0.5">
+              Build the <strong className="text-amber-300">Scaffold &amp; Foundation</strong> epic before feature stories can compile.
+            </p>
+            {scaffoldStoryFile && (
+              <button
+                className="mt-1.5 text-[10px] font-semibold text-amber-300 border border-amber-500/40 rounded px-2 py-0.5 hover:bg-amber-500/10 transition-colors"
+                onClick={() => onBuild(scaffoldStoryFile, 'AppStory')}
+              >
+                Build Scaffold →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Story list */}
       <div className="flex-1 overflow-y-auto divide-y divide-border/20 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">

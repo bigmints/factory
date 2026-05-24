@@ -3,7 +3,7 @@
  * Single source for all config operations.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
@@ -164,6 +164,46 @@ export function loadBridgeConfig(repoPath: string): BridgeConfig {
         throw new Error(`No .factory/factory.yaml in ${repoPath}`);
     }
     return parseYaml(readFileSync(yamlPath, 'utf-8')) as BridgeConfig;
+}
+
+/**
+ * Check whether a project's scaffold has been built.
+ * Returns true when:
+ *   - project.bootstrapped is explicitly true in factory.yaml, OR
+ *   - project.bootstrapped is absent/undefined (treat legacy configs as bootstrapped)
+ * Returns false only when project.bootstrapped is explicitly false.
+ */
+export function isBootstrapped(repoPath: string): boolean {
+    try {
+        const bridge = loadBridgeConfig(repoPath);
+        // Explicitly false → new project that still needs scaffolding
+        if (bridge.project?.bootstrapped === false) return false;
+        // Absent or true → treat as bootstrapped (existing projects, legacy configs)
+        return true;
+    } catch {
+        return true; // If we can’t read the config, don’t block builds
+    }
+}
+
+/**
+ * Mark a project as bootstrapped by writing project.bootstrapped: true
+ * into its .factory/factory.yaml. Called by the engine after a scaffold
+ * AppStory build succeeds.
+ */
+export function setBootstrapped(repoPath: string, value: boolean): void {
+    const yamlPath = join(repoPath, '.factory', 'factory.yaml');
+    if (!existsSync(yamlPath)) return;
+
+    const raw = readFileSync(yamlPath, 'utf-8');
+    const config = parseYaml(raw) as any;
+
+    if (!config.project) config.project = {};
+    config.project.bootstrapped = value;
+
+    const tempPath = yamlPath + '.tmp';
+    writeFileSync(tempPath, toYaml(config, { lineWidth: 120 }));
+    renameSync(tempPath, yamlPath);
+    log(value ? '✓' : '→', `project.bootstrapped → ${value} written to factory.yaml`);
 }
 
 /** Check if a repo has a .factory bridge */

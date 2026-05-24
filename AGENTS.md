@@ -187,6 +187,33 @@ The planning spec at `.factory/scaffold.yaml`. Contains features with inline sto
 
 Valid story `status` values: `draft` | `in-progress` | `done` (never `todo`, `pending`, `unknown`).
 
+### Scaffold Epic (Bootstrap Pattern)
+
+Every new project MUST have a `⚙️ Scaffold & Foundation` epic as the **first** feature in scaffold.yaml. It contains a single AppStory (`stories/apps/<app-name>.yaml`) that bootstraps the project structure.
+
+```yaml
+features:
+  - name: "⚙️ Scaffold & Foundation"
+    scaffold: true    # marks this as the bootstrap epic
+    priority: 0       # always first
+    stories:
+      - name: "Scaffold <app-name> project"
+        file: .factory/stories/apps/<app-name>.yaml
+  # ... feature epics follow
+```
+
+**Bootstrap guard in `factory.yaml`:**
+```yaml
+project:
+  bootstrapped: false  # false = feature builds blocked until scaffold completes
+                       # true  = existing project, no gate
+```
+
+- `bootstrapped: false` → new project; the engine blocks feature stories until the AppStory builds
+- `bootstrapped: true` → existing project; features build immediately with no gate
+- The engine writes `bootstrapped: true` automatically after a successful AppStory build
+- Set manually to `true` when connecting a pre-built existing project
+
 ### Queue
 
 SQLite-backed (`factory.db`) build queue. Items: `pending → running → completed | failed`. Supports priority, retry, batch processing, and autonomous `queue start`.

@@ -10,7 +10,7 @@ import { join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { slugify } from './types.ts';
-import { getActiveProject } from './config.ts';
+import { getActiveProject, isBootstrapped } from './config.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -259,19 +259,20 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
                 return { ready: false, reason: `App story "${latestApp.storyFile}" has not completed yet.` };
             }
         } else {
-            // No app story in queue. Check if parent app story is physically built (in done/ directory)
+            // No app story in queue — check project.bootstrapped in factory.yaml.
+            // false  → new project, scaffold hasn’t built yet → block.
+            // true   → existing / already-bootstrapped project → allow.
+            // absent → legacy config, treat as bootstrapped.
             try {
                 const project = getActiveProject();
-                if (project && project.path) {
-                    const doneAppPath1 = join(project.path, '.factory', 'stories', 'done', `${item.targetApp}.yaml`);
-                    const doneAppPath2 = join(project.path, '.factory', 'stories', 'done', `${item.targetApp}.yml`);
-                    const appExists = existsSync(doneAppPath1) || existsSync(doneAppPath2);
-                    if (!appExists) {
-                        return { ready: false, reason: `App scaffold "${item.targetApp}" is missing. The base app scaffold must be built before feature stories can compile.` };
-                    }
+                if (project && project.path && !isBootstrapped(project.path)) {
+                    return {
+                        ready: false,
+                        reason: `Project is not bootstrapped. Build the "⚙️ Scaffold & Foundation" epic first to unlock feature stories.`,
+                    };
                 }
             } catch {
-                // fall through
+                // fall through — if we can’t read config, don’t block
             }
         }
     }
@@ -636,7 +637,7 @@ async function runBuild(item: QueueItem): Promise<boolean> {
         const { runPipeline, runFeaturePipeline } = await import('./generate.ts');
         const { loadStory, loadFeatureStory } = await import('./story.ts');
         const { gatherBlueprint } = await import('./blueprint.ts');
-        const { loadBridgeConfig, getActiveProject } = await import('./config.ts');
+        const { loadBridgeConfig, getActiveProject, setBootstrapped } = await import('./config.ts');
         const { writeFiles, setupProject, writeKnowledgeEntry, writeAppAgentsMd } = await import('./writer.ts');
         const { resolve } = await import('node:path');
         const { storySlug } = await import('./types.ts');
@@ -673,6 +674,17 @@ async function runBuild(item: QueueItem): Promise<boolean> {
         const appName = 'appName' in story ? story.appName : story.feature.name;
         writeKnowledgeEntry(projectPath, appName, result, (story as any).stack || {}, item.storyFile);
         writeAppAgentsMd(targetDir, appName, (story as any).stack || {}, result.files);
+
+        // If an AppStory built successfully, mark the project as bootstrapped
+        // so feature stories are no longer gated behind the scaffold check.
+        if (item.kind === 'AppStory' && result.success) {
+            try {
+                setBootstrapped(projectPath, true);
+                log('✓', 'Project marked as bootstrapped — feature stories are now unlocked');
+            } catch {
+                // Non-fatal: don’t fail the build over a flag write error
+            }
+        }
 
         return result.success;
     } catch (error) {

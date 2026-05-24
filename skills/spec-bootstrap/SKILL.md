@@ -12,7 +12,7 @@ You are helping the user create specs for their project so the Factory build eng
 
 Factory reads **one file**: `.factory/scaffold.yaml`. Everything — features, stories, progress — lives there or is referenced from it. Your job is to produce that file plus the individual story YAML files it references.
 
-**No epics. No dependency maps. No phase ordering. No dependsOn. Just features → stories.**
+> **Bootstrap rule**: Every new project MUST have a `⚙️ Scaffold & Foundation` epic as the **first** feature (priority 0, scaffold: true). It contains one AppStory at `.factory/stories/apps/<app-name>.yaml`. Feature stories cannot build until this AppStory completes and `project.bootstrapped: true` is written to `factory.yaml`.
 
 ---
 
@@ -73,6 +73,21 @@ stack:
   cloud: <cloud>                # vercel | gcp | aws | none
 
 features:
+  # ─── REQUIRED: Scaffold Epic ─── always first, always priority 0 ──────────
+  - name: "⚙️ Scaffold & Foundation"
+    scaffold: true          # marks this as the bootstrap epic
+    priority: 0             # always first — the engine enforces this
+    status: pending
+    progressPercent: 0
+    description: "Creates the project structure, installs core dependencies, sets up the design system. Must complete before any feature story can queue."
+    stories:
+      - name: "Scaffold <app-name> <framework> project"
+        file: .factory/stories/apps/<app-name>.yaml
+        status: draft
+        progressPercent: 0
+        tasks: []
+
+  # ─── Feature Epics ─── unlocked after scaffold completes ────────────────
   - name: "<Feature Name>"
     status: draft
     progressPercent: 0
@@ -96,9 +111,9 @@ features:
 
 **Rules:**
 - `name` at the top level is the app slug — lowercase, hyphens, no spaces
-- `features` is a flat list — no nesting, no IDs, no phase numbers, no milestones
-- Each feature has a `stories` array — **inline**, not a file reference
-- Each story has a `file` pointing to `.factory/stories/features/<story-slug>.yaml`
+- `features` MUST start with the `⚙️ Scaffold & Foundation` epic — **do not skip this**
+- The scaffold epic story file goes in `.factory/stories/apps/` — NOT in `features/`
+- Feature stories go in `.factory/stories/features/`
 - `status` is always `draft` to start — never `todo`, `pending`, or `unknown`
 - No `dependsOn`, no `phase`, no `milestone`, no `id` fields on features or stories
 - `tasks: []` is required on every story even if empty
@@ -155,10 +170,29 @@ acceptance_criteria:
 
 ```yaml
 version: 1
-name: "<app-name>"
-description: "<short description>"
-factory_home: /path/to/factory  # path to Factory install — ask user if unsure
+
+project:
+  name: "<app-name>"
+  bootstrapped: false   # false = new project; scaffold epic must build first.
+                        # The engine sets this to true automatically after the
+                        # '⚙️ Scaffold & Foundation' AppStory completes.
+                        # Set to true manually for EXISTING projects being connected.
+  description: "<short description>"
+
+stack:
+  framework: <framework>
+  language: typescript
+  packageManager: <pm>
+
+conventions:
+  - "<key coding convention>"
+
+agentic:
+  logs_dir: .factory/logs
+  knowledge_dir: .factory/knowledge
 ```
+
+> **Existing projects**: If connecting a project that is already built, set `bootstrapped: true` in factory.yaml so the engine never blocks feature builds.
 
 ---
 
@@ -170,17 +204,25 @@ After writing all files, tell the user:
 ✅ Done. Here's what was created:
 
 .factory/scaffold.yaml
+  └── Epic: ⚙️ Scaffold & Foundation (1 AppStory) ← BUILD THIS FIRST
   └── Feature: Chat UI (3 stories)
   └── Feature: Auth (2 stories)
   └── Feature: Settings (2 stories)
+
+.factory/stories/apps/
+  └── <app-name>.yaml   ← AppStory scaffold spec
 
 .factory/stories/features/
   ├── build-message-bubbles.yaml
   ├── implement-websocket-streaming.yaml
   ├── ...
 
-Next: open the Factory dashboard → Plan tab → click "Sync Roadmap"
-Stories will appear on the board grouped by feature.
+factory.yaml: project.bootstrapped = false
+
+Next steps:
+1. Open Factory dashboard → Plan tab
+2. Build the "⚙️ Scaffold & Foundation" epic first
+3. Once complete, all feature stories unlock automatically
 ```
 
 ---

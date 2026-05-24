@@ -165,6 +165,15 @@ export interface BridgeConfig {
     skills?: SkillsConfig;
     templates?: { starter?: string };
     apps_dir?: string;
+    /**
+     * Project bootstrap state.
+     * bootstrapped: false → new project; scaffold AppStory must build before features are unlocked.
+     * bootstrapped: true  → existing project; features build immediately without scaffold gate.
+     * The engine sets this to true automatically after the scaffold AppStory succeeds.
+     */
+    project?: {
+        bootstrapped?: boolean;
+    };
     /** Agentic configuration — paths to logs, tasks, skills, workflows, knowledge */
     agentic?: {
         logs_dir?: string;

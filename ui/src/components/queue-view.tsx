@@ -340,20 +340,22 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
           const allStories = [...(data.stories || []), ...(data.featureStories || [])];
           for (const s of allStories) {
             const slug = getSlugLocal(s.file || '');
-            const name = s.metadata?.name || s.feature?.name || s.feature?.title || '';
+            // s.name is the story's own name — prefer it over feature/epic name
+            const name = s.name || s.metadata?.name || '';
             if (slug && name) map.set(slug, name);
           }
         }
       } catch { /* ignore */ }
       try {
-        // 2. App rollup DB — dbName for stories that have it
+        // 2. App rollup DB — story.name from scaffold.yaml is the actual story name
         const res = await fetch('/api/app-rollup');
         if (res.ok) {
           const data = await res.json();
           for (const feature of (data.features || [])) {
             for (const s of (feature.stories || [])) {
               const slug = getSlugLocal(s.file || '');
-              if (slug && s.name && !map.has(slug)) map.set(slug, s.name);
+              // Always overwrite with rollup name — it's sourced directly from scaffold.yaml
+              if (slug && s.name) map.set(slug, s.name);
             }
           }
         }

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T11:33:46Z"
+  last_seen: "2026-05-25T11:41:59Z"
   host: "BigMac-2"
-  task: "post-commit: feat(orchestrate): TPM model — delegate_to_cli streams with stall/loop/question monitors, intervene tool, 4-tool set, no run_check/read_output"
+  task: "post-commit: fix(queue): completed stories no longer re-enqueue after clear — check done/ dir and status:done in YAML, not just queue history"
   status: alive

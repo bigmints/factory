@@ -241,8 +241,14 @@ function resolveAllDependencies(
           ? `done/${f}` 
           : (dirName === 'apps' ? `apps/${f}` : `features/${f}`);
         
-        const isFeature = defaultKind === 'FeatureStory' || (dirName === 'done' && parsed && (parsed.feature || parsed.target || 'phase' in parsed));
-        const storyKind = isFeature ? 'FeatureStory' : 'AppStory';
+        // Detect kind from YAML content — never guess based on folder name alone.
+        // AppStory has appName at the top level.
+        // FeatureStory has feature.slug or target.app.
+        // Stories in done/ are already built — skip them from dependency resolution.
+        if (dirName === 'done') continue; // already built, not a build candidate
+
+        const isAppStory = Boolean(parsed?.appName && !parsed?.feature && !parsed?.target);
+        const storyKind: 'AppStory' | 'FeatureStory' = isAppStory ? 'AppStory' : defaultKind;
         
         const slug = parsed.feature?.slug || parsed.metadata?.slug || f.replace(/\.ya?ml$/, '');
         const displayName = parsed.feature?.name || parsed.metadata?.name || parsed.appName || slug;
@@ -263,7 +269,7 @@ function resolveAllDependencies(
   const storiesRoot = join(projectPath, '.factory', 'stories');
   scanDir(join(storiesRoot, 'apps'), 'AppStory');
   scanDir(join(storiesRoot, 'features'), 'FeatureStory');
-  scanDir(join(storiesRoot, 'done'), 'FeatureStory');
+  // done/ intentionally excluded — those stories are already built
 
   // Helper to check if already in queue or physically completed
   const isAlreadyQueuedOrBuilt = (file: string, slug: string) => {

@@ -1,35 +1,41 @@
 import * as React from "react"
 import { type LucideIcon } from "lucide-react"
-
 import {
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
 export function NavSecondary({
+  label,
   items,
+  activeId,
+  onSelect,
   ...props
 }: {
-  items: {
-    title: string
-    url: string
-    icon: LucideIcon
-  }[]
+  label: string
+  items: { title: string; id: string; icon: LucideIcon }[]
+  activeId: string
+  onSelect: (id: string) => void
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   return (
     <SidebarGroup {...props}>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild size="sm">
-                <a href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </a>
+            <SidebarMenuItem key={item.id}>
+              <SidebarMenuButton
+                size="sm"
+                tooltip={item.title}
+                isActive={activeId === item.id}
+                onClick={() => onSelect(item.id)}
+              >
+                <item.icon />
+                <span>{item.title}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}

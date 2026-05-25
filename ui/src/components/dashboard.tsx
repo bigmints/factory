@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { Sidebar } from '@/components/sidebar';
+import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb';
 import { Separator } from '@/components/ui/separator';
 import { AddProject } from '@/components/add-project';
 import { BuildLog } from '@/components/build-log';
@@ -30,7 +31,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { FileText, Package, CheckCircle2, AlertCircle, Activity, Puzzle, Globe, ListOrdered, X, Terminal, Plug, Plus, Loader2 as Spinner, Sparkles, Rocket, Compass, LayoutDashboard } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X, Terminal } from 'lucide-react';
 
 
 interface Story {
@@ -541,7 +542,7 @@ export default function Dashboard() {
   // ─── Main Layout ─────────────────────────────────────────
   return (
     <SidebarProvider>
-      <Sidebar
+      <AppSidebar
         activeTab={showAddProject ? 'projects' : activeTab}
         onTabChange={(tab) => {
           if (tab === 'projects') {
@@ -555,16 +556,26 @@ export default function Dashboard() {
         projectRefreshKey={projectRefreshKey}
       />
 
-      <SidebarInset className="flex flex-col min-h-0 h-screen overflow-hidden bg-background">
-        {/* Mobile top header utilizing standard SidebarTrigger */}
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 px-4 bg-background/95 backdrop-blur md:hidden sticky top-0 z-50">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <span className="text-sm font-bold truncate">Factory</span>
+      <SidebarInset>
+        {/* Page header — pure shadcn sidebar-08 pattern */}
+        <header className="flex h-16 shrink-0 items-center gap-2">
+          <div className="flex items-center gap-2 px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="capitalize">
+                    {showAddProject ? 'Projects' : activeTab}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
         </header>
 
-        <div className="flex-1 min-h-0 flex relative">
-          <div className="flex-grow min-w-0 h-full overflow-y-auto pt-4 md:pt-0">
+        <div className="flex flex-1 min-h-0 relative">
+          <div className="flex-1 min-w-0 overflow-y-auto">
             {showAddProject ? (
               <div className="p-4 md:p-8 w-full h-full">
                 <AddProject
@@ -583,7 +594,7 @@ export default function Dashboard() {
                 />
               </div>
             ) : (
-              <div className="w-full max-w-[1400px] mx-auto p-2 md:px-6 md:py-4">
+              <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
                 {/* Page header */}
                 {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
                   <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">

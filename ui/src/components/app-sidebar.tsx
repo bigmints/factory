@@ -2,22 +2,23 @@
 
 import * as React from "react"
 import {
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  LifeBuoy,
-  Map,
-  PieChart,
-  Send,
-  Settings2,
-  SquareTerminal,
+  Factory,
+  LayoutDashboard,
+  Plug,
+  Settings,
+  Wand2,
+  FolderOpen,
+  Rocket,
+  FlaskConical,
+  Globe,
+  Brain,
+  BarChart3,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
+import { ProjectSwitcher } from "@/components/project-switcher"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import {
   Sidebar,
   SidebarContent,
@@ -28,157 +29,92 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  navMain: [
-    {
-      title: "Playground",
-      url: "#",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Support",
-      url: "#",
-      icon: LifeBuoy,
-    },
-    {
-      title: "Feedback",
-      url: "#",
-      icon: Send,
-    },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
-    },
-  ],
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  activeTab: string
+  onTabChange: (tab: string) => void
+  onAddProject: () => void
+  projectRefreshKey?: number
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+const navMain = [
+  { title: "Plan",   id: "plan",   icon: LayoutDashboard },
+  { title: "Build",  id: "build",  icon: Rocket },
+  { title: "Test",   id: "test",   icon: FlaskConical },
+  { title: "Deploy", id: "deploy", icon: Globe },
+]
+
+const navAnalytics = [
+  { title: "Reports",   id: "reports",   icon: BarChart3 },
+  { title: "Knowledge", id: "knowledge", icon: Brain },
+]
+
+const navSecondary = [
+  { title: "Skills",       id: "skills",       icon: Wand2 },
+  { title: "Projects",     id: "projects",     icon: FolderOpen },
+  { title: "Integrations", id: "integrations", icon: Plug },
+  { title: "Settings",     id: "settings",     icon: Settings },
+]
+
+export function AppSidebar({
+  activeTab,
+  onTabChange,
+  onAddProject,
+  projectRefreshKey,
+  ...props
+}: AppSidebarProps) {
   return (
     <Sidebar variant="inset" {...props}>
+      {/* Header: logo + project switcher */}
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+              <div className="cursor-default">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Command className="size-4" />
+                  <Factory className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Acme Inc</span>
-                  <span className="truncate text-xs">Enterprise</span>
+                  <span className="truncate font-semibold">Factory</span>
+                  <span className="truncate text-xs">Build Engine</span>
                 </div>
-              </a>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <ProjectSwitcher onAddProject={onAddProject} refreshKey={projectRefreshKey} />
       </SidebarHeader>
+
       <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavMain
+          label="Workflow"
+          items={navMain}
+          activeId={activeTab}
+          onSelect={onTabChange}
+        />
+        <NavMain
+          label="Analytics"
+          items={navAnalytics}
+          activeId={activeTab}
+          onSelect={onTabChange}
+        />
+        <NavSecondary
+          label="Configure"
+          items={navSecondary}
+          activeId={activeTab}
+          onSelect={onTabChange}
+          className="mt-auto"
+        />
       </SidebarContent>
+
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <div className="flex items-center justify-between px-2 py-1">
+              <span className="text-xs text-muted-foreground font-mono">v1.1.0</span>
+              <ThemeToggle />
+            </div>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   )

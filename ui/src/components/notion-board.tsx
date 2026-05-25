@@ -870,6 +870,60 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
     }
   };
 
+  const handleDeleteTask = async (taskFullId: string) => {
+    setUpdatingTaskId(taskFullId);
+    try {
+      const res = await fetch('/api/app-rollup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deleteTask', taskId: taskFullId }),
+      });
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || 'Delete failed');
+      }
+
+      // Fast optimistic UI update
+      if (appRollup) {
+        const updatedFeatures = appRollup.features.map(f => ({
+          ...f,
+          stories: f.stories.map(s => {
+            const hasTask = s.tasks.some(t => t.fullId === taskFullId);
+            if (!hasTask) return s;
+
+            const nextTasks = s.tasks.filter(t => t.fullId !== taskFullId);
+            const comp = nextTasks.filter(t => t.status === 'completed').length;
+            const progress = nextTasks.length > 0 ? Math.round((comp / nextTasks.length) * 100) : 0;
+            return {
+              ...s,
+              progressPercent: progress,
+              tasks: nextTasks
+            };
+          })
+        }));
+        setAppRollup({ ...appRollup, features: updatedFeatures });
+      }
+
+      await fetchRollup(true);
+      toast.success('Task deleted successfully');
+
+      // Refresh drawer if viewing active item
+      if (selectedItem && selectedItem.type === 'story') {
+        setSelectedItem(prev => prev ? {
+          ...prev,
+          data: {
+            ...prev.data,
+            checklistTasks: (prev.data.checklistTasks || []).filter((t: any) => t.fullId !== taskFullId)
+          }
+        } : null);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete task');
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
+
   const handleEnqueue = async (file: string, kind: string, extra?: any) => {
     try {
       const res = await fetch('/api/queue', {
@@ -1533,9 +1587,11 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
     finally { setSavingYaml(false); }
   };
 
-  const handleDeleteStory = async (file: string) => {
+  const handleDeleteStory = async (file: string, name?: string) => {
     try {
-      const res = await fetch(`/api/stories/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      const encodedFile = encodeURIComponent(file || 'none');
+      const nameParam = name ? `?name=${encodeURIComponent(name)}` : '';
+      const res = await fetch(`/api/stories/${encodedFile}${nameParam}`, { method: 'DELETE' });
       if (res.ok) {
         toast.success('Story deleted');
         setDrawerOpen(false);
@@ -2330,7 +2386,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       ) : (
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] text-rose-400 font-semibold font-sans">Delete?</span>
-                          <Button size="sm" onClick={() => handleDeleteStory(selectedItem.data.file)}
+                          <Button size="sm" onClick={() => handleDeleteStory(selectedItem.data.file, selectedItem.data.name)}
                             className="h-7 px-2.5 text-[11px] bg-rose-600 hover:bg-rose-500 text-white font-semibold font-sans">Yes</Button>
                           <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(false)}
                             className="h-7 px-2.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">No</Button>
@@ -2566,18 +2622,28 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       selectedItem.data.checklistTasks.map((task: Task) => {
                         const isDone = task.status === 'completed';
                         return (
-                          <div key={task.fullId} className={cn('flex items-start gap-3 px-3 py-2.5 rounded-lg border transition-all',
+                          <div key={task.fullId} className={cn('flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-all group',
                             isDone ? 'border-zinc-800/40 bg-zinc-900/20' : 'border-zinc-800 bg-zinc-900/50')}>
-                            <button disabled={updatingTaskId !== null}
-                              onClick={() => handleUpdateTaskStatus(task.fullId, isDone ? 'pending' : 'completed')}
-                              className={cn('h-5 w-5 rounded-md border flex items-center justify-center transition-all shrink-0 mt-0.5',
-                                isDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-600 hover:border-zinc-400')}>
-                              {isDone && <Check className="h-3 w-3 stroke-[3]" />}
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              <button disabled={updatingTaskId !== null}
+                                onClick={() => handleUpdateTaskStatus(task.fullId, isDone ? 'pending' : 'completed')}
+                                className={cn('h-5 w-5 rounded-md border flex items-center justify-center transition-all shrink-0 mt-0.5',
+                                  isDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-600 hover:border-zinc-400')}>
+                                {isDone && <Check className="h-3 w-3 stroke-[3]" />}
+                              </button>
+                              <span className={cn('text-[11px] leading-snug font-sans', isDone ? 'text-zinc-500 line-through' : 'text-zinc-200')}>
+                                <span className="font-mono text-[9px] text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded border border-zinc-700/50 mr-2">{task.id}</span>
+                                {task.title}
+                              </span>
+                            </div>
+                            <button
+                              disabled={updatingTaskId !== null}
+                              onClick={() => handleDeleteTask(task.fullId)}
+                              className="opacity-0 group-hover:opacity-100 hover:text-red-500 text-zinc-500 p-1 rounded transition-all shrink-0"
+                              title="Delete task"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
-                            <span className={cn('text-[11px] leading-snug font-sans', isDone ? 'text-zinc-500 line-through' : 'text-zinc-200')}>
-                              <span className="font-mono text-[9px] text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded border border-zinc-700/50 mr-2">{task.id}</span>
-                              {task.title}
-                            </span>
                           </div>
                         );
                       })

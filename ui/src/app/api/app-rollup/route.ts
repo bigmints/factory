@@ -67,6 +67,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Roadmap synchronized successfully.' });
     }
 
+    // Support delete task action
+    if (body.action === 'deleteTask') {
+      const { taskId } = body;
+      if (!taskId) {
+        return NextResponse.json({ error: 'Missing taskId.' }, { status: 400 });
+      }
+      const { deleteTask } = await import('@engine/rollup');
+      await deleteTask(taskId);
+      return NextResponse.json({ success: true, message: `Task "${taskId}" deleted successfully.` });
+    }
+
     const { taskId, status } = body;
     if (!taskId || !status) {
       return NextResponse.json({ error: 'Missing taskId or status.' }, { status: 400 });

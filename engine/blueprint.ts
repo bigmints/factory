@@ -246,10 +246,19 @@ function gatherKnowledgeFiles(repoPath: string, bridge: BridgeConfig): Knowledge
 function gatherConventions(repoPath: string, bridge: BridgeConfig): string[] {
     const contents: string[] = [];
 
-    // Agents.md
+    // Encapsulated .factory/AGENTS.md
+    const factoryAgentsPath = join(repoPath, '.factory', 'AGENTS.md');
+    const factoryAgentsPathLc = join(repoPath, '.factory', 'agents.md');
+    if (existsSync(factoryAgentsPath)) {
+        contents.push(readFileSync(factoryAgentsPath, 'utf-8'));
+    } else if (existsSync(factoryAgentsPathLc)) {
+        contents.push(readFileSync(factoryAgentsPathLc, 'utf-8'));
+    }
+
+    // Configured agents.md path
     if (bridge.conventions?.agents) {
         const agentsPath = join(repoPath, bridge.conventions.agents);
-        if (existsSync(agentsPath)) {
+        if (existsSync(agentsPath) && agentsPath !== factoryAgentsPath && agentsPath !== factoryAgentsPathLc) {
             contents.push(readFileSync(agentsPath, 'utf-8'));
         }
     }

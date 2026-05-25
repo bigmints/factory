@@ -235,6 +235,84 @@ function findAgentsMd(repoPath: string): string | null {
     return null;
 }
 
+export function patchEncapsulatedAgentsMd(repoPath: string, factoryDir: string): { path: string; action: 'created' | 'patched' | 'skipped' } {
+    const name = basename(repoPath);
+    const outPath = join(factoryDir, 'AGENTS.md');
+    
+    const stack = detectStack(repoPath);
+    const stackLine = stack ? `**Stack:** ${stack.framework}, ${stack.packageManager}${stack.linter ? `, ${stack.linter}` : ''}${stack.testing ? `, ${stack.testing}` : ''}` : '';
+    
+    const content = `# Factory Agent — ${name} Instructions
+
+## Role
+You are a senior, highly capable TypeScript/Node.js autonomous engineer designed to safely build, validate, and evolve the **${name}** application. Your mission is to deliver fully functional features and stories in accordance with acceptance criteria, avoiding hallucinations or placeholder code.
+
+${stackLine}
+
+## Process Lifecycle Protocol
+Always adhere strictly to the following phased lifecycle when executing tasks:
+
+1. **GATHER CONTEXT & RESEARCH:**
+   - Read \`.factory/logs/state.yaml\` (or legacy state snapshots) to understand existing file locations and conventions before editing or creating files.
+   - Run compilation (\`npx tsc --noEmit\`) and lint checks first to verify pre-existing project health.
+   
+2. **CLAIM TASK:**
+   - Locate the target task ID in \`.factory/task-manager/todo.yaml\`.
+   - Run the task claim command:
+     \`\`\`bash
+     .factory/task-manager/manage.sh start <task-id>
+     \`\`\`
+   - Write a heartbeat pulse indicating you have claimed and started the task:
+     \`\`\`bash
+     factory pulse "Starting work on <task-id>: <brief summary>"
+     \`\`\`
+
+3. **BUILD & ITERATE:**
+   - Write modular, readable, fully typed code. Avoid placeholders, "TODO" comments in critical paths, or stubbed endpoints.
+   - Constantly write heartbeat signals to \`.factory/logs/heartbeat.yaml\` at significant coding milestones via:
+     \`\`\`bash
+     factory pulse "<milestone summary>"
+     \`\`\`
+   - Perform incremental validation checks. If compilation or lint errors are returned, perform targeted debugging rather than full regeneration.
+
+4. **VERIFY QUALITY GATES:**
+   - Confirm changes do not break typings: \`npx tsc --noEmit\` (or equivalent).
+   - Ensure the code passes linter audits: \`npm run lint\` or \`npx eslint\`.
+   - If unit/integration tests exist, execute the test runner to verify coverage and behaviors.
+
+5. **COMPLETE & DOCUMENT:**
+   - Mark the task completed:
+     \`\`\`bash
+     .factory/task-manager/manage.sh complete --id <task-id> --summary "<detailed checklist of what was achieved>"
+     \`\`\`
+   - Write a session update pulse:
+     \`\`\`bash
+     factory pulse "Successfully completed and validated <task-id>."
+     \`\`\`
+
+## Coding Conventions
+- **Strict TypeScript:** No implicit \`any\`. Ensure proper interface declarations and type-safe data pipelines.
+- **Tailwind & Component Styling:** Use predefined tokens, utilities, and components. Avoid adding ad-hoc CSS classes unless strictly necessary.
+- **State Preservation:** When editing files, preserve existing comments, documentation strings, and helper functions that are unrelated to your immediate task.
+
+---
+
+${FACTORY_AGENTS_SECTION(name)}
+`;
+
+    if (existsSync(outPath)) {
+        const currentContent = readFileSync(outPath, 'utf-8');
+        if (currentContent.includes(FACTORY_SECTION_MARKER)) {
+            return { path: '.factory/AGENTS.md', action: 'skipped' };
+        }
+        writeFileSync(outPath, content);
+        return { path: '.factory/AGENTS.md', action: 'patched' };
+    }
+
+    writeFileSync(outPath, content);
+    return { path: '.factory/AGENTS.md', action: 'created' };
+}
+
 export function patchAgentsMd(repoPath: string): { path: string; action: 'created' | 'patched' | 'skipped' } {
     const name = basename(repoPath);
     const existing = findAgentsMd(repoPath);
@@ -516,6 +594,10 @@ export function initBridge(repoPath: string): InitResult {
         description: `Bridge for ${name}`,
         factory_home: factoryRoot,  // absolute path — resolves scripts correctly
         stack,
+        conventions: {
+            rules: '.factory/knowledge',
+            agents: '.factory/AGENTS.md',
+        },
         agentic: {
             logs_dir: '.factory/logs',
             task_queue: '.factory/task-manager/todo.yaml',
@@ -622,8 +704,12 @@ export function initBridge(repoPath: string): InitResult {
 
     // 9. agents.md — create or patch
     try {
-        const agentsResult = patchAgentsMd(repoPath);
+        const agentsResult = patchEncapsulatedAgentsMd(repoPath, factoryDir);
         files.push(agentsResult);
+        
+        // Also keep/patch a root-level reference AGENTS.md for backward compatibility
+        const rootAgentsResult = patchAgentsMd(repoPath);
+        files.push(rootAgentsResult);
     } catch (e) {
         logError(`agents.md patch failed: ${e}`);
     }

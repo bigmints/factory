@@ -1,9 +1,16 @@
 ---
-name: factory-spec-bootstrap
+name: Spec Bootstrap
 description: Interactively create a complete Factory spec suite for a new project — one scaffold.yaml with features and stories containing exhaustive developer-facing acceptance criteria.
+category: general
+tags:
+  - spec
+  - bootstrap
+  - scaffold
+  - planning
+  - factory
+trigger: spec|bootstrap|scaffold|init-bridge
+enabled: true
 ---
-
-# Factory Spec Bootstrap Skill
 
 ## Instructions
 

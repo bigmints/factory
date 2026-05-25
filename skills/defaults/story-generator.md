@@ -1,9 +1,16 @@
 ---
 name: Story Generator
 description: Gathers requirements interactively and generates schema-compliant app or feature stories in YAML format with exhaustive developer-facing acceptance criteria.
+category: general
+tags:
+  - story
+  - generator
+  - planning
+  - yaml
+  - schema
+trigger: story|generator|spec|write|scaffold
+enabled: true
 ---
-
-# Story Generator Skill
 
 ## Instructions
 

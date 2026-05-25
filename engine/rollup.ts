@@ -1,5 +1,5 @@
-import { loadAppSpec, validateAppSpec } from './story.ts';
-import { writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { loadAppSpec, validateAppSpec, resolveStoryPath } from './story.ts';
+import { writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { stringify as stringifyYaml, parse as parseYaml } from 'yaml';
 import { slugify } from './types.ts';
@@ -158,11 +158,12 @@ export function calculateRollups(app: any, appSlug: string): any {
 }
 
 /**
- * Synchronizes the scaffold.yaml specification.
+ * Synchronizes the scaffold.yaml specification synchronously.
  * Since we are database-free, this is a pure self-contained in-memory rollup
  * that writes status and progress rollups directly back to the yaml file.
+ * It also auto-discovers physical story files and maps them to features/epics.
  */
-export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
+export function syncAppRoadmapSync(scaffoldYamlPath: string): void {
     const absPath = resolve(scaffoldYamlPath);
     if (!existsSync(absPath)) {
         throw new Error(`App spec file not found at: ${absPath}`);
@@ -179,15 +180,127 @@ export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
     }
 
     const appSlug = slugify(app.name);
+    const project = getActiveProject();
+    const storiesDir = resolve(project.path, '.factory', 'stories');
 
-    // Sync physical story statuses first
+    // 1. Gather all existing story files referenced in scaffold.yaml to avoid duplicates
+    const referencedFiles = new Set<string>();
+    if (app.features) {
+        for (const feature of app.features) {
+            if (feature.stories) {
+                for (const story of feature.stories) {
+                    if (story.file) {
+                        const clean = story.file.replace(/^\.?\//, '').replace(/^.*?\.factory\/stories\//, '');
+                        referencedFiles.add(clean);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Discover physical story files in features/, apps/, done/
+    const newStories: { file: string; name: string; kind: 'AppStory' | 'FeatureStory'; status: string; requirements: string[] }[] = [];
+
+    const appsDir = join(storiesDir, 'apps');
+    const featuresDir = join(storiesDir, 'features');
+    const doneDir = join(storiesDir, 'done');
+
+    const scanDir = (dirPath: string, subfolder: 'apps' | 'features' | 'done') => {
+        if (!existsSync(dirPath)) return;
+        const files = readdirSync(dirPath).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+        for (const file of files) {
+            const relPath = `${subfolder}/${file}`;
+            if (referencedFiles.has(relPath)) continue;
+            
+            try {
+                const absFilePath = join(dirPath, file);
+                const raw = readFileSync(absFilePath, 'utf-8');
+                const parsed = parseYaml(raw) as any;
+                if (!parsed) continue;
+
+                const isFeature = subfolder === 'features' || !!(parsed.feature || parsed.target || 'phase' in parsed);
+                const name = isFeature 
+                    ? (parsed.feature?.name || parsed.name || file.replace(/\.ya?ml$/i, ''))
+                    : (parsed.appName || parsed.metadata?.name || file.replace(/\.ya?ml$/i, ''));
+                
+                let requirements: string[] = [];
+                if (Array.isArray(parsed.requirements)) {
+                    requirements = parsed.requirements;
+                } else if (Array.isArray(parsed.acceptanceCriteria)) {
+                    requirements = parsed.acceptanceCriteria;
+                }
+                
+                newStories.push({
+                    file: relPath,
+                    name,
+                    kind: isFeature ? 'FeatureStory' : 'AppStory',
+                    status: parsed.status || (subfolder === 'done' ? 'done' : 'draft'),
+                    requirements
+                });
+            } catch {}
+        }
+    };
+
+    scanDir(appsDir, 'apps');
+    scanDir(featuresDir, 'features');
+    scanDir(doneDir, 'done');
+
+    // 3. For each newly discovered story, append it to a feature in app.features
+    if (newStories.length > 0) {
+        if (!app.features) {
+            app.features = [];
+        }
+
+        for (const story of newStories) {
+            // Determine feature/epic name
+            let featureName = story.kind === 'AppStory' ? '⚙️ Scaffold & Foundation' : story.name;
+            let featureDescription = story.kind === 'AppStory' 
+                ? 'Foundational scaffolding and environment baseline setup.' 
+                : `Feature capability for ${story.name}.`;
+
+            // Find or create feature
+            let feature = app.features.find((f: any) => f.name.toLowerCase() === featureName.toLowerCase());
+            if (!feature) {
+                feature = {
+                    name: featureName,
+                    description: featureDescription,
+                    status: 'pending',
+                    stories: []
+                };
+                app.features.push(feature);
+            }
+
+            // Map tasks from requirements
+            const tasks: any[] = story.requirements.map((req: string, idx: number) => ({
+                id: `task-${slugify(story.name)}-${idx + 1}`,
+                title: req.slice(0, 180),
+                status: story.status === 'done' ? 'completed' : 'pending'
+            }));
+
+            if (tasks.length === 0) {
+                tasks.push({
+                    id: `task-${slugify(story.name)}-default`,
+                    title: `Implement core requirements for ${story.name}`,
+                    status: story.status === 'done' ? 'completed' : 'pending'
+                });
+            }
+
+            feature.stories.push({
+                name: story.name,
+                file: story.file,
+                status: story.status as any,
+                tasks
+            });
+        }
+    }
+
+    // 4. Sync physical story statuses first
     if (app.features) {
         for (const feature of app.features) {
             if (feature.stories) {
                 for (const story of feature.stories) {
                     if (story.file) {
                         try {
-                            const { resolveStoryPath } = await import('./story.ts');
                             const storyAbsPath = resolveStoryPath(story.file);
                             if (existsSync(storyAbsPath)) {
                                 const rawStory = readFileSync(storyAbsPath, 'utf-8');
@@ -223,12 +336,19 @@ export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
         }
     }
 
-    // Perform rollup computations directly in memory
+    // 5. Perform rollup computations directly in memory
     const updatedApp = calculateRollups(app, appSlug);
 
     // Write the updated spec back to the yaml file
     writeFileSync(absPath, stringifyYaml(updatedApp, { lineWidth: 120 }));
     log('✓', `Synced roadmap structure and statuses successfully: ${scaffoldYamlPath}`);
+}
+
+/**
+ * Synchronizes the scaffold.yaml specification.
+ */
+export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
+    syncAppRoadmapSync(scaffoldYamlPath);
 }
 
 /**
@@ -245,9 +365,21 @@ export function getAppRollup(appId: string): AppRollupData | null {
             return null;
         }
 
-        const raw = readFileSync(scaffoldYamlPath, 'utf-8');
-        const app = parseYaml(raw) as any;
+        let raw = readFileSync(scaffoldYamlPath, 'utf-8');
+        let app = parseYaml(raw) as any;
         if (!app) return null;
+
+        // Auto-heal empty or un-synchronized roadmaps on first load
+        if (!app.features || app.features.length === 0) {
+            try {
+                syncAppRoadmapSync(scaffoldYamlPath);
+                // Reload
+                raw = readFileSync(scaffoldYamlPath, 'utf-8');
+                app = parseYaml(raw) as any;
+            } catch (e) {
+                logError(`Auto-sync failed on load: ${e}`);
+            }
+        }
 
         const appSlug = slugify(app.name);
         const storiesDir = resolve(project.path, '.factory', 'stories');
@@ -461,4 +593,51 @@ export async function updateStoryStatusInApp(storyFile: string, newStatus: strin
     writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
     log('✓', `Updated story "${storyFile}" status to "${newStatus}" and saved scaffold.yaml`);
 }
+
+/**
+ * Removes a specific task from scaffold.yaml by its ID, recalculating rollups.
+ */
+export async function deleteTask(taskId: string): Promise<void> {
+    const project = getActiveProject();
+    const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
+    if (!existsSync(yamlPath)) {
+        throw new Error(`scaffold.yaml not found at active project: ${yamlPath}`);
+    }
+
+    const raw = readFileSync(yamlPath, 'utf-8');
+    const app = parseYaml(raw) as any;
+    if (!app) {
+        throw new Error('Failed to parse scaffold.yaml');
+    }
+
+    let found = false;
+    if (app.features) {
+        for (const feature of app.features) {
+            if (feature.stories) {
+                for (const story of feature.stories) {
+                    if (story.tasks) {
+                        const originalLength = story.tasks.length;
+                        story.tasks = story.tasks.filter((t: any) => !(t.id === taskId || taskId.endsWith(`:${t.id}`)));
+                        if (story.tasks.length < originalLength) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (found) break;
+        }
+    }
+
+    if (!found) {
+        throw new Error(`Task with ID "${taskId}" not found in scaffold.yaml`);
+    }
+
+    // Re-run rollup calculations and save
+    const appSlug = slugify(app.name);
+    const updatedApp = calculateRollups(app, appSlug);
+    writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
+    log('✓', `Deleted task "${taskId}" from scaffold.yaml`);
+}
+
 

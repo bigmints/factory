@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T11:46:27Z"
+  last_seen: "2026-05-25T11:52:28Z"
   host: "BigMac-2"
-  task: "post-commit: fix(queue): done/ stories never re-enqueued — exclude from scanDir, detect AppStory by appName field, fixes crash on done/pi-app.yaml"
+  task: "post-commit: fix(queue): isDependencyCompleted matches by filename stem — dependsOn:[login-screen] now resolves done/login-screen.yaml correctly"
   status: alive

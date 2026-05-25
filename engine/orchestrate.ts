@@ -312,27 +312,30 @@ You do NOT write code. You do NOT run tests. You do NOT inspect files.
 You write briefs, monitor delivery health, and make go/no-go calls.
 
 ## Your Tools
-- **delegate_to_cli(prompt)** — Hand the story to the CLI engineer with a complete brief. The tool streams the session and returns a structured delivery report automatically.
+- **delegate_to_cli(prompt)** — Hand the story to the CLI engineer with a complete brief. The tool streams the session and returns a structured delivery report.
 - **intervene(reason, new_instructions)** — The CLI got stuck or failed. Re-brief with corrected direction.
+- **create_fix_task(issue, fix_instructions)** — When a story fails, create a targeted fix task and re-queue it with high priority. This is your primary recovery action — prefer this over mark_story_failed.
+- **create_qa_task(scope, test_instructions)** — After an epic or feature set completes, queue a QA task to verify the app works end-to-end.
 - **mark_story_done(summary)** — Delivery accepted. Called when the report shows success.
-- **mark_story_failed(reason)** — Cannot deliver. Escalate for human review.
-- **update_context(message)** — Optional. Log a note to the project worklog.
+- **mark_story_failed(reason)** — Last resort only. Use create_fix_task first.
+- **update_context(message)** — Log a note to the project worklog.
 
 ## Delivery Reports (what delegate_to_cli returns)
 The tool monitors the CLI session and returns one of:
 - \`DELIVERED\` — CLI completed successfully. Call mark_story_done.
-- \`FAILED (exit N)\` — CLI exited with an error. Read the report, then use intervene.
+- \`FAILED (exit N)\` — CLI exited with an error. Use create_fix_task to re-queue a targeted fix.
 - \`INTERVENTION [STALL]\` — CLI stopped producing output for 2+ minutes. It is stuck.
 - \`INTERVENTION [LOOP]\` — CLI is repeating the same output. It is looping.
 - \`INTERVENTION [ASKING]\` — CLI asked a question and is blocked waiting for input.
 
 ## Rules
 1. **Turn 1 is always delegate_to_cli.** Never start with anything else.
-2. **Maximum 2 delegations.** After 2 failed delegations, call mark_story_failed.
+2. **Maximum 2 delegations per story.** After 2 failed delegations, call create_fix_task.
 3. **If report shows DELIVERED, call mark_story_done immediately.** Do not second-guess.
-4. **If intervention reason is ASKING, embed the answer in your new brief.** The CLI must not need to ask.
-5. **If intervention reason is STALL or LOOP, change approach in your new brief.** Same prompt = same result.
-6. **Never ask for help.** Make a decision and act.`);
+4. **If report shows FAILED, call create_fix_task with the specific issue and corrected instructions.** This re-queues the story so it will be retried automatically.
+5. **After completing a group of related features (an epic), call create_qa_task** to verify the app runs and the features work.
+6. **mark_story_failed is last resort.** Only call it if the story is fundamentally broken and no fix is possible without human input.
+7. **Never ask for help.** Make a decision and act.`);
 
     // ── Target Directory ──
     sections.push(`## Target Directory
@@ -448,13 +451,37 @@ export const ORCHESTRATOR_TOOL_DEFINITIONS = [
     },
     {
         name: 'mark_story_failed',
-        description: 'Escalate. Call when delivery cannot be achieved after 2 attempts. Story goes to human review.',
+        description: 'Last resort escalation. Call ONLY when no fix is possible without human intervention. Prefer create_fix_task for recoverable failures.',
         parameters: {
             type: 'object',
             properties: {
-                reason: { type: 'string', description: 'Why delivery failed and what a human needs to fix.' },
+                reason: { type: 'string', description: 'Why delivery cannot proceed and what a human needs to fix.' },
             },
             required: ['reason'],
+        },
+    },
+    {
+        name: 'create_fix_task',
+        description: 'When a story fails, create a targeted fix story and re-queue it automatically. Use this instead of mark_story_failed for recoverable errors. The fix story gets high priority and runs next.',
+        parameters: {
+            type: 'object',
+            properties: {
+                issue: { type: 'string', description: 'Concise description of what failed and why.' },
+                fix_instructions: { type: 'string', description: 'Detailed instructions for the CLI to fix the issue. Be specific about what to change, which files, and what the correct output should look like.' },
+            },
+            required: ['issue', 'fix_instructions'],
+        },
+    },
+    {
+        name: 'create_qa_task',
+        description: 'After completing an epic or a set of related features, create a QA task to verify the app runs and features work. Queued at phase 99 so it runs after all features.',
+        parameters: {
+            type: 'object',
+            properties: {
+                scope: { type: 'string', description: 'What to test (e.g. "Auth & App Shell epic", "login screen and navigation").' },
+                test_instructions: { type: 'string', description: 'Step-by-step instructions: what to run, what to check, what success looks like.' },
+            },
+            required: ['scope', 'test_instructions'],
         },
     },
 ] as const;
@@ -470,15 +497,17 @@ async function executeOrchestratorTool(
         switch (name) {
             case 'delegate_to_cli':  return toolDelegateToCli(args, ctx);
             case 'intervene':        return toolIntervene(args, ctx);
+            case 'create_fix_task':  return toolCreateFixTask(args, ctx);
+            case 'create_qa_task':   return toolCreateQaTask(args, ctx);
             case 'update_context':   return toolUpdateContext(args, ctx);
             case 'mark_story_done':  return toolMarkStoryDone(args, ctx);
             case 'mark_story_failed':return toolMarkStoryFailed(args, ctx);
-            // Legacy tool names — redirect gracefully so old LLM outputs don't hard-fail
-            case 'read_output':      return { content: 'read_output is not available. You are the TPM — call mark_story_done if the delivery report showed DELIVERED, or intervene if it showed failure.', isError: true };
-            case 'run_check':        return { content: 'run_check is not available. You are the TPM — you do not run tests. Read the delivery report and make a decision.', isError: true };
-            case 'update_knowledge': return toolUpdateKnowledge(args, ctx); // kept for backwards compat
+            // Legacy tool names — redirect gracefully
+            case 'read_output':      return { content: 'read_output is not available. Call mark_story_done if DELIVERED, or create_fix_task if failed.', isError: true };
+            case 'run_check':        return { content: 'run_check is not available. You are the TPM — read the delivery report and call create_fix_task or mark_story_done.', isError: true };
+            case 'update_knowledge': return toolUpdateKnowledge(args, ctx);
             default:
-                return { content: `Unknown tool: ${name}. Available: delegate_to_cli, intervene, mark_story_done, mark_story_failed, update_context.`, isError: true };
+                return { content: `Unknown tool: ${name}. Available: delegate_to_cli, intervene, create_fix_task, create_qa_task, mark_story_done, mark_story_failed, update_context.`, isError: true };
         }
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -732,12 +761,111 @@ function toolMarkStoryFailed(
 
     writeBuildReceipt(ctx, reason, false);
 
+    // Auto-create a fix task so humans can see what broke and re-queue
+    try {
+        const fixPath = createFixStoryFile(ctx, reason, '');
+        if (fixPath) log('→', `Fix story created: ${fixPath}`);
+    } catch (e) {
+        log('!', `Could not auto-create fix story: ${e}`);
+    }
+
     ctx.success = false;
     ctx.terminal = true;
     ctx.logs.push({ level: 'error', message: reason });
 
     logError(`Story marked failed: ${reason.slice(0, 200)}`);
-    return { content: `Story marked failed. Reason: ${reason}`, isError: false };
+    return { content: `Story marked failed. Reason: ${reason}\n\nA fix story has been written to .factory/stories/features/ for review.`, isError: false };
+}
+
+// ── create_fix_task ──────────────────────────────────────
+// TPM's recovery tool: creates a targeted fix story and re-queues it.
+
+async function toolCreateFixTask(
+    args: Record<string, unknown>,
+    ctx: OrchestratorContext,
+): Promise<ToolResult> {
+    const issue = String(args.issue || 'Unknown issue');
+    const fixInstructions = String(args.fix_instructions || '');
+    if (!fixInstructions) return { content: 'fix_instructions is required', isError: true };
+
+    log('→', `TPM creating fix task: ${issue.slice(0, 80)}`);
+
+    const fixPath = createFixStoryFile(ctx, issue, fixInstructions);
+    if (!fixPath) return { content: 'Failed to write fix story file', isError: true };
+
+    // Re-enqueue the original story with the fix brief injected into its YAML
+    try {
+        const { enqueue } = await import('./queue.ts');
+        const slug = ctx.storyFile.split('/').pop()?.replace(/\.ya?ml$/, '') || 'fix';
+        const fixStoryFile = `features/fix-${slug}.yaml`;
+        enqueue(fixStoryFile, 'FeatureStory', { phase: 0, dependsOn: [], engine: 'factory' });
+        log('✓', `Fix story enqueued with high priority: ${fixStoryFile}`);
+    } catch (e) {
+        log('!', `Could not enqueue fix story: ${e}`);
+    }
+
+    ctx.success = false;
+    ctx.terminal = true;
+
+    return {
+        content: `Fix task created and queued.\n\nIssue: ${issue}\nFix story: ${fixPath}\n\nThe story will be retried automatically when the queue runs.`,
+        isError: false,
+    };
+}
+
+// ── create_qa_task ───────────────────────────────────────
+// TPM creates a QA verification task after features complete.
+
+async function toolCreateQaTask(
+    args: Record<string, unknown>,
+    ctx: OrchestratorContext,
+): Promise<ToolResult> {
+    const scope = String(args.scope || 'recent features');
+    const testInstructions = String(args.test_instructions || '');
+    if (!testInstructions) return { content: 'test_instructions is required', isError: true };
+
+    log('→', `TPM creating QA task for: ${scope.slice(0, 80)}`);
+
+    const storiesDir = join(ctx.repoPath, '.factory', 'stories', 'features');
+    mkdirSync(storiesDir, { recursive: true });
+
+    const slug = `qa-${scope.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}-${Date.now()}`;
+    const qaPath = join(storiesDir, `${slug}.yaml`);
+
+    const qaStory = {
+        name: `QA: Verify ${scope}`,
+        description: `Quality assurance task to verify that ${scope} works correctly end-to-end.`,
+        status: 'ready',
+        feature: { name: 'QA & Testing', slug: 'qa-testing' },
+        target: { app: ctx.repoPath.split('/').pop() || 'app' },
+        acceptance_criteria: [
+            'App starts without errors (npm run dev)',
+            'No TypeScript errors (npx tsc --noEmit)',
+            'All acceptance criteria for the tested features pass',
+        ],
+        qa_scope: scope,
+        test_instructions: testInstructions,
+        phase: 99,  // QA always runs last
+        dependsOn: [],
+        createdBy: 'factory-tpm',
+        createdAt: new Date().toISOString(),
+    };
+
+    writeFileSync(qaPath, toYaml(qaStory));
+
+    // Enqueue with lowest priority so it runs after all features
+    try {
+        const { enqueue } = await import('./queue.ts');
+        enqueue(`features/${slug}.yaml`, 'FeatureStory', { phase: 99, dependsOn: [], engine: 'factory' });
+        log('✓', `QA task queued: features/${slug}.yaml`);
+    } catch (e) {
+        log('!', `Could not enqueue QA task: ${e}`);
+    }
+
+    return {
+        content: `QA task created and queued (phase 99 — runs after all features).\n\nScope: ${scope}\nFile: ${qaPath}`,
+        isError: false,
+    };
 }
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -773,6 +901,49 @@ function writeBuildReceipt(ctx: OrchestratorContext, summary: string, success: b
 
     writeFileSync(receiptPath, content);
     log('✓', `Build receipt: ${receiptDir}/${slug}-${timestamp}.md`);
+}
+
+/** Write a fix story YAML into .factory/stories/features/ for re-queuing. */
+function createFixStoryFile(ctx: OrchestratorContext, issue: string, fixInstructions: string): string | null {
+    try {
+        const slug = ctx.storyFile.split('/').pop()?.replace(/\.ya?ml$/, '') || 'story';
+        const fixSlug = `fix-${slug}`;
+        const storiesDir = join(ctx.repoPath, '.factory', 'stories', 'features');
+        mkdirSync(storiesDir, { recursive: true });
+        const fixPath = join(storiesDir, `${fixSlug}.yaml`);
+
+        // Load original story for context
+        let originalStory: any = {};
+        try {
+            const originalPath = join(ctx.repoPath, '.factory', 'stories', ctx.storyFile);
+            if (existsSync(originalPath)) {
+                originalStory = parseYaml(readFileSync(originalPath, 'utf-8')) || {};
+            }
+        } catch { /* use empty */ }
+
+        const fixStory = {
+            name: `Fix: ${originalStory.name || slug}`,
+            description: `Automated fix task created by Factory TPM.\n\nOriginal story: ${ctx.storyFile}\nIssue: ${issue}`,
+            status: 'ready',
+            feature: originalStory.feature || { name: 'Fix', slug: 'fix' },
+            target: originalStory.target || {},
+            stack: originalStory.stack || {},
+            acceptance_criteria: originalStory.acceptance_criteria || [],
+            fix_instructions: fixInstructions || issue,
+            original_story: ctx.storyFile,
+            phase: 0,
+            dependsOn: [],
+            createdBy: 'factory-tpm',
+            createdAt: new Date().toISOString(),
+        };
+
+        writeFileSync(fixPath, toYaml(fixStory));
+        log('✓', `Fix story written: ${fixPath}`);
+        return `features/${fixSlug}.yaml`;
+    } catch (e) {
+        logError(`createFixStoryFile failed: ${e}`);
+        return null;
+    }
 }
 
 function loadKnowledgeFiles(repoPath: string): Array<{ name: string; content: string }> {

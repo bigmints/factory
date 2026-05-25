@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T11:41:59Z"
+  last_seen: "2026-05-25T11:46:27Z"
   host: "BigMac-2"
-  task: "post-commit: fix(queue): completed stories no longer re-enqueue after clear — check done/ dir and status:done in YAML, not just queue history"
+  task: "post-commit: fix(queue): done/ stories never re-enqueued — exclude from scanDir, detect AppStory by appName field, fixes crash on done/pi-app.yaml"
   status: alive

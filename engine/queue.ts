@@ -214,23 +214,22 @@ export function isDependencyCompleted(depSlug: string): boolean {
                     const parsed = parseYaml(raw);
                     if (!parsed) continue;
 
-                    let isMatch = false;
-                    // Check if AppStory
-                    if (parsed.appName) {
-                        const appSlug = slugify(parsed.appName);
-                        if (appSlug === depSlug) {
-                            isMatch = true;
-                        }
+                    // Match by filename stem — this is what dependsOn actually uses
+                    const fileStem = file.replace(/\.ya?ml$/, '');
+
+                    let isMatch = fileStem === depSlug;
+
+                    // Also match by feature.slug (internal slug field)
+                    if (!isMatch && parsed.feature?.slug) {
+                        isMatch = parsed.feature.slug === depSlug;
                     }
-                    // Check if FeatureStory
-                    if (parsed.feature && parsed.feature.slug) {
-                        if (parsed.feature.slug === depSlug) {
-                            isMatch = true;
-                        }
+                    // Also match by appName slug
+                    if (!isMatch && parsed.appName) {
+                        isMatch = slugify(parsed.appName) === depSlug;
                     }
 
                     if (isMatch) {
-                        // If it's in the 'done' folder, or its status is 'done', it's completed
+                        // In done/ = completed. In features/apps with status:done = completed.
                         if (subDir === 'done' || parsed.status === 'done') {
                             return true;
                         }

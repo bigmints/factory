@@ -258,22 +258,24 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
             if (latestApp.status === 'pending' || latestApp.status === 'running') {
                 return { ready: false, reason: `App story "${latestApp.storyFile}" has not completed yet.` };
             }
+            // completed — fall through, ready
         } else {
-            // No app story in queue — check project.bootstrapped in factory.yaml.
-            // false  → new project, scaffold hasn’t built yet → block.
-            // true   → existing / already-bootstrapped project → allow.
-            // absent → legacy config, treat as bootstrapped.
-            try {
-                const project = getActiveProject();
-                if (project && project.path && !isBootstrapped(project.path)) {
-                    return {
-                        ready: false,
-                        reason: `Project is not bootstrapped. Build the "⚙️ Scaffold & Foundation" epic first to unlock feature stories.`,
-                    };
+            // App story not in queue — check if it was already built (in done/ dir or status:done in YAML)
+            if (!isDependencyCompleted(item.targetApp)) {
+                // Not found as done — fall back to bootstrapped flag in factory.yaml
+                try {
+                    const project = getActiveProject();
+                    if (project && project.path && !isBootstrapped(project.path)) {
+                        return {
+                            ready: false,
+                            reason: `Project is not bootstrapped. Build the "⚙️ Scaffold & Foundation" epic first.`,
+                        };
+                    }
+                } catch {
+                    // fall through — if we can't read config, don't block
                 }
-            } catch {
-                // fall through — if we can’t read config, don’t block
             }
+            // isDependencyCompleted true — app was built outside the queue, allow feature to proceed
         }
     }
 

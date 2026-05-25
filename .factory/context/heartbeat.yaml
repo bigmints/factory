@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T11:10:56Z"
+  last_seen: "2026-05-25T11:33:46Z"
   host: "BigMac-2"
-  task: "post-commit: fix(orchestrate): rewrite system prompt to enforce turn efficiency — delegate-first, mark-done-fast"
+  task: "post-commit: feat(orchestrate): TPM model — delegate_to_cli streams with stall/loop/question monitors, intervene tool, 4-tool set, no run_check/read_output"
   status: alive

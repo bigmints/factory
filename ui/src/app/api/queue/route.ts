@@ -265,12 +265,31 @@ function resolveAllDependencies(
   scanDir(join(storiesRoot, 'features'), 'FeatureStory');
   scanDir(join(storiesRoot, 'done'), 'FeatureStory');
 
-  // Helper to check if already in queue or completed
+  // Helper to check if already in queue or physically completed
   const isAlreadyQueuedOrBuilt = (file: string, slug: string) => {
-    return queue.some(
+    // 1. Check the current queue (pending/running/completed)
+    const inQueue = queue.some(
       item => (item.storyFile === file || item.storyFile.split('/').pop()?.replace(/\.ya?ml$/i, '') === slug) &&
         ['pending', 'running', 'completed'].includes(item.status)
     );
+    if (inQueue) return true;
+
+    // 2. Check if the story YAML itself has status:done OR lives in the done/ directory
+    // This survives "clear done" — the queue has no memory but the filesystem does.
+    const candidates = [
+      join(projectPath, '.factory', 'stories', file),
+      join(projectPath, '.factory', 'stories', 'done', slug + '.yaml'),
+      join(projectPath, '.factory', 'stories', 'done', slug + '.yml'),
+    ];
+    for (const candidate of candidates) {
+      if (!existsSync(candidate)) continue;
+      try {
+        const raw = readFileSync(candidate, 'utf-8');
+        const parsed = parseYaml(raw) as any;
+        if (parsed?.status === 'done' || candidate.includes('/done/')) return true;
+      } catch { /* ignore */ }
+    }
+    return false;
   };
 
   // Walk dependency graph recursively

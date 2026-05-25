@@ -646,7 +646,11 @@ export default function Dashboard() {
         </div>
 
         {/* Collapsible Ask TPM Chat Right Sidebar */}
-        <TpmChat isOpen={tpmChatOpen} onClose={() => setTpmChatOpen(false)} />
+        <TpmChat
+          isOpen={tpmChatOpen}
+          onClose={() => setTpmChatOpen(false)}
+          onToggle={() => setTpmChatOpen(!tpmChatOpen)}
+        />
       </main>
 
       {/* Output panel — desktop: slide-over overlay, mobile: bottom sheet */}

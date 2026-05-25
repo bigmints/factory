@@ -111,6 +111,7 @@ export default function Dashboard() {
   const [queueRunning, setQueueRunning] = useState(false);
 
   const logOffsetRef = useRef(0);
+  const isInitialLoad = useRef(true);
 
   const fetchQueueStatus = useCallback(async () => {
     try {
@@ -166,7 +167,12 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchProjects(), fetchStories(), fetchReports(), fetchQueueStatus()]).finally(() => setLoading(false));
+    Promise.all([fetchProjects(), fetchStories(), fetchReports(), fetchQueueStatus()]).finally(() => {
+      setLoading(false);
+      setTimeout(() => {
+        isInitialLoad.current = false;
+      }, 200);
+    });
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '');
       if (hash === 'roadmap' || hash === 'stories' || hash === 'dashboard') {
@@ -195,7 +201,9 @@ export default function Dashboard() {
     }
     setBuildOutput('Waiting for build output...\n');
     logOffsetRef.current = 0;
-    setOutputPanelOpen(true);
+    if (!isInitialLoad.current) {
+      setOutputPanelOpen(true);
+    }
     const pollLog = async () => {
       try {
         const res = await fetch(`/api/queue/log?offset=${logOffsetRef.current}`);

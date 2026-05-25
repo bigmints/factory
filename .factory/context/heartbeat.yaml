@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T21:05:21Z"
+  last_seen: "2026-05-25T21:23:12Z"
   host: "BigMac-2"
-  task: "post-commit: feat(init): support encapsulated .factory/AGENTS.md and auto-discovery conventions"
+  task: "post-commit: feat(engine): smart targetDir resolution for single-app projects"
   status: alive

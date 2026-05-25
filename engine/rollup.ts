@@ -5,6 +5,7 @@ import { stringify as stringifyYaml, parse as parseYaml } from 'yaml';
 import { slugify } from './types.ts';
 import { log, logError } from './log.ts';
 import { getActiveProject } from './config.ts';
+import { listQueue } from './queue.ts';
 
 export interface AppRollupData {
     id: string;
@@ -383,6 +384,7 @@ export function getAppRollup(appId: string): AppRollupData | null {
 
         const appSlug = slugify(app.name);
         const storiesDir = resolve(project.path, '.factory', 'stories');
+        const queueItems = listQueue();
 
         // Resolve physical story status from filesystem BEFORE running rollup
         // This ensures done/in-progress status is always current, not stale YAML
@@ -423,6 +425,36 @@ export function getAppRollup(appId: string): AppRollupData | null {
                                         }
                                     }
                                     break;
+                                }
+                            }
+
+                            // Check active queue status from SQLite database queue
+                            const qi = queueItems.find(item => {
+                                const qiFile = item.storyFile || '';
+                                return slugify(qiFile) === slugify(story.file) || slugify(qiFile.split('/').pop() || '') === slugify(stem);
+                            });
+                            if (qi) {
+                                if (qi.status === 'running') {
+                                    story.status = 'in-progress';
+                                    if (story.tasks && story.tasks.length > 0) {
+                                        const hasStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                                        if (!hasStarted) {
+                                            story.tasks[0].status = 'running';
+                                        }
+                                    }
+                                } else if (qi.status === 'completed') {
+                                    story.status = 'done';
+                                    if (story.tasks) {
+                                        for (const task of story.tasks) task.status = 'completed';
+                                    }
+                                } else if (qi.status === 'failed' || qi.status === 'needs-attention') {
+                                    story.status = 'review';
+                                    if (story.tasks && story.tasks.length > 0) {
+                                        const hasFailed = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                                        if (!hasFailed) {
+                                            story.tasks[0].status = 'failed';
+                                        }
+                                    }
                                 }
                             }
                         } catch {

@@ -2103,6 +2103,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                                   updatingTaskId={updatingTaskId}
                                   activeAction={activeAction}
                                   allStories={mergedStories}
+                                  bootstrapped={bootstrapped}
                                 />
                               ))
                             ) : (
@@ -3063,6 +3064,7 @@ function KanbanColumn({
                   onBuild={onBuild}
                   activeAction={activeAction}
                   allStories={allStories}
+                  bootstrapped={bootstrapped}
                 />
               );
             }
@@ -3086,6 +3088,7 @@ function KanbanColumn({
                       onBuild={onBuild}
                       activeAction={activeAction}
                       allStories={allStories}
+                      bootstrapped={bootstrapped}
                     />
                   ))}
                 </div>
@@ -3109,7 +3112,8 @@ function StoryKanbanCard({
   onValidate,
   onBuild,
   activeAction,
-  allStories
+  allStories,
+  bootstrapped = true
 }: {
   item: any;
   epicColor?: EpicColor;
@@ -3118,6 +3122,7 @@ function StoryKanbanCard({
   onBuild: (file: string, kind: string) => void;
   activeAction: { type: string; file: string } | null;
   allStories?: any[];
+  bootstrapped?: boolean;
 }) {
   const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const effectiveStatus = getEffectiveStatus(item);
@@ -3131,7 +3136,7 @@ function StoryKanbanCard({
   const targetApp = item.target?.app || item.targetApp;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
   let isScaffoldGated = false;
-  if (isFeature && targetApp) {
+  if (isFeature && targetApp && !bootstrapped) {
     const parentApp = allStories?.find(s => 
       s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
     );
@@ -3254,6 +3259,7 @@ interface ListStoryRowProps {
   updatingTaskId: string | null;
   activeAction: { type: string; file: string } | null;
   allStories?: any[];
+  bootstrapped?: boolean;
 }
 
 function ListStoryRow({
@@ -3266,7 +3272,8 @@ function ListStoryRow({
   onToggleTask,
   updatingTaskId,
   activeAction,
-  allStories
+  allStories,
+  bootstrapped = true
 }: ListStoryRowProps) {
   const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
   const isFeature = item.kind === 'FeatureStory' || !!item.feature;
@@ -3284,7 +3291,7 @@ function ListStoryRow({
   });
   const targetApp = item.target?.app || item.targetApp;
   let isScaffoldGated = false;
-  if (isFeature && targetApp) {
+  if (isFeature && targetApp && !bootstrapped) {
     const parentApp = allStories?.find(s =>
       s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
     );

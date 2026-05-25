@@ -104,9 +104,11 @@ const CLI_YOLO_FLAGS: Record<string, string[]> = {
     gemini: ['--yolo'],
     claude: ['--dangerously-skip-permissions'],
     agy:    ['--dangerously-skip-permissions'],
-    // --no-session: skip loading/saving session (avoids corrupted settings stall)
+    // --no-session:    skip loading/saving session (avoids corrupted settings stall)
     // --no-extensions: skip MCP adapter init which blocks stdout for 30-60s
-    pi:     ['--no-session', '--no-extensions'],
+    // --no-skills:     skip toon-context skill which reads ALL project files before responding
+    //                  (183 files = 300s stall on local models)
+    pi:     ['--no-session', '--no-extensions', '--no-skills'],
 };
 
 // ─── Orchestrator Loop ───────────────────────────────────

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T11:52:28Z"
+  last_seen: "2026-05-25T12:22:24Z"
   host: "BigMac-2"
-  task: "post-commit: fix(queue): isDependencyCompleted matches by filename stem — dependsOn:[login-screen] now resolves done/login-screen.yaml correctly"
+  task: "post-commit: feat(tpm): create_fix_task auto-requeues failed stories, create_qa_task schedules epic verification, mark_story_failed writes fix story — TPM now recovers from failures instead of giving up"
   status: alive

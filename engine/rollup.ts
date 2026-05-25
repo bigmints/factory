@@ -234,6 +234,8 @@ export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
 /**
  * Get overall progress stats for the app rollup UI dashboard.
  * Directly loads scaffold.yaml from the active project.
+ * Resolves physical story statuses from the filesystem before computing rollups
+ * so the UI always reflects real state without needing a manual sync.
  */
 export function getAppRollup(appId: string): AppRollupData | null {
     try {
@@ -248,8 +250,58 @@ export function getAppRollup(appId: string): AppRollupData | null {
         if (!app) return null;
 
         const appSlug = slugify(app.name);
+        const storiesDir = resolve(project.path, '.factory', 'stories');
 
-        // Perform in-memory rollups to ensure absolute consistency
+        // Resolve physical story status from filesystem BEFORE running rollup
+        // This ensures done/in-progress status is always current, not stale YAML
+        if (app.features) {
+            for (const feature of app.features) {
+                if (feature.stories) {
+                    for (const story of feature.stories) {
+                        if (!story.file) continue;
+                        try {
+                            // Check done/ dir first (filename stem match)
+                            const stem = story.file.split('/').pop()?.replace(/\.ya?ml$/i, '') || '';
+
+                            const doneFile = resolve(storiesDir, 'done', `${stem}.yaml`);
+                            const doneFileYml = resolve(storiesDir, 'done', `${stem}.yml`);
+                            if (existsSync(doneFile) || existsSync(doneFileYml)) {
+                                story.status = 'done';
+                                if (story.tasks) {
+                                    for (const task of story.tasks) task.status = 'completed';
+                                }
+                                continue;
+                            }
+
+                            // Try to read the story file at its declared path
+                            const candidates = [
+                                resolve(storiesDir, story.file),
+                                resolve(storiesDir, 'features', stem + '.yaml'),
+                                resolve(storiesDir, 'apps', stem + '.yaml'),
+                                resolve(project.path, '.factory', story.file),
+                            ];
+
+                            for (const candidate of candidates) {
+                                if (existsSync(candidate)) {
+                                    const physicalStatus = (parseYaml(readFileSync(candidate, 'utf-8')) as any)?.status;
+                                    if (physicalStatus) {
+                                        story.status = physicalStatus;
+                                        if (physicalStatus === 'done' && story.tasks) {
+                                            for (const task of story.tasks) task.status = 'completed';
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        } catch {
+                            // ignore individual file read errors
+                        }
+                    }
+                }
+            }
+        }
+
+        // Perform in-memory rollups with the now-correct physical statuses
         const rolled = calculateRollups(app, appSlug);
 
         const resultFeatures = [];

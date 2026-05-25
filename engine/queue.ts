@@ -197,7 +197,12 @@ export function getLatestDependencyItem(depSlug: string): QueueItem | null {
 export function isDependencyCompleted(depSlug: string): boolean {
     try {
         const project = getActiveProject();
-        if (!project || !project.path) return false;
+        if (!project || !project.path) {
+            console.error(`[isDependencyCompleted] No active project for depSlug="${depSlug}"`);
+            return false;
+        }
+
+        console.error(`[isDependencyCompleted] Checking depSlug="${depSlug}" in project="${project.path}"`);
 
         const storiesDir = join(project.path, '.factory', 'stories');
         const subDirs = ['done', 'features', 'apps'];
@@ -231,16 +236,19 @@ export function isDependencyCompleted(depSlug: string): boolean {
                     if (isMatch) {
                         // In done/ = completed. In features/apps with status:done = completed.
                         if (subDir === 'done' || parsed.status === 'done') {
+                            console.error(`[isDependencyCompleted] FOUND depSlug="${depSlug}" → ${subDir}/${file} (status=${parsed.status || 'in-done-dir'})`);
                             return true;
                         }
+                        console.error(`[isDependencyCompleted] MATCH but not done: depSlug="${depSlug}" → ${subDir}/${file} status=${parsed.status}`);
                     }
                 } catch {
                     // Ignore parse/read errors for individual files
                 }
             }
         }
-    } catch {
-        // Ignore project loading errors
+        console.error(`[isDependencyCompleted] NOT FOUND depSlug="${depSlug}"`);
+    } catch (e) {
+        console.error(`[isDependencyCompleted] ERROR for depSlug="${depSlug}":`, e);
     }
     return false;
 }

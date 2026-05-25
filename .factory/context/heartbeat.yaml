@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T14:33:14Z"
+  last_seen: "2026-05-25T14:39:18Z"
   host: "BigMac-2"
-  task: "post-commit: fix(ui): epic progress/status reads physical story files from filesystem, not stale scaffold.yaml — Scaffold & Foundation now shows 100%/Done when story is in done/ dir"
+  task: "post-commit: fix(orchestrate): pi stall — add --no-session --no-extensions flags, increase stall timeout 120s→5min, inject nvm bin to PATH"
   status: alive

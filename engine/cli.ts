@@ -553,9 +553,13 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             const bridge = loadBridgeConfig(project.path);
             const blueprint = gatherBlueprint(project.path, bridge);
 
-            const targetDir = bridge.apps_dir
-                ? resolve(project.path, bridge.apps_dir, story.target.app)
-                : resolve(project.path, story.target.app);
+            // Fix stories created by TPM may have target: {} — fall back to project root
+            const targetApp = story.target?.app;
+            const targetDir = bridge.apps_dir && targetApp
+                ? resolve(project.path, bridge.apps_dir, targetApp)
+                : targetApp
+                ? resolve(project.path, targetApp)
+                : project.path;  // no apps_dir + no target.app → build in project root
 
             // Orchestrator delegates to the configured CLI — no writeFiles() needed after.
             const result = await runFeaturePipeline(story, blueprint, targetDir, storyPath);
@@ -777,9 +781,13 @@ async function handleQueueStart(): Promise<void> {
                 if (current.kind === 'FeatureStory') {
                     // Feature build
                     const story = loadFeatureStory(current.storyFile);
-                    const targetDir = bridge.apps_dir
-                        ? resolve(project.path, bridge.apps_dir, story.target.app)
-                        : resolve(project.path, story.target.app);
+                    // Fix stories created by TPM may have target: {} — fall back to project root
+                    const targetApp = story.target?.app;
+                    const targetDir = bridge.apps_dir && targetApp
+                        ? resolve(project.path, bridge.apps_dir, targetApp)
+                        : targetApp
+                        ? resolve(project.path, targetApp)
+                        : project.path;  // no apps_dir + no target.app → build in project root
                     
                     const result = await runFeaturePipeline(story, blueprint, targetDir, current.storyFile);
 

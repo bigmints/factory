@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T18:26:46Z"
+  last_seen: "2026-05-25T18:41:31Z"
   host: "BigMac-2"
-  task: "post-commit: fix(engine): undefined target.app crash — fall back to project.path for TPM fix stories; pi flags --no-session --no-extensions; stall timeout 5min"
+  task: "post-commit: fix(orchestrate): add --no-skills to pi flags (toon-context was loading 183 files causing 300s stall); fix git commit msg undefined"
   status: alive

@@ -570,7 +570,7 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             archiveStory(storyPath);
 
             // Git commit + push
-            const commitTarget = story.target?.app || story.name || 'fix';
+            const commitTarget = story.target?.app || story.feature.name || 'fix';
             gitCommit(project.path, `factory: feature ${story.feature.name} → ${commitTarget}`);
             gitPush(project.path);
 
@@ -807,7 +807,7 @@ async function handleQueueStart(): Promise<void> {
                         updateStoryStatus(current.storyFile, 'done');
                         await updateStoryStatusInApp(current.storyFile, 'done');
                         archiveStory(current.storyFile);
-                        const commitTarget = story.target?.app || story.name || 'fix';
+                        const commitTarget = story.target?.app || story.feature.name || 'fix';
                         gitCommit(project.path, `factory: add feature ${story.feature.name} to ${commitTarget}`);
                         succeeded++;
                     } else {

@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
-import { StoryChat } from '@/components/story-chat';
 
 // ─── Interfaces ───
 
@@ -149,9 +148,8 @@ interface NotionBoardProps {
   onNavigateToBuild?: () => void;
   /** Increment this key whenever the active project changes to force a full data reset. */
   projectRefreshKey?: number;
-  /** When this flips to true, open the story-chat dialog. Parent resets it after. */
-  externalOpenStoryChat?: boolean;
-  onExternalStoryChatConsumed?: () => void;
+  /** Callback to switch to the Ask TPM chat tab */
+  onOpenStoryChat?: () => void;
   className?: string;
 }
 
@@ -463,7 +461,7 @@ function YamlViewer({ content }: { content: string }) {
   );
 }
 
-export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRefreshKey = 0, externalOpenStoryChat, onExternalStoryChatConsumed, className }: NotionBoardProps) {
+export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRefreshKey = 0, onOpenStoryChat, className }: NotionBoardProps) {
   // ─── State ───
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'queue'>(initialView);
   const [loading, setLoading] = useState(true);
@@ -567,16 +565,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
   // Story Creation & Editing overlays
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
-  const [showStoryChat, setShowStoryChat] = useState(false);
   const [activeAction, setActiveAction] = useState<{ type: string; file: string } | null>(null);
-
-  // External trigger from FAB
-  useEffect(() => {
-    if (externalOpenStoryChat) {
-      setShowStoryChat(true);
-      onExternalStoryChatConsumed?.();
-    }
-  }, [externalOpenStoryChat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Empty-state prompt banner dismiss (persisted in localStorage)
   const DISMISS_KEY = 'factory_empty_board_dismissed';
@@ -1836,7 +1825,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
               {/* New Story — hidden on mobile (FAB handles it), shown on desktop */}
               <button
-                onClick={() => setShowStoryChat(true)}
+                onClick={() => onOpenStoryChat?.()}
                 className="tap-shrink hidden sm:flex h-8 px-2.5 items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm text-[10px] shrink-0"
                 title="New Story"
               >
@@ -1918,7 +1907,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
         </div>
       </div>
 
-      <StoryChat open={showStoryChat} onOpenChange={setShowStoryChat} onStorySaved={fetchStories} />
+
 
       {editingStory && (
         <StoryEditor
@@ -1981,7 +1970,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
         onClose={() => setShowPromptModal(false)}
         onStartCreating={() => {
           setShowPromptModal(false);
-          setShowStoryChat(true);
+          onOpenStoryChat?.();
         }}
       />
 

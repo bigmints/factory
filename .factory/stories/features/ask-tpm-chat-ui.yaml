@@ -1,0 +1,19 @@
+name: "Scaffold Ask TPM Chat UI & Sidebar"
+description: "Builds the standalone 'Ask TPM' chat interface tab in the Factory dashboard, replacing the old story decomposition modal. Includes responsive layout, workspace preview panel with tabbed editors, and navigation wiring."
+status: draft
+feature:
+  name: "Ask TPM Chat Interface"
+  slug: "ask-tpm-chat"
+target:
+  app: "factory"
+phase: 1
+dependsOn: []
+dependencies:
+  - "lucide-react"
+acceptance_criteria:
+  - "UI: Add a dedicated 'Ask TPM' sidebar and mobile navigation item with a conversational Lucide icon (e.g. Brain, Bot, or MessageSquareCode)."
+  - "UI: Render a premium, modern split-panel layout. Chat workspace is on the left; stories workspace preview is on the right."
+  - "UX: Left-side chat panel provides thread history, empty state with quick prompts, character counters, clear thread, and streaming stop/start actions."
+  - "UX: Right-side workspace preview renders proposed specs (AppStory/FeatureStory) inside responsive tabbed views with YAML syntax highlighting and full-screen previews."
+  - "Interactive: Previews allow individual/batch saving to disk and enqueuing directly to the active build queue with immediate feedback."
+  - "Edge: Chat layouts automatically collapse to a single tabbed panel on mobile, allowing users to switch tabs between 'Chat Workspace' and 'Proposed Stories'."

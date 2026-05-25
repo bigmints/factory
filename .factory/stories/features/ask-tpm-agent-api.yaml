@@ -1,0 +1,19 @@
+name: "Implement TPM Tool-Calling LLM API"
+description: "Creates a streaming `/api/tpm/chat` endpoint equipped with a tool-calling LLM loop. Provides tools for project status lookups, story generation/decomposition, enqueuing builds, and updating context."
+status: draft
+feature:
+  name: "Ask TPM Chat Interface"
+  slug: "ask-tpm-chat"
+target:
+  app: "factory"
+phase: 1
+dependsOn: ["ask-tpm-chat-ui"]
+dependencies:
+  - "yaml"
+acceptance_criteria:
+  - "API: Mount `/api/tpm/chat` endpoint supporting POST requests with thread messages, repo context, and project configs."
+  - "Agentic: TPM agent prompt has strict persona rules (delivery-focused, program manager, does not write code, coordinates builders)."
+  - "Tool-Calling: Integrate LLM function declarations for get_project_status, decompose_requirements, apply_story, and add_adr_decision."
+  - "Tool Execution: Backend automatically intercepts tool call decisions, executes the local operations (e.g. SQLite database query, writing story YAML to disk, enqueuing builds), and returns the results to the LLM context."
+  - "Streaming: The API streams assistant thoughts, tool invocation states, and tool results back to the frontend using Server-Sent Events (SSE)."
+  - "Edge: Gracefully handles LLM rate limits or API timeouts, returning clean JSON error responses without breaking the UI chat thread."

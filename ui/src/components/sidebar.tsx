@@ -43,10 +43,12 @@ interface SidebarProps {
 // ─── SDLC primary workflow nav ───
 const sdlcNav = [
   { id: 'plan',   label: 'Plan',   icon: LayoutDashboard },
+  { id: 'tpm',    label: 'Ask TPM', icon: Brain },
   { id: 'build',  label: 'Build',  icon: Rocket },
   { id: 'test',   label: 'Test',   icon: FlaskConical },
   { id: 'deploy', label: 'Deploy', icon: Globe },
 ];
+
 
 // ─── Secondary / analytics nav ───
 const secondaryNav = [

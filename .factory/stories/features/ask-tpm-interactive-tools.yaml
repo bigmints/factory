@@ -1,0 +1,19 @@
+name: "Build Interactive Tool Call Badges & Output Viewer"
+description: "Builds visual tool execution cards in the chat bubbles inspired by cowork. Visualizes live tool running state, duration, parameters, and allows expanding a modal to view the raw execution output."
+status: draft
+feature:
+  name: "Ask TPM Chat Interface"
+  slug: "ask-tpm-chat"
+target:
+  app: "factory"
+phase: 2
+dependsOn: ["ask-tpm-chat-ui", "ask-tpm-agent-api"]
+dependencies:
+  - "lucide-react"
+acceptance_criteria:
+  - "UI: Render custom visual card containers inside assistant chat bubbles whenever the TPM triggers a tool call."
+  - "UX: Show visual cues based on tool call status (Running with pulsing blue/violet boundary and elapsed duration timer, Succeeded with solid green badge, Failed with red warning indicator)."
+  - "UX: Interactive details card shows the tool name (namespace-stripped, e.g. get_project_status instead of factory.get_project_status) and input arguments nicely formatted as JSON."
+  - "Interactivity: Displays a 'View Result' button that opens a beautiful code viewer dialog or drawer, rendering the raw string/JSON returned by the tool."
+  - "UX: If a tool execution fails (e.g. database locked or directory missing), render the specific error snippet directly in the card so the user can easily debug."
+  - "Edge: Active timers and animation states are safely suspended when the chat is closed or when navigating to another tab."

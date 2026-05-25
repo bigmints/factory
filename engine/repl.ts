@@ -5,7 +5,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { getActiveProject, loadBridgeConfig } from './config.ts';
@@ -119,7 +119,9 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
         slug = 'appName' in activeStory ? storySlug(activeStory as AppStory) : activeStory.feature.slug;
         targetDir = bridge.apps_dir
             ? resolve(project.path, bridge.apps_dir, slug)
-            : resolve(project.path, slug);
+            : slug !== project.name && slug !== basename(project.path)
+            ? resolve(project.path, slug)
+            : project.path;
     }
 
     // Gather existing app integration blueprint if this is a feature build

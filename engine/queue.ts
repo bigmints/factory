@@ -661,16 +661,21 @@ async function runBuild(item: QueueItem): Promise<boolean> {
         let targetDir: string;
         if (item.kind === 'FeatureStory') {
             const story = loadFeatureStory(item.storyFile);
-            targetDir = bridge.apps_dir
-                ? resolve(projectPath, bridge.apps_dir, story.target.app)
-                : resolve(projectPath, story.target.app);
+            const targetApp = story.target.app;
+            targetDir = bridge.apps_dir && targetApp
+                ? resolve(projectPath, bridge.apps_dir, targetApp)
+                : targetApp && targetApp !== project.name && targetApp !== basename(projectPath)
+                ? resolve(projectPath, targetApp)
+                : projectPath;
             result = await runFeaturePipeline(story, blueprint, targetDir, item.storyFile);
         } else {
             const story = loadStory(item.storyFile);
             const slug = storySlug(story);
             targetDir = bridge.apps_dir
                 ? resolve(projectPath, bridge.apps_dir, slug)
-                : resolve(projectPath, slug);
+                : slug !== project.name && slug !== basename(projectPath)
+                ? resolve(projectPath, slug)
+                : projectPath;
             result = await runPipeline(story, blueprint, targetDir, item.storyFile);
         }
 

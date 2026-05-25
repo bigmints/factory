@@ -13,6 +13,7 @@ import { SettingsView } from '@/components/settings-view';
 import { SkillsView } from '@/components/skills-view';
 import { NotionBoard } from '@/components/notion-board';
 import { BuildPage } from '@/components/build-page';
+import { TpmChat } from '@/components/tpm-chat';
 import { IntegrationsView } from '@/components/integrations-view';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -60,7 +61,7 @@ interface ValidationCheck {
   message: string;
 }
 
-const VALID_TABS = ['plan', 'build', 'test', 'deploy', 'roadmap', 'queue', 'dashboard', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
+const VALID_TABS = ['plan', 'tpm', 'build', 'test', 'deploy', 'roadmap', 'queue', 'dashboard', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('plan');
@@ -104,8 +105,6 @@ export default function Dashboard() {
   const [projectCount, setProjectCount] = useState(0);
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
-  const [showStoryChat, setShowStoryChat] = useState(false);
-  const [globalOpenStoryChat, setGlobalOpenStoryChat] = useState(false);
   const [isBuildingAll, setIsBuildingAll] = useState(false);
   const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
   const [queueRunning, setQueueRunning] = useState(false);
@@ -627,12 +626,13 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'plan' && <NotionBoard initialView="list" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} className="flex-1 min-h-0" />}
+            {activeTab === 'plan' && <NotionBoard initialView="list" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setActiveTab('tpm')} className="flex-1 min-h-0" />}
+            {activeTab === 'tpm' && <TpmChat />}
             {activeTab === 'build' && <BuildPage />}
             {activeTab === 'test' && <TestPlaceholder />}
             {activeTab === 'deploy' && <DeployPlaceholder />}
             {/* legacy hash compat */}
-            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} externalOpenStoryChat={globalOpenStoryChat} onExternalStoryChatConsumed={() => setGlobalOpenStoryChat(false)} className="flex-1 min-h-0" />}
+            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setActiveTab('tpm')} className="flex-1 min-h-0" />}
             {activeTab === 'skills' && <SkillsView />}
             {activeTab === 'reports' && renderReports()}
             {activeTab === 'knowledge' && <KnowledgeView />}
@@ -720,11 +720,7 @@ export default function Dashboard() {
         onAddProject={() => setShowAddProject(true)}
         projectRefreshKey={projectRefreshKey}
         onNewStory={() => {
-          // Switch to Plan tab first if not already there
-          if (activeTab !== 'plan' && activeTab !== 'dashboard') {
-            setActiveTab('plan');
-          }
-          setGlobalOpenStoryChat(true);
+          setActiveTab('tpm');
         }}
       />
     </div>

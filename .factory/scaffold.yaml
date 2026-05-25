@@ -42,5 +42,22 @@ features:
             status: completed
         progressPercent: 100
     progressPercent: 100
-status: done
-progressPercent: 100
+  - name: "💬 Ask TPM Chat Interface"
+    description: "Replaces the spec modal with a dedicated, unified Ask TPM chat tab. TPM agent can call tools to report status, decompose feature specs, auto-enqueue builds, and track progress with interactive visuals inspired by cowork."
+    status: draft
+    stories:
+      - name: "Scaffold Ask TPM Chat UI & Sidebar"
+        file: stories/features/ask-tpm-chat-ui.yaml
+        status: draft
+        tasks: []
+      - name: "Implement TPM Tool-Calling LLM API"
+        file: stories/features/ask-tpm-agent-api.yaml
+        status: draft
+        tasks: []
+      - name: "Build Interactive Tool Call Badges & Output Viewer"
+        file: stories/features/ask-tpm-interactive-tools.yaml
+        status: draft
+        tasks: []
+status: in-progress
+progressPercent: 66
+

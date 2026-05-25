@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T19:03:19Z"
+  last_seen: "2026-05-25T21:05:21Z"
   host: "BigMac-2"
-  task: "post-commit: fix(ui): resolve story names in queue items instead of epic/feature names"
+  task: "post-commit: feat(init): support encapsulated .factory/AGENTS.md and auto-discovery conventions"
   status: alive

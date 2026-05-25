@@ -15,7 +15,7 @@
  *   factory feature validate <spec.yaml>     Validate a feature spec
  */
 
-import { resolve, dirname, join, isAbsolute } from 'node:path';
+import { resolve, dirname, join, isAbsolute, basename } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -143,7 +143,9 @@ async function handleBuild(storyPath?: string): Promise<void> {
     const slug = storySlug(story);
     const targetDir = bridge.apps_dir
         ? resolve(project.path, bridge.apps_dir, slug)
-        : resolve(project.path, slug);
+        : slug !== project.name && slug !== basename(project.path)
+        ? resolve(project.path, slug)
+        : project.path;
 
     // Step 3: Run orchestrator — LLM delegates to the configured CLI
     // The CLI agent writes files directly; no post-pipeline writeFiles() needed.
@@ -557,7 +559,7 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             const targetApp = story.target?.app;
             const targetDir = bridge.apps_dir && targetApp
                 ? resolve(project.path, bridge.apps_dir, targetApp)
-                : targetApp
+                : targetApp && targetApp !== project.name && targetApp !== basename(project.path)
                 ? resolve(project.path, targetApp)
                 : project.path;  // no apps_dir + no target.app → build in project root
 
@@ -786,7 +788,7 @@ async function handleQueueStart(): Promise<void> {
                     const targetApp = story.target?.app;
                     const targetDir = bridge.apps_dir && targetApp
                         ? resolve(project.path, bridge.apps_dir, targetApp)
-                        : targetApp
+                        : targetApp && targetApp !== project.name && targetApp !== basename(project.path)
                         ? resolve(project.path, targetApp)
                         : project.path;  // no apps_dir + no target.app → build in project root
                     
@@ -852,7 +854,9 @@ async function handleQueueStart(): Promise<void> {
                     const slug = storySlug(story);
                     const targetDir = bridge.apps_dir
                         ? resolve(project.path, bridge.apps_dir, slug)
-                        : resolve(project.path, slug);
+                        : slug !== project.name && slug !== basename(project.path)
+                        ? resolve(project.path, slug)
+                        : project.path;
 
                     // Orchestrator writes files directly — no writeFiles() needed
                     const result = await runPipeline(story, blueprint, targetDir, current.storyFile);

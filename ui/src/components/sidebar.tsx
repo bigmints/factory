@@ -45,7 +45,6 @@ interface SidebarProps {
 // ─── SDLC primary workflow nav ───
 const sdlcNav = [
   { id: 'plan',   label: 'Plan',   icon: LayoutDashboard },
-  { id: 'tpm',    label: 'Ask TPM', icon: Brain },
   { id: 'build',  label: 'Build',  icon: Rocket },
   { id: 'test',   label: 'Test',   icon: FlaskConical },
   { id: 'deploy', label: 'Deploy', icon: Globe },
@@ -158,14 +157,8 @@ export function Sidebar({
           <NavItem
             key={item.id}
             {...item}
-            active={item.id === 'tpm' ? !!tpmChatOpen : activeTab === item.id}
-            onClick={() => {
-              if (item.id === 'tpm') {
-                onToggleTpmChat?.();
-              } else {
-                onTabChange(item.id);
-              }
-            }}
+            active={activeTab === item.id}
+            onClick={() => onTabChange(item.id)}
             isCollapsed={isCollapsed}
           />
         ))}
@@ -348,31 +341,31 @@ export function MobileNav({
           <div className="overflow-y-auto flex-1 px-3 py-3">
             {/* SDLC primary */}
             <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Workflow</p>
-             {sdlcNav.map((item) => {
-              const Icon = item.icon;
-              const isActive = item.id === 'tpm' ? !!tpmChatOpen : activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavChange(item.id)}
-                  className={cn(
-                    'tap-shrink w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5',
-                    isActive ? 'bg-primary/12 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                  )}
-                >
-                  <div className={cn(
-                    'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all',
-                    isActive ? 'bg-primary/15' : 'bg-muted/50'
-                  )}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <span>{item.label}</span>
-                  {isActive && (
-                    <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
-                  )}
-                </button>
-              );
-            })}
+              {sdlcNav.map((item) => {
+               const Icon = item.icon;
+               const isActive = activeTab === item.id;
+               return (
+                 <button
+                   key={item.id}
+                   onClick={() => handleNavChange(item.id)}
+                   className={cn(
+                     'tap-shrink w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5',
+                     isActive ? 'bg-primary/12 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                   )}
+                 >
+                   <div className={cn(
+                     'h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all',
+                     isActive ? 'bg-primary/15' : 'bg-muted/50'
+                   )}>
+                     <Icon className="h-4 w-4" />
+                   </div>
+                   <span>{item.label}</span>
+                   {isActive && (
+                     <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                   )}
+                 </button>
+               );
+             })}
 
             {/* Secondary nav */}
             <p className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Analytics</p>

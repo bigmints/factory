@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-24T11:36:47Z"
+  last_seen: "2026-05-24T11:45:16Z"
   host: "192"
-  task: "post-commit: fix(ui): resolve StatusPill type error in build-page.tsx"
+  task: "post-commit: feat(orchestrate): explicitly inject target directory into system prompt to prevent placeholder path guesses"
   status: alive

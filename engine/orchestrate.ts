@@ -113,7 +113,7 @@ const CLI_YOLO_FLAGS: Record<string, string[]> = {
 
 // ─── Orchestrator Loop ───────────────────────────────────
 
-const MAX_TURNS = 8;   // max LLM turns before giving up
+const MAX_TURNS = 15;   // max LLM turns before giving up
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 async function runOrchestratorLoop(

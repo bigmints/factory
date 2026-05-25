@@ -104,7 +104,9 @@ const CLI_YOLO_FLAGS: Record<string, string[]> = {
     gemini: ['--yolo'],
     claude: ['--dangerously-skip-permissions'],
     agy:    ['--dangerously-skip-permissions'],
-    pi:     [],
+    // --no-session: skip loading/saving session (avoids corrupted settings stall)
+    // --no-extensions: skip MCP adapter init which blocks stdout for 30-60s
+    pi:     ['--no-session', '--no-extensions'],
 };
 
 // ─── Orchestrator Loop ───────────────────────────────────
@@ -113,7 +115,7 @@ const MAX_TURNS = 12;              // max LLM turns before giving up
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 
 // ─── CLI Health Monitor Thresholds ──────────────────────
-const STALL_TIMEOUT_MS  = 120_000;  // 2 min no output → kill (covers npm install)
+const STALL_TIMEOUT_MS  = 5 * 60_000;   // 5 min — local models need time to think + write files
 const LOOP_WINDOW_BYTES = 500;      // bytes to compare for loop detection
 const LOOP_CHECK_MS     = 15_000;   // how often to run loop check
 const QUESTION_PATTERNS: RegExp[] = [
@@ -540,6 +542,15 @@ async function toolDelegateToCli(
         const child = spawn(ctx.cliName, cliArgs, {
             cwd: resolvedCwd,
             stdio: ['ignore', 'pipe', 'pipe'],
+            env: {
+                ...process.env,
+                // Ensure nvm-installed CLIs (pi, claude) are on PATH
+                PATH: [
+                    `/home/${process.env.USER || 'bigmints'}/.nvm/versions/node/v22.22.2/bin`,
+                    `/home/${process.env.USER || 'bigmints'}/.nvm/versions/node/v20.20.2/bin`,
+                    process.env.PATH || '',
+                ].join(':'),
+            },
         });
 
         let buffer = '';

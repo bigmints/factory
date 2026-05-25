@@ -115,6 +115,8 @@ export function Sidebar({
   projectRefreshKey,
   isCollapsed = false,
   onToggleCollapse,
+  tpmChatOpen,
+  onToggleTpmChat,
 }: SidebarProps) {
   return (
     <aside className={cn(

@@ -38,6 +38,8 @@ interface SidebarProps {
   projectRefreshKey?: number;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  tpmChatOpen?: boolean;
+  onToggleTpmChat?: () => void;
 }
 
 // ─── SDLC primary workflow nav ───
@@ -154,8 +156,14 @@ export function Sidebar({
           <NavItem
             key={item.id}
             {...item}
-            active={activeTab === item.id}
-            onClick={() => onTabChange(item.id)}
+            active={item.id === 'tpm' ? !!tpmChatOpen : activeTab === item.id}
+            onClick={() => {
+              if (item.id === 'tpm') {
+                onToggleTpmChat?.();
+              } else {
+                onTabChange(item.id);
+              }
+            }}
             isCollapsed={isCollapsed}
           />
         ))}
@@ -234,12 +242,16 @@ export function MobileNav({
   onAddProject,
   projectRefreshKey,
   onNewStory,
+  tpmChatOpen,
+  onToggleTpmChat,
 }: {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onAddProject: () => void;
   projectRefreshKey?: number;
   onNewStory?: () => void;
+  tpmChatOpen?: boolean;
+  onToggleTpmChat?: () => void;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [fabPressed, setFabPressed] = useState(false);
@@ -247,6 +259,8 @@ export function MobileNav({
   const handleNavChange = (tab: string) => {
     if (tab === 'projects') {
       onAddProject();
+    } else if (tab === 'tpm') {
+      onToggleTpmChat?.();
     } else {
       onTabChange(tab);
     }
@@ -332,9 +346,9 @@ export function MobileNav({
           <div className="overflow-y-auto flex-1 px-3 py-3">
             {/* SDLC primary */}
             <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40">Workflow</p>
-            {sdlcNav.map((item) => {
+             {sdlcNav.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = item.id === 'tpm' ? !!tpmChatOpen : activeTab === item.id;
               return (
                 <button
                   key={item.id}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
+  ArrowLeft,
   Bot,
   User,
   Save,
@@ -120,7 +121,7 @@ function extractNameFromYaml(yaml: string): string | null {
   return null;
 }
 
-export function TpmChat() {
+export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -129,14 +130,12 @@ export function TpmChat() {
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingAll, setSavingAll] = useState(false);
+  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
 
   const [activeProject, setActiveProject] = useState<any>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const [repoBlueprint, setRepoBlueprint] = useState<any>(null);
-
-  // Mobile layout switch: 'chat' | 'preview'
-  const [mobilePane, setMobilePane] = useState<'chat' | 'preview'>('chat');
 
   // Tool Call Output Popup Modal
   const [selectedToolOutput, setSelectedToolOutput] = useState<{ name: string; result: string } | null>(null);
@@ -353,6 +352,14 @@ export function TpmChat() {
   const hasStories = mergedStories.length > 0;
   const allSaved = mergedStories.length > 0 && mergedStories.every((s) => savedStories.has(s.filename));
 
+  const prevStoriesLength = useRef(0);
+  useEffect(() => {
+    if (mergedStories.length > prevStoriesLength.current && mergedStories.length > 0) {
+      setArtifactPanelOpen(true);
+    }
+    prevStoriesLength.current = mergedStories.length;
+  }, [mergedStories.length]);
+
   const handleSaveStory = async (story: ParsedStory) => {
     setSaving(true);
     try {
@@ -451,14 +458,6 @@ export function TpmChat() {
     toast.success('Chat history cleared');
   };
 
-  // Quick suggestion prompts
-  const suggestionPrompts = [
-    { title: "📊 Project Status", prompt: "TPM, what is the status of my active stories and build queue?" },
-    { title: "🚀 Plan New Feature", prompt: "Help me plan a dark mode toggle component with acceptance criteria." },
-    { title: "📄 Register ADR", prompt: "Plan an architectural decision to use SQLite for queue states." },
-    { title: "🔍 Recent Heartbeats", prompt: "TPM, get the recent heartbeat signals and session logs." }
-  ];
-
   const isEmpty = messages.length === 0;
 
   const phaseColor = (phase?: number) => {
@@ -471,162 +470,266 @@ export function TpmChat() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-2rem)] md:h-screen bg-background relative overflow-hidden">
-      {/* Top Header Panel */}
-      <header className="border-b border-border px-4 py-3 flex items-center justify-between h-14 sm:h-16 shrink-0 bg-card sticky top-0 z-40 shadow-xs">
-        <div className="flex items-center space-x-3 min-w-0">
-          <div className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary/10 p-2 border border-primary/20 text-primary">
-            <Brain className="size-4" />
+    <div className="flex shrink-0 h-full relative z-40 select-none">
+      {/* ── Collapsible Spec stories (Artifact Panel) sliding next to the chat ── */}
+      <div className={cn(
+        "h-full flex flex-col bg-card border-l border-border transition-all duration-300 ease-in-out shrink-0 relative overflow-hidden",
+        isOpen && artifactPanelOpen && hasStories ? "w-[420px] md:w-[450px]" : "w-0 border-l-0"
+      )}>
+        <div className="w-[450px] h-full flex flex-col">
+          
+          {/* Stories Horizontal Tab Bar */}
+          <div className="border-b border-border bg-muted shrink-0 select-none">
+            <div className="flex items-center h-14 px-3 justify-between">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 mr-2 pb-1 pt-1 select-none snap-x snap-mandatory">
+                {mergedStories.map((story, idx) => (
+                  <button
+                    key={story.filename}
+                    onClick={() => setActiveTab(idx)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold whitespace-nowrap transition-all shrink-0 min-h-[30px] snap-center tap-shrink border',
+                      idx === activeTab
+                        ? 'bg-card border-border text-foreground shadow-xs'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/40'
+                    )}
+                  >
+                    {story.kind === 'app' ? (
+                      <Package className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <Layers className="h-3 w-3 text-muted-foreground" />
+                    )}
+                    <span className="max-w-[100px] truncate">{story.name}</span>
+                    {story.phase && (
+                      <span className={cn('text-[8px] px-1 rounded-md border font-bold', phaseColor(story.phase))}>
+                        P{story.phase}
+                      </span>
+                    )}
+                    {savedStories.has(story.filename) && (
+                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
+                  onClick={() => setArtifactPanelOpen(false)}
+                  title="Close Panel"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
-          <div className="space-y-0.5 min-w-0">
-            <h2 className="text-sm sm:text-base font-bold tracking-tight truncate text-foreground flex items-center gap-1.5">
-              Ask TPM Chat
-              <Badge variant="secondary" className="h-4.5 px-1.5 text-[8.5px] uppercase font-mono tracking-wider font-semibold border bg-primary/5 text-primary border-primary/20">
-                Agentic Loop
-              </Badge>
-            </h2>
-            <p className="text-[10px] sm:text-xs text-muted-foreground font-medium truncate">
-              {activeProject
-                ? `Coordinating program delivery for: ${activeProject.name}`
-                : 'Interactive build orchestration, feature planning, and status report'}
-            </p>
+
+          {/* Stories YAML Editor/Code view */}
+          <div className="flex-1 overflow-auto bg-card select-text">
+            {activeStory ? (
+              <div className="p-4 sm:p-6 font-mono text-[10px] leading-relaxed relative">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-border relative z-10">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {activeStory.kind === 'app' ? (
+                      <div className="p-1.5 rounded-lg bg-muted border border-border shrink-0">
+                        <Package className="h-3.5 w-3.5 text-foreground" />
+                      </div>
+                    ) : (
+                      <div className="p-1.5 rounded-lg bg-muted border border-border shrink-0">
+                        <Layers className="h-3.5 w-3.5 text-foreground" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <h3 className="text-foreground text-xs font-bold truncate">{activeStory.name}</h3>
+                      <p className="text-muted-foreground text-[8px] font-semibold truncate mt-0.5">{activeStory.filename}</p>
+                    </div>
+                    {activeStory.phase && (
+                      <span className={cn('text-[8px] px-2 py-0.5 rounded-md border font-bold ml-2 shrink-0', phaseColor(activeStory.phase))}>
+                        Phase {activeStory.phase}
+                      </span>
+                    )}
+                  </div>
+
+                  {!savedStories.has(activeStory.filename) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2.5 text-[10px] font-bold gap-1 rounded-md tap-shrink border-border"
+                      onClick={() => handleSaveStory(activeStory)}
+                      disabled={saving || streaming}
+                    >
+                      {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      <span>Save</span>
+                    </Button>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1 bg-muted px-2 py-0.5 rounded-md border border-emerald-500/30 shrink-0">
+                      <Check className="h-3 w-3" /> Enqueued
+                    </span>
+                  )}
+                </div>
+                
+                <div className="rounded-lg border border-border p-4 shadow-xs relative overflow-hidden bg-[#0d1117] text-white">
+                  <pre className="relative z-10 whitespace-pre-wrap overflow-x-auto leading-relaxed">
+                    <code className="text-slate-200">{activeStory.yaml}</code>
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-6 select-none opacity-50">
+                <div className="relative">
+                  <div className="relative flex h-16 w-16 items-center justify-center rounded-xl bg-muted border border-border shadow-inner">
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-foreground">Spec Workspace Empty</h4>
+                  <p className="text-[10px] text-muted-foreground max-w-xs leading-relaxed">
+                    Decomposed feature blueprints will load on the right panel automatically during chat sessions.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+      </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {hasStories && !streaming && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-md tap-shrink border-border"
-                onClick={handleCopy}
-              >
-                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
-              </Button>
-              {!allSaved && (
+      {/* ── Collapsible Chat Workspace Panel sliding from the right ── */}
+      <div className={cn(
+        "h-full flex flex-col bg-card border-l border-border transition-all duration-300 ease-in-out shrink-0 relative overflow-hidden",
+        isOpen ? "w-[400px] md:w-[420px]" : "w-0 border-l-0"
+      )}>
+        <div className="w-[420px] h-full flex flex-col relative">
+          {/* Header */}
+          <header className="border-b border-border px-4 py-3 flex items-center justify-between h-14 shrink-0 bg-card sticky top-0 z-40 shadow-xs select-none">
+            <div className="flex items-center space-x-2 min-w-0">
+              <div className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary/10 p-1.5 border border-primary/20 text-primary">
+                <Brain className="size-4" />
+              </div>
+              <div className="space-y-0.5 min-w-0">
+                <h2 className="text-xs font-bold tracking-tight truncate text-foreground flex items-center gap-1.5">
+                  Ask TPM
+                  <Badge variant="secondary" className="h-4 px-1 text-[7.5px] uppercase font-mono tracking-wider font-semibold border bg-primary/5 text-primary border-primary/20">
+                    Agent
+                  </Badge>
+                </h2>
+                <p className="text-[8px] text-muted-foreground font-semibold truncate">
+                  {activeProject ? `Project: ${activeProject.name}` : 'Factory Assistant'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Toggle Artifact Panel */}
+              {hasStories && (
                 <Button
-                  size="sm"
-                  className="h-8 px-3 text-[10px] sm:text-xs font-semibold gap-1.5 rounded-md tap-shrink bg-gradient-to-r from-violet-600 to-indigo-600 text-white"
-                  onClick={handleSaveAll}
-                  disabled={savingAll}
+                  variant={artifactPanelOpen ? "secondary" : "outline"}
+                  size="icon"
+                  className="h-7 w-7 rounded-md border border-border/50 relative"
+                  onClick={() => setArtifactPanelOpen(!artifactPanelOpen)}
+                  title="Toggle specs panel"
                 >
-                  {savingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SaveAll className="h-3.5 w-3.5" />}
-                  <span>Save All ({mergedStories.length - savedStories.size})</span>
+                  <Layers className="h-3.5 w-3.5" />
+                  <Badge className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 text-[7px] font-bold bg-indigo-600 text-white flex items-center justify-center rounded-full border border-card shadow-sm">
+                    {mergedStories.length}
+                  </Badge>
                 </Button>
               )}
-            </>
-          )}
 
-          {!isEmpty && (
-            <Button
-              variant="outline"
-              size="icon"
-              title="Clear History"
-              className="h-8 w-8 rounded-md hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/20 border-border text-muted-foreground"
-              onClick={clearHistory}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </header>
-
-      {/* Mobile Segment Switcher */}
-      {hasStories && (
-        <div className="lg:hidden flex bg-muted px-3 py-2 border-b border-border shrink-0">
-          <div className="w-full rounded-lg bg-muted p-1 flex items-center border border-border">
-            <button
-              className={cn(
-                "flex-1 text-xs font-bold py-1.5 rounded-md transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
-                mobilePane === 'chat' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => setMobilePane('chat')}
-            >
-              <MessageSquareCode className="h-3.5 w-3.5" />
-              Chat Workspace
-            </button>
-            <button
-              className={cn(
-                "flex-1 text-xs font-bold py-1.5 rounded-md transition-all min-h-[38px] flex items-center justify-center gap-1.5 tap-shrink",
-                mobilePane === 'preview' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => setMobilePane('preview')}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Proposed Stories ({mergedStories.length})
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content Split Panel */}
-      <div className="flex flex-1 overflow-hidden relative">
-        
-        {/* Left Side: Chat Workspace */}
-        <div className={cn(
-          "flex flex-col border-r border-border bg-card relative",
-          mobilePane === 'chat' || !hasStories ? "flex w-full lg:w-[35%] lg:min-w-[420px] lg:max-w-[480px]" : "hidden lg:flex lg:w-[35%] lg:min-w-[420px] lg:max-w-[480px]"
-        )}>
-          
-          {/* Context Banner */}
-          {activeProject && isEmpty && (
-            <div className="mx-4 mt-4 px-3 py-2.5 rounded-lg bg-muted border border-border text-foreground text-[10px] sm:text-xs font-medium flex items-center gap-2 shadow-inner">
-              <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">Active Project: <strong className="text-foreground">{activeProject.name}</strong></span>
-            </div>
-          )}
-
-          {isEmpty && (
-            <div className={cn(
-              "mx-4 mt-3 px-3 py-2.5 rounded-lg border text-[10px] sm:text-xs font-semibold flex items-center gap-2 transition-colors",
-              scanning ? "border-border bg-muted text-foreground" :
-              repoBlueprint ? "border-border bg-muted text-foreground" :
-              scanError ? "border-rose-500/25 bg-rose-500/5 dark:bg-rose-950/15 text-rose-600 dark:text-rose-400" : ""
-            )}>
-              {scanning ? (
-                <><ScanSearch className="h-4 w-4 text-muted-foreground shrink-0 animate-pulse" /> <span>Scanning repo blueprint...</span></>
-              ) : repoBlueprint ? (
-                <><ScanSearch className="h-4 w-4 text-primary shrink-0" />
-                  <span className="truncate text-foreground/90 font-medium">
-                    Codebase Stack: {repoBlueprint.stack?.framework || 'Node.js'} ({Object.keys(repoBlueprint.dependencies || {}).length} dependencies)
-                  </span>
+              {hasStories && !streaming && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7 rounded-md border border-border/50"
+                    onClick={handleCopy}
+                    title="Copy active story spec"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  </Button>
+                  {!allSaved && (
+                    <Button
+                      size="sm"
+                      className="h-7 px-2.5 text-[9px] font-bold gap-1 rounded-md bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:opacity-90 border-0"
+                      onClick={handleSaveAll}
+                      disabled={savingAll}
+                    >
+                      {savingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <SaveAll className="h-3.5 w-3.5" />}
+                      <span>Save All</span>
+                    </Button>
+                  )}
                 </>
-              ) : scanError ? (
-                <><ScanSearch className="h-4 w-4 text-rose-500 shrink-0" /> <span>Repo metadata unavailable</span></>
-              ) : null}
+              )}
+
+              {!isEmpty && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  title="Clear History"
+                  className="h-7 w-7 rounded-md hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/20 border-border text-muted-foreground"
+                  onClick={clearHistory}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
+                onClick={onClose}
+                title="Close TPM Chat"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </header>
+
+          {/* Scanning banner */}
+          {isEmpty && (activeProject || repoBlueprint || scanError) && (
+            <div className="px-4 mt-3 space-y-1.5">
+              {activeProject && (
+                <div className="px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border text-foreground text-[9px] font-semibold flex items-center gap-1.5 shadow-xs">
+                  <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">Active Project: <strong className="text-foreground">{activeProject.name}</strong></span>
+                </div>
+              )}
+
+              <div className={cn(
+                "px-2.5 py-1.5 rounded-lg border text-[9px] font-semibold flex items-center gap-1.5 transition-colors",
+                scanning ? "border-border bg-muted/60 text-foreground" :
+                repoBlueprint ? "border-border bg-muted/60 text-foreground" :
+                scanError ? "border-rose-500/25 bg-rose-500/5 dark:bg-rose-950/15 text-rose-600 dark:text-rose-400" : ""
+              )}>
+                {scanning ? (
+                  <><ScanSearch className="h-3.5 w-3.5 text-muted-foreground shrink-0 animate-pulse" /> <span>Scanning repo...</span></>
+                ) : repoBlueprint ? (
+                  <><ScanSearch className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate text-foreground/90 font-medium">
+                      Stack: {repoBlueprint.stack?.framework || 'Node.js'} ({Object.keys(repoBlueprint.dependencies || {}).length} deps)
+                    </span>
+                  </>
+                ) : scanError ? (
+                  <><ScanSearch className="h-3.5 w-3.5 text-rose-500 shrink-0" /> <span>Metadata unavailable</span></>
+                ) : null}
+              </div>
             </div>
           )}
 
           {/* Message Thread */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 sm:py-6 space-y-6 scrollbar-thin">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-6 scrollbar-thin">
             {isEmpty ? (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-5 sm:gap-6 py-10 max-w-sm mx-auto select-none">
+              <div className="flex flex-col items-center justify-center py-20 text-center gap-4 max-w-[280px] mx-auto select-none animate-in fade-in slide-in-from-bottom-3 duration-300">
                 <div className="relative">
-                  <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary shadow-sm">
-                    <Bot className="h-8 w-8" />
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
+                    <Bot className="h-6 w-6" />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <h3 className="text-sm sm:text-base font-bold text-foreground">Ask the TPM Agent</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-bold text-foreground">Ask the TPM Agent</h3>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
                     Check project status, plan new feature specs, save story blueprints directly to the build queue, or register ADRs in the project.
                   </p>
-                </div>
-
-                {/* Quick Prompts list */}
-                <div className="w-full pt-4 grid grid-cols-1 gap-2 text-left">
-                  {suggestionPrompts.map((s, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleSend(s.prompt)}
-                      className="flex items-center justify-between rounded-lg border border-border px-3.5 py-2.5 text-xs font-semibold hover:bg-muted/80 text-foreground/90 transition-all bg-card/50 shadow-xs tap-shrink hover:border-primary/20 hover:text-primary group"
-                    >
-                      <span>{s.title}</span>
-                      <ArrowUp className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity rotate-90 text-primary" />
-                    </button>
-                  ))}
                 </div>
               </div>
             ) : (
@@ -635,7 +738,7 @@ export function TpmChat() {
                   <div
                     key={i}
                     className={cn(
-                      "flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                      "flex gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-300",
                       msg.role === 'assistant' ? "flex-row" : "flex-row-reverse"
                     )}
                   >
@@ -656,29 +759,29 @@ export function TpmChat() {
                       "flex-1 flex flex-col min-w-0",
                       msg.role === 'user' ? "items-end text-right" : "items-start text-left"
                     )}>
-                      <span className="text-[8px] sm:text-[9px] font-bold text-muted-foreground/60 mb-1 uppercase tracking-widest px-1">
+                      <span className="text-[8px] font-bold text-muted-foreground/60 mb-1 uppercase tracking-widest px-1">
                         {msg.role === 'assistant' ? 'Program Manager' : 'Author'}
                       </span>
                       
                       <div className={cn(
-                        "max-w-[92%] text-xs sm:text-sm rounded-xl p-3 sm:p-4 leading-relaxed border flex flex-col gap-3 shadow-xs",
+                        "max-w-[90%] text-xs rounded-xl p-3 leading-relaxed border flex flex-col gap-3 shadow-xs",
                         msg.role === 'assistant'
                           ? "bg-card border-border text-card-foreground"
                           : "bg-primary text-primary-foreground border-primary font-medium"
                       )}>
-                        {msg.content && <p className="whitespace-pre-wrap">{msg.content}</p>}
+                        {msg.content && <p className="whitespace-pre-wrap select-text">{msg.content}</p>}
 
                         {/* Interactive Tool Calling Badges */}
                         {msg.toolCalls && msg.toolCalls.length > 0 && (
                           <div className="space-y-2 mt-2 w-full">
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">
+                            <div className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">
                               Executed Actions ({msg.toolCalls.length})
                             </div>
                             {msg.toolCalls.map((tc) => (
                               <div
                                 key={tc.id}
                                 className={cn(
-                                  "rounded-lg border p-2.5 flex flex-col gap-2 transition-all bg-card/70 backdrop-blur-md",
+                                  "rounded-lg border p-2 flex flex-col gap-2 transition-all bg-card/70 backdrop-blur-md",
                                   tc.status === 'running' ? "border-violet-500/40 shadow-xs shadow-violet-500/5 animate-pulse" :
                                   tc.status === 'success' ? "border-emerald-500/20 text-foreground" : "border-rose-500/20 text-foreground"
                                 )}
@@ -686,27 +789,27 @@ export function TpmChat() {
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-1.5 min-w-0">
                                     {tc.status === 'running' ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500 shrink-0" />
+                                      <Loader2 className="h-3 w-3 animate-spin text-violet-500 shrink-0" />
                                     ) : tc.status === 'success' ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                      <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
                                     ) : (
-                                      <AlertTriangle className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                                      <AlertTriangle className="h-3 w-3 text-rose-500 shrink-0" />
                                     )}
-                                    <span className="font-mono text-[10px] font-bold text-foreground/80 truncate">
+                                    <span className="font-mono text-[9px] font-bold text-foreground/80 truncate">
                                       {tc.name}
                                     </span>
                                   </div>
                                   
                                   {tc.duration !== undefined && (
-                                    <div className="text-[9px] font-mono font-semibold text-muted-foreground flex items-center gap-1">
-                                      <Clock className="h-2.5 w-2.5" />
+                                    <div className="text-[8px] font-mono font-semibold text-muted-foreground flex items-center gap-1">
+                                      <Clock className="h-2 w-2" />
                                       {(tc.duration / 1000).toFixed(1)}s
                                     </div>
                                   )}
                                 </div>
 
                                 {tc.arguments && Object.keys(tc.arguments).length > 0 && (
-                                  <div className="text-[9px] font-mono bg-muted p-1.5 rounded border border-border/60 text-muted-foreground max-h-20 overflow-y-auto leading-relaxed select-text">
+                                  <div className="text-[8px] font-mono bg-muted p-1.5 rounded border border-border/60 text-muted-foreground max-h-20 overflow-y-auto leading-relaxed select-text">
                                     {JSON.stringify(tc.arguments, null, 2)}
                                   </div>
                                 )}
@@ -716,10 +819,10 @@ export function TpmChat() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className="h-6.5 text-[9px] font-bold border-border/80 text-foreground hover:bg-muted shrink-0 flex items-center gap-1 shadow-xs"
+                                      className="h-6 text-[8px] font-bold border-border/80 text-foreground hover:bg-muted shrink-0 flex items-center gap-1 shadow-xs"
                                       onClick={() => setSelectedToolOutput({ name: tc.name, result: tc.result || "" })}
                                     >
-                                      <Eye className="h-3 w-3" />
+                                      <Eye className="h-2.5 w-2.5" />
                                       View Output
                                     </Button>
                                   </div>
@@ -736,38 +839,38 @@ export function TpmChat() {
             )}
           </div>
 
-          {/* Input Area */}
-          <div className="p-3 sm:p-4 shrink-0 border-t border-border relative z-30">
-            <div className="relative flex flex-col rounded-lg bg-card border border-border overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all duration-200 shadow-inner">
+          {/* Centered Input Area */}
+          <div className="p-3 shrink-0 border-t border-border bg-card relative z-30">
+            <div className="relative flex flex-col rounded-[20px] bg-background/60 backdrop-blur-md border border-border/60 overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40 transition-all duration-250 shadow-xs">
               <Textarea
                 ref={inputRef}
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask TPM for status, feature specs, or build stories..."
-                className="w-full border-0 p-3.5 pr-12 min-h-[50px] max-h-[140px] outline-hidden text-xs sm:text-sm leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
+                placeholder="Message TPM..."
+                className="w-full border-0 px-4 py-3.5 pr-12 min-h-[48px] max-h-[140px] outline-hidden text-xs leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent scrollbar-none"
                 rows={1}
                 disabled={streaming}
               />
-              <div className="flex items-center justify-between px-3.5 pb-2.5">
-                <div className="flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+              <div className="flex items-center justify-between px-4 pb-2.5 pt-0.5">
+                <div className="flex items-center gap-1.5 opacity-50 hover:opacity-100 transition-opacity select-none">
                   <Terminal className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-[9px] font-semibold font-mono tracking-tight text-muted-foreground uppercase">SSE Active</span>
+                  <span className="text-[8px] font-semibold font-mono tracking-tight text-muted-foreground uppercase">SSE Active</span>
                 </div>
-                <div className="absolute right-2.5 bottom-2.5">
+                <div className="absolute right-3 bottom-2.5">
                   <Button
                     size="icon"
                     className={cn(
-                      'rounded-md h-8 w-8 p-0 transition-all duration-200 tap-shrink',
+                      'rounded-full h-7 w-7 p-0 transition-all duration-200 tap-shrink',
                       input.trim()
-                        ? 'bg-primary text-primary-foreground hover:scale-105 active:scale-95 shadow-xs'
+                        ? 'bg-primary text-primary-foreground hover:scale-105 active:scale-95 shadow-md'
                         : 'bg-muted text-muted-foreground hover:bg-muted'
                     )}
                     disabled={!input.trim() || streaming}
                     onClick={() => handleSend()}
                   >
                     {streaming ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <ArrowUp className="h-3.5 w-3.5" />
                     )}
@@ -775,135 +878,6 @@ export function TpmChat() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Right Side: Proposed Stories Workspace Preview */}
-        <div className={cn(
-          "flex flex-1 flex-col bg-card text-foreground relative overflow-hidden border-l border-border/10",
-          hasStories && mobilePane === 'preview' ? "flex w-full" : hasStories ? "hidden lg:flex lg:flex-1" : "hidden lg:flex lg:flex-1"
-        )}>
-          
-          {/* Stories Horizontal Tab Bar */}
-          <div className="border-b border-border bg-muted shrink-0">
-            <div className="flex items-center h-12 px-3 justify-between">
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 mr-4 pb-1.5 pt-1.5 select-none snap-x snap-mandatory">
-                {mergedStories.length > 0 ? (
-                  mergedStories.map((story, idx) => (
-                    <button
-                      key={story.filename}
-                      onClick={() => setActiveTab(idx)}
-                      className={cn(
-                        'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-all shrink-0 min-h-[34px] snap-center tap-shrink border',
-                        idx === activeTab
-                          ? 'bg-card border-border text-foreground shadow-xs'
-                          : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent hover:text-accent-foreground'
-                      )}
-                    >
-                      {story.kind === 'app' ? (
-                        <Package className="h-3 w-3 text-muted-foreground" />
-                      ) : (
-                        <Layers className="h-3 w-3 text-muted-foreground" />
-                      )}
-                      <span className="max-w-[100px] sm:max-w-[140px] truncate">{story.name}</span>
-                      {story.phase && (
-                        <span className={cn('text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-md border font-bold', phaseColor(story.phase))}>
-                          P{story.phase}
-                        </span>
-                      )}
-                      {savedStories.has(story.filename) && (
-                        <Check className="h-3 w-3 text-emerald-500 shrink-0" />
-                      )}
-                    </button>
-                  ))
-                ) : (
-                  <div className="flex items-center gap-1.5 text-muted-foreground/60 select-none">
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground/40" />
-                    <span className="text-[10px] font-bold tracking-widest uppercase font-mono">
-                      {streaming ? 'orchestrator generating specifications...' : 'awaiting story briefs'}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {mergedStories.length > 0 && (
-                <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-semibold shrink-0">
-                  <Badge variant="secondary" className="rounded-md">
-                    {mergedStories.filter(s => s.kind === 'app').length} App
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-md">
-                    {mergedStories.filter(s => s.kind === 'feature').length} Features
-                  </Badge>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Stories YAML Editor/Code view */}
-          <div className="flex-1 overflow-auto bg-card select-text">
-            {activeStory ? (
-              <div className="p-4 sm:p-6 md:p-8 font-mono text-[10px] sm:text-xs md:text-sm leading-relaxed relative">
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-border relative z-10">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {activeStory.kind === 'app' ? (
-                      <div className="p-2 rounded-lg bg-muted border border-border shrink-0">
-                        <Package className="h-4 w-4 text-foreground" />
-                      </div>
-                    ) : (
-                      <div className="p-2 rounded-lg bg-muted border border-border shrink-0">
-                        <Layers className="h-4 w-4 text-foreground" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <h3 className="text-foreground text-xs sm:text-sm font-bold truncate">{activeStory.name}</h3>
-                      <p className="text-muted-foreground text-[8px] sm:text-[10px] font-semibold truncate mt-0.5">{activeStory.filename}</p>
-                    </div>
-                    {activeStory.phase && (
-                      <span className={cn('text-[8px] sm:text-[9px] px-2 py-0.5 rounded-md border font-bold ml-2 shrink-0', phaseColor(activeStory.phase))}>
-                        Phase {activeStory.phase}
-                      </span>
-                    )}
-                  </div>
-
-                  {!savedStories.has(activeStory.filename) ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-3 text-[10px] sm:text-xs font-bold gap-1.5 rounded-md tap-shrink border-border"
-                      onClick={() => handleSaveStory(activeStory)}
-                      disabled={saving || streaming}
-                    >
-                      {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      <span>Save Story</span>
-                    </Button>
-                  ) : (
-                    <span className="text-emerald-600 dark:text-emerald-400 text-[10px] sm:text-xs font-bold flex items-center gap-1 bg-muted px-2.5 py-1 rounded-md border border-emerald-500/30 shrink-0">
-                      <Check className="h-3.5 w-3.5" /> Enqueued to Build
-                    </span>
-                  )}
-                </div>
-                
-                <div className="rounded-lg border border-border bg-card p-4 shadow-xs relative overflow-hidden">
-                  <pre className="relative z-10 whitespace-pre-wrap overflow-x-auto leading-relaxed">
-                    <code className="text-foreground/80">{activeStory.yaml}</code>
-                  </pre>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-6 select-none opacity-50">
-                <div className="relative">
-                  <div className="relative flex h-16 w-16 items-center justify-center rounded-xl bg-muted border border-border shadow-inner">
-                    <FileText className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-xs sm:text-sm font-bold text-foreground">Spec Workspace Empty</h4>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground max-w-xs leading-relaxed">
-                    Decomposed feature blueprints will load on the right panel automatically during chat sessions.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

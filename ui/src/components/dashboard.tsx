@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('plan');
   const [showAddProject, setShowAddProject] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [tpmChatOpen, setTpmChatOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -563,83 +564,89 @@ export default function Dashboard() {
         projectRefreshKey={projectRefreshKey}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
+        tpmChatOpen={tpmChatOpen}
+        onToggleTpmChat={() => setTpmChatOpen(!tpmChatOpen)}
       />
 
-      <main className="flex-1 min-h-0 pt-12 md:pt-0 overflow-auto">
-        {showAddProject ? (
-          <div className="p-4 md:p-8 w-full h-full">
-            <AddProject
-              onProjectAdded={() => {
-                setShowAddProject(false);
-                setHasProjects(true);
-                setProjectRefreshKey((k) => k + 1);
-                fetchProjects();
-                fetchStories();
-                fetchReports();
-              }}
-              onNavigateToPlan={() => {
-                setShowAddProject(false);
-                setActiveTab('plan');
-              }}
-            />
-          </div>
-        ) : (
-          <div className="w-full max-w-[1400px] mx-auto p-2 md:px-6 md:py-4">
-            {/* Page header */}
-            {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
-              <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                <div>
-                  <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                    {activeTab === 'dashboard' && 'Dashboard'}
-                    {activeTab === 'stories' && 'Stories'}
-                    {activeTab === 'skills' && 'Skills'}
-                    {activeTab === 'reports' && 'Reports'}
-                    {activeTab === 'integrations' && 'Integrations'}
-                    {activeTab === 'settings' && 'Settings'}
-                  </h1>
-                  <p className="text-xs md:text-sm text-muted-foreground mt-1">
-                    {activeTab === 'dashboard' && 'Overview for the active project'}
-                    {activeTab === 'stories' && 'Manage your app stories'}
-                    {activeTab === 'skills' && 'Reusable recipes the engine auto-matches to builds'}
-                    {activeTab === 'reports' && 'View generated build reports'}
-                    {activeTab === 'integrations' && 'Connect external services and tools'}
-                    {activeTab === 'settings' && 'Configure factory preferences'}
-                  </p>
+      <main className="flex-1 min-h-0 pt-0 h-screen overflow-hidden flex relative">
+        <div className="flex-grow min-w-0 h-full overflow-y-auto pt-12 md:pt-0">
+          {showAddProject ? (
+            <div className="p-4 md:p-8 w-full h-full">
+              <AddProject
+                onProjectAdded={() => {
+                  setShowAddProject(false);
+                  setHasProjects(true);
+                  setProjectRefreshKey((k) => k + 1);
+                  fetchProjects();
+                  fetchStories();
+                  fetchReports();
+                }}
+                onNavigateToPlan={() => {
+                  setShowAddProject(false);
+                  setActiveTab('plan');
+                }}
+              />
+            </div>
+          ) : (
+            <div className="w-full max-w-[1400px] mx-auto p-2 md:px-6 md:py-4">
+              {/* Page header */}
+              {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
+                <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                  <div>
+                    <h1 className="text-xl md:text-2xl font-bold tracking-tight">
+                      {activeTab === 'dashboard' && 'Dashboard'}
+                      {activeTab === 'stories' && 'Stories'}
+                      {activeTab === 'skills' && 'Skills'}
+                      {activeTab === 'reports' && 'Reports'}
+                      {activeTab === 'integrations' && 'Integrations'}
+                      {activeTab === 'settings' && 'Settings'}
+                    </h1>
+                    <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                      {activeTab === 'dashboard' && 'Overview for the active project'}
+                      {activeTab === 'stories' && 'Manage your app stories'}
+                      {activeTab === 'skills' && 'Reusable recipes the engine auto-matches to builds'}
+                      {activeTab === 'reports' && 'View generated build reports'}
+                      {activeTab === 'integrations' && 'Connect external services and tools'}
+                      {activeTab === 'settings' && 'Configure factory preferences'}
+                    </p>
+                  </div>
+                  {showOutputButton && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setOutputPanelOpen(true)}
+                    >
+                      <Terminal className="h-4 w-4" />
+                      Output
+                      {queueRunning && (
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                        </span>
+                      )}
+                    </Button>
+                  )}
                 </div>
-                {showOutputButton && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => setOutputPanelOpen(true)}
-                  >
-                    <Terminal className="h-4 w-4" />
-                    Output
-                    {queueRunning && (
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                      </span>
-                    )}
-                  </Button>
-                )}
-              </div>
-            )}
+              )}
 
-            {activeTab === 'plan' && <NotionBoard initialView="list" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setActiveTab('tpm')} className="flex-1 min-h-0" />}
-            {activeTab === 'tpm' && <TpmChat />}
-            {activeTab === 'build' && <BuildPage />}
-            {activeTab === 'test' && <TestPlaceholder />}
-            {activeTab === 'deploy' && <DeployPlaceholder />}
-            {/* legacy hash compat */}
-            {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setActiveTab('tpm')} className="flex-1 min-h-0" />}
-            {activeTab === 'skills' && <SkillsView />}
-            {activeTab === 'reports' && renderReports()}
-            {activeTab === 'knowledge' && <KnowledgeView />}
-            {activeTab === 'integrations' && <IntegrationsView />}
-            {activeTab === 'settings' && <SettingsView />}
-          </div>
-        )}
+              {activeTab === 'plan' && <NotionBoard initialView="list" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setTpmChatOpen(true)} className="flex-1 min-h-0" />}
+              {activeTab === 'build' && <BuildPage />}
+              {activeTab === 'test' && <TestPlaceholder />}
+              {activeTab === 'deploy' && <DeployPlaceholder />}
+              {/* legacy hash compat */}
+              {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setTpmChatOpen(true)} className="flex-1 min-h-0" />}
+              {activeTab === 'skills' && <SkillsView />}
+              {activeTab === 'reports' && renderReports()}
+              {activeTab === 'knowledge' && <KnowledgeView />}
+              {activeTab === 'integrations' && <IntegrationsView />}
+              {activeTab === 'settings' && <SettingsView />}
+            </div>
+          )}
+        </div>
+
+        {/* Collapsible Ask TPM Chat Right Sidebar */}
+        <TpmChat isOpen={tpmChatOpen} onClose={() => setTpmChatOpen(false)} />
       </main>
 
       {/* Output panel — desktop: slide-over overlay, mobile: bottom sheet */}
@@ -720,8 +727,10 @@ export default function Dashboard() {
         onAddProject={() => setShowAddProject(true)}
         projectRefreshKey={projectRefreshKey}
         onNewStory={() => {
-          setActiveTab('tpm');
+          setTpmChatOpen(true);
         }}
+        tpmChatOpen={tpmChatOpen}
+        onToggleTpmChat={() => setTpmChatOpen(!tpmChatOpen)}
       />
     </div>
   );

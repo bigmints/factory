@@ -3,39 +3,24 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
-  ArrowLeft,
   Bot,
-  User,
   Save,
   Loader2,
-  Sparkles,
   Copy,
   Check,
   X,
   FileText,
   Terminal,
-  Zap,
   Package,
   Layers,
   SaveAll,
   ScanSearch,
-  FolderTree,
-  Blocks,
-  FileCode,
   AlertTriangle,
-  Play,
-  RotateCcw,
   CheckCircle2,
-  PlayCircle,
   Clock,
   Eye,
-  Sliders,
-  History,
   Trash2,
   Brain,
-  MessageSquareCode,
-  ChevronLeft,
-  ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -126,11 +111,9 @@ function extractNameFromYaml(yaml: string): string | null {
 export function TpmChat({
   isOpen,
   onClose,
-  onToggle
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onToggle?: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -481,14 +464,6 @@ export function TpmChat({
 
   return (
     <div className="flex shrink-0 h-full relative z-40 select-none">
-      {/* Shadcn-like absolute collapse/expand toggle button */}
-      <button
-        onClick={onToggle || onClose}
-        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-50 h-6 w-6 rounded-full border border-border bg-background text-muted-foreground hover:text-foreground shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
-        title={isOpen ? "Collapse sidebar" : "Expand sidebar"}
-      >
-        {isOpen ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-      </button>
       {/* ── Collapsible Spec stories (Artifact Panel) sliding next to the chat ── */}
       <div className={cn(
         "h-full flex flex-col bg-card border-l border-border transition-all duration-300 ease-in-out shrink-0 relative overflow-hidden",

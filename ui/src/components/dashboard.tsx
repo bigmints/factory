@@ -31,7 +31,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, AlertCircle, X, Terminal } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X, Terminal, PanelRight } from 'lucide-react';
 
 
 interface Story {
@@ -558,8 +558,8 @@ export default function Dashboard() {
 
       <SidebarInset>
         {/* Page header — pure shadcn sidebar-08 pattern */}
-        <header className="flex h-16 shrink-0 items-center gap-2">
-          <div className="flex items-center gap-2 px-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b">
+          <div className="flex items-center gap-2 px-4 flex-1">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <Breadcrumb>
@@ -571,6 +571,19 @@ export default function Dashboard() {
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
+          </div>
+          {/* Right panel trigger — same ghost/size-7 style as SidebarTrigger */}
+          <div className="px-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={() => setTpmChatOpen((v) => !v)}
+              title="Toggle TPM Chat"
+            >
+              <PanelRight />
+              <span className="sr-only">Toggle TPM Chat</span>
+            </Button>
           </div>
         </header>
 
@@ -655,7 +668,6 @@ export default function Dashboard() {
           <TpmChat
             isOpen={tpmChatOpen}
             onClose={() => setTpmChatOpen(false)}
-            onToggle={() => setTpmChatOpen(!tpmChatOpen)}
           />
         </div>
       </SidebarInset>

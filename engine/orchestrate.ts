@@ -114,7 +114,7 @@ const CLI_YOLO_FLAGS: Record<string, string[]> = {
 // ─── Orchestrator Loop ───────────────────────────────────
 
 const MAX_TURNS = 15;   // max LLM turns before giving up
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes — large scaffolds take time
 
 async function runOrchestratorLoop(
     story: AppStory | FeatureStory,
@@ -146,7 +146,7 @@ async function runOrchestratorLoop(
         { role: 'system', content: systemPrompt },
         {
             role: 'user',
-            content: 'Begin. The story is ready. Start by calling delegate_to_cli with a precise, context-rich prompt for the CLI agent.',
+            content: 'Begin. Call delegate_to_cli NOW with a complete, self-contained prompt. The CLI agent will handle everything: scaffolding, coding, npm install, fixing type errors, lint errors, and verifying the build. Your job is to write a thorough brief and let the CLI do the work. Do NOT call read_output or run_check first — delegate immediately.',
         },
     ];
 
@@ -247,36 +247,44 @@ function buildSystemPrompt(
     const sections: string[] = [];
 
     sections.push(`You are Factory, an autonomous build orchestrator.
-Your job: deliver the story below by delegating to the configured CLI agent.
-You do NOT write code yourself. You write prompts for the CLI agent and verify its work.`);
+Your job: deliver the story below by writing a complete brief for the CLI agent and confirming the result.
+You do NOT write code. You write one thorough delegation prompt, then verify, then mark done.
+
+## CRITICAL RULES — READ FIRST
+- TURN BUDGET: You have ${MAX_TURNS} turns total. Use them wisely.
+- FIRST TURN: ALWAYS call delegate_to_cli immediately. Never start with read_output or run_check.
+- DELEGATE EVERYTHING: The CLI agent handles scaffolding, coding, npm install, tsc, lint, and fixing errors. You do not run these yourself unless the CLI failed.
+- ONE BIG PROMPT: Write a single comprehensive prompt that includes all context. The CLI will do the full job in one session.
+- MARK DONE FAST: Once the CLI succeeds and you've verified via read_output, call mark_story_done immediately. Do not keep running more checks.
+- MARK FAILED: If the CLI fails twice, call mark_story_failed — do not waste turns on a broken path.`);
 
     // ── Target Directory ──
     sections.push(`## Target Directory
-All files must be generated and checks executed inside the target directory:
-\`${targetDir}\``);
+All files must be generated inside:
+\`${targetDir}\`
+The CLI agent's cwd will be set to this directory automatically.`);
 
     // ── Configured CLI ──
-    sections.push(`## Configured CLI
-${cliName}
-This is the user's choice. Do not question it. Always use delegate_to_cli with this CLI.
-The CLI runs with full filesystem access in the target directory and will do the actual coding.`);
+    sections.push(`## Configured CLI: ${cliName}
+This is the user's configured agent CLI. Use delegate_to_cli exclusively.
+The CLI runs with full filesystem access and handles everything end-to-end.`);
 
     // ── Story ──
     const storyBlock = isAppStory(story)
         ? `appName: ${story.appName}\ndescription: ${story.description}\nstack: ${JSON.stringify(story.stack)}\n${toYaml(story)}`
         : toYaml(story);
-    sections.push(`## Story\n\`\`\`yaml\n${storyBlock}\n\`\`\``);
+    sections.push(`## Story to Deliver\n\`\`\`yaml\n${storyBlock}\n\`\`\``);
 
     // ── Project Context (TOON state) ──
     if (blueprint.toonSnapshot) {
-        sections.push(`## Project Context (TOON State)\n${blueprint.toonSnapshot}`);
+        sections.push(`## Project State (TOON Snapshot)\n${blueprint.toonSnapshot}`);
     }
 
     // ── Knowledgebase ──
     const knowledgeFiles = loadKnowledgeFiles(blueprint.repoPath);
     if (knowledgeFiles.length > 0) {
         const kb = knowledgeFiles.map(k => `### ${k.name}\n${k.content}`).join('\n\n');
-        sections.push(`## Knowledgebase (past builds & decisions)\n${kb}`);
+        sections.push(`## Knowledgebase\n${kb}`);
     }
 
     // ── Conventions ──
@@ -290,38 +298,27 @@ The CLI runs with full filesystem access in the target directory and will do the
         sections.push(`## App Knowledge Files\n${kf}`);
     }
 
-    // ── Your workflow ──
-    sections.push(`## Your Workflow
+    // ── Workflow ──
+    sections.push(`## Your Exact Workflow (follow this order strictly)
 
-1. Call **delegate_to_cli** with a precise, context-rich prompt. Include:
-   - Exactly what to build (reference the story)
-   - The stack (framework, language, package manager)
-   - Relevant conventions from the knowledgebase
-   - Where to write files (the target directory)
-   - That the CLI should run tsc/lint/tests itself if the story requires it
+**Turn 1 — delegate_to_cli**: Write a single comprehensive prompt containing:
+  - The full story acceptance criteria
+  - Stack details: ${isAppStory(story) ? JSON.stringify((story as AppStory).stack) : 'see story above'}
+  - Target directory: \`${targetDir}\`
+  - All conventions from knowledgebase
+  - Explicit instruction to the CLI to: scaffold, implement, run npm install, fix any tsc errors, fix any lint errors, and verify the build passes
+  - Instruction to commit when done
 
-2. Call **read_output** to inspect what was produced.
+**Turn 2 — read_output**: Check what files were produced. If the directory looks correct (files exist), proceed to mark done.
 
-3. Call **run_check** if you need to verify compilation or tests independently.
-   Only run checks appropriate to the story's stack. Config-only stories need no checks.
+**Turn 3 — mark_story_done OR delegate_to_cli again**: 
+  - If output looks correct → call mark_story_done immediately.
+  - If the CLI clearly failed → delegate again with the specific error text.
+  - After a second delegation, check output once more then mark done or failed.
 
-4. If something is wrong, call **delegate_to_cli** again with:
-   - The specific errors found
-   - What needs to be fixed
+**No more than 2 delegations total.** If it still fails after 2 delegations, call mark_story_failed.
 
-5. When satisfied, call **update_knowledge** with what was built and any key decisions.
-
-6. Call **update_context** to log completion to the worklog.
-
-7. Call **mark_story_done** with a summary.
-
-If you cannot recover after re-delegation, call **mark_story_failed** with the reason.
-
-## Rules
-- Never call mark_story_done unless you have verified the output is correct.
-- Never call run_check with commands that compile the whole world — scope to the target directory.
-- Keep delegation prompts precise and context-rich. A vague prompt produces vague code.
-- Include stack information in every delegation prompt — the CLI agent needs to know the tech.`);
+After marking done/failed, optionally call update_knowledge with key decisions (1 sentence).`);
 
     return sections.join('\n\n');
 }

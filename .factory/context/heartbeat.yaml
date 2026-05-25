@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-24T11:45:16Z"
-  host: "192"
-  task: "post-commit: feat(orchestrate): explicitly inject target directory into system prompt to prevent placeholder path guesses"
+  last_seen: "2026-05-25T09:48:12Z"
+  host: "Mac"
+  task: "post-commit: feat(orchestrate): increase MAX_TURNS to 15 to prevent build timeouts"
   status: alive

@@ -93,9 +93,10 @@ function resolveDisplayName(storyFile: string, projectPath: string | null): stri
   // Helper to normalize paths for robust comparison
   const normalizePath = (p: string) => {
     return p
-      .replace(/^(done|apps|features)\//, '') // strip starting folders
-      .replace(/^\.?\//, '')                 // strip leading ./
-      .replace(/\.ya?ml$/i, '')              // strip yaml extensions
+      .replace(/^.*?\.factory\/stories\//, '') // strip starting directories up to stories/
+      .replace(/^(done|apps|features)\//, '')  // strip starting folders
+      .replace(/^\.?\//, '')                  // strip leading ./
+      .replace(/\.ya?ml$/i, '')               // strip yaml extensions
       .toLowerCase()
       .trim();
   };
@@ -140,12 +141,9 @@ function resolveDisplayName(storyFile: string, projectPath: string | null): stri
     try {
       const raw = readFileSync(candidate, 'utf-8');
       const parsed = parseYaml(raw) as any;
-      // Feature story: feature.name / feature.title
-      const featureName = parsed?.feature?.name || parsed?.feature?.title;
-      // App story: appName / metadata.name
-      const appName = parsed?.appName || parsed?.metadata?.name;
-      const resolved = featureName || appName;
-      if (resolved && typeof resolved === 'string') return resolved;
+      // Feature/App story: first try story name, fallback to feature.name (epic name), fallback to appName
+      const storyName = parsed?.name || parsed?.metadata?.name || parsed?.feature?.name || parsed?.feature?.title || parsed?.appName;
+      if (storyName && typeof storyName === 'string') return storyName;
     } catch { /* keep trying */ }
   }
 

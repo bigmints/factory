@@ -21,6 +21,7 @@ import {
   Eye,
   Trash2,
   Brain,
+  Dot,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,7 +32,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -64,7 +64,7 @@ interface ParsedStory {
 
 function extractAllStories(content: string): ParsedStory[] {
   const stories: ParsedStory[] = [];
-  
+
   const appPatternNew = /=== APP_STORY:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_STORY ===/g;
   let match;
   while ((match = appPatternNew.exec(content)) !== null) {
@@ -83,12 +83,11 @@ function extractAllStories(content: string): ParsedStory[] {
     let dependsOn: string[] | undefined;
     if (depsMatch) {
       const raw = depsMatch[1].trim();
-      dependsOn = raw.length > 0 ? raw.split(',').map(s => s.trim().replace(/["']/g, '')).filter(Boolean) : [];
+      dependsOn = raw.length > 0 ? raw.split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean) : [];
     }
     stories.push({ kind: 'feature', filename: match[1], yaml, name, phase, dependsOn });
   }
 
-  // Fallback to generic yaml blocks
   if (stories.length === 0) {
     const yamlMatch = content.match(/```yaml\n([\s\S]*?)```/);
     if (yamlMatch) {
@@ -130,13 +129,11 @@ export function TpmChat({
   const [scanError, setScanError] = useState('');
   const [repoBlueprint, setRepoBlueprint] = useState<any>(null);
 
-  // Tool Call Output Popup Modal
   const [selectedToolOutput, setSelectedToolOutput] = useState<{ name: string; result: string } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load project context & codebase details
   useEffect(() => {
     fetch('/api/projects')
       .then((r) => r.json())
@@ -158,29 +155,28 @@ export function TpmChat({
       .finally(() => setScanning(false));
   }, []);
 
-  // Sync scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Update timer durations for running tool calls
   useEffect(() => {
     if (!streaming) return;
     const interval = setInterval(() => {
-      setMessages((prev) => {
-        return prev.map((msg) => {
+      setMessages((prev) =>
+        prev.map((msg) => {
           if (!msg.toolCalls) return msg;
-          const updatedCalls = msg.toolCalls.map((tc) => {
-            if (tc.status === 'running' && tc.startTime) {
-              return { ...tc, duration: Date.now() - tc.startTime };
-            }
-            return tc;
-          });
-          return { ...msg, toolCalls: updatedCalls };
-        });
-      });
+          return {
+            ...msg,
+            toolCalls: msg.toolCalls.map((tc) =>
+              tc.status === 'running' && tc.startTime
+                ? { ...tc, duration: Date.now() - tc.startTime }
+                : tc
+            ),
+          };
+        })
+      );
     }, 100);
     return () => clearInterval(interval);
   }, [streaming]);
@@ -214,7 +210,7 @@ export function TpmChat({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newMessages.map((m) => ({ role: m.role, content: m.content }))
+          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
         }),
       });
 
@@ -244,14 +240,12 @@ export function TpmChat({
 
           try {
             const parsed = JSON.parse(data);
-            
+
             if (parsed.type === 'text' && parsed.content) {
               setMessages((prev) => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
-                if (last && last.role === 'assistant') {
-                  last.content += parsed.content;
-                }
+                if (last && last.role === 'assistant') last.content += parsed.content;
                 return updated;
               });
             } else if (parsed.type === 'tool_start') {
@@ -260,14 +254,14 @@ export function TpmChat({
                 const last = updated[updated.length - 1];
                 if (last && last.role === 'assistant') {
                   const calls = last.toolCalls || [];
-                  if (!calls.some(c => c.id === parsed.id)) {
+                  if (!calls.some((c) => c.id === parsed.id)) {
                     calls.push({
                       id: parsed.id,
                       name: parsed.name,
                       arguments: parsed.arguments,
                       status: 'running',
                       startTime: Date.now(),
-                      duration: 0
+                      duration: 0,
                     });
                   }
                   last.toolCalls = calls;
@@ -279,13 +273,11 @@ export function TpmChat({
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
                 if (last && last.role === 'assistant' && last.toolCalls) {
-                  const tc = last.toolCalls.find(c => c.id === parsed.id);
+                  const tc = last.toolCalls.find((c) => c.id === parsed.id);
                   if (tc) {
                     tc.status = parsed.status || 'success';
                     tc.result = parsed.result;
-                    if (tc.startTime) {
-                      tc.duration = Date.now() - tc.startTime;
-                    }
+                    if (tc.startTime) tc.duration = Date.now() - tc.startTime;
                   }
                 }
                 return updated;
@@ -294,7 +286,7 @@ export function TpmChat({
               toast.error(parsed.error || 'Server error occurred');
             }
           } catch {
-            // Skip
+            // skip malformed lines
           }
         }
       }
@@ -313,9 +305,7 @@ export function TpmChat({
     }
   };
 
-  // Find proposed stories from assistant briefs
   const allStories: ParsedStory[] = (() => {
-    // Check if any assistant message contains decomposed story blocks
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant') {
         const stories = extractAllStories(messages[i].content);
@@ -325,7 +315,6 @@ export function TpmChat({
     return [];
   })();
 
-  // Also check if tool execution of decompose_requirements returned story blocks!
   const allStoriesFromTools: ParsedStory[] = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant' && messages[i].toolCalls) {
@@ -359,15 +348,11 @@ export function TpmChat({
       const res = await fetch('/api/stories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: story.name,
-          content: story.yaml,
-          kind: story.kind === 'feature' ? 'feature' : 'app',
-        }),
+        body: JSON.stringify({ name: story.name, content: story.yaml, kind: story.kind === 'feature' ? 'feature' : 'app' }),
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(`Saved ${story.kind === 'feature' ? 'feature' : 'app'} story`, { description: data.file });
+        toast.success(`Saved ${story.kind} story`, { description: data.file });
         setSavedStories((prev) => new Set(prev).add(story.filename));
       } else {
         toast.error('Save failed', { description: data.error });
@@ -384,23 +369,19 @@ export function TpmChat({
     let successCount = 0;
     let failCount = 0;
 
-    const sortedStories = [...mergedStories].sort((a, b) => {
-      const phaseA = a.kind === 'app' ? 0 : (a.phase ?? 99);
-      const phaseB = b.kind === 'app' ? 0 : (b.phase ?? 99);
-      return phaseA - phaseB;
+    const sorted = [...mergedStories].sort((a, b) => {
+      const pa = a.kind === 'app' ? 0 : (a.phase ?? 99);
+      const pb = b.kind === 'app' ? 0 : (b.phase ?? 99);
+      return pa - pb;
     });
 
-    for (const story of sortedStories) {
+    for (const story of sorted) {
       if (savedStories.has(story.filename)) continue;
       try {
         const res = await fetch('/api/stories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: story.name,
-            content: story.yaml,
-            kind: story.kind === 'feature' ? 'feature' : 'app',
-          }),
+          body: JSON.stringify({ name: story.name, content: story.yaml, kind: story.kind === 'feature' ? 'feature' : 'app' }),
         });
         const data = await res.json();
         if (res.ok) {
@@ -411,12 +392,7 @@ export function TpmChat({
               await fetch('/api/queue', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  storyFile: data.file,
-                  kind: 'FeatureStory',
-                  phase: story.phase ?? 0,
-                  dependsOn: story.dependsOn ?? [],
-                }),
+                body: JSON.stringify({ storyFile: data.file, kind: 'FeatureStory', phase: story.phase ?? 0, dependsOn: story.dependsOn ?? [] }),
               });
             } catch { /* non-critical */ }
           }
@@ -448,207 +424,185 @@ export function TpmChat({
     setMessages([]);
     setSavedStories(new Set());
     setActiveTab(0);
-    toast.success('Chat history cleared');
+    toast.success('Chat cleared');
   };
 
   const isEmpty = messages.length === 0;
 
   const phaseColor = (phase?: number) => {
     switch (phase) {
-      case 1: return 'bg-muted text-emerald-600 dark:text-emerald-400 border-emerald-500';
-      case 2: return 'bg-muted text-amber-600 dark:text-amber-500 border-amber-500';
-      case 3: return 'bg-muted text-purple-600 dark:text-purple-400 border-purple-500';
-      default: return 'bg-muted text-muted-foreground border-border';
+      case 1: return 'text-emerald-600 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/5';
+      case 2: return 'text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/5';
+      case 3: return 'text-purple-600 dark:text-purple-400 border-purple-500/40 bg-purple-500/5';
+      default: return 'text-muted-foreground border-border bg-muted';
     }
   };
 
+  if (!isOpen && !artifactPanelOpen) return null;
+
   return (
-    <div className="flex shrink-0 h-full relative z-40 select-none">
-      {/* ── Collapsible Spec stories (Artifact Panel) sliding next to the chat ── */}
+    <div className="flex shrink-0 h-full">
+      {/* ── Artifact / Stories panel ── */}
       <div className={cn(
-        "h-full flex flex-col bg-card border-l border-border transition-all duration-300 ease-in-out shrink-0 relative overflow-hidden",
-        isOpen && artifactPanelOpen && hasStories ? "w-[420px] md:w-[450px]" : "w-0 border-l-0"
+        'h-full flex flex-col bg-background border-l border-border transition-all duration-300 ease-in-out shrink-0 overflow-hidden',
+        isOpen && artifactPanelOpen && hasStories ? 'w-96' : 'w-0 border-l-0'
       )}>
-        <div className="w-[450px] h-full flex flex-col">
-          
-          {/* Stories Horizontal Tab Bar */}
-          <div className="border-b border-border bg-muted shrink-0 select-none">
-            <div className="flex items-center h-14 px-3 justify-between">
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 mr-2 pb-1 pt-1 select-none snap-x snap-mandatory">
+        <div className="w-96 h-full flex flex-col">
+          {/* Tab bar */}
+          <div className="border-b border-border bg-card/50 shrink-0">
+            <div className="flex items-center h-12 px-3 gap-2">
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1">
                 {mergedStories.map((story, idx) => (
                   <button
                     key={story.filename}
                     onClick={() => setActiveTab(idx)}
                     className={cn(
-                      'flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold whitespace-nowrap transition-all shrink-0 min-h-[30px] snap-center tap-shrink border',
+                      'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors shrink-0',
                       idx === activeTab
-                        ? 'bg-card border-border text-foreground shadow-xs'
-                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/40'
+                        ? 'bg-background text-foreground shadow-sm border border-border'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                     )}
                   >
-                    {story.kind === 'app' ? (
-                      <Package className="h-3 w-3 text-muted-foreground" />
-                    ) : (
-                      <Layers className="h-3 w-3 text-muted-foreground" />
-                    )}
-                    <span className="max-w-[100px] truncate">{story.name}</span>
+                    {story.kind === 'app'
+                      ? <Package className="h-3 w-3" />
+                      : <Layers className="h-3 w-3" />}
+                    <span className="max-w-24 truncate">{story.name}</span>
                     {story.phase && (
-                      <span className={cn('text-[8px] px-1 rounded-md border font-bold', phaseColor(story.phase))}>
+                      <span className={cn('text-xs px-1 rounded border font-semibold', phaseColor(story.phase))}>
                         P{story.phase}
                       </span>
                     )}
                     {savedStories.has(story.filename) && (
-                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+                      <Check className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
                     )}
                   </button>
                 ))}
               </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
-                  onClick={() => setArtifactPanelOpen(false)}
-                  title="Close Panel"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 text-muted-foreground"
+                onClick={() => setArtifactPanelOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
-          {/* Stories YAML Editor/Code view */}
-          <div className="flex-1 overflow-auto bg-card select-text">
+          {/* Story content */}
+          <div className="flex-1 overflow-auto">
             {activeStory ? (
-              <div className="p-4 sm:p-6 font-mono text-[10px] leading-relaxed relative">
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-border relative z-10">
+              <div className="p-4 font-mono text-xs leading-relaxed">
+                {/* Story header */}
+                <div className="flex items-start justify-between mb-4 pb-3 border-b border-border gap-3">
                   <div className="flex items-center gap-2 min-w-0">
-                    {activeStory.kind === 'app' ? (
-                      <div className="p-1.5 rounded-lg bg-muted border border-border shrink-0">
-                        <Package className="h-3.5 w-3.5 text-foreground" />
-                      </div>
-                    ) : (
-                      <div className="p-1.5 rounded-lg bg-muted border border-border shrink-0">
-                        <Layers className="h-3.5 w-3.5 text-foreground" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <h3 className="text-foreground text-xs font-bold truncate">{activeStory.name}</h3>
-                      <p className="text-muted-foreground text-[8px] font-semibold truncate mt-0.5">{activeStory.filename}</p>
+                    <div className="p-1.5 rounded-md bg-muted border border-border shrink-0">
+                      {activeStory.kind === 'app'
+                        ? <Package className="h-3 w-3" />
+                        : <Layers className="h-3 w-3" />}
                     </div>
-                    {activeStory.phase && (
-                      <span className={cn('text-[8px] px-2 py-0.5 rounded-md border font-bold ml-2 shrink-0', phaseColor(activeStory.phase))}>
-                        Phase {activeStory.phase}
-                      </span>
-                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{activeStory.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{activeStory.filename}</p>
+                    </div>
                   </div>
-
                   {!savedStories.has(activeStory.filename) ? (
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-8 px-2.5 text-[10px] font-bold gap-1 rounded-md tap-shrink border-border"
+                      className="h-7 px-2.5 text-xs gap-1 shrink-0"
                       onClick={() => handleSaveStory(activeStory)}
                       disabled={saving || streaming}
                     >
-                      {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      <span>Save</span>
+                      {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                      Save
                     </Button>
                   ) : (
-                    <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1 bg-muted px-2 py-0.5 rounded-md border border-emerald-500/30 shrink-0">
-                      <Check className="h-3 w-3" /> Enqueued
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 shrink-0">
+                      <Check className="h-3 w-3" /> Saved
                     </span>
                   )}
                 </div>
-                
-                <div className="rounded-lg border border-border p-4 shadow-xs relative overflow-hidden bg-[#0d1117] text-white">
-                  <pre className="relative z-10 whitespace-pre-wrap overflow-x-auto leading-relaxed">
-                    <code className="text-slate-200">{activeStory.yaml}</code>
+
+                {/* YAML block */}
+                <div className="rounded-lg border border-border bg-zinc-950 dark:bg-zinc-900 overflow-hidden">
+                  <pre className="p-4 whitespace-pre-wrap overflow-x-auto leading-relaxed text-zinc-100">
+                    <code>{activeStory.yaml}</code>
                   </pre>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-6 select-none opacity-50">
-                <div className="relative">
-                  <div className="relative flex h-16 w-16 items-center justify-center rounded-xl bg-muted border border-border shadow-inner">
-                    <FileText className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-foreground">Spec Workspace Empty</h4>
-                  <p className="text-[10px] text-muted-foreground max-w-xs leading-relaxed">
-                    Decomposed feature blueprints will load on the right panel automatically during chat sessions.
-                  </p>
-                </div>
+              <div className="flex flex-col items-center justify-center h-full text-center gap-3 p-8 opacity-40">
+                <FileText className="h-8 w-8 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">No story selected</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Collapsible Chat Workspace Panel sliding from the right ── */}
+      {/* ── Main chat panel ── */}
       <div className={cn(
-        "h-full flex flex-col bg-card border-l border-border transition-all duration-300 ease-in-out shrink-0 relative overflow-hidden",
-        isOpen ? "w-[400px] md:w-[420px]" : "w-0 border-l-0"
+        'h-full flex flex-col bg-background border-l border-border transition-all duration-300 ease-in-out shrink-0 overflow-hidden',
+        isOpen ? 'w-96' : 'w-0 border-l-0'
       )}>
-        <div className="w-[420px] h-full flex flex-col relative">
-          {/* Header */}
-          <header className="border-b border-border px-4 py-3 flex items-center justify-between h-14 shrink-0 bg-card sticky top-0 z-40 shadow-xs select-none">
-            <div className="flex items-center space-x-2 min-w-0">
-              <div className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary/10 p-1.5 border border-primary/20 text-primary">
+        <div className="w-96 h-full flex flex-col">
+
+          {/* ── Header ── */}
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
                 <Brain className="size-4" />
               </div>
-              <div className="space-y-0.5 min-w-0">
-                <h2 className="text-xs font-bold tracking-tight truncate text-foreground flex items-center gap-1.5">
-                  Ask TPM
-                  <Badge variant="secondary" className="h-4 px-1 text-[7.5px] uppercase font-mono tracking-wider font-semibold border bg-primary/5 text-primary border-primary/20">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-foreground">TPM</span>
+                  <Badge variant="secondary" className="h-4 px-1.5 text-xs font-medium">
                     Agent
                   </Badge>
-                </h2>
-                <p className="text-[8px] text-muted-foreground font-semibold truncate">
-                  {activeProject ? `Project: ${activeProject.name}` : 'Factory Assistant'}
-                </p>
+                </div>
+                {activeProject && (
+                  <p className="text-xs text-muted-foreground truncate">{activeProject.name}</p>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Toggle Artifact Panel */}
+            <div className="flex items-center gap-1 shrink-0">
               {hasStories && (
                 <Button
-                  variant={artifactPanelOpen ? "secondary" : "outline"}
+                  variant={artifactPanelOpen ? 'secondary' : 'ghost'}
                   size="icon"
-                  className="h-7 w-7 rounded-md border border-border/50 relative"
+                  className="size-7 relative"
                   onClick={() => setArtifactPanelOpen(!artifactPanelOpen)}
-                  title="Toggle specs panel"
+                  title="Toggle specs"
                 >
-                  <Layers className="h-3.5 w-3.5" />
-                  <Badge className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 text-[7px] font-bold bg-indigo-600 text-white flex items-center justify-center rounded-full border border-card shadow-sm">
+                  <Layers className="h-4 w-4" />
+                  <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold border border-background">
                     {mergedStories.length}
-                  </Badge>
+                  </span>
                 </Button>
               )}
 
               {hasStories && !streaming && (
                 <>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="icon"
-                    className="h-7 w-7 rounded-md border border-border/50"
+                    className="size-7"
                     onClick={handleCopy}
-                    title="Copy active story spec"
+                    title="Copy YAML"
                   >
-                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                   {!allSaved && (
                     <Button
                       size="sm"
-                      className="h-7 px-2.5 text-[9px] font-bold gap-1 rounded-md bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:opacity-90 border-0"
+                      className="h-7 px-2.5 text-xs gap-1 font-medium"
                       onClick={handleSaveAll}
                       disabled={savingAll}
                     >
-                      {savingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <SaveAll className="h-3.5 w-3.5" />}
-                      <span>Save All</span>
+                      {savingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <SaveAll className="h-3 w-3" />}
+                      Save all
                     </Button>
                   )}
                 </>
@@ -656,127 +610,124 @@ export function TpmChat({
 
               {!isEmpty && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="icon"
-                  title="Clear History"
-                  className="h-7 w-7 rounded-md hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/20 border-border text-muted-foreground"
+                  className="size-7 text-muted-foreground hover:text-foreground"
                   onClick={clearHistory}
+                  title="Clear"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               )}
 
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
+                className="size-7 text-muted-foreground hover:text-foreground"
                 onClick={onClose}
-                title="Close TPM Chat"
+                title="Close"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
           </header>
 
-          {/* Scanning banner */}
-          {isEmpty && (activeProject || repoBlueprint || scanError) && (
-            <div className="px-4 mt-3 space-y-1.5">
+          {/* ── Context pill (only on empty state) ── */}
+          {isEmpty && (activeProject || repoBlueprint || scanning) && (
+            <div className="px-4 pt-3 pb-0 flex flex-col gap-1.5">
               {activeProject && (
-                <div className="px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border text-foreground text-[9px] font-semibold flex items-center gap-1.5 shadow-xs">
-                  <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">Active Project: <strong className="text-foreground">{activeProject.name}</strong></span>
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  <Dot className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <span className="font-medium text-foreground truncate">{activeProject.name}</span>
                 </div>
               )}
-
-              <div className={cn(
-                "px-2.5 py-1.5 rounded-lg border text-[9px] font-semibold flex items-center gap-1.5 transition-colors",
-                scanning ? "border-border bg-muted/60 text-foreground" :
-                repoBlueprint ? "border-border bg-muted/60 text-foreground" :
-                scanError ? "border-rose-500/25 bg-rose-500/5 dark:bg-rose-950/15 text-rose-600 dark:text-rose-400" : ""
-              )}>
-                {scanning ? (
-                  <><ScanSearch className="h-3.5 w-3.5 text-muted-foreground shrink-0 animate-pulse" /> <span>Scanning repo...</span></>
-                ) : repoBlueprint ? (
-                  <><ScanSearch className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <span className="truncate text-foreground/90 font-medium">
-                      Stack: {repoBlueprint.stack?.framework || 'Node.js'} ({Object.keys(repoBlueprint.dependencies || {}).length} deps)
-                    </span>
-                  </>
-                ) : scanError ? (
-                  <><ScanSearch className="h-3.5 w-3.5 text-rose-500 shrink-0" /> <span>Metadata unavailable</span></>
-                ) : null}
-              </div>
+              {scanning && (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  <ScanSearch className="h-3.5 w-3.5 shrink-0 animate-pulse" />
+                  Scanning repo…
+                </div>
+              )}
+              {!scanning && repoBlueprint && (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  <ScanSearch className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="truncate">
+                    {repoBlueprint.stack?.framework || 'Node.js'} · {Object.keys(repoBlueprint.dependencies || {}).length} deps
+                  </span>
+                </div>
+              )}
+              {!scanning && scanError && (
+                <div className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-600 dark:text-rose-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  Repo metadata unavailable
+                </div>
+              )}
             </div>
           )}
 
-          {/* Message Thread */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-6 scrollbar-thin">
+          {/* ── Message thread ── */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {isEmpty ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center gap-4 max-w-[280px] mx-auto select-none animate-in fade-in slide-in-from-bottom-3 duration-300">
-                <div className="relative">
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
-                    <Bot className="h-6 w-6" />
-                  </div>
+              /* Empty state */
+              <div className="flex flex-col items-center justify-center h-full gap-5 py-16 text-center">
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
+                  <Bot className="size-7" />
                 </div>
-                <div className="space-y-1.5">
-                  <h3 className="text-xs font-bold text-foreground">Ask the TPM Agent</h3>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    Check project status, plan new feature specs, save story blueprints directly to the build queue, or register ADRs in the project.
+                <div className="space-y-1.5 max-w-56">
+                  <h3 className="text-sm font-semibold text-foreground">Ask the TPM Agent</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Plan features, decompose stories, check build status, or register decisions in the project.
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {messages.map((msg, i) => (
                   <div
                     key={i}
                     className={cn(
-                      "flex gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-300",
-                      msg.role === 'assistant' ? "flex-row" : "flex-row-reverse"
+                      'flex gap-2.5 animate-in fade-in slide-in-from-bottom-1 duration-200',
+                      msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
                     )}
                   >
-                    <Avatar className="h-7 w-7 shrink-0 mt-0.5 border border-border">
+                    {/* Avatar */}
+                    <Avatar className="size-7 shrink-0 mt-0.5">
                       <AvatarFallback
                         className={cn(
-                          'text-[9px] font-bold',
+                          'text-xs font-semibold',
                           msg.role === 'assistant'
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary/10 text-primary'
                             : 'bg-muted text-muted-foreground'
                         )}
                       >
-                        {msg.role === 'assistant' ? 'TPM' : 'US'}
+                        {msg.role === 'assistant' ? 'AI' : 'Me'}
                       </AvatarFallback>
                     </Avatar>
 
                     <div className={cn(
-                      "flex-1 flex flex-col min-w-0",
-                      msg.role === 'user' ? "items-end text-right" : "items-start text-left"
+                      'flex flex-col gap-1 min-w-0 max-w-72',
+                      msg.role === 'user' ? 'items-end' : 'items-start'
                     )}>
-                      <span className="text-[8px] font-bold text-muted-foreground/60 mb-1 uppercase tracking-widest px-1">
-                        {msg.role === 'assistant' ? 'Program Manager' : 'Author'}
-                      </span>
-                      
+                      {/* Bubble */}
                       <div className={cn(
-                        "max-w-[90%] text-xs rounded-xl p-3 leading-relaxed border flex flex-col gap-3 shadow-xs",
+                        'rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
                         msg.role === 'assistant'
-                          ? "bg-card border-border text-card-foreground"
-                          : "bg-primary text-primary-foreground border-primary font-medium"
+                          ? 'bg-muted text-foreground rounded-tl-sm'
+                          : 'bg-primary text-primary-foreground rounded-tr-sm'
                       )}>
-                        {msg.content && <p className="whitespace-pre-wrap select-text">{msg.content}</p>}
+                        {msg.content && (
+                          <p className="whitespace-pre-wrap select-text">{msg.content}</p>
+                        )}
 
-                        {/* Interactive Tool Calling Badges */}
+                        {/* Tool calls */}
                         {msg.toolCalls && msg.toolCalls.length > 0 && (
-                          <div className="space-y-2 mt-2 w-full">
-                            <div className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">
-                              Executed Actions ({msg.toolCalls.length})
-                            </div>
+                          <div className={cn('space-y-1.5 mt-3', msg.content && 'border-t border-current/10 pt-3')}>
                             {msg.toolCalls.map((tc) => (
                               <div
                                 key={tc.id}
                                 className={cn(
-                                  "rounded-lg border p-2 flex flex-col gap-2 transition-all bg-card/70 backdrop-blur-md",
-                                  tc.status === 'running' ? "border-violet-500/40 shadow-xs shadow-violet-500/5 animate-pulse" :
-                                  tc.status === 'success' ? "border-emerald-500/20 text-foreground" : "border-rose-500/20 text-foreground"
+                                  'rounded-lg border px-2.5 py-2 text-xs flex flex-col gap-1.5 bg-background/50',
+                                  tc.status === 'running' ? 'border-violet-500/30 animate-pulse' :
+                                  tc.status === 'success' ? 'border-emerald-500/20' : 'border-rose-500/20'
                                 )}
                               >
                                 <div className="flex items-center justify-between gap-2">
@@ -788,37 +739,28 @@ export function TpmChat({
                                     ) : (
                                       <AlertTriangle className="h-3 w-3 text-rose-500 shrink-0" />
                                     )}
-                                    <span className="font-mono text-[9px] font-bold text-foreground/80 truncate">
+                                    <span className="font-mono text-xs font-medium text-foreground truncate">
                                       {tc.name}
                                     </span>
                                   </div>
-                                  
                                   {tc.duration !== undefined && (
-                                    <div className="text-[8px] font-mono font-semibold text-muted-foreground flex items-center gap-1">
-                                      <Clock className="h-2 w-2" />
+                                    <span className="text-xs font-mono text-muted-foreground flex items-center gap-0.5 shrink-0">
+                                      <Clock className="h-2.5 w-2.5" />
                                       {(tc.duration / 1000).toFixed(1)}s
-                                    </div>
+                                    </span>
                                   )}
                                 </div>
 
-                                {tc.arguments && Object.keys(tc.arguments).length > 0 && (
-                                  <div className="text-[8px] font-mono bg-muted p-1.5 rounded border border-border/60 text-muted-foreground max-h-20 overflow-y-auto leading-relaxed select-text">
-                                    {JSON.stringify(tc.arguments, null, 2)}
-                                  </div>
-                                )}
-
                                 {tc.result && (
-                                  <div className="flex justify-end pt-1">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-6 text-[8px] font-bold border-border/80 text-foreground hover:bg-muted shrink-0 flex items-center gap-1 shadow-xs"
-                                      onClick={() => setSelectedToolOutput({ name: tc.name, result: tc.result || "" })}
-                                    >
-                                      <Eye className="h-2.5 w-2.5" />
-                                      View Output
-                                    </Button>
-                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 text-xs gap-1 w-full justify-start text-muted-foreground hover:text-foreground px-1"
+                                    onClick={() => setSelectedToolOutput({ name: tc.name, result: tc.result || '' })}
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    View output
+                                  </Button>
                                 )}
                               </div>
                             ))}
@@ -832,69 +774,67 @@ export function TpmChat({
             )}
           </div>
 
-          {/* Centered Input Area */}
-          <div className="p-3 shrink-0 border-t border-border bg-card relative z-30">
-            <div className="relative flex flex-col rounded-[20px] bg-background/60 backdrop-blur-md border border-border/60 overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40 transition-all duration-250 shadow-xs">
+          {/* ── Input ── */}
+          <div className="shrink-0 border-t border-border p-3">
+            <div className={cn(
+              'relative flex flex-col rounded-xl border bg-background transition-all duration-150',
+              'focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10',
+              streaming ? 'opacity-70' : 'opacity-100'
+            )}>
               <Textarea
                 ref={inputRef}
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Message TPM..."
-                className="w-full border-0 px-4 py-3.5 pr-12 min-h-[48px] max-h-[140px] outline-hidden text-xs leading-relaxed text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent scrollbar-none"
+                placeholder="Message TPM…"
+                className="w-full border-0 px-4 py-3 pr-12 min-h-10 max-h-32 text-sm leading-relaxed resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
                 rows={1}
                 disabled={streaming}
               />
-              <div className="flex items-center justify-between px-4 pb-2.5 pt-0.5">
-                <div className="flex items-center gap-1.5 opacity-50 hover:opacity-100 transition-opacity select-none">
-                  <Terminal className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-[8px] font-semibold font-mono tracking-tight text-muted-foreground uppercase">SSE Active</span>
-                </div>
-                <div className="absolute right-3 bottom-2.5">
-                  <Button
-                    size="icon"
-                    className={cn(
-                      'rounded-full h-7 w-7 p-0 transition-all duration-200 tap-shrink',
-                      input.trim()
-                        ? 'bg-primary text-primary-foreground hover:scale-105 active:scale-95 shadow-md'
-                        : 'bg-muted text-muted-foreground hover:bg-muted'
-                    )}
-                    disabled={!input.trim() || streaming}
-                    onClick={() => handleSend()}
-                  >
-                    {streaming ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </div>
+              <div className="absolute right-2.5 bottom-2.5">
+                <Button
+                  size="icon"
+                  className={cn(
+                    'size-7 rounded-full transition-all duration-150',
+                    input.trim()
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                      : 'bg-muted text-muted-foreground'
+                  )}
+                  disabled={!input.trim() || streaming}
+                  onClick={() => handleSend()}
+                >
+                  {streaming
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <ArrowUp className="h-3.5 w-3.5" />}
+                </Button>
               </div>
             </div>
+            <p className="text-center text-xs text-muted-foreground/50 mt-2">
+              ⌘↵ to send · shift↵ for newline
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Tool Call Output Dialog */}
+      {/* ── Tool output dialog ── */}
       <Dialog open={!!selectedToolOutput} onOpenChange={() => setSelectedToolOutput(null)}>
-        <DialogContent className="fixed z-50 flex flex-col max-h-[85vh] w-[92vw] sm:max-w-2xl border border-border p-0 bg-background/98 backdrop-blur-xl shadow-2xl rounded-xl">
-          <DialogHeader className="border-b border-border/80 px-4 py-3 shrink-0 bg-card/60 flex flex-row items-center justify-between space-y-0 h-14">
-            <DialogTitle className="text-xs sm:text-sm font-bold flex items-center gap-1.5 text-foreground">
-              <Terminal className="h-4 w-4 text-primary shrink-0" />
-              <span>Tool Output Log: {selectedToolOutput?.name}</span>
+        <DialogContent className="flex flex-col max-h-screen w-11/12 sm:max-w-2xl border border-border p-0 bg-background shadow-2xl rounded-xl">
+          <DialogHeader className="flex flex-row items-center justify-between border-b border-border px-4 py-3 space-y-0 shrink-0">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-primary" />
+              {selectedToolOutput?.name}
             </DialogTitle>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-md shrink-0 text-muted-foreground"
+              className="size-8 text-muted-foreground"
               onClick={() => setSelectedToolOutput(null)}
             >
               <X className="h-4 w-4" />
             </Button>
           </DialogHeader>
-
-          <div className="flex-1 overflow-auto p-4 bg-muted/40 font-mono text-[9px] sm:text-xs leading-relaxed select-text min-h-0">
-            <pre className="whitespace-pre-wrap break-all bg-card border border-border/60 rounded-lg p-3 sm:p-4 text-foreground/80 leading-5">
+          <div className="flex-1 overflow-auto p-4 min-h-0">
+            <pre className="whitespace-pre-wrap break-all rounded-lg border border-border bg-muted p-4 text-xs leading-relaxed text-foreground font-mono select-text">
               {selectedToolOutput?.result}
             </pre>
           </div>

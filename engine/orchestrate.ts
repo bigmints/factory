@@ -1,21 +1,17 @@
 /**
- * Orchestrate — LLM-driven story delivery.
+ * Orchestrate — TPM-driven story delivery.
  *
- * The LLM receives the story + full context (TOON state, knowledgebase,
- * conventions, factory.yaml) and uses tools to:
- *   1. Delegate to the user-configured CLI (pi, claude, gemini, agy)
- *   2. Read what was produced
- *   3. Run checks (tsc, lint, etc.)
- *   4. Update the knowledgebase
- *   5. Update context / heartbeat
- *   6. Mark the story done or failed
+ * The orchestrator is a Technical Program Manager (TPM).
+ * Its job: write a complete brief, delegate to the CLI engineer, monitor
+ * the session for dysfunction, intervene if needed, and make the go/no-go call.
  *
- * The engine drives zero logic. The LLM decides everything.
+ * The TPM does NOT write code, run tests, or inspect files.
+ * Tools: delegate_to_cli, intervene, mark_story_done, mark_story_failed, update_context.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
-import { spawnSync, execSync } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log, logError } from './log.ts';
 import { writeHeartbeat } from './toon.ts';
@@ -91,11 +87,11 @@ function resolveCliName(settings: FactorySettings): string {
     }
     // Auto-detect
     for (const bin of ['pi', 'gemini', 'claude', 'agy']) {
-        const result = spawnSync('which', [bin], { encoding: 'utf8' });
-        if (result.status === 0) {
+        try {
+            execSync(`which ${bin}`, { stdio: 'ignore' });
             log('→', `Auto-detected CLI: ${bin}`);
             return bin;
-        }
+        } catch { /* not found, try next */ }
     }
     throw new Error(
         'No CLI configured. Run: factory worker default-cli <pi|gemini|claude|agy>\n' +
@@ -113,8 +109,23 @@ const CLI_YOLO_FLAGS: Record<string, string[]> = {
 
 // ─── Orchestrator Loop ───────────────────────────────────
 
-const MAX_TURNS = 15;   // max LLM turns before giving up
-const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes — large scaffolds take time
+const MAX_TURNS = 12;              // max LLM turns before giving up
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+
+// ─── CLI Health Monitor Thresholds ──────────────────────
+const STALL_TIMEOUT_MS  = 120_000;  // 2 min no output → kill (covers npm install)
+const LOOP_WINDOW_BYTES = 500;      // bytes to compare for loop detection
+const LOOP_CHECK_MS     = 15_000;   // how often to run loop check
+const QUESTION_PATTERNS: RegExp[] = [
+    /\?\s*$/m,              // line ending in ?
+    /\[y\/n\]/i,            // [y/n] prompt
+    /\(yes\/no\)/i,
+    /press enter/i,
+    /enter .{0,40}:/i,
+    /provide .{0,40}:/i,
+    /what (should|do you)/i,
+    /please (specify|provide|enter|choose)/i,
+];
 
 async function runOrchestratorLoop(
     story: AppStory | FeatureStory,
@@ -146,13 +157,18 @@ async function runOrchestratorLoop(
         { role: 'system', content: systemPrompt },
         {
             role: 'user',
-            content: 'Begin. Call delegate_to_cli NOW with a complete, self-contained prompt. The CLI agent will handle everything: scaffolding, coding, npm install, fixing type errors, lint errors, and verifying the build. Your job is to write a thorough brief and let the CLI do the work. Do NOT call read_output or run_check first — delegate immediately.',
+            content: 'You are the TPM. Write your brief now and call delegate_to_cli. The brief must be comprehensive enough that the CLI engineer never needs to ask a question. Include the full story, stack, conventions, target directory, and a self-sufficiency instruction.',
         },
     ];
 
     const sessionStart = Date.now();
     let totalTokensIn = 0;
     let totalTokensOut = 0;
+
+    // TPM loop guards
+    const recentTools: string[] = [];  // track last N tool calls to detect orchestrator-level loops
+    let delegationCount = 0;           // how many times we've called delegate_to_cli or intervene
+    let lastCliErrorSig = '';          // signature of last CLI error (to detect repeated failures)
 
     for (let turn = 0; turn < MAX_TURNS && !ctx.terminal; turn++) {
         if (Date.now() - sessionStart > SESSION_TIMEOUT_MS) {
@@ -190,7 +206,36 @@ async function runOrchestratorLoop(
             const args = tc.function?.arguments || tc.arguments || {};
             log('→', `Tool: ${toolName}`);
 
+            // Track delegation count
+            if (toolName === 'delegate_to_cli' || toolName === 'intervene') {
+                delegationCount++;
+                if (delegationCount > 2) {
+                    // TPM tried twice — force escalation
+                    const msg = 'MANAGER OVERRIDE: You have delegated twice and the CLI has not succeeded. You must now call mark_story_failed with a clear reason. Do not delegate again.';
+                    log('⚠', 'Max delegations reached — forcing escalation');
+                    messages.push({ role: 'tool', content: msg, tool_call_id: tc.id });
+                    messages.push({ role: 'user', content: msg });
+                    ctx.logs.push({ level: 'error', message: msg });
+                    continue;
+                }
+            }
+
             const result = await executeOrchestratorTool(toolName, args, ctx);
+
+            // Duplicate error guard
+            if ((toolName === 'delegate_to_cli' || toolName === 'intervene') && result.isError) {
+                const sig = result.content.slice(0, 150);
+                if (lastCliErrorSig && sig === lastCliErrorSig) {
+                    const intervention = '⚠️ MANAGER ALERT: Same error returned twice. Changing the prompt will not help. Call mark_story_failed now.';
+                    log('⚠', 'Duplicate CLI error — injecting escalation directive');
+                    messages.push({ role: 'tool', content: result.content, tool_call_id: tc.id });
+                    messages.push({ role: 'user', content: intervention });
+                    ctx.logs.push({ level: 'error', message: intervention });
+                    continue;
+                }
+                lastCliErrorSig = sig;
+            }
+
             messages.push({
                 role: 'tool',
                 content: result.content,
@@ -202,6 +247,18 @@ async function runOrchestratorLoop(
                 log('✗', `Tool error — ${toolName}: ${result.content.slice(0, 200)}`);
             } else {
                 ctx.logs.push({ level: 'info', message: result.content });
+            }
+
+            recentTools.push(toolName);
+        }
+
+        // Orchestrator-level loop guard: same tool called 3 turns in a row
+        if (recentTools.length >= 3) {
+            const last3 = recentTools.slice(-3);
+            if (last3.every(t => t === last3[0]) && last3[0] !== 'mark_story_done' && last3[0] !== 'mark_story_failed') {
+                const loopMsg = `⚠️ MANAGER ALERT: You have called '${last3[0]}' three turns in a row. This is a loop. You must now call mark_story_done or mark_story_failed immediately.`;
+                log('⚠', `Orchestrator loop detected on tool: ${last3[0]}`);
+                messages.push({ role: 'user', content: loopMsg });
             }
         }
 
@@ -246,28 +303,45 @@ function buildSystemPrompt(
 ): string {
     const sections: string[] = [];
 
-    sections.push(`You are Factory, an autonomous build orchestrator.
-Your job: deliver the story below by writing a complete brief for the CLI agent and confirming the result.
-You do NOT write code. You write one thorough delegation prompt, then verify, then mark done.
+    // ── TPM Identity ──
+    sections.push(`You are the Factory TPM — Technical Program Manager.
 
-## CRITICAL RULES — READ FIRST
-- TURN BUDGET: You have ${MAX_TURNS} turns total. Use them wisely.
-- FIRST TURN: ALWAYS call delegate_to_cli immediately. Never start with read_output or run_check.
-- DELEGATE EVERYTHING: The CLI agent handles scaffolding, coding, npm install, tsc, lint, and fixing errors. You do not run these yourself unless the CLI failed.
-- ONE BIG PROMPT: Write a single comprehensive prompt that includes all context. The CLI will do the full job in one session.
-- MARK DONE FAST: Once the CLI succeeds and you've verified via read_output, call mark_story_done immediately. Do not keep running more checks.
-- MARK FAILED: If the CLI fails twice, call mark_story_failed — do not waste turns on a broken path.`);
+Your ONLY responsibility is delivery: ensure the story below is built correctly by the CLI engineer.
+
+You do NOT write code. You do NOT run tests. You do NOT inspect files.
+You write briefs, monitor delivery health, and make go/no-go calls.
+
+## Your Tools
+- **delegate_to_cli(prompt)** — Hand the story to the CLI engineer with a complete brief. The tool streams the session and returns a structured delivery report automatically.
+- **intervene(reason, new_instructions)** — The CLI got stuck or failed. Re-brief with corrected direction.
+- **mark_story_done(summary)** — Delivery accepted. Called when the report shows success.
+- **mark_story_failed(reason)** — Cannot deliver. Escalate for human review.
+- **update_context(message)** — Optional. Log a note to the project worklog.
+
+## Delivery Reports (what delegate_to_cli returns)
+The tool monitors the CLI session and returns one of:
+- \`DELIVERED\` — CLI completed successfully. Call mark_story_done.
+- \`FAILED (exit N)\` — CLI exited with an error. Read the report, then use intervene.
+- \`INTERVENTION [STALL]\` — CLI stopped producing output for 2+ minutes. It is stuck.
+- \`INTERVENTION [LOOP]\` — CLI is repeating the same output. It is looping.
+- \`INTERVENTION [ASKING]\` — CLI asked a question and is blocked waiting for input.
+
+## Rules
+1. **Turn 1 is always delegate_to_cli.** Never start with anything else.
+2. **Maximum 2 delegations.** After 2 failed delegations, call mark_story_failed.
+3. **If report shows DELIVERED, call mark_story_done immediately.** Do not second-guess.
+4. **If intervention reason is ASKING, embed the answer in your new brief.** The CLI must not need to ask.
+5. **If intervention reason is STALL or LOOP, change approach in your new brief.** Same prompt = same result.
+6. **Never ask for help.** Make a decision and act.`);
 
     // ── Target Directory ──
     sections.push(`## Target Directory
-All files must be generated inside:
 \`${targetDir}\`
-The CLI agent's cwd will be set to this directory automatically.`);
+The CLI engineer's working directory. All work happens here.`);
 
     // ── Configured CLI ──
-    sections.push(`## Configured CLI: ${cliName}
-This is the user's configured agent CLI. Use delegate_to_cli exclusively.
-The CLI runs with full filesystem access and handles everything end-to-end.`);
+    sections.push(`## CLI Engineer: ${cliName}
+This is the user's configured CLI agent. It has full filesystem access and handles everything: scaffolding, coding, npm install, type errors, lint errors, build verification.`);
 
     // ── Story ──
     const storyBlock = isAppStory(story)
@@ -277,14 +351,14 @@ The CLI runs with full filesystem access and handles everything end-to-end.`);
 
     // ── Project Context (TOON state) ──
     if (blueprint.toonSnapshot) {
-        sections.push(`## Project State (TOON Snapshot)\n${blueprint.toonSnapshot}`);
+        sections.push(`## Project State\n${blueprint.toonSnapshot}`);
     }
 
     // ── Knowledgebase ──
     const knowledgeFiles = loadKnowledgeFiles(blueprint.repoPath);
     if (knowledgeFiles.length > 0) {
         const kb = knowledgeFiles.map(k => `### ${k.name}\n${k.content}`).join('\n\n');
-        sections.push(`## Knowledgebase\n${kb}`);
+        sections.push(`## Knowledgebase (past builds & decisions)\n${kb}`);
     }
 
     // ── Conventions ──
@@ -298,27 +372,19 @@ The CLI runs with full filesystem access and handles everything end-to-end.`);
         sections.push(`## App Knowledge Files\n${kf}`);
     }
 
-    // ── Workflow ──
-    sections.push(`## Your Exact Workflow (follow this order strictly)
+    // ── Brief Template ──
+    const stackStr = isAppStory(story) ? JSON.stringify((story as AppStory).stack, null, 2) : 'see story';
+    sections.push(`## What Your Brief Must Include
 
-**Turn 1 — delegate_to_cli**: Write a single comprehensive prompt containing:
-  - The full story acceptance criteria
-  - Stack details: ${isAppStory(story) ? JSON.stringify((story as AppStory).stack) : 'see story above'}
-  - Target directory: \`${targetDir}\`
-  - All conventions from knowledgebase
-  - Explicit instruction to the CLI to: scaffold, implement, run npm install, fix any tsc errors, fix any lint errors, and verify the build passes
-  - Instruction to commit when done
+When you call delegate_to_cli, your prompt must contain ALL of the following:
 
-**Turn 2 — read_output**: Check what files were produced. If the directory looks correct (files exist), proceed to mark done.
-
-**Turn 3 — mark_story_done OR delegate_to_cli again**: 
-  - If output looks correct → call mark_story_done immediately.
-  - If the CLI clearly failed → delegate again with the specific error text.
-  - After a second delegation, check output once more then mark done or failed.
-
-**No more than 2 delegations total.** If it still fails after 2 delegations, call mark_story_failed.
-
-After marking done/failed, optionally call update_knowledge with key decisions (1 sentence).`);
+1. **Story acceptance criteria** (copy them verbatim from the story above)
+2. **Stack**: ${stackStr}
+3. **Target directory**: \`${targetDir}\`
+4. **Conventions**: summarise the key rules from the Conventions section above
+5. **Self-sufficiency instruction**: 
+   > "Complete the full implementation without asking questions. Run npm install, fix any TypeScript or lint errors, verify the build passes. When done, print DELIVERY COMPLETE and a summary of what was built."
+6. **What NOT to do** (from knowledgebase — e.g. no Tailwind, specific patterns to avoid)`);
 
     return sections.join('\n\n');
 }
@@ -328,84 +394,65 @@ After marking done/failed, optionally call update_knowledge with key decisions (
 export const ORCHESTRATOR_TOOL_DEFINITIONS = [
     {
         name: 'delegate_to_cli',
-        description: 'Run the configured CLI agent with a prompt in the target directory. The CLI agent writes files, runs installs, etc. Returns combined stdout/stderr.',
+        description: 'Hand the story brief to the CLI engineer. The tool streams the session and monitors for stalls, loops, and questions. Returns a structured delivery report: DELIVERED, FAILED, or INTERVENTION [STALL|LOOP|ASKING]. You write the brief; the CLI does everything else.',
         parameters: {
             type: 'object',
             properties: {
-                prompt: { type: 'string', description: 'The full prompt to send to the CLI agent. Be precise and context-rich.' },
-                cwd: { type: 'string', description: 'Working directory for the CLI. Defaults to the target build directory.' },
+                prompt: {
+                    type: 'string',
+                    description: 'Complete self-contained brief for the CLI engineer. Must include: acceptance criteria, stack, target directory, conventions, and a self-sufficiency instruction (do not ask questions, complete everything, verify the build).'
+                },
             },
             required: ['prompt'],
         },
     },
     {
-        name: 'read_output',
-        description: 'List files in the target directory and optionally read specific file contents. Use to inspect what the CLI agent produced.',
+        name: 'intervene',
+        description: 'Re-brief the CLI engineer after a failed or stuck delivery. Use when delegate_to_cli returned FAILED or INTERVENTION. Maximum 1 intervention per story.',
         parameters: {
             type: 'object',
             properties: {
-                files: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    description: 'Optional list of specific file paths (relative to target dir) to read contents of.',
+                reason: {
+                    type: 'string',
+                    description: 'What went wrong in the previous attempt (STALL, LOOP, ASKING, FAILED). Be specific.'
+                },
+                new_instructions: {
+                    type: 'string',
+                    description: 'Revised brief for the CLI engineer. Must address the specific failure. If ASKING, embed the answer. If LOOP, tell it what to stop doing and what to do instead. If STALL, try a different approach.'
                 },
             },
-            required: [],
-        },
-    },
-    {
-        name: 'run_check',
-        description: 'Run a validation command in the target directory (e.g. tsc --noEmit, npm test, npx eslint .). Returns stdout/stderr and exit code.',
-        parameters: {
-            type: 'object',
-            properties: {
-                command: { type: 'string', description: 'The command to run, e.g. "npx tsc --noEmit" or "npm test".' },
-                cwd: { type: 'string', description: 'Working directory. Defaults to the target build directory.' },
-            },
-            required: ['command'],
-        },
-    },
-    {
-        name: 'update_knowledge',
-        description: 'Write a knowledge entry to .factory/knowledge/<slug>.md. Record what was built, key decisions, and what to avoid next time.',
-        parameters: {
-            type: 'object',
-            properties: {
-                slug: { type: 'string', description: 'Short identifier for this knowledge entry, e.g. "greeting-app" or "auth-feature".' },
-                content: { type: 'string', description: 'Markdown content. Include: what was built, stack decisions, known issues, conventions used.' },
-            },
-            required: ['slug', 'content'],
+            required: ['reason', 'new_instructions'],
         },
     },
     {
         name: 'update_context',
-        description: 'Append a message to the project worklog (.factory/logs/worklog.yaml) and update the heartbeat.',
+        description: 'Log a note to the project worklog. Use to record key delivery decisions.',
         parameters: {
             type: 'object',
             properties: {
-                message: { type: 'string', description: 'What just happened or was decided.' },
+                message: { type: 'string', description: 'What happened or was decided.' },
             },
             required: ['message'],
         },
     },
     {
         name: 'mark_story_done',
-        description: 'Mark the story as done. Call this ONLY when you have verified the output is correct. Updates story YAML status to done.',
+        description: 'Confirm delivery. Call when the delivery report shows DELIVERED. Updates story status to done and writes a build receipt.',
         parameters: {
             type: 'object',
             properties: {
-                summary: { type: 'string', description: 'What was delivered. Will be written to the build receipt.' },
+                summary: { type: 'string', description: 'What was delivered. Copied to the build receipt.' },
             },
             required: ['summary'],
         },
     },
     {
         name: 'mark_story_failed',
-        description: 'Mark the story as failed/needs review. Call when you cannot recover from errors.',
+        description: 'Escalate. Call when delivery cannot be achieved after 2 attempts. Story goes to human review.',
         parameters: {
             type: 'object',
             properties: {
-                reason: { type: 'string', description: 'Why the build failed and what would be needed to fix it.' },
+                reason: { type: 'string', description: 'Why delivery failed and what a human needs to fix.' },
             },
             required: ['reason'],
         },
@@ -421,15 +468,17 @@ async function executeOrchestratorTool(
 ): Promise<ToolResult> {
     try {
         switch (name) {
-            case 'delegate_to_cli':      return toolDelegateToCli(args, ctx);
-            case 'read_output':          return toolReadOutput(args, ctx);
-            case 'run_check':            return toolRunCheck(args, ctx);
-            case 'update_knowledge':     return toolUpdateKnowledge(args, ctx);
-            case 'update_context':       return toolUpdateContext(args, ctx);
-            case 'mark_story_done':      return toolMarkStoryDone(args, ctx);
-            case 'mark_story_failed':    return toolMarkStoryFailed(args, ctx);
+            case 'delegate_to_cli':  return toolDelegateToCli(args, ctx);
+            case 'intervene':        return toolIntervene(args, ctx);
+            case 'update_context':   return toolUpdateContext(args, ctx);
+            case 'mark_story_done':  return toolMarkStoryDone(args, ctx);
+            case 'mark_story_failed':return toolMarkStoryFailed(args, ctx);
+            // Legacy tool names — redirect gracefully so old LLM outputs don't hard-fail
+            case 'read_output':      return { content: 'read_output is not available. You are the TPM — call mark_story_done if the delivery report showed DELIVERED, or intervene if it showed failure.', isError: true };
+            case 'run_check':        return { content: 'run_check is not available. You are the TPM — you do not run tests. Read the delivery report and make a decision.', isError: true };
+            case 'update_knowledge': return toolUpdateKnowledge(args, ctx); // kept for backwards compat
             default:
-                return { content: `Unknown tool: ${name}`, isError: true };
+                return { content: `Unknown tool: ${name}. Available: delegate_to_cli, intervene, mark_story_done, mark_story_failed, update_context.`, isError: true };
         }
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -438,125 +487,145 @@ async function executeOrchestratorTool(
 }
 
 // ── delegate_to_cli ──────────────────────────────────────
+// Streams the CLI session. Monitors for stalls, loops, and questions.
+// Returns a structured delivery report to the TPM.
 
-function toolDelegateToCli(
+async function toolDelegateToCli(
     args: Record<string, unknown>,
     ctx: OrchestratorContext,
-): ToolResult {
+): Promise<ToolResult> {
     const prompt = String(args.prompt || '');
     if (!prompt) return { content: 'prompt is required', isError: true };
 
-    const cwd = args.cwd ? resolve(String(args.cwd)) : ctx.targetDir;
-    if (!existsSync(cwd)) mkdirSync(cwd, { recursive: true });
+    const cwd = String(args.cwd || ctx.targetDir);
+    const resolvedCwd = resolve(cwd);
+    if (!existsSync(resolvedCwd)) mkdirSync(resolvedCwd, { recursive: true });
 
     const yoloFlags = CLI_YOLO_FLAGS[ctx.cliName] || [];
     const cliArgs = ['-p', prompt, ...yoloFlags];
 
-    log('→', `Running: ${ctx.cliName} in ${cwd}`);
+    log('→', `Running: ${ctx.cliName} in ${resolvedCwd}`);
     log('→', `Prompt (${prompt.length} chars): ${prompt.slice(0, 120)}${prompt.length > 120 ? '…' : ''}`);
 
-    const result = spawnSync(ctx.cliName, cliArgs, {
-        cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        encoding: 'utf8',
-        timeout: 20 * 60 * 1000, // 20 minutes per CLI invocation
-        maxBuffer: 50 * 1024 * 1024,
-    });
+    return new Promise<ToolResult>((resolve: (r: ToolResult) => void) => {
+        const child = spawn(ctx.cliName, cliArgs, {
+            cwd: resolvedCwd,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
 
-    const stdout = result.stdout || '';
-    const stderr = result.stderr || '';
-    const combined = [stdout, stderr].filter(Boolean).join('\n');
-    const exitCode = result.status ?? -1;
+        let buffer = '';
+        let lastActivityAt = Date.now();
+        let interventionReason: string | null = null;
+        let killed = false;
 
-    log(exitCode === 0 ? '✓' : '!', `CLI exited with code ${exitCode}`);
-
-    // Scan what was written to give the LLM a file manifest
-    const fileTree = scanDirTree(cwd);
-    ctx.files = fileTree;
-
-    const fileList = fileTree.length > 0
-        ? `\nFiles written:\n${fileTree.map(f => `  ${f.filename}`).join('\n')}`
-        : '\nNo files detected in output directory.';
-
-    return {
-        content: `Exit code: ${exitCode}\n${combined.slice(0, 8000)}${combined.length > 8000 ? '\n[truncated]' : ''}${fileList}`,
-        isError: exitCode !== 0,
-    };
-}
-
-// ── read_output ──────────────────────────────────────────
-
-function toolReadOutput(
-    args: Record<string, unknown>,
-    ctx: OrchestratorContext,
-): ToolResult {
-    const fileTree = scanDirTree(ctx.targetDir);
-    ctx.files = fileTree;
-
-    const requestedFiles = Array.isArray(args.files) ? (args.files as string[]) : [];
-    const lines: string[] = [`Directory: ${ctx.targetDir}`, ''];
-
-    // File tree
-    lines.push('File tree:');
-    if (fileTree.length === 0) {
-        lines.push('  (empty)');
-    } else {
-        for (const f of fileTree) {
-            lines.push(`  ${f.filename}`);
+        // ── kill helper ────────────────────────────
+        function killChild(reason: string) {
+            if (killed) return;
+            killed = true;
+            interventionReason = reason;
+            log('⚠', `CLI intervention: ${reason}`);
+            child.kill('SIGTERM');
+            setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* ignore */ } }, 3000);
         }
-    }
 
-    // Read requested file contents
-    if (requestedFiles.length > 0) {
-        lines.push('');
-        lines.push('File contents:');
-        for (const relPath of requestedFiles) {
-            const absPath = join(ctx.targetDir, relPath);
-            if (existsSync(absPath)) {
-                const content = readFileSync(absPath, 'utf-8');
-                lines.push(`\n### ${relPath}\n\`\`\`\n${content.slice(0, 4000)}${content.length > 4000 ? '\n[truncated]' : ''}\n\`\`\``);
+        // ── stall detector ─────────────────────────
+        const stallTimer = setInterval(() => {
+            if (killed) return;
+            const silentMs = Date.now() - lastActivityAt;
+            if (silentMs >= STALL_TIMEOUT_MS) {
+                killChild(`STALL: No output for ${Math.round(silentMs / 1000)}s`);
+            }
+        }, 10_000);
+
+        // ── loop detector ──────────────────────────
+        let prevTail = '';
+        let loopRepeatCount = 0;
+        const loopTimer = setInterval(() => {
+            if (killed) return;
+            const tail = buffer.slice(-LOOP_WINDOW_BYTES);
+            if (tail.length >= LOOP_WINDOW_BYTES && tail === prevTail) {
+                loopRepeatCount++;
+                if (loopRepeatCount >= 3) {
+                    killChild(`LOOP: Output unchanged for ${LOOP_CHECK_MS * 3 / 1000}s — CLI is repeating itself`);
+                }
             } else {
-                lines.push(`\n### ${relPath}\n(file not found)`);
+                loopRepeatCount = 0;
+            }
+            prevTail = tail;
+        }, LOOP_CHECK_MS);
+
+        // ── data handler (questions detected here) ──
+        function onData(chunk: Buffer) {
+            const text = chunk.toString();
+            buffer += text;
+            lastActivityAt = Date.now();
+
+            if (!killed) {
+                for (const pattern of QUESTION_PATTERNS) {
+                    if (pattern.test(text)) {
+                        killChild(`ASKING: CLI asked for input — "${text.trim().slice(0, 200)}"`);
+                        break;
+                    }
+                }
             }
         }
-    }
 
-    return { content: lines.join('\n'), isError: false };
+        child.stdout?.on('data', onData);
+        child.stderr?.on('data', onData);
+
+        child.on('close', (code: number | null) => {
+            clearInterval(stallTimer);
+            clearInterval(loopTimer);
+
+            const tail = buffer.slice(-3000);
+            const fileTree = scanDirTree(resolvedCwd);
+            ctx.files = fileTree;
+            const fileCount = fileTree.length;
+            const fileSummary = fileCount > 0
+                ? `\n\nFiles in target directory: ${fileCount}\n${fileTree.slice(0, 30).map(f => `  ${f.filename}`).join('\n')}${fileCount > 30 ? `\n  ... and ${fileCount - 30} more` : ''}`
+                : '\n\nNo files detected in target directory.';
+
+            if (interventionReason) {
+                resolve({
+                    content: `INTERVENTION [${interventionReason}]\n\nLast output from CLI:\n${tail}${fileSummary}`,
+                    isError: true,
+                });
+                return;
+            }
+
+            log(code === 0 ? '✓' : '!', `CLI exited with code ${code}`);
+
+            resolve({
+                content: code === 0
+                    ? `DELIVERED\n\n${tail}${fileSummary}`
+                    : `FAILED (exit ${code})\n\n${tail}${fileSummary}`,
+                isError: code !== 0,
+            });
+        });
+
+        child.on('error', (err: Error) => {
+            clearInterval(stallTimer);
+            clearInterval(loopTimer);
+            resolve({ content: `CLI spawn error: ${err.message}`, isError: true });
+        });
+    });
 }
 
-// ── run_check ────────────────────────────────────────────
+// ── intervene ────────────────────────────────────────────
+// Re-brief the CLI with corrected instructions after a failed delivery.
 
-function toolRunCheck(
+async function toolIntervene(
     args: Record<string, unknown>,
     ctx: OrchestratorContext,
-): ToolResult {
-    const command = String(args.command || '');
-    if (!command) return { content: 'command is required', isError: true };
+): Promise<ToolResult> {
+    const reason = String(args.reason || 'unknown');
+    const newInstructions = String(args.new_instructions || '');
+    if (!newInstructions) return { content: 'new_instructions is required', isError: true };
 
-    const cwd = args.cwd ? resolve(String(args.cwd)) : ctx.targetDir;
-    log('→', `Check: ${command} in ${cwd}`);
+    log('⚠', `TPM intervening: ${reason.slice(0, 100)}`);
 
-    try {
-        const output = execSync(command, {
-            cwd,
-            stdio: 'pipe',
-            encoding: 'utf8',
-            timeout: 5 * 60 * 1000,
-            maxBuffer: 10 * 1024 * 1024,
-        });
-        return {
-            content: `Exit 0 (OK)\n${output.slice(0, 4000)}`,
-            isError: false,
-        };
-    } catch (err: any) {
-        const stderr = err?.stderr?.toString() || '';
-        const stdout = err?.stdout?.toString() || '';
-        const combined = [stdout, stderr].filter(Boolean).join('\n');
-        return {
-            content: `Exit ${err?.status ?? 1} (FAILED)\n${combined.slice(0, 4000)}`,
-            isError: true,
-        };
-    }
+    const revisedPrompt = `PREVIOUS ATTEMPT FAILED.\nReason: ${reason}\n\nRevised instructions:\n${newInstructions}`;
+    return toolDelegateToCli({ prompt: revisedPrompt, cwd: args.cwd }, ctx);
 }
 
 // ── update_knowledge ─────────────────────────────────────

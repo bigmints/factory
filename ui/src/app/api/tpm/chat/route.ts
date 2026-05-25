@@ -328,7 +328,7 @@ RULES:
 - If a tool completes successfully, summarize its result clearly and list any acceptances or queue IDs.
 - Speak professionally, clearly, and serve as the intelligent orchestrator.`;
 
-          const localMessages = [
+          const localMessages: any[] = [
             { role: 'system', content: tpmSystemPrompt },
             ...messages.map((m: any) => ({ role: m.role, content: m.content, tool_calls: m.toolCalls }))
           ];

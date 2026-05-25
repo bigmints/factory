@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T21:54:23Z"
+  last_seen: "2026-05-25T21:56:25Z"
   host: "BigMac-2"
-  task: "post-commit: feat(ui): add Shadcn-like absolute collapse/expand button to the right TPM Chat sidebar"
+  task: "post-commit: feat(ui): remove Ask TPM from left sidebar to keep both sidebars cleanly original"
   status: alive

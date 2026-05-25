@@ -45,11 +45,14 @@ type StatusFilter = 'all' | 'active' | 'completed' | 'failed';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function humanName(item: QueueItem, idx: number): string {
+function humanName(item: QueueItem, idx: number, nameMap?: Map<string, string>): string {
   if (item.displayName) return item.displayName;
   const specName = item.storyFile || item.specFile || '';
   if (!specName) return `Build #${idx + 1}`;
-  return specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '');
+  const slug = specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '');
+  // Look up actual story name from scaffold/stories API
+  if (nameMap && nameMap.has(slug)) return nameMap.get(slug)!;
+  return slug;
 }
 
 function formatRelativeTime(iso: string): string {
@@ -173,6 +176,44 @@ export function BuildPage() {
   const logOffsetRef = useRef(0);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
+  // ── Story name resolution (slug → human name from scaffold/stories APIs) ──
+  const [storyNameMap, setStoryNameMap] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const getSlug = (path: string) => (path.split('/').pop() || '').replace(/\.ya?ml$/i, '');
+    async function loadNames() {
+      const map = new Map<string, string>();
+      try {
+        const res = await fetch('/api/stories');
+        if (res.ok) {
+          const data = await res.json();
+          const all = [...(data.stories || []), ...(data.featureStories || [])];
+          for (const s of all) {
+            const slug = getSlug(s.file || '');
+            const name = s.name || s.metadata?.name || '';
+            if (slug && name) map.set(slug, name);
+          }
+        }
+      } catch { /* ignore */ }
+      try {
+        const res = await fetch('/api/app-rollup');
+        if (res.ok) {
+          const data = await res.json();
+          for (const feature of (data.features || [])) {
+            for (const s of (feature.stories || [])) {
+              const slug = getSlug(s.file || '');
+              if (slug && s.name) map.set(slug, s.name); // rollup always wins
+            }
+          }
+        }
+      } catch { /* ignore */ }
+      setStoryNameMap(map);
+    }
+    loadNames();
+    const interval = setInterval(loadNames, 15_000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ── Data ──────────────────────────────────────────────────────────────────
 
   const fetchQueue = useCallback(async () => {
@@ -243,7 +284,7 @@ export function BuildPage() {
 
   const filteredItems = useMemo(() => {
     return queueItems.filter(item => {
-      const name = humanName(item, queueItems.indexOf(item)).toLowerCase();
+      const name = humanName(item, queueItems.indexOf(item), storyNameMap).toLowerCase();
       const matchesSearch = !searchQuery || name.includes(searchQuery.toLowerCase()) ||
         item.kind.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.status.toLowerCase().includes(searchQuery.toLowerCase());
@@ -515,7 +556,7 @@ export function BuildPage() {
                           'text-xs font-semibold truncate font-sans',
                           isSelected || isRunning ? 'text-white' : 'text-zinc-200 group-hover:text-white'
                         )}>
-                          {humanName(item, idx)}
+                          {humanName(item, idx, storyNameMap)}
                         </span>
                         <span className="text-[10px] text-zinc-600 font-mono shrink-0 tabular-nums">
                           {formatRelativeTime(item.addedAt)}
@@ -624,7 +665,7 @@ export function BuildPage() {
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <h2 className="text-base font-bold text-white leading-tight font-sans truncate">
-                      {humanName(selectedItem, queueItems.indexOf(selectedItem))}
+                      {humanName(selectedItem, queueItems.indexOf(selectedItem), storyNameMap)}
                     </h2>
                     
                     <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-zinc-500 font-mono mt-1">

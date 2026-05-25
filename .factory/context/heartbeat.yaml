@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T18:42:10Z"
+  last_seen: "2026-05-25T18:52:22Z"
   host: "BigMac-2"
-  task: "post-commit: fix(cli): TS error — use story.feature.name not story.name in commit msg fallback"
+  task: "post-commit: fix(ui): queue list shows actual story names (not epic names) — use s.name over s.feature.name"
   status: alive

@@ -66,6 +66,20 @@ interface ValidationCheck {
 
 const VALID_TABS = ['plan', 'tpm', 'build', 'test', 'deploy', 'roadmap', 'queue', 'dashboard', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
 
+const TAB_TITLES: Record<string, string> = {
+  plan: "Sprint & Backlog Board",
+  build: "Autonomous Build Queue",
+  test: "Validation Gates & Tests",
+  deploy: "Production Deployments",
+  dashboard: "Sprint & Backlog Board",
+  skills: "Custom Agentic Skills",
+  reports: "Build Performance Analytics",
+  knowledge: "Context & Architecture Decisions (ADR)",
+  integrations: "Connected Services & Integrations",
+  settings: "Workspace Settings",
+  projects: "Active Workspaces & Projects",
+};
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('plan');
   const [showAddProject, setShowAddProject] = useState(false);
@@ -558,15 +572,15 @@ export default function Dashboard() {
 
       <SidebarInset>
         {/* Page header — pure shadcn sidebar-08 pattern */}
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur-md">
           <div className="flex items-center gap-2 px-4 flex-1">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
-                  <BreadcrumbPage className="capitalize">
-                    {showAddProject ? 'Projects' : activeTab}
+                  <BreadcrumbPage className="font-semibold text-foreground">
+                    {showAddProject ? 'Active Workspaces & Projects' : (TAB_TITLES[activeTab] || activeTab)}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
@@ -587,7 +601,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0 relative">
           <div className="flex-1 min-w-0 overflow-y-auto">
             {showAddProject ? (
               <div className="p-4 md:p-8 w-full h-full">
@@ -621,8 +635,8 @@ export default function Dashboard() {
                       Output
                       {queueRunning && (
                         <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                           <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
                         </span>
                       )}
                     </Button>
@@ -643,6 +657,14 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          {/* TPM Chat Backdrop on Mobile */}
+          {tpmChatOpen && (
+            <div
+              className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 md:hidden animate-in fade-in duration-200"
+              onClick={() => setTpmChatOpen(false)}
+            />
+          )}
 
           {/* TPM Chat — always mounted to keep SSE streams alive across tab switches */}
           <TpmChat

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-26T07:42:34Z"
+  last_seen: "2026-05-26T07:49:33Z"
   host: "Mac"
-  task: "post-commit: refactor(ui): rewrite TPM chat modelled on cowork — prose markdown, muted bubbles, tool chips, thinking dots, token telemetry, glassmorphic input"
+  task: "post-commit: feat(tpm-chat): singleton store for cross-nav persistence, super compact spacing, never unmounts"
   status: alive

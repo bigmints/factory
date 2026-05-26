@@ -37,22 +37,22 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 const navMain = [
-  { title: "Plan",   id: "plan",   icon: LayoutDashboard },
-  { title: "Build",  id: "build",  icon: Rocket },
-  { title: "Test",   id: "test",   icon: FlaskConical },
-  { title: "Deploy", id: "deploy", icon: Globe },
+  { title: "Sprint & Backlog", id: "plan",   icon: LayoutDashboard },
+  { title: "Build Pipeline",  id: "build",  icon: Rocket },
+  { title: "Validation Gates",id: "test",   icon: FlaskConical },
+  { title: "Deploy Workspace",id: "deploy", icon: Globe },
 ]
 
 const navAnalytics = [
-  { title: "Reports",   id: "reports",   icon: BarChart3 },
-  { title: "Knowledge", id: "knowledge", icon: Brain },
+  { title: "Analytics Reports", id: "reports",   icon: BarChart3 },
+  { title: "ADRs & Knowledge",  id: "knowledge", icon: Brain },
 ]
 
 const navSecondary = [
-  { title: "Skills",       id: "skills",       icon: Wand2 },
-  { title: "Projects",     id: "projects",     icon: FolderOpen },
-  { title: "Integrations", id: "integrations", icon: Plug },
-  { title: "Settings",     id: "settings",     icon: Settings },
+  { title: "Custom Skills",     id: "skills",       icon: Wand2 },
+  { title: "Active Projects",   id: "projects",     icon: FolderOpen },
+  { title: "Integrations",      id: "integrations", icon: Plug },
+  { title: "System Settings",   id: "settings",     icon: Settings },
 ]
 
 export function AppSidebar({

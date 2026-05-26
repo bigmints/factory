@@ -512,16 +512,20 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   return (
     <div
       className={cn(
-        'flex shrink-0 h-full transition-all duration-300 ease-in-out',
-        isOpen ? 'w-auto' : 'w-0 overflow-hidden',
+        'transition-all duration-300 ease-in-out shrink-0',
+        // Desktop styles: standard flex sibling
+        'md:flex md:self-stretch md:w-auto md:relative md:translate-x-0',
+        // Mobile styles: fixed drawer overlay
+        'fixed right-0 top-0 bottom-0 h-full z-40 bg-background shadow-2xl md:shadow-none flex',
+        isOpen ? 'w-full sm:w-[400px] md:w-auto translate-x-0' : 'w-0 overflow-hidden translate-x-full md:translate-x-0',
       )}
     >
       {/* Artifact panel */}
       <div className={cn(
-        'h-full flex flex-col bg-card border-l border-border transition-all duration-300 shrink-0 overflow-hidden',
-        isOpen && artifactOpen && hasStories ? 'w-[380px]' : 'w-0 border-l-0',
+        'self-stretch flex flex-col bg-card border-l border-border transition-all duration-300 shrink-0 overflow-hidden',
+        isOpen && artifactOpen && hasStories ? 'w-full md:w-[380px]' : 'w-0 border-l-0',
       )}>
-        <div className="w-[380px] h-full flex flex-col">
+        <div className="w-full md:w-[380px] flex flex-col flex-1 min-h-0">
           {/* Tabs */}
           <div className="border-b border-border bg-muted/30 shrink-0 flex items-center h-10 px-2 gap-1.5">
             <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 min-w-0">
@@ -585,7 +589,11 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
       </div>
 
       {/* Main chat */}
-      <div className="h-full flex flex-col bg-background border-l border-border w-[360px] shrink-0">
+      <div className={cn(
+        "self-stretch flex flex-col bg-background border-l border-border shrink-0 min-h-0 transition-all duration-300",
+        isOpen ? (artifactOpen && hasStories ? 'w-0 md:w-[360px] overflow-hidden border-l-0' : 'w-full md:w-[360px]') : 'w-0 overflow-hidden border-l-0',
+      )}>
+        <div className="w-full md:w-[360px] flex flex-col flex-1 min-h-0">
 
         {/* Header — h-10 (compact, matches cowork h-12 spirit) */}
         <header className="flex h-10 shrink-0 items-center justify-between border-b border-border/60 px-3 bg-background/60 backdrop-blur-md">
@@ -633,7 +641,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
         )}
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4" style={{ scrollbarWidth: 'thin' }}>
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ scrollbarWidth: 'thin' }}>
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center h-full gap-5 text-center select-none">
               <div>
@@ -788,6 +796,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             </div>
           </div>
           <p className="text-center text-[9px] text-muted-foreground/30 mt-1.5">TPM can make mistakes. Verify decisions.</p>
+        </div>
         </div>
       </div>
 

@@ -258,10 +258,10 @@ export function KnowledgeView() {
   return (
     <div className="space-y-6 md:space-y-8 flex flex-col">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight">Knowledge Base</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Knowledge Base</h1>
+          <p className="text-sm text-muted-foreground">
             ADRs, architecture context, workflows, and failure records
           </p>
         </div>
@@ -299,7 +299,7 @@ export function KnowledgeView() {
                 </div>
                 <div>
                   <p className="text-lg font-bold leading-none">{stat.value}</p>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mt-0.5">{stat.label}</p>
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mt-0.5">{stat.label}</p>
                 </div>
               </CardContent>
             </Card>
@@ -499,13 +499,13 @@ export function KnowledgeView() {
                 )}
                 {f.error && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Error</p>
-                    <pre className="text-[11px] font-mono bg-destructive/10 border border-destructive/20 rounded-md p-3 text-destructive overflow-x-auto whitespace-pre-wrap">{f.error}</pre>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Error</p>
+                    <pre className="text-xs font-mono bg-destructive/10 border border-destructive/20 rounded-md p-3 text-destructive overflow-x-auto whitespace-pre-wrap">{f.error}</pre>
                   </div>
                 )}
                 {f.action && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Action</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Action</p>
                     <div className="rounded-lg bg-muted/50 border p-3">
                       <MarkdownBlock content={f.action} />
                     </div>

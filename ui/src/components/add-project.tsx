@@ -489,11 +489,11 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
     <div className="w-full space-y-6 sm:space-y-8 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight">Projects</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                Manage your connected repositories
-            </p>
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Projects</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage your connected repositories
+          </p>
         </div>
         <Button size="sm" onClick={() => setShowModal(true)} className="text-xs">
             <IconPlus className="h-3.5 w-3.5 mr-2" />
@@ -502,7 +502,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
       </div>
 
       <div className="space-y-2 sm:space-y-3">
-          <h2 className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-widest pl-1">
+          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest pl-1">
             Connected Repositories
           </h2>
           
@@ -544,15 +544,15 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                            <p className="text-[10px] sm:text-xs font-semibold truncate">{project.name}</p>
+                            <p className="text-xs font-semibold truncate">{project.name}</p>
                             {project.id === activeId && (
-                              <Badge className="gap-1 font-medium text-[8px] sm:text-[9px] px-1.5 py-0 rounded-md">
+                              <Badge className="gap-1 font-medium text-xs px-1.5 py-0 rounded-md">
                                 <IconRadio className="h-1.5 w-1.5 sm:h-2 sm:w-2" />
                                 Active
                               </Badge>
                             )}
                           </div>
-                          <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate font-mono mt-0.5">
+                          <p className="text-xs text-muted-foreground truncate font-mono mt-0.5">
                             {project.path}
                           </p>
                         </div>
@@ -561,7 +561,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-6 sm:h-7 text-[9px] sm:text-[10px] px-1.5 sm:px-2"
+                              className="h-6 sm:h-7 text-xs px-1.5 sm:px-2"
                               onClick={() => handleSwitch(project.id)}
                               disabled={!!switching}
                             >
@@ -600,32 +600,32 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                           {project.bridge.stack && (
                             <div className="flex flex-wrap gap-1.5">
                               {project.bridge.stack.framework && (
-                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.framework}
                                 </Badge>
                               )}
                               {project.bridge.stack.packageManager && (
-                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.packageManager}
                                 </Badge>
                               )}
                               {project.bridge.stack.database && (
-                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.database}
                                 </Badge>
                               )}
                               {project.bridge.stack.cloud && (
-                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.cloud}
                                 </Badge>
                               )}
                               {project.bridge.stack.testing && (
-                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.testing}
                                 </Badge>
                               )}
                               {project.bridge.stack.linter && (
-                                <Badge variant="outline" className="text-[9px] sm:text-[10px] font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
                                   {project.bridge.stack.linter}
                                 </Badge>
                               )}
@@ -633,7 +633,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                           )}
 
                           {/* Stats Row */}
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[9px] sm:text-[10px] text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
                             {project.bridge.stats.apps > 0 && (
                               <span className="flex items-center gap-1">
                                 <IconRocket className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
@@ -674,7 +674,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
             <DialogTitle className="text-xs sm:text-sm font-semibold">Connect New Project</DialogTitle>
             <div className="flex items-center gap-2 sm:gap-3">
               <CircularProgress completed={completedCount} total={totalSteps} />
-              <div className="text-[9px] sm:text-[10px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{totalSteps - completedCount}</span> steps left
               </div>
             </div>
@@ -714,7 +714,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                           }}
                         >
                           <h4 className={cn(
-                            "text-[10px] sm:text-xs font-semibold transition-colors uppercase tracking-wider",
+                            "text-xs font-semibold transition-colors uppercase tracking-wider",
                             isCompleted ? "text-primary" : "text-foreground"
                           )}>
                             {step.title}
@@ -727,7 +727,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-4 sm:h-5 text-[8px] sm:text-[9px] px-1 sm:px-1.5 text-muted-foreground hover:text-foreground"
+                                className="h-4 sm:h-5 text-xs px-1 sm:px-1.5 text-muted-foreground hover:text-foreground"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setOpenStepId(step.id);

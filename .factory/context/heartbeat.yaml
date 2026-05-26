@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-25T21:56:25Z"
-  host: "BigMac-2"
-  task: "post-commit: feat(ui): remove Ask TPM from left sidebar to keep both sidebars cleanly original"
+  last_seen: "2026-05-26T07:42:34Z"
+  host: "Mac"
+  task: "post-commit: refactor(ui): rewrite TPM chat modelled on cowork — prose markdown, muted bubbles, tool chips, thinking dots, token telemetry, glassmorphic input"
   status: alive

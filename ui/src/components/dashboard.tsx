@@ -587,7 +587,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="flex flex-1 min-h-0 relative">
+        <div className="flex flex-1 min-h-0">
           <div className="flex-1 min-w-0 overflow-y-auto">
             {showAddProject ? (
               <div className="p-4 md:p-8 w-full h-full">
@@ -608,44 +608,24 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-                {/* Page header */}
-                {['skills', 'reports', 'integrations', 'settings'].includes(activeTab) && (
-                  <div className="mb-4 md:mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                    <div>
-                      <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                        {activeTab === 'dashboard' && 'Dashboard'}
-                        {activeTab === 'stories' && 'Stories'}
-                        {activeTab === 'skills' && 'Skills'}
-                        {activeTab === 'reports' && 'Reports'}
-                        {activeTab === 'integrations' && 'Integrations'}
-                        {activeTab === 'settings' && 'Settings'}
-                      </h1>
-                      <p className="text-xs md:text-sm text-muted-foreground mt-1">
-                        {activeTab === 'dashboard' && 'Overview for the active project'}
-                        {activeTab === 'stories' && 'Manage your app stories'}
-                        {activeTab === 'skills' && 'Reusable recipes the engine auto-matches to builds'}
-                        {activeTab === 'reports' && 'View generated build reports'}
-                        {activeTab === 'integrations' && 'Connect external services and tools'}
-                        {activeTab === 'settings' && 'Configure factory preferences'}
-                      </p>
-                    </div>
-                    {showOutputButton && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => setOutputPanelOpen(true)}
-                      >
-                        <Terminal className="h-4 w-4" />
-                        Output
-                        {queueRunning && (
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                          </span>
-                        )}
-                      </Button>
-                    )}
+                {/* Output button — shown when there's output available */}
+                {showOutputButton && (
+                  <div className="flex justify-end mb-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setOutputPanelOpen(true)}
+                    >
+                      <Terminal className="h-4 w-4" />
+                      Output
+                      {queueRunning && (
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                        </span>
+                      )}
+                    </Button>
                   </div>
                 )}
 
@@ -664,13 +644,15 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Collapsible Ask TPM Chat Right Sidebar */}
+          {/* TPM Chat — always mounted to keep SSE streams alive across tab switches */}
           <TpmChat
             isOpen={tpmChatOpen}
             onClose={() => setTpmChatOpen(false)}
           />
         </div>
       </SidebarInset>
+
+      {/* TPM Chat is inside SidebarInset flex row above */}
 
       {/* Output panel — desktop: slide-over overlay, mobile: bottom sheet */}
       {/* Desktop panel */}

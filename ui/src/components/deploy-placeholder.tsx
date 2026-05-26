@@ -21,14 +21,14 @@ export function DeployPlaceholder() {
         <div className="h-20 w-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
           <Globe className="h-9 w-9 text-emerald-400" />
         </div>
-        <span className="absolute -top-2 -right-2 text-[10px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+        <span className="absolute -top-2 -right-2 text-xs font-semibold bg-amber-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
           Soon
         </span>
       </div>
 
       {/* Heading */}
       <div className="space-y-2 max-w-lg">
-        <h1 className="text-2xl font-bold tracking-tight">Deploy</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Deploy</h1>
         <p className="text-sm text-muted-foreground leading-relaxed">
           One-click deployment pipeline — push your generated apps straight to production with pre-deploy gates, health checks, and automatic rollback. Full CI/CD orchestration is coming soon.
         </p>
@@ -51,7 +51,7 @@ export function DeployPlaceholder() {
               <div className="h-8 w-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
                 <Icon className="h-4 w-4 text-emerald-400" />
               </div>
-              <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              <Badge variant="outline" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {tag}
               </Badge>
             </div>

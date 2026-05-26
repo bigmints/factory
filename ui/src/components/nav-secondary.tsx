@@ -20,7 +20,7 @@ export function NavSecondary({
   items: { title: string; id: string; icon: LucideIcon }[]
   activeId: string
   onSelect: (id: string) => void
-} & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
+} & Omit<React.ComponentPropsWithoutRef<typeof SidebarGroup>, 'onSelect'>) {
   return (
     <SidebarGroup {...props}>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-26T07:49:33Z"
+  last_seen: "2026-05-26T07:58:51Z"
   host: "Mac"
-  task: "post-commit: feat(tpm-chat): singleton store for cross-nav persistence, super compact spacing, never unmounts"
+  task: "post-commit: feat(ui): compact header, descriptive titles and robust mobile TPM Chat layout"
   status: alive

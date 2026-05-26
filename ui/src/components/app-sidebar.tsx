@@ -30,9 +30,9 @@ import {
 } from "@/components/ui/sidebar"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  activeTab: string
-  onTabChange: (tab: string) => void
-  onAddProject: () => void
+  activeTab?: string
+  onTabChange?: (tab: string) => void
+  onAddProject?: () => void
   projectRefreshKey?: number
 }
 
@@ -56,9 +56,9 @@ const navSecondary = [
 ]
 
 export function AppSidebar({
-  activeTab,
-  onTabChange,
-  onAddProject,
+  activeTab = "plan",
+  onTabChange = () => {},
+  onAddProject = () => {},
   projectRefreshKey,
   ...props
 }: AppSidebarProps) {

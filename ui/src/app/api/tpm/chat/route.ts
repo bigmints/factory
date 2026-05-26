@@ -485,8 +485,9 @@ async function handleGetBuildLogs(projectPath: string, limit: number = 10) {
     if (logs && logs.length > 0) {
       results.push(`## Recent Build Logs (${logs.length})`);
       for (const log of logs) {
+        const isSuccess = log.status !== 'failed';
         results.push(
-          `- [${log.status || 'unknown'}] ${log.storyFile || '?'} | ${log.createdAt || ''} | ${log.error ? `Error: ${log.error}` : 'Success'}`
+          `- [${log.status || 'unknown'}] ${log.storyFile || '?'} | ${log.timestamp || ''} | ${isSuccess ? 'Success' : `Failed: ${log.notes || ''}`}`
         );
       }
     }

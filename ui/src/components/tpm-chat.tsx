@@ -512,20 +512,20 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   return (
     <div
       className={cn(
-        'transition-all duration-300 ease-in-out shrink-0',
-        // Desktop styles: standard flex sibling
-        'md:flex md:self-stretch md:w-auto md:relative md:translate-x-0',
-        // Mobile styles: fixed drawer overlay
-        'fixed right-0 top-0 bottom-0 h-full z-40 bg-background shadow-2xl md:shadow-none flex',
-        isOpen ? 'w-full sm:w-[400px] md:w-auto translate-x-0' : 'w-0 overflow-hidden translate-x-full md:translate-x-0',
+        // Always flex on desktop so the component stays mounted (keeps SSE streams alive)
+        // Width collapses to 0 when closed rather than display:none
+        'md:flex md:shrink-0 md:self-stretch transition-all duration-300',
+        isOpen ? 'md:w-auto' : 'md:w-0 md:overflow-hidden',
+        // Mobile: fixed full-height drawer when open, hidden otherwise
+        isOpen ? 'fixed right-0 top-0 bottom-0 z-40 flex md:static md:z-auto shadow-2xl md:shadow-none' : 'hidden md:flex',
       )}
     >
       {/* Artifact panel */}
       <div className={cn(
-        'self-stretch flex flex-col bg-card border-l border-border transition-all duration-300 shrink-0 overflow-hidden',
-        isOpen && artifactOpen && hasStories ? 'w-full md:w-[380px]' : 'w-0 border-l-0',
+        'flex flex-col bg-card border-l border-border transition-all duration-300 shrink-0 overflow-hidden self-stretch',
+        artifactOpen && hasStories ? 'w-[380px]' : 'w-0 border-l-0',
       )}>
-        <div className="w-full md:w-[380px] flex flex-col flex-1 min-h-0">
+        <div className="w-[380px] h-full flex flex-col">
           {/* Tabs */}
           <div className="border-b border-border bg-muted/30 shrink-0 flex items-center h-10 px-2 gap-1.5">
             <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 min-w-0">
@@ -589,11 +589,8 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
       </div>
 
       {/* Main chat */}
-      <div className={cn(
-        "self-stretch flex flex-col bg-background border-l border-border shrink-0 min-h-0 transition-all duration-300",
-        isOpen ? (artifactOpen && hasStories ? 'w-0 md:w-[360px] overflow-hidden border-l-0' : 'w-full md:w-[360px]') : 'w-0 overflow-hidden border-l-0',
-      )}>
-        <div className="w-full md:w-[360px] flex flex-col flex-1 min-h-0">
+      <div className="flex flex-col bg-background border-l border-border shrink-0 w-[360px] self-stretch min-h-0">
+        <div className="w-[360px] flex-1 flex flex-col min-h-0">
 
         {/* Header — h-10 (compact, matches cowork h-12 spirit) */}
         <header className="flex h-10 shrink-0 items-center justify-between border-b border-border/60 px-3 bg-background/60 backdrop-blur-md">

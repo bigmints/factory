@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T14:55:51Z"
+  last_seen: "2026-05-30T14:57:55Z"
   host: "Mac"
-  task: "post-commit: feat(ui): implement mobile-first modal-driven settings active integrations view"
+  task: "post-commit: feat(ui): implement manual model override and desktop responsive grid layouts"
   status: alive

@@ -861,7 +861,7 @@ export function SettingsView() {
                         placeholder={
                           (selectedTypeToAdd || editingProvider?.id) === 'ollama' 
                             ? 'http://localhost:11434' 
-                            : 'http://100.77.38.96:8080/v1'
+                            : 'https://api.yourprovider.com/v1'
                         } 
                         value={modalBaseUrl} 
                         onChange={(e) => setModalBaseUrl(e.target.value)} 

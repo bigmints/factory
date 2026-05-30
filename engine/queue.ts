@@ -45,6 +45,7 @@ export interface QueueItem {
     errorCategory: 'transient' | 'permanent' | null;
     durationMs: number | null;
     targetApp?: string; // Optional target app slug for feature stories
+    threadId?: string;
 }
 
 export interface QueueState {
@@ -116,11 +117,64 @@ export function timestamp(): string {
 
 // ─── Core Operations ─────────────────────────────────────
 
+/** Automatically find the right threadId for a story based on targetApp or dependencies */
+export function resolveThreadIdForStory(storyFile: string, dependsOn: string[]): string | undefined {
+    // 1. Check if the story file itself already contains a threadId
+    try {
+        const project = getActiveProject();
+        const storyPath = resolve(project.path, '.factory', 'stories', storyFile);
+        if (existsSync(storyPath)) {
+            const parsed = parseYaml(readFileSync(storyPath, 'utf-8')) as any;
+            if (parsed?.threadId) return parsed.threadId;
+        }
+    } catch {}
+
+    // 2. Check dependencies (dependsOn slugs) for an existing threadId in the queue or story YAMLs
+    for (const depSlug of dependsOn) {
+        const latestDep = getLatestDependencyItem(depSlug);
+        if (latestDep && latestDep.threadId) {
+            return latestDep.threadId;
+        }
+        
+        // Check story file directly
+        try {
+            const project = getActiveProject();
+            const storiesDir = join(project.path, '.factory', 'stories');
+            for (const subDir of ['done', 'features', 'apps']) {
+                const dirPath = join(storiesDir, subDir);
+                if (!existsSync(dirPath)) continue;
+                const file = readdirSync(dirPath).find(f => f.replace(/\.ya?ml$/, '') === depSlug);
+                if (file) {
+                    const parsed = parseYaml(readFileSync(join(dirPath, file), 'utf-8')) as any;
+                    if (parsed?.threadId) return parsed.threadId;
+                }
+            }
+        } catch {}
+    }
+
+    // 3. Check other queue items with the same target app
+    try {
+        const project = getActiveProject();
+        const storyPath = resolve(project.path, '.factory', 'stories', storyFile);
+        if (existsSync(storyPath)) {
+            const parsed = parseYaml(readFileSync(storyPath, 'utf-8')) as any;
+            const targetApp = parsed?.target?.app;
+            if (targetApp) {
+                const queue = loadQueue();
+                const match = queue.find(item => item.targetApp === targetApp && item.threadId);
+                if (match && match.threadId) return match.threadId;
+            }
+        }
+    } catch {}
+
+    return undefined;
+}
+
 /** Add a story to the build queue. */
 export function enqueue(
     storyFile: string,
     kind: 'AppStory' | 'FeatureStory',
-    opts?: { phase?: number; dependsOn?: string[]; engine?: BuildEngine },
+    opts?: { phase?: number; dependsOn?: string[]; engine?: BuildEngine; threadId?: string },
 ): QueueItem {
     const queue = loadQueue();
     const id = generateId();
@@ -128,6 +182,11 @@ export function enqueue(
     const phase = opts?.phase ?? 0;
     const dependsOn = opts?.dependsOn ?? [];
     const engine = opts?.engine ?? 'factory';
+    let threadId = opts?.threadId;
+
+    if (!threadId) {
+        threadId = resolveThreadIdForStory(storyFile, dependsOn);
+    }
 
     // Check for duplicates
     const existing = queue.find(
@@ -171,6 +230,7 @@ export function enqueue(
         errorCategory: null,
         durationMs: null,
         targetApp: targetApp || undefined,
+        threadId: threadId || undefined,
     };
 
     queue.push(newItem);
@@ -396,7 +456,7 @@ export function listQueue(): QueueItem[] {
 /** Update a queue item's fields. */
 export function updateItem(
     id: string,
-    updates: Partial<Pick<QueueItem, 'status' | 'output' | 'error' | 'errorCategory' | 'startedAt' | 'completedAt' | 'durationMs' | 'priority'>>
+    updates: Partial<Pick<QueueItem, 'status' | 'output' | 'error' | 'errorCategory' | 'startedAt' | 'completedAt' | 'durationMs' | 'priority' | 'threadId'>>
 ): QueueItem | null {
     const queue = loadQueue();
     const index = queue.findIndex(item => item.id === id);

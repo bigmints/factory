@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:09:22Z"
+  last_seen: "2026-05-30T15:09:41Z"
   host: "Mac"
-  task: "post-commit: feat(ui): refactor backlog details drawer into a minimalist actions sheet"
+  task: "post-commit: docs: update task checklist and walkthrough for backlog drawer refactoring"
   status: alive

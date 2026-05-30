@@ -17,6 +17,7 @@ import { log, logError } from './log.ts';
 import { writeHeartbeat } from './toon.ts';
 import { updateStoryStatus } from './story.ts';
 import { loadSettings } from './config.ts';
+import { loadQueue, saveQueue } from './queue.ts';
 import type {
     AppStory, FeatureStory, ProjectBlueprint,
     BuildResult, GeneratedFile, FactorySettings, LLMProvider,
@@ -33,6 +34,7 @@ export interface OrchestratorContext {
     success: boolean;
     files: GeneratedFile[];
     logs: Array<{ level: 'info' | 'error'; message: string }>;
+    threadId?: string;
 }
 
 interface ToolResult {
@@ -151,6 +153,7 @@ async function runOrchestratorLoop(
         success: false,
         files: [],
         logs: [],
+        threadId: (story as any).threadId,
     };
 
     mkdirSync(targetDir, { recursive: true });
@@ -393,6 +396,12 @@ When you call delegate_to_cli, your prompt must contain ALL of the following:
    > "Complete the full implementation without asking questions. Run npm install, fix any TypeScript or lint errors, verify the build passes. When done, print DELIVERY COMPLETE and a summary of what was built."
 6. **What NOT to do** (from knowledgebase — e.g. no Tailwind, specific patterns to avoid)`);
 
+    if ((story as any).btw && Array.isArray((story as any).btw) && (story as any).btw.length > 0) {
+        sections.push(`## PRIORITIZED ADDITIONAL DETAILS (By the Way)
+The user has added these urgent, high-priority instructions/constraints. You MUST prioritize these above all else, inject them into your brief, and ensure the CLI engineer implements them perfectly:
+${(story as any).btw.map((b: string) => `- ${b}`).join('\n')}`);
+    }
+
     return sections.join('\n\n');
 }
 
@@ -536,6 +545,9 @@ async function toolDelegateToCli(
 
     const yoloFlags = CLI_YOLO_FLAGS[ctx.cliName] || [];
     const cliArgs = ['-p', prompt, ...yoloFlags];
+    if (ctx.cliName === 'agy' && ctx.threadId) {
+        cliArgs.push('--conversation', ctx.threadId);
+    }
 
     log('→', `Running: ${ctx.cliName} in ${resolvedCwd}`);
     log('→', `Prompt (${prompt.length} chars): ${prompt.slice(0, 120)}${prompt.length > 120 ? '…' : ''}`);
@@ -599,11 +611,48 @@ async function toolDelegateToCli(
             prevTail = tail;
         }, LOOP_CHECK_MS);
 
-        // ── data handler (questions detected here) ──
+        // ── data handler (questions & thread ID detected here) ──
         function onData(chunk: Buffer) {
             const text = chunk.toString();
             buffer += text;
             lastActivityAt = Date.now();
+
+            // Extract Conversation ID from agy CLI output
+            const match = text.match(/Conversation ID:\s*([a-f0-9-]+)/i);
+            if (match && match[1]) {
+                const threadId = match[1];
+                if (ctx.threadId !== threadId) {
+                    ctx.threadId = threadId;
+                    log('→', `Captured agy conversation thread ID: ${threadId}`);
+                    
+                    // Write/update the threadId in the story file in-place!
+                    try {
+                        const storyPath = join(ctx.repoPath, '.factory', 'stories', ctx.storyFile);
+                        if (existsSync(storyPath)) {
+                            const raw = readFileSync(storyPath, 'utf-8');
+                            const parsed = parseYaml(raw) as any;
+                            if (parsed && parsed.threadId !== threadId) {
+                                parsed.threadId = threadId;
+                                writeFileSync(storyPath, toYaml(parsed), 'utf-8');
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore write errors
+                    }
+
+                    // Also update the queue item in-place if it is in the queue!
+                    try {
+                        const queue = loadQueue();
+                        const item = queue.find((q: any) => q.storyFile === ctx.storyFile && ['pending', 'running'].includes(q.status));
+                        if (item && item.threadId !== threadId) {
+                            item.threadId = threadId;
+                            saveQueue(queue);
+                        }
+                    } catch {
+                        // Ignore queue update errors
+                    }
+                }
+            }
 
             if (!killed) {
                 for (const pattern of QUESTION_PATTERNS) {

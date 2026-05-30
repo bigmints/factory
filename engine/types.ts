@@ -21,6 +21,8 @@ export interface AppStory {
     status?: StoryStatus;
     engine?: 'factory' | 'worker';
     build?: BuildMeta;
+    threadId?: string;
+    btw?: string[];
 }
 
 /** Build metadata written back into the story after a successful build */
@@ -147,6 +149,8 @@ export interface FeatureStory {
         title: string;
     }>;
     engine?: 'factory' | 'worker';
+    threadId?: string;
+    btw?: string[];
 }
 
 // ─── Bridge Config (.factory/factory.yaml) ───────────────

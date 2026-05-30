@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
 import { loadStory, loadFeatureStory, listStories, validateStory, validateFeatureStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from './story.ts';
+import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { updateStoryStatusInApp } from './rollup.ts';
 import { loadProjects, getActiveProject, addProject, removeProject, switchProject, loadBridgeConfig } from './config.ts';
 import { gatherBlueprint, syncBlueprint } from './blueprint.ts';
@@ -108,6 +109,9 @@ async function main(): Promise<void> {
             return handleHooks();
         case 'repl':
             return handleRepl(target);
+        case 'btw':
+            return handleBtw(target, args.slice(2).join(' '));
+
         default:
             printUsage();
             process.exit(command ? 1 : 0);
@@ -1135,6 +1139,125 @@ function handlePulse(): void {
     const script = resolveScript('heartbeat/pulse.sh');
     const msg = args.slice(1).join(' ') || 'pulse';
     spawnScript(script, [msg]);
+}
+
+/** factory btw <target> "<message>" — prioritize btw additional details without interrupting running tasks */
+function handleBtw(target: string, message: string): void {
+    if (!target || !message) {
+        console.error('Usage: factory btw <story-slug|queue-id> "<message>"');
+        process.exit(1);
+    }
+
+    const project = getActiveProject();
+    const projectPath = project.path;
+    const queue = loadQueue();
+    const targetSlug = target.toLowerCase().replace(/\.ya?ml$/, '').replace(/^stories\/(features|apps|done)\//, '');
+
+    const queueItem = queue.find(item =>
+        item.id === target ||
+        item.storyFile === target ||
+        basename(item.storyFile).replace(/\.ya?ml$/, '') === targetSlug
+    );
+
+    if (queueItem) {
+        if (queueItem.status === 'running') {
+            const originalStoryFile = queueItem.storyFile;
+            const originalPath = resolve(projectPath, '.factory', 'stories', originalStoryFile);
+            let originalStory: any = {};
+            try {
+                if (existsSync(originalPath)) {
+                    originalStory = parseYaml(readFileSync(originalPath, 'utf-8')) || {};
+                }
+            } catch {}
+
+            const originalSlug = basename(originalStoryFile).replace(/\.ya?ml$/, '');
+            const btwSlug = `btw-${originalSlug}-${Date.now()}`;
+            const relativePath = `features/${btwSlug}.yaml`;
+            const fullPath = resolve(projectPath, '.factory', 'stories', relativePath);
+
+            const btwStory = {
+                name: `BTW Follow-up: ${originalStory.name || originalSlug}`,
+                description: `Automated BTW follow-up task.\n\nOriginal: ${originalStoryFile}\nInstruction: ${message}`,
+                status: 'ready',
+                feature: originalStory.feature || { name: 'BTW Follow-up', slug: 'btw-followup' },
+                target: originalStory.target || {},
+                stack: originalStory.stack || {},
+                acceptance_criteria: originalStory.acceptance_criteria || [],
+                btw: [message],
+                original_story: originalStoryFile,
+                phase: 0,
+                dependsOn: [],
+                threadId: queueItem.threadId || originalStory.threadId,
+                createdBy: 'factory-btw-cli',
+                createdAt: new Date().toISOString(),
+            };
+
+            writeFileSync(fullPath, toYaml(btwStory), 'utf-8');
+
+            // Enqueue as high-priority
+            const newItem = enqueue(relativePath, 'FeatureStory', {
+                phase: 0,
+                dependsOn: [],
+                engine: 'factory',
+                threadId: queueItem.threadId || originalStory.threadId
+            });
+            newItem.priority = 999;
+            saveQueue(loadQueue().map(q => q.id === newItem.id ? newItem : q));
+
+            log('✓', `Running task cannot be interrupted. Created and enqueued prioritized follow-up task on same thread:`);
+            log('→', `Follow-up Story: .factory/stories/${relativePath}`);
+            log('→', `Thread ID: ${queueItem.threadId || 'auto-resolved'}`);
+        } else {
+            // Pending / other status
+            const originalStoryFile = queueItem.storyFile;
+            const originalPath = resolve(projectPath, '.factory', 'stories', originalStoryFile);
+            if (existsSync(originalPath)) {
+                const raw = readFileSync(originalPath, 'utf-8');
+                const parsed = parseYaml(raw) as any;
+                if (parsed) {
+                    if (!parsed.btw) parsed.btw = [];
+                    if (!Array.isArray(parsed.btw)) parsed.btw = [parsed.btw];
+                    parsed.btw.push(message);
+                    writeFileSync(originalPath, toYaml(parsed), 'utf-8');
+                    log('✓', `Appended prioritised additional details to pending task: ${originalStoryFile}`);
+                }
+            } else {
+                log('!', `Could not find story file on disk: ${originalStoryFile}`);
+            }
+        }
+    } else {
+        const folders = ['features', 'apps', 'done'];
+        let foundPath: string | null = null;
+        let foundRelative: string | null = null;
+        for (const folder of folders) {
+            const dir = resolve(projectPath, '.factory', 'stories', folder);
+            if (!existsSync(dir)) continue;
+            const file = readdirSync(dir).find(f =>
+                f === target ||
+                f.replace(/\.ya?ml$/, '') === targetSlug
+            );
+            if (file) {
+                foundPath = resolve(dir, file);
+                foundRelative = `stories/${folder}/${file}`;
+                break;
+            }
+        }
+
+        if (foundPath) {
+            const raw = readFileSync(foundPath, 'utf-8');
+            const parsed = parseYaml(raw) as any;
+            if (parsed) {
+                if (!parsed.btw) parsed.btw = [];
+                if (!Array.isArray(parsed.btw)) parsed.btw = [parsed.btw];
+                parsed.btw.push(message);
+                writeFileSync(foundPath, toYaml(parsed), 'utf-8');
+                log('✓', `Appended prioritised additional details to story: ${foundRelative}`);
+            }
+        } else {
+            logError(`Could not find story or queue item matching: "${target}"`);
+            process.exit(1);
+        }
+    }
 }
 
 /** factory task <list|start|complete|add> [args...] — manage tasks */

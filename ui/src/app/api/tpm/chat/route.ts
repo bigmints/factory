@@ -180,6 +180,10 @@ export const TPM_TOOLS = [
           items: { type: 'string' },
           description: 'Slugs of feature stories this story depends on.',
         },
+        threadId: {
+          type: 'string',
+          description: 'Optional thread/conversation ID to associate with this story and task (for running in the same context).',
+        },
       },
       required: ['name', 'content', 'kind'],
     },
@@ -684,7 +688,8 @@ async function handleApplyStory(
   kind: string,
   phase: number,
   dependsOn: string[],
-  projectPath: string
+  projectPath: string,
+  threadId?: string
 ) {
   try {
     const slug = name
@@ -695,8 +700,20 @@ async function handleApplyStory(
     const relativePath = `stories/${folder}/${slug}.yaml`;
     const fullPath = join(projectPath, '.factory', relativePath);
 
+    // Inject threadId into the content YAML if provided
+    let finalContent = content;
+    if (threadId) {
+      try {
+        const parsed = parseYaml(content) as any;
+        if (parsed) {
+          parsed.threadId = threadId;
+          finalContent = toYaml(parsed);
+        }
+      } catch {}
+    }
+
     mkdirSync(join(projectPath, '.factory', 'stories', folder), { recursive: true });
-    writeFileSync(fullPath, content, 'utf-8');
+    writeFileSync(fullPath, finalContent, 'utf-8');
 
     if (kind === 'feature') {
       try {
@@ -704,6 +721,7 @@ async function handleApplyStory(
           phase: phase || 1,
           dependsOn: dependsOn || [],
           engine: 'factory',
+          threadId: threadId,
         });
       } catch (e: any) {
         return `Story saved to ${relativePath} but failed to auto-enqueue: ${e.message}`;
@@ -1040,7 +1058,8 @@ You have access to the following tools. Use them proactively to fulfill user req
                         tc.arguments.kind,
                         tc.arguments.phase || 1,
                         tc.arguments.dependsOn || [],
-                        activeProject.path
+                        activeProject.path,
+                        tc.arguments.threadId
                       );
                       break;
                     case 'add_adr_decision':

@@ -82,6 +82,9 @@ export function SettingsView() {
   const [modalTesting, setModalTesting] = useState(false);
   const [modalTestResult, setModalTestResult] = useState<{ ok: boolean; message: string; models?: ModelConfig[] } | null>(null);
   const [modalDefaultModel, setModalDefaultModel] = useState('');
+  const [modalModels, setModalModels] = useState<ModelConfig[]>([]);
+  const [isAddingManualModel, setIsAddingManualModel] = useState(false);
+  const [manualModelInput, setManualModelInput] = useState('');
 
   const loadSettings = useCallback(async () => {
     try {
@@ -216,6 +219,7 @@ export function SettingsView() {
       if (result.ok) {
         toast.success(result.message);
         if (result.models?.length) {
+          setModalModels(result.models);
           const hasCurrentDefault = result.models.some((m: any) => m.id === modalDefaultModel);
           if (!hasCurrentDefault) {
             setModalDefaultModel(result.models[0].id);
@@ -247,7 +251,7 @@ export function SettingsView() {
         enabled: true, 
         baseUrl: modalBaseUrl.trim(), 
         apiKey: modalApiKey || '', 
-        models: modalTestResult?.models || [], 
+        models: modalModels, 
         defaultModel: modalDefaultModel || '' 
       };
       setSettings({ 
@@ -269,7 +273,7 @@ export function SettingsView() {
         enabled: true,
         apiKey: modalApiKey || undefined,
         baseUrl: modalBaseUrl || undefined,
-        models: modalTestResult?.models || provider.models,
+        models: modalModels,
         defaultModel: modalDefaultModel || provider.defaultModel
       };
 
@@ -292,6 +296,9 @@ export function SettingsView() {
     setModalApiKey('');
     setModalTestResult(null);
     setModalDefaultModel('');
+    setModalModels([]);
+    setIsAddingManualModel(false);
+    setManualModelInput('');
   };
 
   // Perform Connection saving after edit
@@ -302,7 +309,7 @@ export function SettingsView() {
     const updates: Partial<LLMProvider> = {
       apiKey: modalApiKey || undefined,
       baseUrl: modalBaseUrl || undefined,
-      models: modalTestResult?.models || editingProvider.models,
+      models: modalModels,
       defaultModel: modalDefaultModel || editingProvider.defaultModel
     };
 
@@ -329,6 +336,9 @@ export function SettingsView() {
     setModalApiKey('');
     setModalTestResult(null);
     setModalDefaultModel('');
+    setModalModels([]);
+    setIsAddingManualModel(false);
+    setManualModelInput('');
     toast.success(`Provider "${editingProvider.name}" updated`);
   };
 
@@ -516,11 +526,11 @@ export function SettingsView() {
             <p className="text-[11px] text-muted-foreground">Manage configured API integrations, keys, and base reference models.</p>
           </div>
 
-          <div className="max-w-2xl mx-auto space-y-4">
+          <div className="w-full max-w-5xl mx-auto space-y-4">
             {enabledProviders.length > 0 ? (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">Configured Integrations</span>
-                <div className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {enabledProviders.map(p => {
                     const meta = getProviderMeta(p.id, p.name);
                     const isActiveDefault = settings?.activeProvider === p.id;
@@ -535,40 +545,78 @@ export function SettingsView() {
                           setModalBaseUrl(p.baseUrl || '');
                           setModalDefaultModel(p.defaultModel || '');
                           setModalTestResult(null);
+                          setModalModels(p.models || []);
+                          setIsAddingManualModel(false);
+                          setManualModelInput('');
                         }}
-                        className="w-full flex items-center justify-between p-4 rounded-xl border border-border/60 hover:border-primary/40 bg-card hover:bg-accent/[0.02] text-left transition-all duration-150 cursor-pointer group shadow-sm"
+                        className={cn(
+                          "flex flex-col justify-between p-5 rounded-xl border bg-card text-left transition-all duration-300 cursor-pointer group shadow-sm min-h-[145px] hover:-translate-y-0.5 select-none",
+                          isActiveDefault 
+                            ? "border-primary/50 shadow-[0_0_15px_rgba(59,130,246,0.04)] bg-primary/[0.01]" 
+                            : "border-border/60 hover:border-primary/45 hover:bg-accent/[0.01]"
+                        )}
                       >
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <div className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
-                            meta.bg
-                          )}>
-                            {meta.icon}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">{p.name}</span>
-                              {isActiveDefault && (
-                                <Badge className="text-[8px] font-bold py-0.2 px-1 bg-primary/10 text-primary border-primary/20 hover:bg-primary/15 uppercase tracking-wider">
-                                  Active Default
-                                </Badge>
-                              )}
+                        <div className="space-y-3.5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+                                meta.bg
+                              )}>
+                                {meta.icon}
+                              </div>
+                              <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors truncate max-w-[140px]">{p.name}</span>
                             </div>
-                            <span className="text-[10px] text-muted-foreground mt-0.5 block truncate max-w-[200px] sm:max-w-md font-mono">
-                              Model: {p.defaultModel || 'None Selected'}
+                            
+                            {isActiveDefault ? (
+                              <Badge className="text-[8px] font-bold py-0.5 px-1.5 bg-primary/10 text-primary border-primary/20 hover:bg-primary/15 uppercase tracking-wider select-none">
+                                Active
+                              </Badge>
+                            ) : (
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 mt-2" title="Connected" />
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider select-none">Default Model</span>
+                            <span className="text-[10px] text-foreground font-mono block truncate py-1 px-2 rounded-md bg-muted/30 border border-border/30">
+                              {p.defaultModel || 'None Selected'}
                             </span>
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-2.5 shrink-0">
-                          <span className="text-[10px] text-primary font-medium group-hover:underline opacity-0 group-hover:opacity-100 transition-opacity">
-                            Configure
-                          </span>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground/60 group-hover:text-foreground transition-colors" />
+                        <div className="flex items-center justify-between pt-3 border-t border-border/30 mt-3.5 text-[10px] text-muted-foreground group-hover:text-primary transition-colors">
+                          <span className="font-medium group-hover:underline">Configure Settings</span>
+                          <ChevronRight className="h-3.5 w-3.5 transform group-hover:translate-x-0.5 transition-transform" />
                         </div>
                       </div>
                     );
                   })}
+
+                  {/* Dash border add button card inside the grid on desktop */}
+                  <div
+                    onClick={() => {
+                      setIsAddingProvider(true);
+                      setSelectedTypeToAdd(null);
+                      setModalApiKey('');
+                      setModalBaseUrl('');
+                      setModalName('');
+                      setModalTestResult(null);
+                      setModalModels([]);
+                      setModalDefaultModel('');
+                      setIsAddingManualModel(false);
+                      setManualModelInput('');
+                    }}
+                    className="flex flex-col items-center justify-center p-5 rounded-xl border border-dashed border-border/80 hover:border-primary/50 bg-card hover:bg-accent/[0.01] text-center transition-all duration-300 cursor-pointer group shadow-sm min-h-[145px] hover:-translate-y-0.5 gap-2"
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/20 text-muted-foreground/60 group-hover:text-primary group-hover:border-primary/45 transition-colors">
+                      <Plus className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors block">Connect API Provider</span>
+                      <span className="text-[9px] text-muted-foreground">Add new direct keys or custom models.</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -583,27 +631,27 @@ export function SettingsView() {
                     Connect an AI service provider (Gemini, OpenAI, Ollama) to start routing workspace builds via API credentials.
                   </p>
                 </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsAddingProvider(true);
+                    setSelectedTypeToAdd(null);
+                    setModalApiKey('');
+                    setModalBaseUrl('');
+                    setModalName('');
+                    setModalTestResult(null);
+                    setModalModels([]);
+                    setModalDefaultModel('');
+                    setIsAddingManualModel(false);
+                    setManualModelInput('');
+                  }}
+                  className="px-5 h-9 flex items-center justify-center gap-2 text-xs font-bold border border-dashed border-border/80 bg-background hover:bg-muted/15 text-foreground hover:border-primary/50 rounded-xl transition-all shadow-sm"
+                >
+                  <Plus className="h-4 w-4 text-primary" />
+                  Connect API Provider
+                </Button>
               </div>
             )}
-
-            {/* Centered Add Connection Button */}
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsAddingProvider(true);
-                  setSelectedTypeToAdd(null);
-                  setModalApiKey('');
-                  setModalBaseUrl('');
-                  setModalName('');
-                  setModalTestResult(null);
-                }}
-                className="w-full sm:w-auto px-6 h-10 flex items-center justify-center gap-2 text-xs font-bold border border-dashed border-border/80 bg-card hover:bg-muted/15 text-foreground hover:border-primary/50 rounded-xl transition-all shadow-sm"
-              >
-                <Plus className="h-4 w-4 text-primary" />
-                Connect API Provider
-              </Button>
-            </div>
           </div>
         </div>
       )}
@@ -822,25 +870,110 @@ export function SettingsView() {
                     </div>
                   )}
 
-                  {/* Base Model Select Dropdown */}
-                  {((modalTestResult && modalTestResult.ok && modalTestResult.models && modalTestResult.models.length > 0) || 
-                    (editingProvider && editingProvider.models && editingProvider.models.length > 0)) && (
-                    <div className="space-y-1.5 animate-in fade-in duration-200">
-                      <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Base Reference Model</Label>
-                      <Select value={modalDefaultModel} onValueChange={setModalDefaultModel}>
-                        <SelectTrigger className="font-mono text-xs h-9.5 rounded-lg border-border/60">
-                          <SelectValue placeholder="Select active model" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(modalTestResult?.models || editingProvider?.models || []).map(model => (
-                            <SelectItem key={model.id} value={model.id} className="font-mono text-xs">
-                              {model.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+                  {/* Base Model Select Dropdown & Manual Input */}
+                  <div className="space-y-2 animate-in fade-in duration-200">
+                    <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Base Reference Model</Label>
+                    
+                    {modalModels.length > 0 ? (
+                      <div className="space-y-2">
+                        <Select value={modalDefaultModel} onValueChange={setModalDefaultModel}>
+                          <SelectTrigger className="font-mono text-xs h-9.5 rounded-lg border-border/60">
+                            <SelectValue placeholder="Select active model" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {modalModels.map(model => (
+                              <SelectItem key={model.id} value={model.id} className="font-mono text-xs">
+                                {model.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        {!isAddingManualModel ? (
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingManualModel(true)}
+                            className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-1 mt-1 transition-all"
+                          >
+                            <Plus className="h-3 w-3" /> Add model name manually
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-2 mt-1 animate-in slide-in-from-top-1 duration-150">
+                            <Input
+                              placeholder="e.g. deepseek-coder"
+                              value={manualModelInput}
+                              onChange={(e) => setManualModelInput(e.target.value)}
+                              className="h-8 text-xs font-mono rounded-lg border-border/60 flex-1"
+                            />
+                            <Button
+                              size="sm"
+                              type="button"
+                              onClick={() => {
+                                const trimmed = manualModelInput.trim();
+                                if (trimmed) {
+                                  if (!modalModels.some(m => m.id === trimmed)) {
+                                    setModalModels([...modalModels, { id: trimmed, name: trimmed }]);
+                                  }
+                                  setModalDefaultModel(trimmed);
+                                  setManualModelInput('');
+                                  setIsAddingManualModel(false);
+                                  toast.success(`Model "${trimmed}" added`);
+                                }
+                              }}
+                              className="h-8 text-xs px-2.5 rounded-lg font-bold bg-primary text-primary-foreground"
+                            >
+                              Add
+                            </Button>
+                            <Button
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                setIsAddingManualModel(false);
+                                setManualModelInput('');
+                              }}
+                              className="h-8 text-xs px-2 text-muted-foreground"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* No Models State - Manual Entry Input */
+                      <div className="space-y-1.5 p-3 rounded-lg border border-dashed border-border/60 bg-muted/10">
+                        <span className="text-[10px] text-muted-foreground block leading-relaxed mb-1">
+                          No models discovered. Enter a reference model name manually to continue:
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="e.g. gpt-4o, ollama-model-id"
+                            value={manualModelInput}
+                            onChange={(e) => setManualModelInput(e.target.value)}
+                            className="h-9 text-xs font-mono rounded-lg border-border/60 flex-1 bg-background"
+                          />
+                          <Button
+                            size="sm"
+                            type="button"
+                            onClick={() => {
+                              const trimmed = manualModelInput.trim();
+                              if (trimmed) {
+                                setModalModels([{ id: trimmed, name: trimmed }]);
+                                setModalDefaultModel(trimmed);
+                                setManualModelInput('');
+                                toast.success(`Model "${trimmed}" registered`);
+                              } else {
+                                toast.error('Enter a valid model name');
+                              }
+                            }}
+                            className="h-9 text-xs px-3 rounded-lg font-bold bg-primary text-primary-foreground"
+                          >
+                            Set Model
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Diagnostics Connection Alert Panel */}
                   {modalTestResult && (

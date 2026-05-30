@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T14:46:21Z"
+  last_seen: "2026-05-30T14:55:51Z"
   host: "Mac"
-  task: "post-commit: feat(ui): optimize layouts for mobile-first with zero bottom-navbar height offset"
+  task: "post-commit: feat(ui): implement mobile-first modal-driven settings active integrations view"
   status: alive

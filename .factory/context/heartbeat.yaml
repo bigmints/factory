@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:01:55Z"
+  last_seen: "2026-05-30T15:09:22Z"
   host: "Mac"
-  task: "post-commit: feat(ui): implement classy unified preferences menu list for settings"
+  task: "post-commit: feat(ui): refactor backlog details drawer into a minimalist actions sheet"
   status: alive

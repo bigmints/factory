@@ -582,23 +582,25 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
   const [activeAction, setActiveAction] = useState<{ type: string; file: string } | null>(null);
 
   // Empty-state prompt banner dismiss (persisted in localStorage)
-  const DISMISS_KEY = 'factory_empty_board_dismissed';
-  const [promptDismissed, setPromptDismissed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(DISMISS_KEY) === 'true';
-  });
+  const [promptDismissed, setPromptDismissed] = useState(true);
   const [showPromptModal, setShowPromptModal] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (activeProjectId) {
+        setPromptDismissed(localStorage.getItem(`factory_empty_board_dismissed_${activeProjectId}`) === 'true');
+      } else {
+        setPromptDismissed(false);
+      }
+    }
+  }, [activeProjectId]);
 
   const handleDismissBanner = () => {
     setPromptDismissed(true);
-    localStorage.setItem(DISMISS_KEY, 'true');
+    if (activeProjectId) {
+      localStorage.setItem(`factory_empty_board_dismissed_${activeProjectId}`, 'true');
+    }
   };
-
-  // Reset dismiss whenever the project changes so new projects always see the banner
-  useEffect(() => {
-    setPromptDismissed(false);
-    localStorage.removeItem(DISMISS_KEY);
-  }, [projectRefreshKey]);
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -1729,7 +1731,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 1. TOP HEADER CONSOLE                                                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <div className="space-y-2 md:space-y-4 pb-3 md:pb-4 select-none shrink-0 border-b border-border/40 px-1">
+      <div className="pb-3 select-none shrink-0 border-b border-border/40 px-1">
 
 
         {/* Controls & Filter Bar — single row on mobile, two rows on desktop */}
@@ -2191,219 +2193,204 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
           {selectedItem && (
             <div className="flex flex-col h-full min-h-0 divide-y divide-border/20 text-zinc-300">
               
-              {/* ── 1. HEADER ── */}
-              <div className="shrink-0 px-6 py-5 bg-zinc-900/40 border-b border-border/20 relative space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5 font-mono">
+              {/* ── UNIFIED COMPACT HEADER ── */}
+              <div className="shrink-0 px-5 pt-3.5 pb-0 bg-zinc-900/40 border-b border-border/20 relative flex flex-col gap-2 select-none">
+                {/* Row 1: Category, Status, & Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                  {/* Category Label */}
+                  <div className="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5 font-mono">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                     {selectedItem.type === 'story'
                       ? (selectedItem.data.kind === 'FeatureStory' ? 'Feature spec story' : 'App bootstrap story')
                       : 'Story sub-task'}
                   </div>
-                  {/* Status Badge */}
-                  {selectedItem.type === 'story' && (() => {
-                    const status = selectedItem.data.status || 'draft';
-                    const statusCfg = storyStatusMap[status] || storyStatusMap.unknown;
-                    return (
-                      <Badge variant="outline" className={cn("px-2 py-0.5 text-[10px] rounded-md border flex items-center gap-1.5 font-sans", statusCfg.bg)}>
-                        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", statusCfg.dot)} />
-                        {statusCfg.label}
-                      </Badge>
-                    );
-                  })()}
-                </div>
 
-                <SheetTitle className="text-lg font-bold text-white tracking-tight pr-6 select-all flex items-center gap-2">
-                  {selectedItem.type === 'task' ? selectedItem.data.title : getStoryTitle(selectedItem.data)}
-                </SheetTitle>
-                
-                {selectedItem.type === 'story' && getStoryDesc(selectedItem.data) && (
-                  <p className="text-xs text-zinc-400 font-sans leading-relaxed select-all">
-                    {getStoryDesc(selectedItem.data)}
-                  </p>
-                )}
-
-                {selectedItem.type === 'task' && selectedItem.parentStory && (
-                  <p className="text-xs text-zinc-500 font-sans select-all">
-                    Parent Story: <span className="text-zinc-400 font-semibold">{selectedItem.parentStory.name}</span>
-                  </p>
-                )}
-              </div>
-
-              {/* ── 2. ACTION & OPERATIONS BAR ── */}
-              <div className="shrink-0 px-6 py-3 bg-zinc-900/25 border-b border-border/20 flex items-center justify-between gap-3 flex-wrap">
-                {/* Left Side: Status Dropdown / Action */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Status:</span>
-                  {selectedItem.type === 'story' ? (
-                    <select
-                      value={selectedItem.data.status ?? 'draft'}
-                      onChange={e => {
-                        handleUpdateStoryStatus(selectedItem.data.file, e.target.value);
-                        setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, status: e.target.value } } : null);
-                      }}
-                      className="h-8 rounded-md border border-zinc-800 bg-zinc-900 text-xs text-zinc-200 px-2.5 focus:outline-none focus:ring-1 focus:ring-primary/60 font-sans cursor-pointer transition-all hover:bg-zinc-850 hover:text-white"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="ready">Ready to Build</option>
-                      <option value="review">In Review</option>
-                      <option value="done">Done</option>
-                    </select>
-                  ) : (
-                    <select
-                      value={selectedItem.data.status ?? 'pending'}
-                      onChange={e => {
-                        handleUpdateTaskStatus(selectedItem.data.fullId, e.target.value as any);
-                        setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, status: e.target.value } } : null);
-                      }}
-                      className="h-8 rounded-md border border-zinc-800 bg-zinc-900 text-xs text-zinc-200 px-2.5 focus:outline-none focus:ring-1 focus:ring-primary/60 font-sans cursor-pointer transition-all hover:bg-zinc-850 hover:text-white"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="running">Running</option>
-                      <option value="completed">Completed</option>
-                      <option value="failed">Failed</option>
-                    </select>
-                  )}
-                </div>
-
-                {/* Right Side: Core operations */}
-                <div className="flex items-center gap-2">
-                  {selectedItem.type === 'story' ? (
-                    <>
-                      {/* Enqueue / Build Button */}
-                      <Button
-                        size="sm"
-                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg hover:shadow-indigo-500/20 transition-all flex items-center"
-                        onClick={() => {
-                          handleEnqueue(selectedItem.data.file, selectedItem.data.kind);
-                          setDrawerOpen(false);
+                  {/* Controls / Actions (Title-adjacent or aligned to right) */}
+                  <div className="flex items-center gap-2">
+                    {/* Status Dropdown */}
+                    {selectedItem.type === 'story' ? (
+                      <select
+                        value={selectedItem.data.status ?? 'draft'}
+                        onChange={e => {
+                          handleUpdateStoryStatus(selectedItem.data.file, e.target.value);
+                          setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, status: e.target.value } } : null);
                         }}
+                        className="h-7 rounded border border-zinc-800 bg-zinc-950 text-[10px] font-medium text-zinc-300 px-2 focus:outline-none focus:ring-1 focus:ring-primary/60 font-sans cursor-pointer hover:bg-zinc-900 hover:text-white transition-all shrink-0"
                       >
-                        <Play className="h-3 w-3 fill-current" />
-                        <span>Build</span>
-                      </Button>
-
-                      {/* Edit Specifications */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 px-3 gap-1.5 text-xs border-border/40 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg transition-all"
-                        onClick={() => {
-                          setEditingStory({ file: selectedItem.data.file, name: selectedItem.data.name });
-                          setDrawerOpen(false);
+                        <option value="draft">Draft</option>
+                        <option value="ready">Ready to Build</option>
+                        <option value="review">In Review</option>
+                        <option value="done">Done</option>
+                      </select>
+                    ) : (
+                      <select
+                        value={selectedItem.data.status ?? 'pending'}
+                        onChange={e => {
+                          handleUpdateTaskStatus(selectedItem.data.fullId, e.target.value as any);
+                          setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, status: e.target.value } } : null);
                         }}
+                        className="h-7 rounded border border-zinc-800 bg-zinc-950 text-[10px] font-medium text-zinc-300 px-2 focus:outline-none focus:ring-1 focus:ring-primary/60 font-sans cursor-pointer hover:bg-zinc-900 hover:text-white transition-all shrink-0"
                       >
-                        <Pencil className="h-3 w-3" />
-                        <span>Edit Form</span>
-                      </Button>
+                        <option value="pending">Pending</option>
+                        <option value="running">Running</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                      </select>
+                    )}
 
-                      {/* Delete with confirmation */}
-                      {!deleteConfirm ? (
+                    {/* Build / Edit / Delete Actions */}
+                    {selectedItem.type === 'story' ? (
+                      <>
                         <Button
                           size="sm"
-                          variant="ghost"
-                          className="h-8 px-3 gap-1.5 text-xs text-zinc-500 hover:text-rose-450 hover:bg-rose-950/20 rounded-lg transition-all"
-                          onClick={() => setDeleteConfirm(true)}
+                          className="h-7 px-2.5 gap-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-all flex items-center shrink-0"
+                          onClick={() => {
+                            handleEnqueue(selectedItem.data.file, selectedItem.data.kind);
+                            setDrawerOpen(false);
+                          }}
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Play className="h-2.5 w-2.5 fill-current" />
+                          <span>Build</span>
                         </Button>
-                      ) : (
-                        <div className="flex items-center gap-1 bg-rose-950/30 border border-rose-800/40 rounded-lg p-0.5">
-                          <span className="text-[10px] text-rose-400 font-bold px-2">Delete?</span>
-                          <Button
-                            size="sm"
-                            className="h-6 px-2 text-[10px] bg-rose-600 hover:bg-rose-505 text-white font-bold"
-                            onClick={() => {
-                              handleDeleteStory(selectedItem.data.file, selectedItem.data.name);
-                              setDrawerOpen(false);
-                            }}
-                          >
-                            Yes
-                          </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2.5 gap-1 text-[10px] border-zinc-800 bg-zinc-950 hover:bg-zinc-900 text-zinc-300 hover:text-white rounded transition-all shrink-0"
+                          onClick={() => {
+                            setEditingStory({ file: selectedItem.data.file, name: selectedItem.data.name });
+                            setDrawerOpen(false);
+                          }}
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                          <span>Edit Form</span>
+                        </Button>
+
+                        {!deleteConfirm ? (
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-6 px-2 text-[10px] text-zinc-400 hover:text-white"
-                            onClick={() => setDeleteConfirm(false)}
+                            className="h-7 w-7 p-0 text-zinc-500 hover:text-rose-450 hover:bg-rose-950/20 rounded transition-all shrink-0"
+                            onClick={() => setDeleteConfirm(true)}
                           >
-                            No
+                            <Trash2 className="h-3 w-3" />
                           </Button>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {/* Delete Task */}
-                      {!deleteConfirm ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 px-3 gap-1.5 text-xs text-zinc-500 hover:text-rose-450 hover:bg-rose-950/20 rounded-lg transition-all"
-                          onClick={() => setDeleteConfirm(true)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          <span>Delete</span>
-                        </Button>
-                      ) : (
-                        <div className="flex items-center gap-1 bg-rose-950/30 border border-rose-800/40 rounded-lg p-0.5">
-                          <span className="text-[10px] text-rose-400 font-bold px-2">Delete task?</span>
-                          <Button
-                            size="sm"
-                            className="h-6 px-2 text-[10px] bg-rose-600 hover:bg-rose-505 text-white font-bold"
-                            onClick={() => {
-                              handleDeleteTask(selectedItem.data.fullId);
-                              setDrawerOpen(false);
-                            }}
-                          >
-                            Yes
-                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-1 bg-rose-950/30 border border-rose-800/40 rounded p-0.5 shrink-0">
+                            <span className="text-[9px] text-rose-400 font-bold px-1.5">Delete?</span>
+                            <Button
+                              size="sm"
+                              className="h-5.5 px-1.5 text-[9px] bg-rose-600 hover:bg-rose-505 text-white font-bold"
+                              onClick={() => {
+                                handleDeleteStory(selectedItem.data.file, selectedItem.data.name);
+                                setDrawerOpen(false);
+                              }}
+                            >
+                              Yes
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-5.5 px-1.5 text-[9px] text-zinc-400 hover:text-white"
+                              onClick={() => setDeleteConfirm(false)}
+                            >
+                              No
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {!deleteConfirm ? (
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-6 px-2 text-[10px] text-zinc-400 hover:text-white"
-                            onClick={() => setDeleteConfirm(false)}
+                            className="h-7 px-2.5 gap-1 text-[10px] text-zinc-500 hover:text-rose-450 hover:bg-rose-950/20 rounded transition-all shrink-0"
+                            onClick={() => setDeleteConfirm(true)}
                           >
-                            No
+                            <Trash2 className="h-3 w-3" />
+                            <span>Delete</span>
                           </Button>
-                        </div>
-                      )}
-                    </>
+                        ) : (
+                          <div className="flex items-center gap-1 bg-rose-950/30 border border-rose-800/40 rounded p-0.5 shrink-0">
+                            <span className="text-[9px] text-rose-400 font-bold px-1.5">Delete?</span>
+                            <Button
+                              size="sm"
+                              className="h-5.5 px-1.5 text-[9px] bg-rose-600 hover:bg-rose-505 text-white font-bold"
+                              onClick={() => {
+                                handleDeleteTask(selectedItem.data.fullId);
+                                setDrawerOpen(false);
+                              }}
+                            >
+                              Yes
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-5.5 px-1.5 text-[9px] text-zinc-400 hover:text-white"
+                              onClick={() => setDeleteConfirm(false)}
+                            >
+                              No
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 2: Title and Subtitle */}
+                <div className="space-y-1">
+                  <SheetTitle className="text-sm font-bold text-white tracking-tight pr-6 select-all flex items-center gap-2 leading-tight">
+                    {selectedItem.type === 'task' ? selectedItem.data.title : getStoryTitle(selectedItem.data)}
+                  </SheetTitle>
+                  
+                  {selectedItem.type === 'story' && getStoryDesc(selectedItem.data) && (
+                    <p className="text-[11px] text-zinc-400 font-sans leading-relaxed select-all line-clamp-2">
+                      {getStoryDesc(selectedItem.data)}
+                    </p>
+                  )}
+
+                  {selectedItem.type === 'task' && selectedItem.parentStory && (
+                    <p className="text-[10px] text-zinc-500 font-sans select-all">
+                      Parent Story: <span className="text-zinc-400 font-semibold">{selectedItem.parentStory.name}</span>
+                    </p>
                   )}
                 </div>
-              </div>
 
-              {/* ── 3. TABS SYSTEM (Only for Story) ── */}
-              {selectedItem.type === 'story' && (
-                <div className="shrink-0 px-6 bg-zinc-900/10 border-b border-border/20 flex items-end gap-2">
-                  {([
-                    { key: 'spec', label: 'Specification' },
-                    { key: 'raw', label: 'YAML Source' },
-                    { key: 'tasks', label: 'Sub-tasks' }
-                  ] as const).map(({ key, label }) => {
-                    const isTasks = key === 'tasks';
-                    const taskCount = selectedItem.data.checklistTasks?.length ?? 0;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => setStoryTab(key)}
-                        className={cn(
-                          'px-4 py-3 text-xs font-semibold border-b-2 transition-all font-sans relative flex items-center gap-1.5 focus:outline-none cursor-pointer',
-                          storyTab === key
-                            ? 'border-primary text-white font-bold'
-                            : 'border-transparent text-zinc-500 hover:text-zinc-300'
-                        )}
-                      >
-                        {label}
-                        {isTasks && taskCount > 0 && (
-                          <span className="inline-flex items-center justify-center bg-zinc-800 text-zinc-300 rounded-full px-1.5 py-0.5 text-[9px] font-mono border border-zinc-700/50">
-                            {taskCount}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                {/* Row 3: Tabs System (Only for Story) */}
+                {selectedItem.type === 'story' && (
+                  <div className="flex items-end gap-1.5 mt-1 border-t border-border/10 pt-1">
+                    {([
+                      { key: 'spec', label: 'Specification' },
+                      { key: 'raw', label: 'YAML Source' },
+                      { key: 'tasks', label: 'Sub-tasks' }
+                    ] as const).map(({ key, label }) => {
+                      const isTasks = key === 'tasks';
+                      const taskCount = selectedItem.data.checklistTasks?.length ?? 0;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setStoryTab(key)}
+                          className={cn(
+                            'px-3 py-1.5 text-[11px] font-semibold border-b-2 transition-all font-sans relative flex items-center gap-1.5 focus:outline-none cursor-pointer',
+                            storyTab === key
+                              ? 'border-primary text-white font-bold'
+                              : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                          )}
+                        >
+                          {label}
+                          {isTasks && taskCount > 0 && (
+                            <span className="inline-flex items-center justify-center bg-zinc-800 text-zinc-300 rounded-full px-1 py-0.5 text-[8px] font-mono border border-zinc-700/50">
+                              {taskCount}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               {/* ── 4. CONTENT BODY ── */}
               <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800/80 bg-zinc-950/50">

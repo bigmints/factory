@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
@@ -27,38 +28,6 @@ interface FactorySettings {
   updatedAt?: string;
 }
 
-const PROVIDER_META: Record<string, { icon: React.ReactNode; color: string; bg: string; description: string }> = {
-  gemini: { 
-    icon: <Sparkles className="h-4.5 w-4.5 text-blue-500" />, 
-    color: 'text-blue-500 border-blue-500/20 bg-blue-500/5', 
-    bg: 'bg-blue-500/5 dark:bg-blue-500/10 border-blue-500/20',
-    description: "Google Gemini developer models via direct API." 
-  },
-  openai: { 
-    icon: <Bot className="h-4.5 w-4.5 text-emerald-500" />, 
-    color: 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5', 
-    bg: 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/20',
-    description: 'Direct integration with OpenAI GPT models.' 
-  },
-  ollama: { 
-    icon: <Server className="h-4.5 w-4.5 text-orange-500" />, 
-    color: 'text-orange-500 border-orange-500/20 bg-orange-500/5', 
-    bg: 'bg-orange-500/5 dark:bg-orange-500/10 border-orange-500/20',
-    description: 'Fully local and private model execution via Ollama.' 
-  },
-};
-
-function providerMeta(id: string, name: string, _kind: string) {
-  const known = PROVIDER_META[id];
-  if (known) return known;
-  return { 
-    icon: <Globe className="h-4.5 w-4.5 text-indigo-500" />, 
-    color: 'text-indigo-500 border-indigo-500/20 bg-indigo-500/5', 
-    bg: 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/20',
-    description: `Custom OpenAI-compatible provider: ${name}` 
-  };
-}
-
 export function SettingsView() {
   const [settings, setSettings] = useState<FactorySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +46,9 @@ export function SettingsView() {
   
   // Inner Sub-Tab state
   const [activeSubTab, setActiveSubTab] = useState<'engine' | 'providers'>('engine');
+  
+  // Single Provider Form selection state
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('');
 
   const loadSettings = useCallback(async () => {
     try {
@@ -88,6 +60,13 @@ export function SettingsView() {
   }, []);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  // Synchronize selection state once settings are loaded
+  useEffect(() => {
+    if (settings && !selectedProviderId) {
+      setSelectedProviderId(settings.activeProvider || settings.providers[0]?.id || 'gemini');
+    }
+  }, [settings, selectedProviderId]);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -157,6 +136,7 @@ export function SettingsView() {
     const newProvider: LLMProvider = { id, name: newName.trim(), kind: 'openai-compat', enabled: true, baseUrl: newBaseUrl.trim(), apiKey: newApiKey || '', models: discoveredModels.length > 0 ? discoveredModels : [], defaultModel: discoveredModels.length > 0 ? discoveredModels[0].id : '' };
     setSettings({ ...settings, providers: [...settings.providers, newProvider] });
     setDirty(true);
+    setSelectedProviderId(id);
     setNewName(''); setNewBaseUrl(''); setNewApiKey(''); setDiscoveredModels([]); setShowAddForm(false);
     toast.success(`Provider "${newName}" added`);
   };
@@ -195,67 +175,54 @@ export function SettingsView() {
   }
 
   const activeProvider = settings.providers.find(p => p.id === settings.activeProvider && p.enabled);
+  const currentProvider = settings.providers.find(p => p.id === selectedProviderId) || settings.providers[0];
+  const isTesting = currentProvider && testingProvider === currentProvider.id;
 
   return (
     <div className="space-y-6">
       
-      {/* ─── Active Status Banner Redesigned ─── */}
-      {settings.defaultCli ? (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03] dark:bg-emerald-500/[0.05] p-4 flex items-center justify-between gap-4 transition-all">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Terminal className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 dark:text-emerald-400">Active Build Route</span>
-              <h4 className="text-sm font-semibold text-foreground truncate mt-0.5">
-                CLI Mode Enabled · <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{settings.defaultCli}</span>
-              </h4>
-              <p className="text-[11px] text-muted-foreground mt-0.5">All build steps are routed through the local CLI natively. No API key required.</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="shrink-0 gap-1.5 py-1 px-2.5 font-bold text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 uppercase tracking-wide">
-            <ShieldCheck className="h-3 w-3" /> CLI Pipeline
-          </Badge>
+      {/* ─── Sleek Status Header Indicator (Ultra-Minimalist) ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/40">
+        <div className="space-y-0.5">
+          <h2 className="text-sm font-semibold tracking-tight text-foreground">Workspace Settings</h2>
+          <p className="text-[11px] text-muted-foreground">Configure build generation engines and backend API credential keys.</p>
         </div>
-      ) : activeProvider && settings.buildModel ? (
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.03] dark:bg-blue-500/[0.05] p-4 flex items-center justify-between gap-4 transition-all">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <Zap className="h-5 w-5 fill-current" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600 dark:text-blue-400">Active Build Route</span>
-              <h4 className="text-sm font-semibold text-foreground truncate mt-0.5">
-                {activeProvider.name} → <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">{settings.buildModel}</span>
-              </h4>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Direct integration via API credential payload keys.</p>
-            </div>
+        
+        {settings.defaultCli ? (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/[0.03] text-xs self-start sm:self-auto transition-all">
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            </span>
+            <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+              CLI Route: <span className="font-mono font-bold text-foreground">{settings.defaultCli}</span>
+            </span>
           </div>
-          <Badge variant="outline" className="shrink-0 gap-1.5 py-1 px-2.5 font-bold text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20 uppercase tracking-wide">
-            <Star className="h-3 w-3 fill-current" /> API Direct
-          </Badge>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.03] dark:bg-amber-500/[0.05] p-4 flex items-center gap-3.5 transition-all">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            <AlertTriangle className="h-5 w-5" />
+        ) : activeProvider && settings.buildModel ? (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-500/20 bg-blue-500/[0.03] text-xs self-start sm:self-auto transition-all">
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
+            </span>
+            <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">
+              API Route: <span className="font-semibold text-foreground">{activeProvider.name}</span> → <span className="font-mono text-[10px] font-bold text-foreground">{settings.buildModel}</span>
+            </span>
           </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600 dark:text-amber-400">Active Build Route</span>
-            <h4 className="text-sm font-semibold text-foreground mt-0.5">No Active Engine Configured</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Please choose a local CLI pipeline or activate an API provider to start running builds.</p>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/[0.03] text-xs self-start sm:self-auto transition-all">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+            <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Unconfigured</span>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* ─── Inner Navigation Sub-Tabs ─── */}
-      <div className="flex items-center justify-between border-b border-border/60 pb-px">
-        <div className="flex items-center gap-1">
+      {/* ─── Flat Tab-Like Row Navigation ─── */}
+      <div className="flex items-center justify-between border-b border-border/40 pb-px">
+        <div className="flex gap-2">
           <button
             onClick={() => setActiveSubTab('engine')}
             className={cn(
-              "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all relative",
+              "px-3 py-2 text-xs font-semibold border-b-2 transition-all duration-150 relative -mb-px",
               activeSubTab === 'engine'
                 ? "border-primary text-foreground font-bold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -264,19 +231,22 @@ export function SettingsView() {
             Build Engine
           </button>
           <button
-            onClick={() => setActiveSubTab('providers')}
+            onClick={() => {
+              setActiveSubTab('providers');
+              setShowAddForm(false);
+            }}
             className={cn(
-              "px-4 py-2.5 text-xs font-semibold border-b-2 transition-all relative",
+              "px-3 py-2 text-xs font-semibold border-b-2 transition-all duration-150 relative -mb-px",
               activeSubTab === 'providers'
                 ? "border-primary text-foreground font-bold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
-            API Credentials & Keys
+            API Credentials
           </button>
         </div>
         {dirty && (
-          <div className="flex items-center gap-1.5 text-[10px] text-amber-500 font-medium px-2 py-0.5 bg-amber-500/5 border border-amber-500/10 rounded-md animate-pulse">
+          <div className="text-[10px] font-semibold text-amber-500 bg-amber-500/5 px-2.5 py-0.5 border border-amber-500/10 rounded-md animate-pulse">
             Unsaved Changes
           </div>
         )}
@@ -284,10 +254,10 @@ export function SettingsView() {
 
       {/* ─── Sub-Tab Content ─── */}
       {activeSubTab === 'engine' ? (
-        <div className="space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-foreground">Generation Pipeline</h3>
-            <p className="text-xs text-muted-foreground">Select where build operations should be executed. Routing to a local CLI uses your terminal session session auth directly.</p>
+        <div className="space-y-5 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="space-y-0.5">
+            <h3 className="text-xs font-semibold text-foreground">Generation Pipeline</h3>
+            <p className="text-[11px] text-muted-foreground">Select where code build tasks should be routed. CLI routing operates natively on your terminal's authentication.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -363,231 +333,293 @@ export function SettingsView() {
           </div>
         </div>
       ) : (
-        <div className="space-y-6 animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-foreground">API Credentials</h3>
-            <p className="text-xs text-muted-foreground">Manage API key payloads, endpoints, and select base models for each connected provider.</p>
+        <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="space-y-0.5">
+            <h3 className="text-xs font-semibold text-foreground">API Credentials & Models</h3>
+            <p className="text-[11px] text-muted-foreground">Select, enable, and configure endpoints, active reference models, and authorization credentials.</p>
           </div>
 
-          <div className="space-y-4">
-            {settings.providers.map(provider => {
-              const meta = providerMeta(provider.id, provider.name, provider.kind);
-              const result = testResults[provider.id];
-              const isActive = settings.activeProvider === provider.id;
-              const isTesting = testingProvider === provider.id;
-              const isCustom = provider.kind !== 'builtin';
-
-              return (
-                <Card 
-                  key={provider.id}
-                  className={cn(
-                    "rounded-xl border transition-all duration-200 border-border/60 overflow-hidden bg-card text-card-foreground hover:shadow-xs",
-                    isActive ? "border-primary/50 bg-muted/[0.02]" : "",
-                    !provider.enabled && "opacity-65"
-                  )}
-                >
-                  <div className="p-4 md:p-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border", 
-                          provider.enabled ? meta.bg : "bg-muted border-border/40 text-muted-foreground"
-                        )}>
-                          {meta.icon}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-bold text-foreground truncate">{provider.name}</span>
-                            {isActive && <Badge className="text-[8px] font-bold py-0 px-1.5 gap-0.5 bg-primary/15 text-primary border-primary/20 uppercase tracking-wide">Active Default</Badge>}
-                            {isCustom && <Badge className="text-[8px] font-bold py-0 px-1.5 bg-secondary text-secondary-foreground border-border uppercase tracking-wide">Custom</Badge>}
+          {/* ─── Consolidated Unified Card Form ─── */}
+          <Card className="border border-border/50 bg-card rounded-xl overflow-hidden p-5">
+            <div className="space-y-5">
+              
+              {/* Row 1: Dropdown selector, active switches, and quick additions */}
+              <div className="flex items-end justify-between gap-4 flex-wrap pb-1">
+                <div className="space-y-1.5 flex-1 min-w-[200px]">
+                  <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Select API Provider</Label>
+                  <Select
+                    value={selectedProviderId}
+                    onValueChange={(val) => {
+                      setSelectedProviderId(val);
+                      setShowAddForm(false);
+                      // If the chosen provider is already enabled and has a default model, set it as active build route
+                      const provider = settings.providers.find(p => p.id === val);
+                      if (provider && provider.enabled && provider.defaultModel) {
+                        setSettings(prev => prev ? { ...prev, activeProvider: val, buildModel: provider.defaultModel || '' } : null);
+                        setDirty(true);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9.5 rounded-lg border-border/60">
+                      <SelectValue placeholder="Choose provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {settings.providers.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          <div className="flex items-center gap-1.5 font-medium text-xs">
+                            {p.name} {p.id === settings.activeProvider && <span className="text-[10px] text-primary">(Active)</span>}
                           </div>
-                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">{meta.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3.5 shrink-0">
-                        {isCustom && (
-                          <Button size="icon" variant="ghost" onClick={() => removeProvider(provider.id)} className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        <Switch checked={provider.enabled} onCheckedChange={(checked) => updateProvider(provider.id, { enabled: checked })} className="scale-90" />
-                      </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  {/* Enable provider directly */}
+                  {currentProvider && (
+                    <div className="flex items-center gap-2 border border-border/60 rounded-lg px-3 py-1.5 h-9.5 bg-muted/[0.04]">
+                      <Label htmlFor="provider-enable" className="text-xs text-muted-foreground font-semibold">Enabled</Label>
+                      <Switch
+                        id="provider-enable"
+                        checked={currentProvider.enabled}
+                        onCheckedChange={(checked) => {
+                          updateProvider(currentProvider.id, { enabled: checked });
+                          // Clear active route if disabled
+                          if (!checked && settings.activeProvider === currentProvider.id) {
+                            setSettings(prev => prev ? { ...prev, activeProvider: '', buildModel: '' } : null);
+                            setDirty(true);
+                          } else if (checked && !settings.activeProvider && currentProvider.defaultModel) {
+                            setSettings(prev => prev ? { ...prev, activeProvider: currentProvider.id, buildModel: currentProvider.defaultModel || '' } : null);
+                            setDirty(true);
+                          }
+                        }}
+                        className="scale-90"
+                      />
                     </div>
+                  )}
 
-                    {provider.enabled && (
-                      <div className="mt-4 pt-4 border-t border-border/50 space-y-4 animate-in fade-in duration-200">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          
-                          {/* API Key */}
-                          {(provider.kind === 'builtin' ? (provider.id === 'gemini' || provider.id === 'openai') : true) && (
-                            <div className="space-y-1.5">
-                              <Label htmlFor={`${provider.id}-key`} className="text-[10px] font-semibold text-muted-foreground">API Credential Key</Label>
-                              <div className="relative">
-                                <Input 
-                                  id={`${provider.id}-key`} 
-                                  type={showKeys[provider.id] ? 'text' : 'password'} 
-                                  placeholder={isCustom ? 'Optional API key...' : (provider.id === 'gemini' ? 'AIzaSy...' : 'sk-...')} 
-                                  value={provider.apiKey || ''} 
-                                  onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })} 
-                                  className="pr-9 font-mono text-xs h-9 rounded-lg border-border/60" 
-                                />
-                                <button type="button" onClick={() => setShowKeys(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                                  {showKeys[provider.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Base URL */}
-                          {(provider.kind !== 'builtin' || provider.id === 'ollama') && (
-                            <div className="space-y-1.5">
-                              <Label htmlFor={`${provider.id}-url`} className="text-[10px] font-semibold text-muted-foreground">Base Endpoint URL</Label>
-                              <Input 
-                                id={`${provider.id}-url`} 
-                                placeholder={isCustom ? 'http://localhost:8080/v1' : 'http://localhost:11434'} 
-                                value={provider.baseUrl || ''} 
-                                onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })} 
-                                className="font-mono text-xs h-9 rounded-lg border-border/60" 
-                              />
-                            </div>
-                          )}
-
-                          {/* Model Select */}
-                          <div className="space-y-1.5 col-span-1">
-                            <Label className="text-[10px] font-semibold text-muted-foreground">Base Reference Model</Label>
-                            {provider.models.length > 0 ? (
-                              <Select
-                                value={provider.defaultModel || ''}
-                                onValueChange={(val) => {
-                                  updateProvider(provider.id, { defaultModel: val });
-                                  if (settings.activeProvider === provider.id) {
-                                    setSettings(prev => prev ? { ...prev, buildModel: val } : null);
-                                    setDirty(true);
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="font-mono text-xs h-9 rounded-lg border-border/60"><SelectValue placeholder="Select active model" /></SelectTrigger>
-                                <SelectContent>
-                                  {provider.models.map(model => <SelectItem key={model.id} value={model.id} className="font-mono text-xs">{model.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <div className="text-[11px] text-muted-foreground/80 py-1.5 px-2.5 rounded-lg border border-dashed border-border/60 bg-muted/20">
-                                No models indexed yet. Run connection test to synchronize.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Connection Test Diagnostics */}
-                        {result && (
-                          <div className={cn(
-                            "flex items-start gap-2.5 text-xs p-3 rounded-lg border leading-relaxed",
-                            result.ok 
-                              ? "bg-emerald-500/[0.03] border-emerald-500/20 text-emerald-700 dark:text-emerald-400" 
-                              : "bg-destructive/[0.03] border-destructive/20 text-destructive"
-                          )}>
-                            {result.ok ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" /> : <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-destructive" />}
-                            <span className="font-medium text-[11px]">{result.message}</span>
-                          </div>
-                        )}
-
-                        {/* Provider Action Row */}
-                        <div className="flex items-center gap-2.5 pt-1">
-                          <Button size="sm" variant="outline" onClick={() => testConnection(provider.id)} disabled={isTesting} className="text-xs gap-1.5 h-8.5 rounded-lg font-semibold border-border/60">
-                            {isTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                            Test & Sync
-                          </Button>
-                          {provider.defaultModel && !isActive && (
-                            <Button size="sm" variant="outline" onClick={() => setActiveProvider(provider.id, provider.defaultModel!)} className="text-xs gap-1.5 h-8.5 rounded-lg font-semibold border-border/60">
-                              <Star className="h-3.5 w-3.5" />Set as Default
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
-
-            {/* ─── Add Custom Provider Redesigned ─── */}
-            <div className="rounded-xl border border-dashed border-border/70 overflow-hidden bg-muted/[0.01]">
-              {!showAddForm ? (
-                <button
-                  onClick={() => setShowAddForm(true)}
-                  className="w-full py-4 flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-all font-semibold text-xs rounded-xl"
-                >
-                  <Plus className="h-4 w-4" />
-                  Connect OpenAI-Compatible Proxy / Endpoint
-                </button>
-              ) : (
-                <div className="p-4 md:p-5 space-y-4 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between pb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">New API Provider Payload</span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => { setShowAddForm(false); setNewName(''); setNewBaseUrl(''); setNewApiKey(''); setDiscoveredModels([]); }}
-                      className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent"
+                  {/* Remove Custom Provider */}
+                  {currentProvider && currentProvider.kind !== 'builtin' && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        removeProvider(currentProvider.id);
+                        setSelectedProviderId('gemini');
+                      }}
+                      className="h-9.5 rounded-lg border-destructive/25 text-destructive hover:bg-destructive/[0.03] hover:border-destructive/35 px-3"
                     >
-                      <XCircle className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                    </Button>
+                  )}
+
+                  {/* Toggle Custom Addition Form Inline */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    className={cn(
+                      "h-9.5 rounded-lg border-border/60 text-xs font-semibold px-3 gap-1.5",
+                      showAddForm && "bg-accent border-accent"
+                    )}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Custom
+                  </Button>
+                </div>
+              </div>
+
+              {/* Row 2: Dynamic Form Fields */}
+              {showAddForm ? (
+                /* Add Custom Provider Form (Inline) */
+                <div className="space-y-4 pt-4 border-t border-border/50 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Register Custom OpenAI-Compatible Provider</span>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => { setShowAddForm(false); setNewName(''); setNewBaseUrl(''); setNewApiKey(''); setDiscoveredModels([]); }} 
+                      className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
+                    >
+                      <XCircle className="h-4 w-4" />
                     </Button>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="new-name" className="text-[10px] font-semibold text-muted-foreground">Provider Identifier</Label>
-                      <Input id="new-name" placeholder="e.g. OpenRouter Proxy" value={newName} onChange={(e) => setNewName(e.target.value)} className="text-xs h-9 rounded-lg border-border/60" />
+                      <Label htmlFor="new-name" className="text-[10px] font-semibold text-muted-foreground">Provider Name</Label>
+                      <Input id="new-name" placeholder="e.g. DeepSeek Proxy, GX10" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-9.5 text-xs rounded-lg border-border/60" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="new-url" className="text-[10px] font-semibold text-muted-foreground">Base URL Endpoint</Label>
-                      <Input id="new-url" placeholder="http://127.0.0.1:8080/v1" value={newBaseUrl} onChange={(e) => setNewBaseUrl(e.target.value)} className="font-mono text-xs h-9 rounded-lg border-border/60" />
+                      <Label htmlFor="new-url" className="text-[10px] font-semibold text-muted-foreground">Base Endpoint URL</Label>
+                      <Input id="new-url" placeholder="http://100.77.38.96:8080/v1" value={newBaseUrl} onChange={(e) => setNewBaseUrl(e.target.value)} className="font-mono text-xs h-9.5 rounded-lg border-border/60" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="new-key" className="text-[10px] font-semibold text-muted-foreground">Authorization Key <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                      <Label htmlFor="new-key" className="text-[10px] font-semibold text-muted-foreground">API Authorization Key (optional)</Label>
                       <div className="relative">
-                        <Input id="new-key" type={newShowKey ? 'text' : 'password'} placeholder="Authorization token if required" value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} className="pr-9 font-mono text-xs h-9 rounded-lg border-border/60" />
+                        <Input id="new-key" type={newShowKey ? 'text' : 'password'} placeholder="Optional API authorization key" value={newApiKey} onChange={(e) => setNewApiKey(e.target.value)} className="pr-9 font-mono text-xs h-9.5 rounded-lg border-border/60" />
                         <button type="button" onClick={() => setNewShowKey(!newShowKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                           {newShowKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                         </button>
                       </div>
                     </div>
                     <div className="space-y-1.5 flex flex-col justify-end">
-                      <Button size="sm" variant="outline" onClick={discoverModels} disabled={discovering || !newBaseUrl.trim()} className="text-xs gap-1.5 h-9 rounded-lg font-semibold border-border/60">
+                      <Button size="sm" variant="outline" onClick={discoverModels} disabled={discovering || !newBaseUrl.trim()} className="text-xs gap-1.5 h-9.5 rounded-lg font-semibold border-border/60">
                         {discovering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                        Fetch Models
+                        Fetch & Discover Models
                       </Button>
                     </div>
                   </div>
 
                   {discoveredModels.length > 0 && (
-                    <div className="space-y-1.5 bg-muted/40 border border-border/50 p-3 rounded-lg animate-in fade-in duration-200">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Indexed Remote Models ({discoveredModels.length})</span>
+                    <div className="space-y-1.5 bg-muted/[0.04] border border-border/50 p-3 rounded-lg">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Discovered Remote Models ({discoveredModels.length})</span>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {discoveredModels.slice(0, 8).map(m => <Badge key={m.id} variant="outline" className="text-[9px] font-mono border-border/60 bg-card text-muted-foreground px-1.5 py-0">{m.id}</Badge>)}
+                        {discoveredModels.slice(0, 8).map(m => <Badge key={m.id} variant="outline" className="text-[9px] font-mono border-border/60 bg-card px-1.5 py-0 text-muted-foreground">{m.id}</Badge>)}
                         {discoveredModels.length > 8 && <Badge variant="outline" className="text-[9px] px-1.5 py-0">+{discoveredModels.length - 8} more</Badge>}
                       </div>
                     </div>
                   )}
 
-                  <div className="flex justify-end pt-3 border-t border-border/50">
-                    <Button size="sm" onClick={addCustomProvider} disabled={!newName.trim() || !newBaseUrl.trim()} className="text-xs gap-1.5 h-8.5 rounded-lg font-bold bg-primary text-primary-foreground">
-                      <Plus className="h-3.5 w-3.5" />Register Provider
+                  <div className="flex justify-end gap-2.5 pt-3 border-t border-border/50">
+                    <Button 
+                      size="sm" 
+                      onClick={addCustomProvider} 
+                      disabled={!newName.trim() || !newBaseUrl.trim()} 
+                      className="text-xs gap-1.5 h-8.5 rounded-lg font-bold bg-primary text-primary-foreground"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Register Custom Provider
                     </Button>
                   </div>
                 </div>
+              ) : (
+                /* Config settings for the selected provider */
+                currentProvider && (
+                  <div className="space-y-4 pt-4 border-t border-border/50 animate-in fade-in duration-200">
+                    
+                    {!currentProvider.enabled ? (
+                      <div className="text-[11px] text-muted-foreground bg-muted/[0.02] border border-border/40 p-4 rounded-xl flex items-center gap-2 leading-relaxed">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                        <span>This provider is currently disabled. Toggle the <strong>Enabled</strong> switch at the top to configure its fields.</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          
+                          {/* API Credential Key Input */}
+                          {(currentProvider.kind === 'builtin' ? (currentProvider.id === 'gemini' || currentProvider.id === 'openai') : true) && (
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`${currentProvider.id}-key`} className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">API Credential Key</Label>
+                              <div className="relative">
+                                <Input 
+                                  id={`${currentProvider.id}-key`} 
+                                  type={showKeys[currentProvider.id] ? 'text' : 'password'} 
+                                  placeholder={currentProvider.kind !== 'builtin' ? 'Optional key payload...' : (currentProvider.id === 'gemini' ? 'AIzaSy...' : 'sk-...')} 
+                                  value={currentProvider.apiKey || ''} 
+                                  onChange={(e) => updateProvider(currentProvider.id, { apiKey: e.target.value })} 
+                                  className="pr-9 font-mono text-xs h-9.5 rounded-lg border-border/60" 
+                                />
+                                <button type="button" onClick={() => setShowKeys(prev => ({ ...prev, [currentProvider.id]: !prev[currentProvider.id] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                  {showKeys[currentProvider.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Base URL Endpoint URL Input */}
+                          {(currentProvider.kind !== 'builtin' || currentProvider.id === 'ollama') && (
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`${currentProvider.id}-url`} className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Base Endpoint URL</Label>
+                              <Input 
+                                id={`${currentProvider.id}-url`} 
+                                placeholder={currentProvider.kind !== 'builtin' ? 'http://localhost:8080/v1' : 'http://localhost:11434'} 
+                                value={currentProvider.baseUrl || ''} 
+                                onChange={(e) => updateProvider(currentProvider.id, { baseUrl: e.target.value })} 
+                                className="font-mono text-xs h-9.5 rounded-lg border-border/60" 
+                              />
+                            </div>
+                          )}
+
+                          {/* Base Reference Model Dropdown */}
+                          <div className="space-y-1.5 col-span-1">
+                            <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Base Reference Model</Label>
+                            {currentProvider.models.length > 0 ? (
+                              <Select
+                                value={currentProvider.defaultModel || ''}
+                                onValueChange={(val) => {
+                                  updateProvider(currentProvider.id, { defaultModel: val });
+                                  if (settings.activeProvider === currentProvider.id) {
+                                    setSettings(prev => prev ? { ...prev, buildModel: val } : null);
+                                    setDirty(true);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="font-mono text-xs h-9.5 rounded-lg border-border/60"><SelectValue placeholder="Select active model" /></SelectTrigger>
+                                <SelectContent>
+                                  {currentProvider.models.map(model => <SelectItem key={model.id} value={model.id} className="font-mono text-xs">{model.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="text-[11px] text-muted-foreground/80 py-2 px-3 rounded-lg border border-dashed border-border/60 bg-muted/20">
+                                No models indexed. Run Sync to synchronize models.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Diagnostic Test Diagnostic Results */}
+                        {testResults[currentProvider.id] && (
+                          <div className={cn(
+                            "flex items-start gap-2.5 text-xs p-3 rounded-lg border leading-relaxed",
+                            testResults[currentProvider.id].ok 
+                              ? "bg-emerald-500/[0.02] border-emerald-500/20 text-emerald-700 dark:text-emerald-400" 
+                              : "bg-destructive/[0.02] border-destructive/20 text-destructive"
+                          )}>
+                            {testResults[currentProvider.id].ok ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" /> : <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-destructive" />}
+                            <span className="font-medium text-[11px]">{testResults[currentProvider.id].message}</span>
+                          </div>
+                        )}
+
+                        {/* Action Row */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => testConnection(currentProvider.id)} 
+                            disabled={isTesting} 
+                            className="text-xs gap-1.5 h-8.5 rounded-lg font-semibold border-border/60"
+                          >
+                            {isTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                            Test & Sync
+                          </Button>
+                          
+                          {currentProvider.defaultModel && settings.activeProvider !== currentProvider.id && (
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => {
+                                setActiveProvider(currentProvider.id, currentProvider.defaultModel!);
+                                toast.success(`Active provider set to: ${currentProvider.name}`);
+                              }} 
+                              className="text-xs gap-1.5 h-8.5 rounded-lg font-semibold border-border/60"
+                            >
+                              <Star className="h-3.5 w-3.5" /> Use as Active Provider
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
               )}
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
-      {/* ─── Global Saving Overlay / Indicator ─── */}
+      {/* ─── Debounced Save Badge overlay ─── */}
       {saving && (
         <div className="flex justify-end sticky bottom-4 z-10">
-          <Badge variant="outline" className="gap-1.5 bg-background/95 backdrop-blur-md shadow-md border-border/60 px-3 py-1 text-[10px] text-muted-foreground font-semibold">
-            <Loader2 className="h-3 w-3 animate-spin text-primary" /> Synchronizing settings...
+          <Badge variant="outline" className="gap-1.5 bg-background/95 backdrop-blur-md shadow-md border-border/60 px-3 py-1.5 text-[10px] text-muted-foreground font-semibold">
+            <Loader2 className="h-3 w-3 animate-spin text-primary" /> Syncing changes...
           </Badge>
         </div>
       )}

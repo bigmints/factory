@@ -9,7 +9,7 @@
  * Tools: delegate_to_cli, intervene, mark_story_done, mark_story_failed, update_context.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, createWriteStream } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
@@ -552,6 +552,15 @@ async function toolDelegateToCli(
     log('→', `Running: ${ctx.cliName} in ${resolvedCwd}`);
     log('→', `Prompt (${prompt.length} chars): ${prompt.slice(0, 120)}${prompt.length > 120 ? '…' : ''}`);
 
+    // ── Live log file (tail -f .factory/logs/cli-<slug>.log) ──────────
+    const logsDir = join(ctx.repoPath, '.factory', 'logs');
+    mkdirSync(logsDir, { recursive: true });
+    const storySlug = ctx.storyFile.split('/').pop()?.replace(/\.ya?ml$/, '') || 'build';
+    const cliLogPath = join(logsDir, `cli-${storySlug}.log`);
+    const logStream = createWriteStream(cliLogPath, { flags: 'a' });
+    logStream.write(`\n${'='.repeat(60)}\n[${new Date().toISOString()}] delegate_to_cli → ${ctx.cliName}\nCWD: ${resolvedCwd}\n${'='.repeat(60)}\n`);
+    log('→', `CLI log: tail -f ${cliLogPath}`);
+
     return new Promise<ToolResult>((resolve: (r: ToolResult) => void) => {
         const child = spawn(ctx.cliName, cliArgs, {
             cwd: resolvedCwd,
@@ -616,6 +625,8 @@ async function toolDelegateToCli(
             const text = chunk.toString();
             buffer += text;
             lastActivityAt = Date.now();
+            // Stream to log file in real-time
+            try { logStream.write(text); } catch { /* non-fatal */ }
 
             // Extract Conversation ID from agy CLI output
             const match = text.match(/Conversation ID:\s*([a-f0-9-]+)/i);
@@ -670,6 +681,7 @@ async function toolDelegateToCli(
         child.on('close', (code: number | null) => {
             clearInterval(stallTimer);
             clearInterval(loopTimer);
+            try { logStream.write(`\n[${new Date().toISOString()}] CLI exited with code ${code}\n`); logStream.end(); } catch { /* non-fatal */ }
 
             const tail = buffer.slice(-3000);
             const fileTree = scanDirTree(resolvedCwd);

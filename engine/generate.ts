@@ -426,6 +426,101 @@ async function callOllamaWithTools(
     };
 }
 
+// ─── Text-Only LLM Dispatch ──────────────────────────────
+
+export async function callProviderTextOnly(
+    provider: LLMProvider,
+    model: string,
+    systemInstruction: string,
+    prompt: string,
+): Promise<string> {
+    const kind = provider.kind || 'builtin';
+
+    if (kind === 'builtin') {
+        if (provider.id === 'gemini') {
+            if (!provider.apiKey) throw new Error('Gemini API key not configured');
+            
+            const body: Record<string, unknown> = {
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 16384 },
+            };
+            if (systemInstruction) {
+                body.system_instruction = { parts: [{ text: systemInstruction }] };
+            }
+
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${provider.apiKey}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+            );
+
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(`Gemini error (${res.status}): ${txt.slice(0, 400)}`);
+            }
+
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            return text;
+        }
+
+        if (provider.id === 'ollama') {
+            const baseUrl = provider.baseUrl || 'http://localhost:11434';
+            const res = await fetch(`${baseUrl}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'system', content: systemInstruction },
+                        { role: 'user', content: prompt }
+                    ],
+                    stream: false,
+                    options: { temperature: 0.2 },
+                }),
+            });
+
+            if (!res.ok) {
+                const body = await res.text();
+                throw new Error(`Ollama error (${res.status}): ${body.slice(0, 300)}`);
+            }
+
+            const data = await res.json();
+            return data.message?.content || '';
+        }
+    }
+
+    if (kind === 'cli') {
+        throw new Error(`CLI provider "${provider.id}" cannot be used for text calls.`);
+    }
+
+    // OpenAI-compat
+    const baseUrl = provider.baseUrl || 'https://api.openai.com/v1';
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(provider.apiKey ? { 'Authorization': `Bearer ${provider.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+            model,
+            messages: [
+                { role: 'system', content: systemInstruction },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.2,
+            max_tokens: 16384,
+        }),
+    });
+
+    if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`OpenAI error (${res.status}): ${body.slice(0, 300)}`);
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || '';
+}
+
 // ─── Util ────────────────────────────────────────────────
 
 function sleep(ms: number): Promise<void> {

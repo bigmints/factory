@@ -789,6 +789,12 @@ async function runBuild(item: QueueItem): Promise<boolean> {
             }
         }
 
+        // Auto-distill chronicle context (dynamic context accumulation)
+        try {
+            const { distillChronicle } = await import('./chronicle.ts');
+            await distillChronicle(projectPath);
+        } catch { /* ignore */ }
+
         return result.success;
     } catch (error) {
         logError(`Build failed: ${error}`);

@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Terminal, Loader2, XCircle, CheckCircle2, RefreshCw,
-  Square, Play, Trash2, Search, Clock, Cpu,
-  GitBranch, Zap, AlertTriangle, ChevronRight, Package,
+  Square, Play, Trash2, Search, Cpu,
+  ChevronRight, Package, Sparkles, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,14 +45,24 @@ type StatusFilter = 'all' | 'active' | 'completed' | 'failed';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Convert a kebab/snake slug into a readable title. */
+function slugToTitle(slug: string): string {
+  return slug
+    .replace(/^fix-/, '')           // strip leading "fix-" prefix
+    .replace(/^fix-/, '')           // strip second one e.g. fix-fix-
+    .replace(/-/g, ' ')             // dashes → spaces
+    .replace(/\b\w/g, c => c.toUpperCase()); // title-case
+}
+
 function humanName(item: QueueItem, idx: number, nameMap?: Map<string, string>): string {
   if (item.displayName) return item.displayName;
   const specName = item.storyFile || item.specFile || '';
   if (!specName) return `Build #${idx + 1}`;
   const slug = specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '');
-  // Look up actual story name from scaffold/stories API
+  // Prefer resolved story name from API
   if (nameMap && nameMap.has(slug)) return nameMap.get(slug)!;
-  return slug;
+  // Fall back to humanized slug
+  return slugToTitle(slug);
 }
 
 function formatRelativeTime(iso: string): string {
@@ -85,9 +95,29 @@ function getLogPreview(item: QueueItem): string {
 }
 
 function kindLabel(kind: string): string {
-  if (kind === 'AppStory') return 'App';
-  if (kind === 'FeatureStory') return 'Feature';
+  if (kind === 'AppStory') return 'New app';
+  if (kind === 'FeatureStory') return 'Feature update';
   return kind;
+}
+
+/** Map heartbeat task strings to plain English. */
+function taskToLabel(task: string | null): string | null {
+  if (!task) return null;
+  if (/orchestrat.*turn\s*(\d+)/i.test(task)) {
+    const m = task.match(/(\d+)/);
+    const n = m ? parseInt(m[1]) : 1;
+    if (n === 1) return 'Preparing task brief…';
+    if (n === 2) return 'AI engineer is working on it…';
+    return 'Reviewing and fixing…';
+  }
+  if (/delegat/i.test(task)) return 'AI engineer is coding…';
+  if (/interven/i.test(task)) return 'Reviewing progress…';
+  if (/gather/i.test(task)) return 'Reading codebase…';
+  if (/plan/i.test(task)) return 'Planning changes…';
+  if (/build/i.test(task)) return 'Writing code…';
+  if (/test/i.test(task)) return 'Running tests…';
+  if (/commit/i.test(task)) return 'Committing changes…';
+  return null;
 }
 
 // ─── Status Pill ─────────────────────────────────────────────────────────────
@@ -168,13 +198,16 @@ export function BuildPage() {
   const [queueRunning, setQueueRunning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [buildOutput, setBuildOutput] = useState('');
+  const [aiSummary, setAiSummary] = useState<{ text: string; ts: string } | null>(null);
+  const [heartbeatRaw, setHeartbeatRaw] = useState<string | null>(null);
+  const [rawLogOpen, setRawLogOpen] = useState(false);
   const [startingQueue, setStartingQueue] = useState(false);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   // Mobile: toggle between queue list and logs panel
   const [mobilePanelTab, setMobilePanelTab] = useState<'queue' | 'logs'>('queue');
-  const logOffsetRef = useRef(0);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const sseRef = useRef<EventSource | null>(null);
 
   // ── Story name resolution (slug → human name from scaffold/stories APIs) ──
   const [storyNameMap, setStoryNameMap] = useState<Map<string, string>>(new Map());
@@ -233,27 +266,59 @@ export function BuildPage() {
     return () => clearInterval(interval);
   }, [fetchQueue]);
 
-  // Stream live log
+  // ── SSE: live log + AI summary ─────────────────────────────────────────
   useEffect(() => {
-    if (!queueRunning) {
-      logOffsetRef.current = 0;
-      return;
-    }
-    setBuildOutput('Connecting to pipeline...\n');
-    logOffsetRef.current = 0;
-    const pollLog = async () => {
-      try {
-        const res = await fetch(`/api/queue/log?offset=${logOffsetRef.current}`);
-        const data = await res.json();
-        if (data.log) { setBuildOutput(prev => prev + data.log); logOffsetRef.current = data.offset; }
-      } catch {}
-    };
-    pollLog();
-    const interval = setInterval(pollLog, 1500);
-    return () => clearInterval(interval);
-  }, [queueRunning]);
+    // Close any previous SSE connection
+    sseRef.current?.close();
+    sseRef.current = null;
 
-  useEffect(() => { terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [buildOutput]);
+    const runningItem = queueItems.find(i => i.status === 'running');
+    if (!runningItem) return;
+
+    const slug = (runningItem.storyFile || runningItem.specFile || '')
+      .replace(/^(features|apps|done)\//, '')
+      .replace(/\.ya?ml$/i, '');
+    if (!slug) return;
+
+    setBuildOutput('');
+    setAiSummary(null);
+    setHeartbeatRaw(null);
+
+    const es = new EventSource(`/api/build-events?slug=${encodeURIComponent(slug)}`);
+    sseRef.current = es;
+
+    es.addEventListener('log', (e: MessageEvent) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.reset) {
+          setBuildOutput(d.text || '');
+        } else if (d.text) {
+          setBuildOutput(prev => prev + d.text);
+        }
+      } catch {}
+    });
+
+    es.addEventListener('summary', (e: MessageEvent) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.text) setAiSummary({ text: d.text, ts: d.ts || new Date().toISOString() });
+      } catch {}
+    });
+
+    es.addEventListener('heartbeat', (e: MessageEvent) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.raw) setHeartbeatRaw(d.raw);
+      } catch {}
+    });
+
+    es.onerror = () => { es.close(); };
+
+    return () => { es.close(); sseRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queueItems.find(i => i.status === 'running')?.id]);
+
+  useEffect(() => { terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [buildOutput, rawLogOpen]);
 
   // Auto-select running item
   useEffect(() => {
@@ -304,6 +369,12 @@ export function BuildPage() {
       ? (buildOutput || selectedItem.output || '')
       : (selectedItem.output || selectedItem.error || ''))
     : (buildOutput || '');
+
+  const heartbeatTask = useMemo(() => {
+    if (!heartbeatRaw) return null;
+    const m = heartbeatRaw.match(/task:\s*(.+)/);
+    return m ? taskToLabel(m[1].trim()) : null;
+  }, [heartbeatRaw]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -660,33 +731,22 @@ export function BuildPage() {
 
           {selectedItem ? (
             <>
-              {/* Build header */}
-              <div className="border-b border-zinc-800 bg-zinc-900/30 px-5 py-3 shrink-0">
+              {/* ── Build header ── */}
+              <div className="border-b border-zinc-800 bg-zinc-900/30 px-5 py-3.5 shrink-0">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <h2 className="text-base font-bold text-white leading-tight font-sans truncate">
                       {humanName(selectedItem, queueItems.indexOf(selectedItem), storyNameMap)}
                     </h2>
-                    
-                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-zinc-500 font-mono mt-1">
-                      <span className="uppercase tracking-wider font-bold text-zinc-400">
-                        {kindLabel(selectedItem.kind)}
-                      </span>
-                      {selectedItem.phase !== undefined && selectedItem.phase > 0 && (
-                        <span>· phase {selectedItem.phase}</span>
+                    <p className="text-[11px] text-zinc-500 font-sans mt-0.5">
+                      {kindLabel(selectedItem.kind)}
+                      {selectedItem.startedAt && (
+                        <span className="text-zinc-600"> · started {formatRelativeTime(selectedItem.startedAt)}</span>
                       )}
-                      {selectedItem.engine && (
-                        <span>· engine: {selectedItem.engine}</span>
+                      {selectedItem.durationMs && (
+                        <span className="text-zinc-600"> · took {formatDuration(selectedItem.durationMs)}</span>
                       )}
-                      {selectedItem.dependsOn && selectedItem.dependsOn.length > 0 && (
-                        <span className="text-zinc-600">
-                          · depends on: {selectedItem.dependsOn.join(', ')}
-                        </span>
-                      )}
-                      <span className="text-zinc-700">
-                        · id: {selectedItem.id.replace('q_', '').slice(0, 8)}
-                      </span>
-                    </div>
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {selectedItem.status === 'failed' || selectedItem.status === 'blocked' ? (
@@ -704,43 +764,134 @@ export function BuildPage() {
                       variant="ghost"
                       onClick={() => handleRemove(selectedItem.id)}
                       className="h-7 px-2 text-[10px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 font-sans font-medium flex items-center gap-1"
-                      title="Remove build from queue"
+                      title="Remove from queue"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       <span>Remove</span>
                     </Button>
-                    <StatusPill 
-                      status={selectedItem.status} 
+                    <StatusPill
+                      status={selectedItem.status}
                       startedAt={selectedItem.startedAt}
                       durationMs={selectedItem.durationMs}
                     />
                   </div>
                 </div>
-
-
-
-
               </div>
 
-              {/* Terminal output */}
+              {/* ── Status / log panel ── */}
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
 
-              <div className="flex-1 overflow-y-auto p-4 scrollbar-thin min-h-0">
-                {panelLog ? (
-                  <div className="space-y-px">
-                    {panelLog.split('\n').map((line, i) => (
-                      <LogLine key={i} line={line} />
-                    ))}
-                    <div ref={terminalEndRef} />
+                {/* Activity strip — only when running */}
+                {isSelectedRunning && (
+                  <div className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/50 px-5 py-4">
+
+                    {/* Current activity line */}
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+                      </span>
+                      <span className="text-[13px] font-medium text-white font-sans">
+                        {heartbeatTask || 'Getting started…'}
+                      </span>
+                    </div>
+
+                    {/* AI summary bullets */}
+                    {aiSummary ? (
+                      <div className="space-y-1.5 pl-4 border-l border-zinc-800">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Sparkles className="h-3 w-3 text-amber-400/70" />
+                          <span className="text-[10px] text-zinc-500 font-sans">Last update · {new Date(aiSummary.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        {aiSummary.text.split('\n').filter(Boolean).map((line, i) => (
+                          <p key={i} className="text-[12px] text-zinc-300 font-sans leading-relaxed">
+                            {line.replace(/^[-•*✅🔨🐛⚠️❌]\s*/, '')}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="pl-4 border-l border-zinc-800">
+                        <p className="text-[12px] text-zinc-500 font-sans">Starting up — this usually takes a moment.</p>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center py-16">
-                    <Terminal className="h-8 w-8 text-zinc-800 mb-3" />
-                    <p className="text-xs text-zinc-600 italic font-sans">
-                      {selectedItem.status === 'pending'
-                        ? 'Build is queued — output will appear once the runner starts.'
-                        : 'No log output recorded.'}
+                )}
+
+                {/* Completed / failed summary */}
+                {!isSelectedRunning && selectedItem.status === 'completed' && selectedItem.output && (
+                  <div className="shrink-0 border-b border-zinc-800/60 bg-emerald-950/20 px-5 py-3.5">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-[12px] font-semibold text-emerald-400 font-sans">Done</span>
+                      {selectedItem.durationMs && (
+                        <span className="text-[11px] text-zinc-500 font-sans ml-auto">Finished in {formatDuration(selectedItem.durationMs)}</span>
+                      )}
+                    </div>
+                    <p className="text-[11.5px] text-zinc-400 font-sans leading-relaxed line-clamp-2">
+                      {selectedItem.output.split('\n').filter(l => l.trim() && !l.includes('===') && !l.startsWith('[')).at(-1)}
                     </p>
                   </div>
+                )}
+
+                {!isSelectedRunning && (selectedItem.status === 'failed' || selectedItem.status === 'blocked') && (
+                  <div className="shrink-0 border-b border-zinc-800/60 bg-rose-950/20 px-5 py-3.5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                      <span className="text-[12px] font-semibold text-rose-400 font-sans">
+                        {selectedItem.status === 'blocked' ? 'Waiting on another task' : 'Something went wrong'}
+                      </span>
+                    </div>
+                    {selectedItem.error && (
+                      <p className="text-[11px] text-zinc-400 font-sans line-clamp-2">{selectedItem.error.split('\n').filter(Boolean).at(-1)}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Collapsible raw log — filtered of internal paths */}
+                {panelLog && panelLog.replace(/\(log:.*?\)\n?/g, '').replace(/Waiting for CLI to start\.\n?/g, '').trim() ? (
+                  <div className="flex flex-col flex-1 overflow-hidden min-h-0">
+                    <button
+                      onClick={() => setRawLogOpen(p => !p)}
+                      className="shrink-0 flex items-center justify-between px-5 py-2 border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Terminal className="h-3 w-3 text-zinc-600 group-hover:text-zinc-400" />
+                        <span className="text-[10px] font-medium text-zinc-600 group-hover:text-zinc-400 font-sans">
+                          View full log
+                        </span>
+                        {!rawLogOpen && (
+                          <span className="text-[9px] text-zinc-700 font-mono">
+                            ({panelLog.split('\n').length} lines)
+                          </span>
+                        )}
+                      </div>
+                      {rawLogOpen
+                        ? <ChevronUp className="h-3 w-3 text-zinc-600" />
+                        : <ChevronDown className="h-3 w-3 text-zinc-600" />}
+                    </button>
+
+                    {rawLogOpen && (
+                      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin min-h-0 bg-black/30">
+                        <div className="space-y-px">
+                          {panelLog
+                            .replace(/\(log:.*?\)\n?/g, '')
+                            .replace(/Waiting for CLI to start\.\n?/g, '')
+                            .split('\n')
+                            .map((line, i) => <LogLine key={i} line={line} />)
+                          }
+                          <div ref={terminalEndRef} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  selectedItem.status === 'pending' && (
+                    <div className="flex flex-col items-center justify-center flex-1 text-center py-16">
+                      <div className="h-8 w-8 rounded-full border-2 border-zinc-800 border-t-violet-500 animate-spin mb-4" />
+                      <p className="text-sm font-medium text-zinc-400 font-sans">Waiting in queue</p>
+                      <p className="text-xs text-zinc-600 font-sans mt-1">Will start once the current task finishes.</p>
+                    </div>
+                  )
                 )}
               </div>
             </>

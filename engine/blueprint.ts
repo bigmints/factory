@@ -235,6 +235,29 @@ function gatherKnowledgeFiles(repoPath: string, bridge: BridgeConfig): Knowledge
         }
     }
 
+    // Dynamic knowledge - auto-discover .factory/knowledge/ markdown files (ADRs, Chronicle, Decisions)
+    const knowledgeDir = join(repoPath, '.factory', 'knowledge');
+    if (existsSync(knowledgeDir)) {
+        try {
+            const entries = readdirSync(knowledgeDir, { withFileTypes: true });
+            const mdFiles = entries
+                .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
+                .map(entry => entry.name)
+                .sort();
+            for (const file of mdFiles) {
+                const relPath = `.factory/knowledge/${file}`;
+                if (!files.some(f => f.path === relPath)) {
+                    files.push({
+                        app: file.replace('.md', ''),
+                        filename: file,
+                        path: relPath,
+                        content: readFileSync(join(knowledgeDir, file), 'utf-8'),
+                    });
+                }
+            }
+        } catch { /* ignore */ }
+    }
+
     return files;
 }
 

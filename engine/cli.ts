@@ -111,6 +111,8 @@ async function main(): Promise<void> {
             return handleRepl(target);
         case 'btw':
             return handleBtw(target, args.slice(2).join(' '));
+        case 'chronicle':
+            return handleChronicle(target, args[2]);
 
         default:
             printUsage();
@@ -155,6 +157,13 @@ async function handleBuild(storyPath?: string): Promise<void> {
     // The CLI agent writes files directly; no post-pipeline writeFiles() needed.
     logStep(3, 4, 'Orchestrating build...');
     const result = await runPipeline(story, blueprint, targetDir, storyPath!);
+
+    // Distill chronicle automatically (dynamic context accumulation)
+    try {
+        log('→', 'Auto-distilling chronicle context...');
+        const { distillChronicle } = await import('./chronicle.ts');
+        await distillChronicle(project.path);
+    } catch { /* ignore */ }
 
     // Step 4: Git commit + push
     logStep(4, 4, 'Committing and pushing...');
@@ -575,6 +584,13 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
                 updateStoryStatus(storyPath, 'done');
                 await updateStoryStatusInApp(storyPath, 'done');
                 archiveStory(storyPath);
+
+                // Distill chronicle automatically (dynamic context accumulation)
+                try {
+                    log('→', 'Auto-distilling chronicle context...');
+                    const { distillChronicle } = await import('./chronicle.ts');
+                    await distillChronicle(project.path);
+                } catch { /* ignore */ }
 
                 const commitTarget = story.target?.app || story.feature.name || 'fix';
                 gitCommit(project.path, `factory: feature ${story.feature.name} → ${commitTarget}`);
@@ -1857,4 +1873,33 @@ async function handleWatch(watchDir?: string): Promise<void> {
         watcher.close();
         process.exit(0);
     });
+}
+
+async function handleChronicle(subcommand?: string, arg?: string): Promise<void> {
+    if (!subcommand) {
+        console.error('Usage: factory chronicle <update|view> [repo-path]');
+        process.exit(1);
+    }
+
+    const project = getActiveProject();
+    const repoPath = arg ? resolve(arg) : project.path;
+
+    switch (subcommand) {
+        case 'update':
+            logHeader('Distilling Repository Chronicle');
+            const { distillChronicle } = await import('./chronicle.ts');
+            await distillChronicle(repoPath);
+            break;
+        case 'view':
+            const chroniclePath = join(repoPath, '.factory', 'knowledge', 'chronicle.md');
+            if (existsSync(chroniclePath)) {
+                console.log(readFileSync(chroniclePath, 'utf-8'));
+            } else {
+                log('!', 'No chronicle found. Run: factory chronicle update');
+            }
+            break;
+        default:
+            console.error(`Unknown chronicle command: ${subcommand}`);
+            process.exit(1);
+    }
 }

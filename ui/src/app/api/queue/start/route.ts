@@ -18,7 +18,8 @@ import {
   updateItem,
   getQueueStats,
   QueueItem,
-  dequeue
+  dequeue,
+  getItem
 } from '@engine/queue';
 import { getActiveProject } from '@engine/config';
 import { logBuild } from '@engine/db';
@@ -253,6 +254,13 @@ function processQueueInBackground() {
     });
 
     child.on('close', (code: number | null) => {
+      // Recovery check: if item was stopped by user, do not overwrite status and error!
+      const currentItem = getItem(item.id);
+      if (currentItem && currentItem.error === 'Stopped by user') {
+        processNext();
+        return;
+      }
+
       const durationMs = Date.now() - startTime;
       const output = stripAnsi(stdout + stderr);
 
@@ -284,6 +292,13 @@ function processQueueInBackground() {
     });
 
     child.on('error', (err: Error) => {
+      // Recovery check: if item was stopped by user, do not overwrite status and error!
+      const currentItem = getItem(item.id);
+      if (currentItem && currentItem.error === 'Stopped by user') {
+        processNext();
+        return;
+      }
+
       const durationMs = Date.now() - startTime;
       updateItem(item.id, {
         status: 'failed',

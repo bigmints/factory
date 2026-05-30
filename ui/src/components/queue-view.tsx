@@ -405,6 +405,31 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
     } catch { console.error('Failed to retry item'); }
   };
 
+  const handleStartTask = async (id: string) => {
+    try {
+      const res = await fetch(`/api/queue/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
+      });
+      if (res.ok) {
+        await fetchQueue();
+        fetch('/api/queue/start', { method: 'POST' }).then(() => fetchQueue());
+      }
+    } catch { console.error('Failed to start task'); }
+  };
+
+  const handleStopTask = async (id: string) => {
+    try {
+      await fetch(`/api/queue/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }),
+      });
+      await fetchQueue();
+    } catch { console.error('Failed to stop task'); }
+  };
+
   const handleClearAll = async () => {
     try { await fetch('/api/queue/clear', { method: 'POST' }); await fetchQueue(); } catch { console.error('Failed to clear queue'); }
   };
@@ -549,12 +574,21 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                         {item.status}
                       </Badge>
                       
+                      {item.status === 'running' ? (
+                        <Button variant="ghost" size="icon" onClick={() => handleStopTask(item.id)} className="h-8 w-8 rounded hover:bg-muted border border-border/80 text-rose-500 hover:text-rose-400" title="Stop active task">
+                          <Square className="h-3.5 w-3.5 fill-rose-500" />
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="icon" onClick={() => handleStartTask(item.id)} className="h-8 w-8 rounded hover:bg-muted border border-border/80 text-emerald-500 hover:text-emerald-400" title="Start task">
+                          <Play className="h-3.5 w-3.5 fill-emerald-500" />
+                        </Button>
+                      )}
                       {item.status === 'failed' && (
                         <Button variant="ghost" size="icon" onClick={() => handleRetry(item.id)} className="h-8 w-8 rounded hover:bg-muted border border-border/80">
                           <RotateCcw className="h-3.5 w-3.5 text-foreground" />
                         </Button>
                       )}
-                      {item.status === 'pending' && !isRunning && (
+                      {item.status !== 'running' && (
                         <Button variant="ghost" size="icon" onClick={() => handleRemove(item.id)} className="h-8 w-8 rounded hover:bg-muted hover:text-destructive border border-border/80">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

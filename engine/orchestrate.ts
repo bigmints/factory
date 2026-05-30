@@ -559,7 +559,6 @@ async function toolDelegateToCli(
     const cliLogPath = join(logsDir, `cli-${storySlug}.log`);
     const logStream = createWriteStream(cliLogPath, { flags: 'a' });
     logStream.write(`\n${'='.repeat(60)}\n[${new Date().toISOString()}] delegate_to_cli → ${ctx.cliName}\nCWD: ${resolvedCwd}\n${'='.repeat(60)}\n`);
-    logStream.write(`### TPM_BRIEF_START ###\n${prompt}\n### TPM_BRIEF_END ###\n### CLI_OUTPUT_START ###\n`);
     log('→', `CLI log: tail -f ${cliLogPath}`);
 
     return new Promise<ToolResult>((resolve: (r: ToolResult) => void) => {
@@ -682,7 +681,7 @@ async function toolDelegateToCli(
         child.on('close', (code: number | null) => {
             clearInterval(stallTimer);
             clearInterval(loopTimer);
-            try { logStream.write(`\n### CLI_OUTPUT_END ###\n[${new Date().toISOString()}] CLI exited with code ${code}\n`); logStream.end(); } catch { /* non-fatal */ }
+            try { logStream.write(`\n[${new Date().toISOString()}] CLI exited with code ${code}\n`); logStream.end(); } catch { /* non-fatal */ }
 
             const tail = buffer.slice(-3000);
             const fileTree = scanDirTree(resolvedCwd);

@@ -191,208 +191,6 @@ function LogLine({ line }: { line: string }) {
   );
 }
 
-// ─── Conversation Parser ───────────────────────────────────────────────────────
-
-interface ConvTurn {
-  id: number;
-  cli: string;
-  brief: string;       // TPM's prompt
-  response: string;    // CLI's stdout
-  complete: boolean;   // CLI_OUTPUT_END seen
-}
-
-function parseConversation(raw: string): ConvTurn[] {
-  const turns: ConvTurn[] = [];
-  // Split on the = separator that precedes each delegate_to_cli header
-  const segments = raw.split(/\n={50,}\n/);
-
-  for (const seg of segments) {
-    const headerMatch = seg.match(/\[.*?\] delegate_to_cli\s*[→-]+\s*(\w+)/);
-    if (!headerMatch) continue;
-
-    const cli = headerMatch[1];
-    const briefMatch = seg.match(/### TPM_BRIEF_START ###\n([\s\S]*?)\n### TPM_BRIEF_END ###/);
-    const outputMatch = seg.match(/### CLI_OUTPUT_START ###\n([\s\S]*?)(?:### CLI_OUTPUT_END ###|$)/);
-    const complete = seg.includes('### CLI_OUTPUT_END ###');
-
-    turns.push({
-      id: turns.length,
-      cli,
-      brief: briefMatch ? briefMatch[1].trim() : '',
-      response: outputMatch ? outputMatch[1].trim() : '',
-      complete,
-    });
-  }
-  return turns;
-}
-
-// ─── Conversation View ─────────────────────────────────────────────────────────
-
-function ConversationView({ raw, cliName, isRunning }: {
-  raw: string;
-  cliName: string;
-  isRunning: boolean;
-}) {
-  const turns = useMemo(() => parseConversation(raw), [raw]);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [turns.length, turns.at(-1)?.response.length]);
-
-  if (turns.length === 0) return null;
-
-  return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 scrollbar-thin min-h-0">
-      {turns.map((turn) => (
-        <div key={turn.id} className="space-y-3">
-
-          {/* TPM bubble — left */}
-          {turn.brief && (
-            <div className="flex items-start gap-3 max-w-[88%]">
-              <div className="shrink-0 h-7 w-7 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-[10px] font-bold text-violet-400 font-mono mt-0.5">
-                TPM
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[10px] font-semibold text-violet-400 font-sans">Task Manager</span>
-                  {turn.id === 0
-                    ? <span className="text-[9px] text-zinc-600 font-mono">initial brief</span>
-                    : <span className="text-[9px] text-zinc-600 font-mono">follow-up · turn {turn.id + 1}</span>}
-                </div>
-                <div className="bg-violet-950/30 border border-violet-800/30 rounded-xl rounded-tl-sm px-3.5 py-2.5">
-                  {/* Show first meaningful section of brief */}
-                  <BriefPreview brief={turn.brief} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* CLI bubble — right */}
-          {(turn.response || (!turn.complete && isRunning)) && (
-            <div className="flex items-start gap-3 max-w-[88%] ml-auto flex-row-reverse">
-              <div className={cn(
-                'shrink-0 h-7 w-7 rounded-full border flex items-center justify-center text-[9px] font-bold font-mono mt-0.5 shrink-0',
-                !turn.complete && isRunning
-                  ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-400'
-              )}>
-                {turn.cli.slice(0, 3).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1.5 justify-end">
-                  {!turn.complete && isRunning && (
-                    <span className="flex items-center gap-1 text-[9px] text-emerald-400 font-mono">
-                      <span className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" />
-                      typing…
-                    </span>
-                  )}
-                  <span className="text-[10px] font-semibold text-zinc-400 font-sans capitalize">{turn.cli}</span>
-                </div>
-                <div className="bg-zinc-900/80 border border-zinc-800/60 rounded-xl rounded-tr-sm px-3.5 py-2.5">
-                  {turn.response ? (
-                    <CliResponsePreview text={turn.response} />
-                  ) : (
-                    <div className="flex items-center gap-2 py-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-      <div ref={bottomRef} />
-    </div>
-  );
-}
-
-/** Renders a short, readable preview of the TPM brief */
-function BriefPreview({ brief }: { brief: string }) {
-  const [expanded, setExpanded] = useState(false);
-
-  // Extract just the story name + description (skip big IMPLEMENTATION INSTRUCTIONS blocks)
-  const lines = brief.split('\n');
-  const storyLine = lines.find(l => l.startsWith('# STORY:') || l.startsWith('## STORY'));
-  const descStart = lines.findIndex(l => l.startsWith('## DESCRIPTION'));
-  const implStart = lines.findIndex(l => l.startsWith('## IMPLEMENTATION') || l.startsWith('## WHAT NOT'));
-  const descLines = descStart >= 0
-    ? lines.slice(descStart + 1, implStart > descStart ? implStart : descStart + 8).filter(Boolean)
-    : [];
-
-  const summary = [
-    storyLine?.replace(/^#+\s*/, ''),
-    ...descLines.slice(0, 4),
-  ].filter(Boolean).join('\n');
-
-  const hasMore = brief.length > summary.length + 50;
-
-  return (
-    <div>
-      <p className="text-[11.5px] text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
-        {expanded ? brief : summary || brief.slice(0, 300)}
-      </p>
-      {hasMore && (
-        <button
-          onClick={() => setExpanded(p => !p)}
-          className="mt-1.5 text-[10px] text-violet-400 hover:text-violet-300 font-sans"
-        >
-          {expanded ? 'Show less' : 'Show full brief…'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** Renders CLI response with color-coded lines, collapsed if very long */
-function CliResponsePreview({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const lines = text.split('\n').filter(l => l.trim());
-  const preview = lines.slice(0, 12);
-  const hasMore = lines.length > 12;
-
-  const renderLine = (line: string, i: number) => {
-    const isError = /\berror\b/i.test(line) && !/yolo/i.test(line);
-    const isSuccess = /✓|✔|done|complete|success/i.test(line);
-    const isWarn = /\bwarn/i.test(line);
-    const isBoilerplate = /yolo mode|ripgrep|falling back|all tool calls/i.test(line);
-
-    if (isBoilerplate) return null; // skip noise
-
-    return (
-      <p key={i} className={cn(
-        'text-[11.5px] leading-relaxed font-sans',
-        isError && 'text-rose-400 font-medium',
-        isSuccess && !isError && 'text-emerald-400',
-        isWarn && !isError && !isSuccess && 'text-amber-400',
-        !isError && !isSuccess && !isWarn && 'text-zinc-300',
-      )}>
-        {line}
-      </p>
-    );
-  };
-
-  const rendered = (expanded ? lines : preview).map(renderLine).filter(Boolean);
-
-  return (
-    <div className="space-y-0.5">
-      {rendered}
-      {hasMore && (
-        <button
-          onClick={() => setExpanded(p => !p)}
-          className="mt-1.5 text-[10px] text-zinc-500 hover:text-zinc-300 font-sans"
-        >
-          {expanded ? 'Show less' : `+${lines.length - 12} more lines…`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-
 // ─── Build Page ───────────────────────────────────────────────────────────────
 
 export function BuildPage() {
@@ -648,9 +446,46 @@ export function BuildPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'retry' }),
       });
-      if (res.ok) { toast.success('Build re-queued'); fetchQueue(); handleStartQueue(); }
+      if (res.ok) { toast.success('Build re-queued'); fetchQueue(); }
       else toast.error('Retry failed');
     } catch { toast.error('Retry failed'); }
+  };
+
+  const handleStartTask = async (id: string) => {
+    try {
+      const res = await fetch(`/api/queue/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
+      });
+      if (res.ok) {
+        toast.success('Task started');
+        fetchQueue();
+        fetch('/api/queue/start', { method: 'POST' }).then(() => fetchQueue());
+      } else {
+        toast.error('Failed to start task');
+      }
+    } catch {
+      toast.error('Failed to start task');
+    }
+  };
+
+  const handleStopTask = async (id: string) => {
+    try {
+      const res = await fetch(`/api/queue/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }),
+      });
+      if (res.ok) {
+        toast.success('Task stopped');
+        fetchQueue();
+      } else {
+        toast.error('Failed to stop task');
+      }
+    } catch {
+      toast.error('Failed to stop task');
+    }
   };
 
   const handleRemove = async (id: string) => {
@@ -892,6 +727,21 @@ export function BuildPage() {
 
                       {/* Always-visible touch actions (mobile) + hover on desktop */}
                       <div className="flex items-center gap-1 mt-2 md:hidden" onClick={e => e.stopPropagation()}>
+                        {isRunning ? (
+                          <button
+                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-rose-400 bg-rose-950/20 hover:bg-rose-900/30 flex items-center gap-1 border border-rose-900/40 font-semibold"
+                            onClick={() => handleStopTask(item.id)}
+                          >
+                            <Square className="h-3 w-3 fill-rose-400" /> Stop
+                          </button>
+                        ) : (
+                          <button
+                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-emerald-400 bg-emerald-950/20 hover:bg-emerald-900/30 flex items-center gap-1 border border-emerald-900/40 font-semibold"
+                            onClick={() => handleStartTask(item.id)}
+                          >
+                            <Play className="h-3 w-3 fill-emerald-400" /> Start
+                          </button>
+                        )}
                         {isFailed && (
                           <button
                             className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 flex items-center gap-1"
@@ -911,6 +761,23 @@ export function BuildPage() {
 
                     {/* Desktop hover actions */}
                     <div className="hidden md:group-hover:flex items-center gap-1 shrink-0 absolute right-2 top-3" onClick={e => e.stopPropagation()}>
+                      {isRunning ? (
+                        <button
+                          className="p-1 rounded text-rose-400 hover:bg-rose-950/30"
+                          title="Stop active task"
+                          onClick={() => handleStopTask(item.id)}
+                        >
+                          <Square className="h-3.5 w-3.5 fill-rose-400" />
+                        </button>
+                      ) : (
+                        <button
+                          className="p-1 rounded text-emerald-400 hover:bg-emerald-950/30"
+                          title="Start task"
+                          onClick={() => handleStartTask(item.id)}
+                        >
+                          <Play className="h-3.5 w-3.5 fill-emerald-400" />
+                        </button>
+                      )}
                       {isFailed && (
                         <button
                           className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-700"
@@ -986,6 +853,25 @@ export function BuildPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {selectedItem.status === 'running' ? (
+                      <Button
+                        size="sm"
+                        onClick={() => handleStopTask(selectedItem.id)}
+                        className="h-7 px-2.5 gap-1 text-[10px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold"
+                      >
+                        <Square className="h-3 w-3 fill-rose-400" />
+                        Stop
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => handleStartTask(selectedItem.id)}
+                        className="h-7 px-2.5 gap-1 text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold"
+                      >
+                        <Play className="h-3 w-3 fill-emerald-400" />
+                        Start
+                      </Button>
+                    )}
                     {selectedItem.status === 'failed' || selectedItem.status === 'blocked' ? (
                       <Button
                         size="sm"
@@ -996,16 +882,18 @@ export function BuildPage() {
                         Retry
                       </Button>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleRemove(selectedItem.id)}
-                      className="h-7 px-2 text-[10px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 font-sans font-medium flex items-center gap-1"
-                      title="Remove from queue"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Remove</span>
-                    </Button>
+                    {selectedItem.status !== 'running' && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRemove(selectedItem.id)}
+                        className="h-7 px-2 text-[10px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 font-sans font-medium flex items-center gap-1"
+                        title="Remove from queue"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Remove</span>
+                      </Button>
+                    )}
                     <StatusPill
                       status={selectedItem.status}
                       startedAt={selectedItem.startedAt}
@@ -1097,14 +985,37 @@ export function BuildPage() {
                   </div>
                 )}
 
-                {/* Conversation view — TPM ↔ CLI bubbles */}
+                {/* Raw log — only shown when there's real content */}
                 {hasRealLog ? (
                   <div className="flex flex-col flex-1 overflow-hidden min-h-0">
-                    <ConversationView
-                      raw={panelLog}
-                      cliName={selectedItem.engine || 'gemini'}
-                      isRunning={isSelectedRunning}
-                    />
+                    <button
+                      onClick={() => setRawLogOpen(p => !p)}
+                      className="shrink-0 flex items-center justify-between px-5 py-2 border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Terminal className="h-3 w-3 text-zinc-600 group-hover:text-zinc-400" />
+                        <span className="text-[10px] font-medium text-zinc-600 group-hover:text-zinc-400 font-sans">
+                          View full log
+                        </span>
+                        {!rawLogOpen && (
+                          <span className="text-[9px] text-zinc-700 font-mono">
+                            ({cleanedLog.split('\n').length} lines)
+                          </span>
+                        )}
+                      </div>
+                      {rawLogOpen
+                        ? <ChevronUp className="h-3 w-3 text-zinc-600" />
+                        : <ChevronDown className="h-3 w-3 text-zinc-600" />}
+                    </button>
+
+                    {rawLogOpen && (
+                      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin min-h-0 bg-black/30">
+                        <div className="space-y-px">
+                          {cleanedLog.split('\n').map((line, i) => <LogLine key={i} line={line} />)}
+                          <div ref={terminalEndRef} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : selectedItem.status === 'pending' ? (
                   <div className="flex flex-col items-center justify-center flex-1 text-center py-16">

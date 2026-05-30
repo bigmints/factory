@@ -541,7 +541,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                 </button>
               ))}
             </div>
-            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setArtifactOpen(false)}>
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setArtifactOpen(false)} aria-label="Close artifact details">
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -561,7 +561,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyYaml}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyYaml} aria-label="Copy YAML to clipboard">
                       {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                     </Button>
                     {!savedStories.has(activeStory.filename) ? (
@@ -605,7 +605,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
 
           <div className="flex items-center gap-0.5 shrink-0">
             {hasStories && (
-              <Button variant={artifactOpen ? 'secondary' : 'ghost'} size="icon" className="h-6 w-6 relative" onClick={() => setArtifactOpen(!artifactOpen)}>
+              <Button variant={artifactOpen ? 'secondary' : 'ghost'} size="icon" className="h-6 w-6 relative" onClick={() => setArtifactOpen(!artifactOpen)} aria-label="Toggle artifact panel">
                 <Layers className="h-3 w-3" />
                 <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-primary-foreground text-[7px] font-bold border border-background">{mergedStories.length}</span>
               </Button>
@@ -617,11 +617,11 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               </Button>
             )}
             {!isEmpty && (
-              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={() => { tpmStore.clear(); toast.success('Cleared'); }}>
+              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={() => { tpmStore.clear(); toast.success('Cleared'); }} aria-label="Clear chat history">
                 <Trash2 className="h-3 w-3" />
               </Button>
             )}
-            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={onClose}>
+            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={onClose} aria-label="Close chat">
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -701,7 +701,8 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                           <span className="text-[9px] tabular-nums text-muted-foreground/40">· {((msg.durationMs || 0) / 1000).toFixed(1)}s</span>
                           {(msg.tokensPerSec || 0) > 0 && <span className="text-[9px] tabular-nums text-emerald-500/50">· {msg.tokensPerSec}/s</span>}
                           <button onClick={() => copyMsg(i, msg.content)}
-                            className="ml-0.5 h-5 px-1.5 flex items-center gap-1 rounded hover:bg-muted text-muted-foreground/40 hover:text-muted-foreground transition-all">
+                            className="ml-0.5 h-5 px-1.5 flex items-center gap-1 rounded hover:bg-muted text-muted-foreground/40 hover:text-muted-foreground transition-all"
+                            aria-label="Copy message">
                             {copiedMsg === i ? <Check className="h-2.5 w-2.5 text-emerald-500" /> : <Copy className="h-2.5 w-2.5" />}
                           </button>
                         </div>
@@ -778,14 +779,14 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               <p className="text-[9px] text-muted-foreground/30">⏎ send · ⇧⏎ newline</p>
               <div className="flex items-center gap-1">
                 {streaming ? (
-                  <Button size="icon" variant="outline" className="h-7 w-7 rounded-lg border-foreground/20 text-foreground/50 hover:bg-foreground/10" onClick={handleStop}>
+                  <Button size="icon" variant="outline" className="h-7 w-7 rounded-lg border-foreground/20 text-foreground/50 hover:bg-foreground/10" onClick={handleStop} aria-label="Stop text generation">
                     <Square className="h-3 w-3 fill-current" />
                   </Button>
                 ) : (
                   <Button size="icon"
                     className={cn('h-7 w-7 rounded-lg shadow-sm transition-all',
                       input.trim() ? 'bg-foreground text-background hover:opacity-90' : 'bg-foreground/8 text-foreground/25 cursor-not-allowed')}
-                    disabled={!input.trim()} onClick={() => handleSend()}>
+                    disabled={!input.trim()} onClick={() => handleSend()} aria-label="Send message">
                     <ArrowUp className="h-3.5 w-3.5" />
                   </Button>
                 )}
@@ -808,7 +809,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                 {selectedTool.duration && <span className="text-[10px] text-muted-foreground/50 font-normal">{(selectedTool.duration / 1000).toFixed(2)}s</span>}
               </>}
             </DialogTitle>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedTool(null)}>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedTool(null)} aria-label="Close tool details">
               <X className="h-3.5 w-3.5" />
             </Button>
           </DialogHeader>

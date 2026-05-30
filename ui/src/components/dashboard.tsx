@@ -175,8 +175,10 @@ export default function Dashboard() {
     });
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'roadmap' || hash === 'stories' || hash === 'dashboard') {
+      if (hash === 'roadmap' || hash === 'stories') {
         setActiveTab('plan');
+      } else if (hash === 'dashboard') {
+        setActiveTab('dashboard');
       } else if (hash === 'queue') {
         setActiveTab('build');
       } else if (VALID_TABS.includes(hash)) {
@@ -705,7 +707,7 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOutputPanelOpen(false)}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOutputPanelOpen(false)} aria-label="Close output panel">
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -738,7 +740,7 @@ export default function Dashboard() {
                   </span>
                 )}
               </div>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOutputPanelOpen(false)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOutputPanelOpen(false)} aria-label="Close output panel">
                 <X className="h-3.5 w-3.5" />
               </Button>
             </div>

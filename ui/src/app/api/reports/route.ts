@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const logs = getBuildLogs() || [];
     
-    let totalBuilds = logs.length;
+    const totalBuilds = logs.length;
     let successfulBuilds = 0;
     let failedBuilds = 0;
     let totalTokensIn = 0;

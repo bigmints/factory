@@ -262,6 +262,15 @@ export function KnowledgeView() {
   const hbLastSeen = hb?.last_seen ? new Date(hb.last_seen as string) : null;
   const hbAge = hbLastSeen ? Math.round((Date.now() - hbLastSeen.getTime()) / 60000) : null;
 
+  const formatHeartbeatAge = (minutes: number) => {
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
   const formatDate = (iso: string) => {
     if (!iso) return '';
     const d = new Date(iso);
@@ -323,7 +332,7 @@ export function KnowledgeView() {
           )}>
             <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', hbIsAlive ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground')} />
             <span>{hbIsAlive ? 'Agent alive' : 'No heartbeat'}</span>
-            {hbAge !== null && <span className="text-muted-foreground font-mono">{hbAge}m ago</span>}
+            {hbAge !== null && <span className="text-muted-foreground font-mono">{formatHeartbeatAge(hbAge)}</span>}
           </div>
         </div>
       ) : (
@@ -341,7 +350,7 @@ export function KnowledgeView() {
           )}>
             <span className={cn('h-2 w-2 rounded-full shrink-0', hbIsAlive ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground')} />
             <span className="hidden sm:block">{hbIsAlive ? 'Agent alive' : 'No heartbeat'}</span>
-            {hbAge !== null && <span className="text-muted-foreground">{hbAge}m ago</span>}
+            {hbAge !== null && <span className="text-muted-foreground">{formatHeartbeatAge(hbAge)}</span>}
           </div>
         </div>
       )}
@@ -423,10 +432,16 @@ export function KnowledgeView() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0">
-                {Object.entries(context.project).map(([k, v]) => (
-                  <div key={k} className="flex flex-col gap-0.5">
+                {Object.entries(context.project || {}).map(([k, v]) => (
+                  <div key={k} className={cn("flex flex-col gap-0.5", k === 'readme_summary' && "col-span-full mt-2")}>
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{k.replace(/_/g, ' ')}</span>
-                    <span className="text-xs text-foreground font-medium">{String(v)}</span>
+                    {k === 'readme_summary' ? (
+                      <div className="text-xs text-muted-foreground border rounded-lg p-3 bg-muted/40 max-h-60 overflow-y-auto mt-1 select-text">
+                        <MarkdownBlock content={String(v)} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-foreground font-medium">{String(v)}</span>
+                    )}
                   </div>
                 ))}
               </CardContent>

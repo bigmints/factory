@@ -94,10 +94,18 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
     errorBreakdown: [],
   };
 
-  const successRate = stats.totalBuilds > 0
-    ? Math.round((stats.successfulBuilds / stats.totalBuilds) * 100)
+  const totalBuilds = stats.totalBuilds || 0;
+  const successfulBuilds = stats.successfulBuilds || 0;
+  const failedBuilds = stats.failedBuilds || 0;
+  const totalTokensIn = stats.totalTokensIn || 0;
+  const totalTokensOut = stats.totalTokensOut || 0;
+  const uniqueStories = stats.uniqueStories || stats.uniqueSpecs || 0;
+  const avgDurationMs = stats.avgDurationMs || 0;
+
+  const successRate = totalBuilds > 0
+    ? Math.round((successfulBuilds / totalBuilds) * 100)
     : 0;
-  const totalTokens = stats.totalTokensIn + stats.totalTokensOut;
+  const totalTokens = totalTokensIn + totalTokensOut;
 
   const errorBreakdown = stats.errorBreakdown ?? [];
   const llmErrors = errorBreakdown.find(e => e.error_source === 'llm')?.count || 0;
@@ -108,23 +116,23 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
       {/* Minimal Stats Ribbon */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground border-b border-border/40 pb-4">
         <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-violet-500 shrink-0" />
-          <span className="font-semibold text-foreground">{stats.totalBuilds}</span> Total Builds
-          <span className="text-[10px] text-muted-foreground/60 font-mono">({stats.uniqueStories ?? stats.uniqueSpecs ?? 0} unique)</span>
+          <span className="h-2.5 w-2.5 rounded-full bg-violet-500 shrink-0" />
+          <span className="font-semibold text-foreground">{totalBuilds}</span> Total Builds
+          <span className="text-[10px] text-muted-foreground/60 font-mono">({uniqueStories} unique)</span>
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
           <span className="font-semibold text-foreground">{successRate}%</span> Success Rate
-          <span className="text-[10px] text-muted-foreground/60">({stats.successfulBuilds} passed / {stats.failedBuilds} failed)</span>
+          <span className="text-[10px] text-muted-foreground/60">({successfulBuilds} passed / {failedBuilds} failed)</span>
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0" />
           <span className="font-semibold text-foreground">{formatTokens(totalTokens)}</span> Tokens Used
-          <span className="text-[10px] text-muted-foreground/60 font-mono">({formatTokens(stats.totalTokensIn)} in / {formatTokens(stats.totalTokensOut)} out)</span>
+          <span className="text-[10px] text-muted-foreground/60 font-mono">({formatTokens(totalTokensIn)} in / {formatTokens(totalTokensOut)} out)</span>
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
-          Average Duration: <span className="font-semibold text-foreground">{stats.avgDurationMs > 0 ? formatDuration(stats.avgDurationMs) : '—'}</span>
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shrink-0" />
+          Average Duration: <span className="font-semibold text-foreground">{avgDurationMs > 0 ? formatDuration(avgDurationMs) : '—'}</span>
         </span>
       </div>
 
@@ -141,8 +149,8 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
           ) : (
             <div className="space-y-4">
               {(stats.modelUsage ?? []).map((m) => {
-                const pct = stats.totalBuilds > 0
-                  ? Math.round((m.count / stats.totalBuilds) * 100)
+                const pct = totalBuilds > 0
+                  ? Math.round((m.count / totalBuilds) * 100)
                   : 0;
                 return (
                   <div key={`${m.provider}-${m.model}`} className="space-y-1.5">
@@ -176,7 +184,7 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="text-[10px] font-bold uppercase tracking-wider">Error Breakdown</span>
           </div>
-          {stats.failedBuilds === 0 ? (
+          {failedBuilds === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60 space-y-2">
               <CheckCircle2 className="h-8 w-8 text-muted-foreground/40" />
               <p className="text-xs font-medium">No errors recorded</p>
@@ -203,13 +211,13 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
                   <p className="text-[9px] text-muted-foreground">Compilation or toolchain failures</p>
                 </div>
               </div>
-              {stats.failedBuilds - llmErrors - engineErrors > 0 && (
+              {failedBuilds - llmErrors - engineErrors > 0 && (
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-card/5">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-muted-foreground/40 shrink-0" />
                     <span className="text-xs font-medium text-muted-foreground">Unclassified</span>
                   </div>
-                  <span className="text-sm font-bold text-muted-foreground">{stats.failedBuilds - llmErrors - engineErrors}</span>
+                  <span className="text-sm font-bold text-muted-foreground">{failedBuilds - llmErrors - engineErrors}</span>
                 </div>
               )}
             </div>

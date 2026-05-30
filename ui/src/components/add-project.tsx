@@ -318,9 +318,12 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
       icon: <IconFolder className="size-3 sm:size-4" />,
       content: (
         <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-3 sm:mt-4">
-            <Card
-               className="cursor-pointer flex flex-col items-center gap-2 text-center hover:bg-accent hover:text-accent-foreground transition-colors group p-4 sm:p-6"
+            <div
+               role="button"
+               tabIndex={0}
+               className="cursor-pointer rounded-xl border bg-card text-card-foreground shadow-sm flex flex-col items-center gap-2 text-center hover:bg-accent hover:text-accent-foreground transition-colors group p-4 sm:p-6 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                onClick={() => setBrowseMode('new')}
+               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setBrowseMode('new'); } }}
              >
                <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-muted group-hover:bg-accent transition-colors">
                  <IconFolderPlus className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
@@ -331,11 +334,14 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                    Create & initialize
                  </p>
                </div>
-            </Card>
+            </div>
 
-            <Card
-               className="cursor-pointer flex flex-col items-center gap-2 text-center hover:bg-accent hover:text-accent-foreground transition-colors group p-4 sm:p-6"
+            <div
+               role="button"
+               tabIndex={0}
+               className="cursor-pointer rounded-xl border bg-card text-card-foreground shadow-sm flex flex-col items-center gap-2 text-center hover:bg-accent hover:text-accent-foreground transition-colors group p-4 sm:p-6 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                onClick={() => setBrowseMode('existing')}
+               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setBrowseMode('existing'); } }}
              >
                <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-muted group-hover:bg-accent transition-colors">
                  <IconFolderOpen className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
@@ -346,7 +352,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                    Connect local path
                  </p>
                </div>
-            </Card>
+            </div>
         </div>
       ),
       summary: pendingPath ? (

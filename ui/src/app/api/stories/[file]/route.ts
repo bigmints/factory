@@ -39,7 +39,7 @@ function resolveStoryPath(file: string): string | null {
   if (!base) return null;
 
   // Clean the file path of common prefixes
-  let cleaned = file
+  const cleaned = file
     .replace(/^(\.?\.?\/)?(\.factory\/)?(stories\/)?/, '') // remove leading ./, .factory/, stories/
     .trim();
 

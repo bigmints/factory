@@ -686,6 +686,7 @@ export function SettingsView() {
                     size="icon" 
                     onClick={() => setIsAddingProvider(false)} 
                     className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/15"
+                    aria-label="Close dialog"
                   >
                     <XCircle className="h-4 w-4" />
                   </Button>
@@ -794,6 +795,7 @@ export function SettingsView() {
                     }} 
                     className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/15"
                     title="Go back"
+                    aria-label="Go back"
                   >
                     <XCircle className="h-4 w-4" />
                   </Button>
@@ -837,6 +839,7 @@ export function SettingsView() {
                           type="button" 
                           onClick={() => setModalShowKey(!modalShowKey)} 
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label={modalShowKey ? "Hide API key" : "Show API key"}
                         >
                           {modalShowKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                         </button>

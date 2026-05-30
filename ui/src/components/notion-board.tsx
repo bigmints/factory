@@ -1736,12 +1736,39 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
         {/* Controls & Filter Bar — single row on mobile, two rows on desktop */}
         <div className="flex flex-col gap-1.5 select-none">
-          <div className="flex items-center gap-1.5 justify-between">
-            {/* Left: Tasks label */}
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
-              <ListTodo className="h-3.5 w-3.5" />
-              <span>All Tasks</span>
-              <span className="tabular-nums text-[10px] bg-muted border rounded px-1.5 py-0.5 text-foreground/70">{filteredStoriesList.length}</span>
+            {/* Left: Tasks label + View Mode Switcher */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                <ListTodo className="h-3.5 w-3.5" />
+                <span>All Tasks</span>
+                <span className="tabular-nums text-[10px] bg-muted border rounded px-1.5 py-0.5 text-foreground/70">{filteredStoriesList.length}</span>
+              </div>
+
+              {/* View Switcher segment group */}
+              <div className="rounded-lg bg-muted p-0.5 flex items-center border border-border/80 select-none ml-1 sm:ml-2">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md px-2 py-1 text-[10px] sm:text-xs font-bold transition-all tap-shrink min-h-[26px] cursor-pointer",
+                    viewMode === 'list' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  aria-label="List View"
+                >
+                  <ListTodo className="h-3 w-3 shrink-0" />
+                  <span className="hidden sm:inline">List</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('board')}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md px-2 py-1 text-[10px] sm:text-xs font-bold transition-all tap-shrink min-h-[26px] cursor-pointer",
+                    viewMode === 'board' ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  aria-label="Board View"
+                >
+                  <Columns className="h-3 w-3 shrink-0" />
+                  <span className="hidden sm:inline">Board</span>
+                </button>
+              </div>
             </div>
 
             {/* Right: actions */}
@@ -1871,7 +1898,6 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
             </div>
           )}
         </div>
-      </div>
 
 
 
@@ -1941,9 +1967,9 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       />
 
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* 3. FLAT TASK LIST — single unified list, no hierarchy, no kanban       */}
+      {/* 3. FLAT TASK LIST — single unified list, no hierarchy                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {(viewMode === 'list' || viewMode === 'board') && (
+      {viewMode === 'list' && (
         <FlatTaskList
           stories={filteredStoriesList}
           mergedStories={mergedStories}
@@ -1952,6 +1978,28 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
           handleValidateStory={handleValidateStory}
           handleSingleBuild={handleSingleBuild}
           activeAction={activeAction}
+          bootstrapped={bootstrapped}
+          scaffoldStoryFile={scaffoldStoryFile}
+        />
+      )}
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* 4. KANBAN BOARD — 4 columns desktop layout / snap carousel mobile      */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'board' && (
+        <MobileKanbanBoard
+          backlogStories={backlogStories}
+          readyStories={readyStories}
+          buildingStories={buildingStories}
+          doneStories={doneStories}
+          mergedStories={mergedStories}
+          epicColorMap={epicColorMap}
+          handleOpenDrawer={handleOpenDrawer}
+          handleValidateStory={handleValidateStory}
+          handleSingleBuild={handleSingleBuild}
+          activeAction={activeAction}
+          showEpicLegend={showEpicLegend}
+          appRollup={appRollup}
           bootstrapped={bootstrapped}
           scaffoldStoryFile={scaffoldStoryFile}
         />

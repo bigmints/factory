@@ -279,8 +279,9 @@ export function SkillsView() {
                 <button
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   onClick={() => setSearchQuery('')}
+                  aria-label="Clear search query"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
@@ -401,13 +402,14 @@ export function SkillsView() {
                       <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
 
                       <div className="flex items-center gap-1">
-                        <Tooltip>
+                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground rounded-md"
                               onClick={() => handleCopyInstructions(skill)}
+                              aria-label="Copy skill instructions"
                             >
                               {copiedId === skill.id ? (
                                 <Check className="h-3.5 w-3.5 text-emerald-500" />
@@ -426,6 +428,7 @@ export function SkillsView() {
                               size="icon"
                               className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground rounded-md"
                               onClick={() => openEditDialog(skill)}
+                              aria-label="Edit skill"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
@@ -440,6 +443,7 @@ export function SkillsView() {
                               size="icon"
                               className="h-8 w-8 shrink-0 text-destructive hover:text-destructive rounded-md"
                               onClick={() => setDeleteTarget(skill)}
+                              aria-label="Delete skill"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -452,6 +456,7 @@ export function SkillsView() {
                           size="icon"
                           className="h-8 w-8 rounded-md text-muted-foreground hover:bg-muted"
                           onClick={() => setExpandedSkill(isExpanded ? null : skill.id)}
+                          aria-label="Toggle skill details"
                         >
                           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </Button>

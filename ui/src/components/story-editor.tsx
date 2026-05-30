@@ -407,6 +407,8 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
                       <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Local Server Port</label>
                       <input
                         type="number"
+                        min={1024}
+                        max={65535}
                         value={parsedFields.port}
                         onChange={(e) => updateField('port', parseInt(e.target.value) || 3000)}
                         className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"

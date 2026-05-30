@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { parse as yamlParse } from 'yaml';
+import { homedir } from 'os';
 
 interface ADR {
   id: string;
@@ -39,114 +40,195 @@ interface WorkflowEntry {
   file: string;
 }
 
+const FACTORY_ROOT = path.resolve(homedir(), '.factory');
+
 function getProjectRoot(): string {
-  // Try to get from engine config
-  const engineConfig = path.resolve(process.cwd(), '../../.factory/factory.yaml');
+  // 1. Read active project from projects.json in FACTORY_ROOT
+  const projectsPath = path.join(FACTORY_ROOT, 'projects.json');
+  if (fs.existsSync(projectsPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'));
+      if (config.activeProject) {
+        const project = config.projects?.find((p: any) => p.id === config.activeProject);
+        if (project && project.path) {
+          return project.path;
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 2. Try to get from engine config relative to process.cwd() (ui/)
+  const engineConfig = path.resolve(process.cwd(), '../.factory/factory.yaml');
   if (fs.existsSync(engineConfig)) {
     try {
       const c = yamlParse(fs.readFileSync(engineConfig, 'utf8')) as Record<string, string>;
       if (c?.factory_home) return c.factory_home as string;
     } catch { /* ignore */ }
   }
-  // Default: the factory project root (two levels up from ui/)
+
+  // 3. Fallback to process.cwd() / .. if running within the factory repo
+  const possibleLocalRoot = path.resolve(process.cwd(), '..');
+  if (fs.existsSync(path.join(possibleLocalRoot, '.factory'))) {
+    return possibleLocalRoot;
+  }
+
+  // 4. Default: two levels up from ui/ (e.g. /Users/pretheesh/Projects)
   return path.resolve(process.cwd(), '../..');
 }
 
 function readAdrs(projectRoot: string): ADR[] {
-  const adrDir = path.join(projectRoot, 'docs', 'adr');
-  if (!fs.existsSync(adrDir)) return [];
-  const files = fs.readdirSync(adrDir).filter(f => f.endsWith('.md')).sort();
-  return files.map(file => {
-    const content = fs.readFileSync(path.join(adrDir, file), 'utf8');
-    // Extract title from first H1
-    const titleMatch = content.match(/^# (.+)$/m);
-    const title = titleMatch?.[1] || file.replace('.md', '');
-    // Extract status
-    const statusMatch = content.match(/\*\*Status\*\*:\s*(.+)/);
-    const status = statusMatch?.[1]?.trim() || 'Unknown';
-    // Extract date
-    const dateMatch = content.match(/\*\*Date\*\*:\s*(.+)/);
-    const date = dateMatch?.[1]?.trim() || '';
-    const id = file.replace('.md', '');
-    return { id, title, status, date, content, file };
-  });
+  const adrs: ADR[] = [];
+  const adrDirs = [
+    { path: path.join(projectRoot, 'docs', 'adr'), type: 'docs' },
+    { path: path.join(projectRoot, '.factory', 'knowledge'), type: 'factory' }
+  ];
+
+  for (const dirInfo of adrDirs) {
+    const dir = dirInfo.path;
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      const mdFiles = entries
+        .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
+        .map(entry => entry.name)
+        .sort();
+
+      for (const file of mdFiles) {
+        const fullPath = path.join(dir, file);
+        const content = fs.readFileSync(fullPath, 'utf8');
+        // Extract title from first H1
+        const titleMatch = content.match(/^# (.+)$/m);
+        const title = titleMatch?.[1] || file.replace('.md', '');
+        // Extract status
+        const statusMatch = content.match(/^(?:\*\*)?Status(?:\*\*)?:\s*(.+)$/im);
+        const status = statusMatch?.[1]?.trim() || 'Unknown';
+        // Extract date
+        const dateMatch = content.match(/^(?:\*\*)?Date(?:\*\*)?:\s*(.+)$/im);
+        const date = dateMatch?.[1]?.trim() || '';
+        const id = file.replace('.md', '');
+        adrs.push({ id, title, status, date, content, file: path.join(dirInfo.type, file) });
+      }
+    } catch { /* ignore */ }
+  }
+  return adrs;
 }
 
 function readContext(projectRoot: string): Record<string, unknown> {
-  const contextFile = path.join(projectRoot, '.factory', 'context', 'context.yaml');
-  if (!fs.existsSync(contextFile)) return {};
-  try {
-    return yamlParse(fs.readFileSync(contextFile, 'utf8')) as Record<string, unknown>;
-  } catch { return {}; }
+  const contextCandidates = [
+    path.join(projectRoot, '.factory', 'logs', 'state.yaml'),
+    path.join(projectRoot, '.factory', 'context', 'context.yaml'),
+    path.join(projectRoot, '.factory', 'logs', 'state.toon'),
+    path.join(projectRoot, '.factory', 'context', 'context.toon'),
+  ];
+
+  for (const file of contextCandidates) {
+    if (fs.existsSync(file)) {
+      try {
+        return yamlParse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+      } catch { /* ignore */ }
+    }
+  }
+  return {};
 }
 
 function readWorklog(projectRoot: string): WorklogEntry[] {
-  const worklogFile = path.join(projectRoot, '.factory', 'context', 'worklog.yaml');
-  if (!fs.existsSync(worklogFile)) return [];
-  try {
-    const raw = yamlParse(fs.readFileSync(worklogFile, 'utf8')) as Record<string, unknown>;
-    // Handle both array format and YAML entries format
-    if (Array.isArray(raw)) return raw as WorklogEntry[];
-    // Handle "entries[N]{date,message}:" format by parsing the raw text
-    const text = fs.readFileSync(worklogFile, 'utf8');
-    const lines = text.split('\n');
-    const entries: WorklogEntry[] = [];
-    for (const line of lines) {
-      const m = line.match(/^\s+"([^"]+)","([^"]+)"/);
-      if (m) entries.push({ date: m[1], message: m[2] });
+  const worklogCandidates = [
+    path.join(projectRoot, '.factory', 'logs', 'worklog.yaml'),
+    path.join(projectRoot, '.factory', 'context', 'worklog.yaml'),
+    path.join(projectRoot, '.factory', 'logs', 'worklog.toon'),
+    path.join(projectRoot, '.factory', 'context', 'worklog.toon'),
+  ];
+
+  for (const file of worklogCandidates) {
+    if (fs.existsSync(file)) {
+      try {
+        const raw = yamlParse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+        if (Array.isArray(raw)) return raw as WorklogEntry[];
+        const text = fs.readFileSync(file, 'utf8');
+        const lines = text.split('\n');
+        const entries: WorklogEntry[] = [];
+        for (const line of lines) {
+          const m = line.match(/^\s+"([^"]+)","([^"]+)"/);
+          if (m) entries.push({ date: m[1], message: m[2] });
+        }
+        if (entries.length > 0) return entries.reverse();
+      } catch { /* ignore */ }
     }
-    return entries.reverse(); // newest first
-  } catch { return []; }
+  }
+  return [];
 }
 
 function readHeartbeat(projectRoot: string): Record<string, unknown> {
-  const hbFile = path.join(projectRoot, '.factory', 'context', 'heartbeat.yaml');
-  if (!fs.existsSync(hbFile)) return {};
-  try {
-    return yamlParse(fs.readFileSync(hbFile, 'utf8')) as Record<string, unknown>;
-  } catch { return {}; }
+  const heartbeatCandidates = [
+    path.join(projectRoot, '.factory', 'logs', 'heartbeat.yaml'),
+    path.join(projectRoot, '.factory', 'context', 'heartbeat.yaml'),
+    path.join(projectRoot, '.factory', 'logs', 'heartbeat.toon'),
+    path.join(projectRoot, '.factory', 'context', 'heartbeat.toon'),
+  ];
+
+  for (const file of heartbeatCandidates) {
+    if (fs.existsSync(file)) {
+      try {
+        return yamlParse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+      } catch { /* ignore */ }
+    }
+  }
+  return {};
 }
 
 function readFailures(projectRoot: string): FailureEntry[] {
-  const failDir = path.join(projectRoot, '.factory', 'knowledge', 'failures');
-  if (!fs.existsSync(failDir)) return [];
-  const files = fs.readdirSync(failDir).filter(f => f.endsWith('.md')).sort().reverse();
-  return files.map(file => {
-    const content = fs.readFileSync(path.join(failDir, file), 'utf8');
-    const titleMatch = content.match(/^# (.+)$/m);
-    const title = titleMatch?.[1] || file.replace('.md', '');
-    const dateMatch = content.match(/\*\*Date:\*\*\s*(.+)/);
-    const date = dateMatch?.[1]?.trim() || '';
-    const catMatch = content.match(/\*\*Category:\*\*\s*(.+)/);
-    const category = catMatch?.[1]?.trim() || '';
-    const durMatch = content.match(/\*\*Duration:\*\*\s*(.+)/);
-    const duration = durMatch?.[1]?.trim() || '';
-    const errorMatch = content.match(/## Error\s*```[\w]*\n([\s\S]+?)```/);
-    const error = errorMatch?.[1]?.trim() || '';
-    const actionMatch = content.match(/## Action\n([\s\S]+?)(?:\n##|$)/);
-    const action = actionMatch?.[1]?.trim() || '';
-    const id = file.replace('.md', '');
-    return { id, title, date, category, duration, error, action, content, file };
-  });
+  const failDirs = [
+    path.join(projectRoot, '.factory', 'logs', 'failures'),
+    path.join(projectRoot, '.factory', 'knowledge', 'failures')
+  ];
+
+  for (const failDir of failDirs) {
+    if (!fs.existsSync(failDir)) continue;
+    try {
+      const files = fs.readdirSync(failDir).filter(f => f.endsWith('.md')).sort().reverse();
+      if (files.length === 0) continue;
+      return files.map(file => {
+        const content = fs.readFileSync(path.join(failDir, file), 'utf8');
+        const titleMatch = content.match(/^# (.+)$/m);
+        const title = titleMatch?.[1] || file.replace('.md', '');
+        const dateMatch = content.match(/\*\*Date:\*\*\s*(.+)/i);
+        const date = dateMatch?.[1]?.trim() || '';
+        const catMatch = content.match(/\*\*Category:\*\*\s*(.+)/i);
+        const category = catMatch?.[1]?.trim() || '';
+        const durMatch = content.match(/\*\*Duration:\*\*\s*(.+)/i);
+        const duration = durMatch?.[1]?.trim() || '';
+        const errorMatch = content.match(/## Error\s*```[\w]*\n([\s\S]+?)```/i);
+        const error = errorMatch?.[1]?.trim() || '';
+        const actionMatch = content.match(/## Action\n([\s\S]+?)(?:\n##|$)/i);
+        const action = actionMatch?.[1]?.trim() || '';
+        const id = file.replace('.md', '');
+        return { id, title, date, category, duration, error, action, content, file };
+      });
+    } catch { /* ignore */ }
+  }
+  return [];
 }
 
 function readWorkflows(projectRoot: string): WorkflowEntry[] {
   const wfDir = path.join(projectRoot, '.factory', 'workflows');
   if (!fs.existsSync(wfDir)) return [];
-  const files = fs.readdirSync(wfDir).filter(f => f.endsWith('.md')).sort();
-  return files.map(file => {
-    const content = fs.readFileSync(path.join(wfDir, file), 'utf8');
-    const titleMatch = content.match(/^#+ (.+)$/m);
-    const title = titleMatch?.[1] || file.replace('.md', '');
-    const id = file.replace('.md', '');
-    return { id, title, content, file };
-  });
+  try {
+    const files = fs.readdirSync(wfDir).filter(f => f.endsWith('.md')).sort();
+    return files.map(file => {
+      const content = fs.readFileSync(path.join(wfDir, file), 'utf8');
+      const titleMatch = content.match(/^#+ (.+)$/m);
+      const title = titleMatch?.[1] || file.replace('.md', '');
+      const id = file.replace('.md', '');
+      return { id, title, content, file };
+    });
+  } catch {
+    return [];
+  }
 }
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const section = url.searchParams.get('section') || 'all';
     const query = url.searchParams.get('q') || '';
 
     const projectRoot = getProjectRoot();

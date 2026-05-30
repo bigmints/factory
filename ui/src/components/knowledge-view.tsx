@@ -22,6 +22,9 @@ import {
   Workflow,
   Zap,
   Server,
+  Factory,
+  Tag,
+  Database,
 } from 'lucide-react';
 
 interface ADR {
@@ -207,14 +210,25 @@ export function KnowledgeView() {
   const [worklog, setWorklog] = useState<WorklogEntry[]>([]);
   const [failures, setFailures] = useState<FailureEntry[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowEntry[]>([]);
-  const [stats, setStats] = useState<KnowledgeStats>({ adrs: 0, failures: 0, workflows: 0, worklogEntries: 0 });
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<KnowledgeStats>({ adrs: 0, failures: 0, workflows: 0, worklogEntries: 0 });
+  const [appRollup, setAppRollup] = useState<any>(null);
 
   // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(searchQuery), 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  const fetchAppRollup = useCallback(async () => {
+    try {
+      const res = await fetch('/api/app-rollup');
+      if (res.ok) {
+        const json = await res.json();
+        setAppRollup(json);
+      }
+    } catch {}
+  }, []);
 
   const fetchKnowledge = useCallback(async (q = '') => {
     setLoading(true);
@@ -237,7 +251,10 @@ export function KnowledgeView() {
     }
   }, []);
 
-  useEffect(() => { fetchKnowledge(debouncedQuery); }, [fetchKnowledge, debouncedQuery]);
+  useEffect(() => {
+    fetchKnowledge(debouncedQuery);
+    fetchAppRollup();
+  }, [fetchKnowledge, fetchAppRollup, debouncedQuery]);
 
   const hb = heartbeat?.heartbeat || heartbeat as Record<string, string>;
   const hbStatus = hb?.status || 'unknown';
@@ -257,24 +274,77 @@ export function KnowledgeView() {
 
   return (
     <div className="space-y-6 md:space-y-8 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">Knowledge Base</h1>
-          <p className="text-sm text-muted-foreground">
-            ADRs, architecture context, workflows, and failure records
-          </p>
+      {/* Active App Header Block (Moved under ADRs & Knowledge) */}
+      {appRollup ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/55 pb-4 gap-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="h-10 w-10 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center shrink-0">
+              <Factory className="h-5 w-5 text-primary shrink-0 animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-sm md:text-lg font-extrabold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
+                <span className="truncate">{appRollup.name || 'Loading Project...'}</span>
+                <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0.5 border-border bg-muted/40 uppercase shrink-0">
+                  v{appRollup.version || '0.0.1'}
+                </Badge>
+              </h1>
+              {/* Stack badges */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground/80 mt-1">
+                {appRollup.stack && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
+                      <Zap className="h-2.5 w-2.5 text-amber-500 shrink-0" /> {appRollup.stack.framework}
+                    </Badge>
+                    {appRollup.stack.language && (
+                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
+                        <Tag className="h-2.5 w-2.5 text-blue-500 shrink-0" /> {appRollup.stack.language}
+                      </Badge>
+                    )}
+                    {appRollup.stack.database && (
+                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
+                        <Database className="h-2.5 w-2.5 text-purple-500 shrink-0" /> {appRollup.stack.database}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                {appRollup.description && (
+                  <span className="hidden md:inline text-[10px] text-muted-foreground/60 border-l border-border/40 pl-3 max-w-xl truncate" title={appRollup.description}>
+                    {appRollup.description}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Heartbeat pill */}
+          <div className={cn(
+            'flex items-center gap-2 px-2.5 py-1 rounded-full border text-[10px] font-medium shrink-0 self-start sm:self-center',
+            hbIsAlive ? 'border-green-500/40 bg-green-500/10 text-green-600' : 'border-muted bg-muted/50 text-muted-foreground'
+          )}>
+            <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', hbIsAlive ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground')} />
+            <span>{hbIsAlive ? 'Agent alive' : 'No heartbeat'}</span>
+            {hbAge !== null && <span className="text-muted-foreground font-mono">{hbAge}m ago</span>}
+          </div>
         </div>
-        {/* Heartbeat pill */}
-        <div className={cn(
-          'flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium shrink-0',
-          hbIsAlive ? 'border-green-500/40 bg-green-500/10 text-green-600' : 'border-muted bg-muted/50 text-muted-foreground'
-        )}>
-          <span className={cn('h-2 w-2 rounded-full shrink-0', hbIsAlive ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground')} />
-          <span className="hidden sm:block">{hbIsAlive ? 'Agent alive' : 'No heartbeat'}</span>
-          {hbAge !== null && <span className="text-muted-foreground">{hbAge}m ago</span>}
+      ) : (
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">Knowledge Base</h1>
+            <p className="text-sm text-muted-foreground">
+              ADRs, architecture context, workflows, and failure records
+            </p>
+          </div>
+          {/* Heartbeat pill */}
+          <div className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium shrink-0',
+            hbIsAlive ? 'border-green-500/40 bg-green-500/10 text-green-600' : 'border-muted bg-muted/50 text-muted-foreground'
+          )}>
+            <span className={cn('h-2 w-2 rounded-full shrink-0', hbIsAlive ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground')} />
+            <span className="hidden sm:block">{hbIsAlive ? 'Agent alive' : 'No heartbeat'}</span>
+            {hbAge !== null && <span className="text-muted-foreground">{hbAge}m ago</span>}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

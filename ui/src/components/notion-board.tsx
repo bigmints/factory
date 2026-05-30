@@ -1730,52 +1730,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       {/* 1. TOP HEADER CONSOLE                                                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
       <div className="space-y-2 md:space-y-4 pb-3 md:pb-4 select-none shrink-0 border-b border-border/40 px-1">
-        {/* Main flex-row: Project Info on Left, Actions on Right */}
-        <div className="flex items-center justify-between gap-2">
-          
-          {/* Left Column: Title + version */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Factory className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0 animate-pulse" />
-            <div className="min-w-0">
-              <h1 className="text-sm md:text-xl font-extrabold tracking-tight text-foreground flex items-center gap-1.5 flex-wrap">
-                <span className="truncate">{appRollup?.name || 'Loading Project...'}</span>
-                <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0.5 border-border bg-muted/40 uppercase shrink-0">
-                  v{appRollup?.version || '0.0.1'}
-                </Badge>
-                {queueRunning && (
-                  <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                )}
-              </h1>
-              {/* Stack badges — hidden on mobile to save space */}
-              <div className="hidden md:flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground/80 mt-1">
-                {appRollup?.stack && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
-                      <Zap className="h-2.5 w-2.5 text-amber-500 shrink-0" /> {appRollup.stack.framework}
-                    </Badge>
-                    {appRollup.stack.language && (
-                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
-                        <Tag className="h-2.5 w-2.5 text-blue-500 shrink-0" /> {appRollup.stack.language}
-                      </Badge>
-                    )}
-                    {appRollup.stack.database && (
-                      <Badge variant="outline" className="text-[9px] font-semibold text-muted-foreground/80 py-0.5 px-1.5 bg-muted/20 flex items-center gap-1">
-                        <Database className="h-2.5 w-2.5 text-purple-500 shrink-0" /> {appRollup.stack.database}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-                {appRollup?.description && (
-                  <span className="text-[10.5px] text-muted-foreground/60 border-l border-border/40 pl-3 max-w-xl truncate" title={appRollup.description}>
-                    {appRollup.description}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
 
-
-        </div>
 
         {/* Controls & Filter Bar — single row on mobile, two rows on desktop */}
         <div className="flex flex-col gap-1.5 select-none">

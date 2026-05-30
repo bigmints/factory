@@ -3093,26 +3093,6 @@ function KanbanColumn({
         <p className="text-[10px] text-muted-foreground/60 leading-normal line-clamp-1">{description}</p>
       </div>
 
-      {/* Scaffold banner — shown only in Ready to Build when project is not bootstrapped */}
-      {title === 'Ready to Build' && !bootstrapped && (
-        <div className="shrink-0 flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border-b border-amber-500/25 select-none">
-          <Wrench className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-bold text-amber-300 leading-tight">Scaffold required first</p>
-            <p className="text-[10px] text-amber-400/70 leading-snug mt-0.5">
-              Build the <strong className="text-amber-300">Scaffold &amp; Foundation</strong> epic before feature stories can compile.
-            </p>
-            {scaffoldStoryFile && (
-              <button
-                className="mt-1.5 text-[10px] font-semibold text-amber-300 border border-amber-500/40 rounded px-2 py-0.5 hover:bg-amber-500/10 transition-colors"
-                onClick={() => onBuild(scaffoldStoryFile, 'AppStory')}
-              >
-                Build Scaffold →
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Story list */}
       <div className="flex-1 overflow-y-auto divide-y divide-border/20 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-26T12:40:15Z"
-  host: "BigMac-2"
-  task: "post-commit: fix(tpm-chat): full-height layout on desktop — always-mounted flex sibling, correct min-h-0 chain, mobile fixed drawer"
+  last_seen: "2026-05-30T12:33:41Z"
+  host: "Mac"
+  task: "post-commit: feat(ui): ask to add scaffold to ready to build if draft when triggered"
   status: alive

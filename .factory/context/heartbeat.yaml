@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:34:13Z"
+  last_seen: "2026-05-30T15:35:31Z"
   host: "Mac"
-  task: "post-commit: fix(ui): fix chat panel layout by constraining SidebarInset height and changing to standard sidebar"
+  task: "post-commit: fix(ui): move output button from content area to header next to TPM chat button"
   status: alive

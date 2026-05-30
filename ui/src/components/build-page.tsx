@@ -191,6 +191,208 @@ function LogLine({ line }: { line: string }) {
   );
 }
 
+// ─── Conversation Parser ───────────────────────────────────────────────────────
+
+interface ConvTurn {
+  id: number;
+  cli: string;
+  brief: string;       // TPM's prompt
+  response: string;    // CLI's stdout
+  complete: boolean;   // CLI_OUTPUT_END seen
+}
+
+function parseConversation(raw: string): ConvTurn[] {
+  const turns: ConvTurn[] = [];
+  // Split on the = separator that precedes each delegate_to_cli header
+  const segments = raw.split(/\n={50,}\n/);
+
+  for (const seg of segments) {
+    const headerMatch = seg.match(/\[.*?\] delegate_to_cli\s*[→-]+\s*(\w+)/);
+    if (!headerMatch) continue;
+
+    const cli = headerMatch[1];
+    const briefMatch = seg.match(/### TPM_BRIEF_START ###\n([\s\S]*?)\n### TPM_BRIEF_END ###/);
+    const outputMatch = seg.match(/### CLI_OUTPUT_START ###\n([\s\S]*?)(?:### CLI_OUTPUT_END ###|$)/);
+    const complete = seg.includes('### CLI_OUTPUT_END ###');
+
+    turns.push({
+      id: turns.length,
+      cli,
+      brief: briefMatch ? briefMatch[1].trim() : '',
+      response: outputMatch ? outputMatch[1].trim() : '',
+      complete,
+    });
+  }
+  return turns;
+}
+
+// ─── Conversation View ─────────────────────────────────────────────────────────
+
+function ConversationView({ raw, cliName, isRunning }: {
+  raw: string;
+  cliName: string;
+  isRunning: boolean;
+}) {
+  const turns = useMemo(() => parseConversation(raw), [raw]);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [turns.length, turns.at(-1)?.response.length]);
+
+  if (turns.length === 0) return null;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 scrollbar-thin min-h-0">
+      {turns.map((turn) => (
+        <div key={turn.id} className="space-y-3">
+
+          {/* TPM bubble — left */}
+          {turn.brief && (
+            <div className="flex items-start gap-3 max-w-[88%]">
+              <div className="shrink-0 h-7 w-7 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-[10px] font-bold text-violet-400 font-mono mt-0.5">
+                TPM
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-semibold text-violet-400 font-sans">Task Manager</span>
+                  {turn.id === 0
+                    ? <span className="text-[9px] text-zinc-600 font-mono">initial brief</span>
+                    : <span className="text-[9px] text-zinc-600 font-mono">follow-up · turn {turn.id + 1}</span>}
+                </div>
+                <div className="bg-violet-950/30 border border-violet-800/30 rounded-xl rounded-tl-sm px-3.5 py-2.5">
+                  {/* Show first meaningful section of brief */}
+                  <BriefPreview brief={turn.brief} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CLI bubble — right */}
+          {(turn.response || (!turn.complete && isRunning)) && (
+            <div className="flex items-start gap-3 max-w-[88%] ml-auto flex-row-reverse">
+              <div className={cn(
+                'shrink-0 h-7 w-7 rounded-full border flex items-center justify-center text-[9px] font-bold font-mono mt-0.5 shrink-0',
+                !turn.complete && isRunning
+                  ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+              )}>
+                {turn.cli.slice(0, 3).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5 justify-end">
+                  {!turn.complete && isRunning && (
+                    <span className="flex items-center gap-1 text-[9px] text-emerald-400 font-mono">
+                      <span className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" />
+                      typing…
+                    </span>
+                  )}
+                  <span className="text-[10px] font-semibold text-zinc-400 font-sans capitalize">{turn.cli}</span>
+                </div>
+                <div className="bg-zinc-900/80 border border-zinc-800/60 rounded-xl rounded-tr-sm px-3.5 py-2.5">
+                  {turn.response ? (
+                    <CliResponsePreview text={turn.response} />
+                  ) : (
+                    <div className="flex items-center gap-2 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      <div ref={bottomRef} />
+    </div>
+  );
+}
+
+/** Renders a short, readable preview of the TPM brief */
+function BriefPreview({ brief }: { brief: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Extract just the story name + description (skip big IMPLEMENTATION INSTRUCTIONS blocks)
+  const lines = brief.split('\n');
+  const storyLine = lines.find(l => l.startsWith('# STORY:') || l.startsWith('## STORY'));
+  const descStart = lines.findIndex(l => l.startsWith('## DESCRIPTION'));
+  const implStart = lines.findIndex(l => l.startsWith('## IMPLEMENTATION') || l.startsWith('## WHAT NOT'));
+  const descLines = descStart >= 0
+    ? lines.slice(descStart + 1, implStart > descStart ? implStart : descStart + 8).filter(Boolean)
+    : [];
+
+  const summary = [
+    storyLine?.replace(/^#+\s*/, ''),
+    ...descLines.slice(0, 4),
+  ].filter(Boolean).join('\n');
+
+  const hasMore = brief.length > summary.length + 50;
+
+  return (
+    <div>
+      <p className="text-[11.5px] text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
+        {expanded ? brief : summary || brief.slice(0, 300)}
+      </p>
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(p => !p)}
+          className="mt-1.5 text-[10px] text-violet-400 hover:text-violet-300 font-sans"
+        >
+          {expanded ? 'Show less' : 'Show full brief…'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Renders CLI response with color-coded lines, collapsed if very long */
+function CliResponsePreview({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = text.split('\n').filter(l => l.trim());
+  const preview = lines.slice(0, 12);
+  const hasMore = lines.length > 12;
+
+  const renderLine = (line: string, i: number) => {
+    const isError = /\berror\b/i.test(line) && !/yolo/i.test(line);
+    const isSuccess = /✓|✔|done|complete|success/i.test(line);
+    const isWarn = /\bwarn/i.test(line);
+    const isBoilerplate = /yolo mode|ripgrep|falling back|all tool calls/i.test(line);
+
+    if (isBoilerplate) return null; // skip noise
+
+    return (
+      <p key={i} className={cn(
+        'text-[11.5px] leading-relaxed font-sans',
+        isError && 'text-rose-400 font-medium',
+        isSuccess && !isError && 'text-emerald-400',
+        isWarn && !isError && !isSuccess && 'text-amber-400',
+        !isError && !isSuccess && !isWarn && 'text-zinc-300',
+      )}>
+        {line}
+      </p>
+    );
+  };
+
+  const rendered = (expanded ? lines : preview).map(renderLine).filter(Boolean);
+
+  return (
+    <div className="space-y-0.5">
+      {rendered}
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(p => !p)}
+          className="mt-1.5 text-[10px] text-zinc-500 hover:text-zinc-300 font-sans"
+        >
+          {expanded ? 'Show less' : `+${lines.length - 12} more lines…`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+
 // ─── Build Page ───────────────────────────────────────────────────────────────
 
 export function BuildPage() {
@@ -208,6 +410,17 @@ export function BuildPage() {
   const [mobilePanelTab, setMobilePanelTab] = useState<'queue' | 'logs'>('queue');
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const sseRef = useRef<EventSource | null>(null);
+  const [elapsed, setElapsed] = useState(0); // seconds since startedAt
+
+  // Live elapsed timer — ticks every second while running
+  useEffect(() => {
+    const runningItem = queueItems.find(i => i.status === 'running');
+    if (!runningItem?.startedAt) { setElapsed(0); return; }
+    const tick = () => setElapsed(Math.floor((Date.now() - new Date(runningItem.startedAt!).getTime()) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [queueItems]);
 
   // ── Story name resolution (slug → human name from scaffold/stories APIs) ──
   const [storyNameMap, setStoryNameMap] = useState<Map<string, string>>(new Map());
@@ -376,7 +589,31 @@ export function BuildPage() {
     return m ? taskToLabel(m[1].trim()) : null;
   }, [heartbeatRaw]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // Strip internal headers/separators from log before display
+  const cleanLog = (raw: string) =>
+    raw
+      .split('\n')
+      .filter(l => {
+        const t = l.trim();
+        if (!t) return false;
+        if (/^=+$/.test(t)) return false;                    // === separators
+        if (/^\[\d{4}-\d{2}-\d{2}.*\] delegate_to_cli/.test(t)) return false; // timestamp header
+        if (/^\[\d{4}-\d{2}-\d{2}.*\] CLI exited/.test(t)) return false;
+        if (/^CWD:/.test(t)) return false;                   // CWD: /path
+        if (/^\(log:/.test(t)) return false;                 // (log: /path)
+        if (/^Waiting for CLI to start/.test(t)) return false;
+        return true;
+      })
+      .join('\n');
+
+  const cleanedLog = cleanLog(panelLog);
+  const hasRealLog = cleanedLog.trim().length > 0;
+
+  const formatElapsed = (s: number) => {
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60); const sec = s % 60;
+    return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
+  };
 
   const handleStartQueue = async () => {
     setStartingQueue(true);
@@ -785,15 +1022,22 @@ export function BuildPage() {
                 {isSelectedRunning && (
                   <div className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/50 px-5 py-4">
 
-                    {/* Current activity line */}
-                    <div className="flex items-center gap-2.5 mb-3">
-                      <span className="relative flex h-2 w-2 shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
-                      </span>
-                      <span className="text-[13px] font-medium text-white font-sans">
-                        {heartbeatTask || 'Getting started…'}
-                      </span>
+                    {/* Activity + elapsed time */}
+                    <div className="flex items-center justify-between gap-4 mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
+                        </span>
+                        <span className="text-[13px] font-medium text-white font-sans">
+                          {heartbeatTask || 'Getting started…'}
+                        </span>
+                      </div>
+                      {elapsed > 0 && (
+                        <span className="text-[11px] text-zinc-500 font-mono tabular-nums shrink-0">
+                          {formatElapsed(elapsed)}
+                        </span>
+                      )}
                     </div>
 
                     {/* AI summary bullets */}
@@ -801,7 +1045,7 @@ export function BuildPage() {
                       <div className="space-y-1.5 pl-4 border-l border-zinc-800">
                         <div className="flex items-center gap-1.5 mb-2">
                           <Sparkles className="h-3 w-3 text-amber-400/70" />
-                          <span className="text-[10px] text-zinc-500 font-sans">Last update · {new Date(aiSummary.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="text-[10px] text-zinc-500 font-sans">Updated {new Date(aiSummary.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                         {aiSummary.text.split('\n').filter(Boolean).map((line, i) => (
                           <p key={i} className="text-[12px] text-zinc-300 font-sans leading-relaxed">
@@ -811,7 +1055,13 @@ export function BuildPage() {
                       </div>
                     ) : (
                       <div className="pl-4 border-l border-zinc-800">
-                        <p className="text-[12px] text-zinc-500 font-sans">Starting up — this usually takes a moment.</p>
+                        <p className="text-[12px] text-zinc-500 font-sans">
+                          {elapsed < 30
+                            ? 'Starting up…'
+                            : elapsed < 120
+                            ? 'Thinking… the AI is reading the codebase and planning.'
+                            : 'Working on it… this task is taking a bit longer than usual.'}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -847,52 +1097,22 @@ export function BuildPage() {
                   </div>
                 )}
 
-                {/* Collapsible raw log — filtered of internal paths */}
-                {panelLog && panelLog.replace(/\(log:.*?\)\n?/g, '').replace(/Waiting for CLI to start\.\n?/g, '').trim() ? (
+                {/* Conversation view — TPM ↔ CLI bubbles */}
+                {hasRealLog ? (
                   <div className="flex flex-col flex-1 overflow-hidden min-h-0">
-                    <button
-                      onClick={() => setRawLogOpen(p => !p)}
-                      className="shrink-0 flex items-center justify-between px-5 py-2 border-b border-zinc-800/40 hover:bg-zinc-900/30 transition-colors group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Terminal className="h-3 w-3 text-zinc-600 group-hover:text-zinc-400" />
-                        <span className="text-[10px] font-medium text-zinc-600 group-hover:text-zinc-400 font-sans">
-                          View full log
-                        </span>
-                        {!rawLogOpen && (
-                          <span className="text-[9px] text-zinc-700 font-mono">
-                            ({panelLog.split('\n').length} lines)
-                          </span>
-                        )}
-                      </div>
-                      {rawLogOpen
-                        ? <ChevronUp className="h-3 w-3 text-zinc-600" />
-                        : <ChevronDown className="h-3 w-3 text-zinc-600" />}
-                    </button>
-
-                    {rawLogOpen && (
-                      <div className="flex-1 overflow-y-auto p-4 scrollbar-thin min-h-0 bg-black/30">
-                        <div className="space-y-px">
-                          {panelLog
-                            .replace(/\(log:.*?\)\n?/g, '')
-                            .replace(/Waiting for CLI to start\.\n?/g, '')
-                            .split('\n')
-                            .map((line, i) => <LogLine key={i} line={line} />)
-                          }
-                          <div ref={terminalEndRef} />
-                        </div>
-                      </div>
-                    )}
+                    <ConversationView
+                      raw={panelLog}
+                      cliName={selectedItem.engine || 'gemini'}
+                      isRunning={isSelectedRunning}
+                    />
                   </div>
-                ) : (
-                  selectedItem.status === 'pending' && (
-                    <div className="flex flex-col items-center justify-center flex-1 text-center py-16">
-                      <div className="h-8 w-8 rounded-full border-2 border-zinc-800 border-t-violet-500 animate-spin mb-4" />
-                      <p className="text-sm font-medium text-zinc-400 font-sans">Waiting in queue</p>
-                      <p className="text-xs text-zinc-600 font-sans mt-1">Will start once the current task finishes.</p>
-                    </div>
-                  )
-                )}
+                ) : selectedItem.status === 'pending' ? (
+                  <div className="flex flex-col items-center justify-center flex-1 text-center py-16">
+                    <div className="h-8 w-8 rounded-full border-2 border-zinc-800 border-t-violet-500 animate-spin mb-4" />
+                    <p className="text-sm font-medium text-zinc-400 font-sans">Waiting in queue</p>
+                    <p className="text-xs text-zinc-600 font-sans mt-1">Will start once the current task finishes.</p>
+                  </div>
+                ) : null}
               </div>
             </>
           ) : (

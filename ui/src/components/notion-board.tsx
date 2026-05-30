@@ -11,6 +11,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu';
 import { NewProjectGuide } from '@/components/new-project-guide';
 import {
   Rocket, Play, Square, ExternalLink, Terminal, Settings, Activity,
@@ -2272,324 +2283,233 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       {/* 6. SLIDING DETAILS DRAWER                                             */}
       {/* ────────────────────────────────────────────────────────────────────── */}
       <Sheet open={drawerOpen} onOpenChange={(open) => { setDrawerOpen(open); if (!open) { setEditMode(false); setDeleteConfirm(false); } }}>
-        <SheetContent className="w-full sm:max-w-2xl bg-background border-l border-border/60 shadow-2xl flex flex-col p-0 overflow-hidden focus:outline-none">
+        <SheetContent 
+          side="bottom" 
+          className="w-full sm:max-w-md mx-auto bg-zinc-950/95 backdrop-blur-md border-t border-border/40 shadow-2xl flex flex-col p-0 overflow-hidden focus:outline-none rounded-t-2xl max-h-[85vh]"
+        >
           {selectedItem && (
-            <div className="flex flex-col h-full min-h-0">
+            <div className="flex flex-col h-full min-h-0 divide-y divide-border/20 text-zinc-300">
 
               {/* ── Header ── */}
-              <div className="shrink-0 border-b border-border/50 bg-muted/20 px-5 py-4 space-y-3">
-                <div className="flex items-center gap-1.5">
-                    {selectedItem.type === 'story' && (
-                      <span className="text-[10px] text-zinc-500 font-mono">
-                        {selectedItem.data.kind === 'FeatureStory' ? 'feature' : 'app story'}
-                      </span>
-                    )}
-                  </div>
-                <SheetTitle className="text-lg font-bold text-white leading-snug pr-2 tracking-tight">
+              <div className="shrink-0 px-6 py-5 space-y-1 relative bg-muted/5">
+                <div className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                  {selectedItem.type === 'story'
+                    ? (selectedItem.data.kind === 'FeatureStory' ? 'Feature spec story' : 'App bootstrap story')
+                    : 'Story sub-task'}
+                </div>
+                <SheetTitle className="text-base font-bold text-white tracking-tight pr-6 select-all">
                   {selectedItem.type === 'task' ? selectedItem.data.title : getStoryTitle(selectedItem.data)}
                 </SheetTitle>
-                {selectedItem.type === 'task' ? (
-                  <SheetDescription className="text-xs text-zinc-500 leading-relaxed line-clamp-2 pr-2">
-                    {selectedItem.parentStory?.name || ''}
-                  </SheetDescription>
-                ) : getStoryDesc(selectedItem.data) ? (
-                  <SheetDescription className="text-sm text-zinc-400 leading-relaxed line-clamp-3 pr-2 mt-1">
+                {selectedItem.type === 'story' && getStoryDesc(selectedItem.data) && (
+                  <p className="text-xs text-zinc-400 font-sans leading-relaxed mt-1 select-all">
                     {getStoryDesc(selectedItem.data)}
-                  </SheetDescription>
-                ) : null}
-
+                  </p>
+                )}
               </div>
 
-              {/* ── Action Bar ── */}
-              {selectedItem.type === 'story' && (
-                <div className="shrink-0 border-b border-border/40 bg-muted/10 px-4 py-2.5 flex items-center gap-1.5 flex-wrap">
-                  {!editMode ? (
-                    <>
-                      <div className="flex-1" />
-                      <Button size="sm" variant="ghost" disabled={loadingYaml}
-                        onClick={() => { setEditMode(true); setStoryTab('raw'); }}
-                        className="h-7 px-3 gap-1.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">
-                        <Pencil className="h-3.5 w-3.5" /> Edit
-                      </Button>
-                      {!deleteConfirm ? (
-                        <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(true)}
-                          className="h-7 px-3 gap-1.5 text-[11px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 font-sans">
-                          <Trash2 className="h-3.5 w-3.5" /> Delete
-                        </Button>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-rose-400 font-semibold font-sans">Delete?</span>
-                          <Button size="sm" onClick={() => handleDeleteStory(selectedItem.data.file, selectedItem.data.name)}
-                            className="h-7 px-2.5 text-[11px] bg-rose-600 hover:bg-rose-500 text-white font-semibold font-sans">Yes</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(false)}
-                            className="h-7 px-2.5 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">No</Button>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Button size="sm" disabled={savingYaml} onClick={() => handleSaveYaml(selectedItem.data.file)}
-                        className="h-7 px-3 gap-1.5 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-semibold font-sans">
-                        {savingYaml ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                        Save changes
-                      </Button>
-                      <Button size="sm" variant="ghost"
-                        onClick={() => { setEditMode(false); setEditedYaml(yamlContent || ''); setStoryTab('raw'); }}
-                        className="h-7 px-3 text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 font-sans">
-                        Cancel
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )}
+              {/* ── Empty Details Page Body with Centered Actions Popover Trigger ── */}
+              <div className="flex-1 flex flex-col items-center justify-center py-20 px-6 space-y-3 bg-zinc-950">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className="h-10 px-5 gap-2.5 rounded-full border-border/40 bg-zinc-900 text-xs font-bold text-zinc-200 hover:bg-zinc-800 hover:text-white shadow-xl hover:shadow-2xl transition-all cursor-pointer"
+                    >
+                      <Sliders className="h-3.5 w-3.5 text-primary shrink-0" />
+                      Actions Menu
+                      <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
+                    </Button>
+                  </DropdownMenuTrigger>
 
+                  <DropdownMenuContent 
+                    align="center" 
+                    side="top"
+                    sideOffset={10}
+                    className="w-56 bg-zinc-900 border border-border/30 p-1 text-zinc-300 font-sans shadow-2xl rounded-xl z-50 focus:outline-none"
+                  >
+                    {selectedItem.type === 'story' ? (
+                      <>
+                        <DropdownMenuLabel className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-2 py-1 font-mono">
+                          Story Operations
+                        </DropdownMenuLabel>
+                        
+                        {/* Status Change Sub-menu */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs font-medium cursor-pointer py-2 focus:bg-zinc-800 focus:text-white rounded-md">
+                            <Activity className="h-3.5 w-3.5 text-zinc-500" />
+                            <span>Change Status</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-40 bg-zinc-900 border border-border/30 p-1 text-zinc-300 shadow-xl rounded-lg">
+                            {(['draft', 'ready', 'review', 'done'] as const).map(status => {
+                              const isActive = (selectedItem.data.status || 'draft') === status;
+                              const labelMap: Record<string, string> = {
+                                draft: 'Draft',
+                                ready: 'Ready to Build',
+                                review: 'In Review',
+                                done: 'Done',
+                              };
+                              const dotColorMap: Record<string, string> = {
+                                draft: 'bg-zinc-500',
+                                ready: 'bg-indigo-500',
+                                review: 'bg-amber-500',
+                                done: 'bg-emerald-500',
+                              };
+                              return (
+                                <DropdownMenuItem
+                                  key={status}
+                                  onClick={() => {
+                                    handleUpdateStoryStatus(selectedItem.data.file, status);
+                                    setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, status } } : null);
+                                  }}
+                                  className="text-xs py-2 px-2.5 cursor-pointer flex items-center justify-between focus:bg-zinc-800 focus:text-white rounded-md"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", dotColorMap[status])} />
+                                    <span>{labelMap[status]}</span>
+                                  </div>
+                                  {isActive && <Check className="h-3 w-3 text-primary shrink-0" />}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
 
+                        <DropdownMenuSeparator className="bg-border/20 my-1" />
 
-              {/* ── Tabs ── */}
-              {selectedItem.type === 'story' && (
-                <div className="shrink-0 border-b border-border/40 bg-muted/10 px-4 flex items-end">
-                  {([{ key: 'spec', label: 'Spec' }, { key: 'raw', label: 'YAML' }, { key: 'tasks', label: 'Tasks' }] as const).map(({ key, label }) => (
-                    <button key={key} onClick={() => setStoryTab(key)}
-                      className={cn('px-3 py-2.5 text-[11px] font-semibold border-b-2 transition-all font-sans',
-                        storyTab === key ? 'border-violet-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
-                      )}>
-                      {label}
-                      {key === 'tasks' && (selectedItem.data.checklistTasks?.length ?? 0) > 0 && (
-                        <span className="ml-1.5 text-[9px] bg-zinc-700 text-zinc-300 rounded-full px-1.5 font-mono">{selectedItem.data.checklistTasks.length}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+                        {/* Build Spec Story */}
+                        <DropdownMenuItem
+                          onClick={() => {
+                            handleEnqueue(selectedItem.data.file, selectedItem.data.kind);
+                            setDrawerOpen(false);
+                          }}
+                          className="text-xs font-semibold py-2 cursor-pointer text-primary focus:bg-primary/10 focus:text-primary rounded-md flex items-center gap-2"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          <span>Build spec feature</span>
+                        </DropdownMenuItem>
 
-              {/* ── Content Body ── */}
-              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800">
+                        {/* Edit Specifications */}
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditingStory({ file: selectedItem.data.file, name: selectedItem.data.name });
+                            setDrawerOpen(false);
+                          }}
+                          className="text-xs py-2 cursor-pointer focus:bg-zinc-800 focus:text-white rounded-md flex items-center gap-2"
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-zinc-400" />
+                          <span>Edit specifications</span>
+                        </DropdownMenuItem>
 
-                {/* TASK DETAIL */}
-                {selectedItem.type === 'task' && (
-                  <div className="p-5 space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Status</label>
-                      <select value={selectedItem.data.status}
-                        onChange={e => handleUpdateTaskStatus(selectedItem.data.fullId, e.target.value as any)}
-                        className="w-full h-9 rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-100 px-3 focus:outline-none focus:ring-1 focus:ring-violet-500">
-                        <option value="pending">Pending</option>
-                        <option value="running">Running</option>
-                        <option value="completed">Completed</option>
-                        <option value="failed">Failed</option>
-                      </select>
-                    </div>
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-2 text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className="text-zinc-500">Task ID</span>
-                        <span className="font-mono text-zinc-200 font-bold">{selectedItem.data.fullId}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-zinc-500">Feature parent</span>
-                        <span className="font-semibold text-zinc-200">{selectedItem.parentFeature?.name || 'General Core'}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                        <DropdownMenuSeparator className="bg-border/20 my-1" />
 
-                {/* STORY — SPEC TAB */}
-                {selectedItem.type === 'story' && storyTab === 'spec' && (
-                  <div className="p-6 space-y-6">
-
-                    {/* Status row */}
-                    <div>
-                      <p className="text-xs font-semibold text-zinc-400 mb-1.5">Status</p>
-                      <select
-                        value={selectedItem.data.status ?? 'draft'}
-                        onChange={e => handleUpdateStoryStatus(selectedItem.data.file, e.target.value)}
-                        className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 text-sm text-zinc-100 px-3 focus:outline-none focus:ring-1 focus:ring-violet-500/60 font-sans cursor-pointer"
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="ready">Ready to build</option>
-                        <option value="review">In review</option>
-                        <option value="done">Done</option>
-                      </select>
-                    </div>
-
-                    {/* Story metadata */}
-                    <div className="space-y-1">
-                      {[
-                        { label: 'File', value: selectedItem.data.file, mono: true },
-                        { label: 'Type', value: selectedItem.data.kind === 'FeatureStory' ? 'Feature' : 'App Story', mono: false },
-                        ...(selectedItem.data.phase ? [{ label: 'Build phase', value: String(selectedItem.data.phase), mono: false }] : []),
-                        ...(selectedItem.data.target?.app ? [{ label: 'Target app', value: selectedItem.data.target.app, mono: true }] : []),
-                      ].map(({ label, value, mono }) => (
-                        <div key={label} className="flex items-start justify-between py-2 border-b border-zinc-800/60 gap-4">
-                          <span className="text-[12px] text-zinc-500">{label}</span>
-                          <span className={cn('text-[12px] text-right', mono ? 'font-mono text-zinc-300 break-all' : 'font-medium text-zinc-200')}>
-                            {value}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Build dependencies */}
-                    {selectedItem.data.dependsOn && selectedItem.data.dependsOn.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold text-zinc-400">Must build first</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {selectedItem.data.dependsOn.map((dep: string) => {
-                            const depStory = mergedStories.find((s: any) => getSlug(s.file) === dep || s.file === dep);
-                            const depStatus = depStory ? getEffectiveStatus(depStory) : 'unknown';
-                            const isDone = depStatus === 'done' || depStatus === 'completed';
-                            return (
-                              <span key={dep}
-                                onClick={() => depStory && handleOpenDrawer(depStory, 'story', undefined, depStory.epicParent)}
-                                className={cn(
-                                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-mono cursor-pointer transition-all',
-                                  isDone
-                                    ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:border-emerald-600/60'
-                                    : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                                )}>
-                                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5 text-zinc-500" />}
-                                {dep}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Related stories */}
-                    {(() => {
-                      const { prerequisites, dependents, peers } = getRelatedStories(selectedItem.data, mergedStories);
-                      const sections = [
-                        { title: 'Depends on', items: prerequisites },
-                        { title: 'Needed by', items: dependents },
-                        { title: 'Same feature group', items: peers },
-                      ].filter(s => s.items.length > 0);
-                      if (!sections.length) return null;
-                      return (
-                        <div className="space-y-4">
-                          {sections.map(({ title, items }) => (
-                            <div key={title} className="space-y-2">
-                              <p className="text-xs font-semibold text-zinc-400">{title}</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {items.map((s: any) => {
-                                  const st = getEffectiveStatus(s);
-                                  const isDone = st === 'done' || st === 'completed';
-                                  return (
-                                    <span key={s.file}
-                                      onClick={() => handleOpenDrawer(s, 'story', undefined, s.epicParent)}
-                                      className={cn(
-                                        'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-mono cursor-pointer transition-all',
-                                        isDone
-                                          ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:border-emerald-600/60'
-                                          : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                                      )}>
-                                      {isDone
-                                        ? <CheckCircle2 className="h-3.5 w-3.5" />
-                                        : <span className={cn('h-2 w-2 rounded-full', storyStatusMap[st]?.dot || 'bg-zinc-600')} />}
-                                      {getSlug(s.file)}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Deployment config */}
-                    {selectedItem.data.deployment && Object.keys(selectedItem.data.deployment).length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold text-zinc-400">Deployment</p>
-                        <div className="space-y-1">
-                          {Object.entries(selectedItem.data.deployment)
-                            .filter(([, v]) => v !== undefined && v !== null)
-                            .map(([k, v]) => (
-                              <div key={k} className="flex items-center justify-between py-2 border-b border-zinc-800/60">
-                                <span className="text-[12px] text-zinc-500 capitalize">{k}</span>
-                                <span className="font-mono text-[12px] text-zinc-300">{String(v)}</span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STORY — RAW YAML TAB */}
-                {selectedItem.type === 'story' && storyTab === 'raw' && (
-                  <div className="flex flex-col" style={{ minHeight: '400px' }}>
-                    <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-zinc-800/60 bg-zinc-900/20">
-                      <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider font-semibold">
-                        {editMode ? 'Editing...' : selectedItem.data.file}
-                      </span>
-                      {!editMode && yamlContent && (
-                        <button onClick={() => { navigator.clipboard.writeText(yamlContent); setCopiedYaml(true); setTimeout(() => setCopiedYaml(false), 1500); }}
-                          className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-200 transition-colors">
-                          <Copy className="h-3 w-3" />{copiedYaml ? 'Copied!' : 'Copy'}
-                        </button>
-                      )}
-                    </div>
-                    {loadingYaml ? (
-                      <div className="flex-1 flex items-center justify-center py-16">
-                        <Loader2 className="h-5 w-5 text-zinc-600 animate-spin" />
-                      </div>
-                    ) : editMode ? (
-                      <textarea value={editedYaml} onChange={e => setEditedYaml(e.target.value)} spellCheck={false}
-                        className="w-full bg-zinc-950 text-zinc-200 font-mono text-[11px] leading-6 p-4 resize-none focus:outline-none focus:ring-1 focus:ring-violet-500/50"
-                        style={{ minHeight: '400px' }}
-                        placeholder="# YAML content..." />
-                    ) : yamlContent ? (
-                      <YamlViewer content={yamlContent} />
-                    ) : (
-                      <div className="flex-1 flex items-center justify-center py-16">
-                        <p className="text-xs text-zinc-600 italic">Failed to load YAML</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STORY — TASKS TAB */}
-                {selectedItem.type === 'story' && storyTab === 'tasks' && (
-                  <div className="p-5 space-y-2">
-                    {selectedItem.data.checklistTasks && selectedItem.data.checklistTasks.length > 0 ? (
-                      selectedItem.data.checklistTasks.map((task: Task) => {
-                        const isDone = task.status === 'completed';
-                        return (
-                          <div key={task.fullId} className={cn('flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border transition-all group',
-                            isDone ? 'border-zinc-800/40 bg-zinc-900/20' : 'border-zinc-800 bg-zinc-900/50')}>
-                            <div className="flex items-start gap-3 min-w-0 flex-1">
-                              <button disabled={updatingTaskId !== null}
-                                onClick={() => handleUpdateTaskStatus(task.fullId, isDone ? 'pending' : 'completed')}
-                                className={cn('h-5 w-5 rounded-md border flex items-center justify-center transition-all shrink-0 mt-0.5',
-                                  isDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-600 hover:border-zinc-400')}>
-                                {isDone && <Check className="h-3 w-3 stroke-[3]" />}
-                              </button>
-                              <span className={cn('text-[11px] leading-snug font-sans', isDone ? 'text-zinc-500 line-through' : 'text-zinc-200')}>
-                                <span className="font-mono text-[9px] text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded border border-zinc-700/50 mr-2">{task.id}</span>
-                                {task.title}
-                              </span>
-                            </div>
-                            <button
-                              disabled={updatingTaskId !== null}
-                              onClick={() => handleDeleteTask(task.fullId)}
-                              className="opacity-0 group-hover:opacity-100 hover:text-red-500 text-zinc-500 p-1 rounded transition-all shrink-0"
-                              title="Delete task"
+                        {/* Delete Story Sub-menu */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs py-2 cursor-pointer text-rose-400 focus:bg-rose-500/10 focus:text-rose-400 rounded-md">
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Delete spec story</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-48 bg-zinc-900 border border-border/30 p-1 text-zinc-300 shadow-xl rounded-lg">
+                            <DropdownMenuLabel className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 py-1 select-none">
+                              Are you absolutely sure?
+                            </DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                handleDeleteStory(selectedItem.data.file, selectedItem.data.name);
+                                setDrawerOpen(false);
+                              }}
+                              className="text-xs font-bold py-2 px-2.5 cursor-pointer text-white bg-rose-600 focus:bg-rose-500 rounded-md mt-1"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })
+                              Yes, permanently delete
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-xs py-2 px-2.5 cursor-pointer focus:bg-zinc-800 focus:text-white rounded-md mt-0.5">
+                              Cancel
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      </>
                     ) : (
-                      <div className="flex flex-col items-center justify-center h-40 text-center">
-                        <ListTodo className="h-7 w-7 text-zinc-700 mb-2" />
-                        <p className="text-xs text-zinc-500 font-sans">No checklist tasks defined.</p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      <>
+                        <DropdownMenuLabel className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-2 py-1 font-mono">
+                          Task Operations
+                        </DropdownMenuLabel>
 
+                        {/* Task Status Sub-menu */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs font-medium cursor-pointer py-2 focus:bg-zinc-800 focus:text-white rounded-md">
+                            <Activity className="h-3.5 w-3.5 text-zinc-500" />
+                            <span>Change Status</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-40 bg-zinc-900 border border-border/30 p-1 text-zinc-300 shadow-xl rounded-lg">
+                            {(['pending', 'running', 'completed', 'failed'] as const).map(status => {
+                              const isActive = selectedItem.data.status === status;
+                              const labelMap: Record<string, string> = {
+                                pending: 'Pending',
+                                running: 'Running',
+                                completed: 'Completed',
+                                failed: 'Failed',
+                              };
+                              const dotColorMap: Record<string, string> = {
+                                pending: 'bg-zinc-500',
+                                running: 'bg-blue-500',
+                                completed: 'bg-emerald-500',
+                                failed: 'bg-rose-500',
+                              };
+                              return (
+                                <DropdownMenuItem
+                                  key={status}
+                                  onClick={() => {
+                                    handleUpdateTaskStatus(selectedItem.data.fullId, status);
+                                    setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, status } } : null);
+                                  }}
+                                  className="text-xs py-2 px-2.5 cursor-pointer flex items-center justify-between focus:bg-zinc-800 focus:text-white rounded-md"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", dotColorMap[status])} />
+                                    <span>{labelMap[status]}</span>
+                                  </div>
+                                  {isActive && <Check className="h-3 w-3 text-primary shrink-0" />}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+
+                        <DropdownMenuSeparator className="bg-border/20 my-1" />
+
+                        {/* Delete Task Sub-menu */}
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger className="text-xs py-2 cursor-pointer text-rose-400 focus:bg-rose-500/10 focus:text-rose-400 rounded-md">
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Delete task</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-48 bg-zinc-900 border border-border/30 p-1 text-zinc-300 shadow-xl rounded-lg">
+                            <DropdownMenuLabel className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 py-1 select-none">
+                              Are you absolutely sure?
+                            </DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                handleDeleteTask(selectedItem.data.fullId);
+                                setDrawerOpen(false);
+                              }}
+                              className="text-xs font-bold py-2 px-2.5 cursor-pointer text-white bg-rose-600 focus:bg-rose-500 rounded-md mt-1"
+                            >
+                              Yes, permanently delete
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-xs py-2 px-2.5 cursor-pointer focus:bg-zinc-800 focus:text-white rounded-md mt-0.5">
+                              Cancel
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <span className="text-[9px] text-zinc-600 font-mono tracking-wider uppercase select-none">
+                  Click to open actions popover
+                </span>
               </div>
+
             </div>
           )}
         </SheetContent>

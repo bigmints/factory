@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:36:05Z"
+  last_seen: "2026-05-30T15:40:18Z"
   host: "Mac"
-  task: "post-commit: feat(ui): redesign story details drawer to restore specs and YAML viewer/editor"
+  task: "post-commit: fix(ui): solve list-view story details drawer empty layout bug by deriving target type correctly"
   status: alive

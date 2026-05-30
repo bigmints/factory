@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:30:34Z"
+  last_seen: "2026-05-30T15:34:13Z"
   host: "Mac"
-  task: "post-commit: feat(engine): priority btw follow-ups and thread routing for agy CLI"
+  task: "post-commit: fix(ui): fix chat panel layout by constraining SidebarInset height and changing to standard sidebar"
   status: alive

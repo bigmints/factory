@@ -586,8 +586,26 @@ export default function Dashboard() {
               </BreadcrumbList>
             </Breadcrumb>
           </div>
-          {/* Right panel trigger — same ghost/size-7 style as SidebarTrigger */}
-          <div className="px-2">
+          {/* Right panel triggers — same ghost/size-7 style as SidebarTrigger */}
+          <div className="px-2 flex items-center gap-1.5">
+            {showOutputButton && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 relative"
+                onClick={() => setOutputPanelOpen((v) => !v)}
+                title="Toggle Output Panel"
+              >
+                <Terminal className="h-4 w-4" />
+                {queueRunning && (
+                  <span className="absolute top-0.5 right-0.5 flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                  </span>
+                )}
+                <span className="sr-only">Toggle Output Panel</span>
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -622,26 +640,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-                {/* Output button — shown when there's output available */}
-                {showOutputButton && (
-                  <div className="flex justify-end mb-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => setOutputPanelOpen(true)}
-                    >
-                      <Terminal className="h-4 w-4" />
-                      Output
-                      {queueRunning && (
-                        <span className="relative flex h-2 w-2">
-                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                           <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                        </span>
-                      )}
-                    </Button>
-                  </div>
-                )}
+
 
                 {activeTab === 'plan' && <NotionBoard initialView="list" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setTpmChatOpen(true)} className="flex-1 min-h-0" />}
                 {activeTab === 'build' && <BuildPage />}

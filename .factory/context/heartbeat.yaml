@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:40:32Z"
+  last_seen: "2026-05-30T15:42:09Z"
   host: "Mac"
-  task: "post-commit: fix(ui): move local dev server controls and project sync button to Validation Gates tab"
+  task: "post-commit: fix(ui): change Build button styling to high-visibility indigo to resolve white-on-white text bug"
   status: alive

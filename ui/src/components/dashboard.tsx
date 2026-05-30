@@ -67,11 +67,11 @@ interface ValidationCheck {
 const VALID_TABS = ['plan', 'tpm', 'build', 'test', 'deploy', 'roadmap', 'queue', 'dashboard', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
 
 const TAB_TITLES: Record<string, string> = {
-  plan: "Sprint & Backlog Board",
+  plan: "Stories",
   build: "Autonomous Build Queue",
   test: "Validation Gates & Tests",
   deploy: "Production Deployments",
-  dashboard: "Sprint & Backlog Board",
+  dashboard: "Stories",
   skills: "Custom Agentic Skills",
   reports: "Build Performance Analytics",
   knowledge: "Context & Architecture Decisions (ADR)",

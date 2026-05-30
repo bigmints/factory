@@ -37,7 +37,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 const navMain = [
-  { title: "Sprint & Backlog", id: "plan",   icon: LayoutDashboard },
+  { title: "Stories", id: "plan",   icon: LayoutDashboard },
   { title: "Build Pipeline",  id: "build",  icon: Rocket },
   { title: "Validation Gates",id: "test",   icon: FlaskConical },
   { title: "Deploy Workspace",id: "deploy", icon: Globe },

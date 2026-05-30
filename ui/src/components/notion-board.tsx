@@ -2819,7 +2819,7 @@ function MobileKanbanBoard({
       <div
         className="flex md:hidden flex-col"
         style={{
-          height: 'calc(100dvh - 176px - 80px - env(safe-area-inset-bottom, 0px))',
+          height: 'calc(100dvh - 176px - env(safe-area-inset-bottom, 0px))',
         }}
       >
         {/* Column dot indicator */}

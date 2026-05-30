@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:09:41Z"
+  last_seen: "2026-05-30T15:30:34Z"
   host: "Mac"
-  task: "post-commit: docs: update task checklist and walkthrough for backlog drawer refactoring"
+  task: "post-commit: feat(engine): priority btw follow-ups and thread routing for agy CLI"
   status: alive

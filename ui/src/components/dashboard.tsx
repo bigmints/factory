@@ -570,7 +570,7 @@ export default function Dashboard() {
         projectRefreshKey={projectRefreshKey}
       />
 
-      <SidebarInset>
+      <SidebarInset className="h-screen overflow-hidden flex flex-col">
         {/* Page header — pure shadcn sidebar-08 pattern */}
         <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur-md">
           <div className="flex items-center gap-2 px-4 flex-1">

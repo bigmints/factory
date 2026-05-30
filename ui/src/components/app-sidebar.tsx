@@ -63,7 +63,7 @@ export function AppSidebar({
   ...props
 }: AppSidebarProps) {
   return (
-    <Sidebar variant="inset" {...props}>
+    <Sidebar variant="sidebar" {...props}>
       {/* Header: logo + project switcher */}
       <SidebarHeader>
         <SidebarMenu>

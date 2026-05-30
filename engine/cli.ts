@@ -566,19 +566,31 @@ async function handleFeature(subcommand?: string, storyPath?: string): Promise<v
             // Orchestrator delegates to the configured CLI — no writeFiles() needed after.
             const result = await runFeaturePipeline(story, blueprint, targetDir, storyPath);
 
-            // Archive completed story + update status
-            updateStoryStatus(storyPath, 'done');
-            await updateStoryStatusInApp(storyPath, 'done');
-            archiveStory(storyPath);
+            if (result.success) {
+                // Archive + update status ONLY on actual success
+                updateStoryStatus(storyPath, 'done');
+                await updateStoryStatusInApp(storyPath, 'done');
+                archiveStory(storyPath);
 
-            // Git commit + push
-            const commitTarget = story.target?.app || story.feature.name || 'fix';
-            gitCommit(project.path, `factory: feature ${story.feature.name} → ${commitTarget}`);
-            gitPush(project.path);
+                const commitTarget = story.target?.app || story.feature.name || 'fix';
+                gitCommit(project.path, `factory: feature ${story.feature.name} → ${commitTarget}`);
+                gitPush(project.path);
 
-            log('✓', `Feature built: ${result.files.length} files`);
-            console.log('');
-            break;
+                log('✓', `Feature built: ${result.files.length} files`);
+                console.log('');
+                process.exit(0);
+            } else {
+                // Orchestration failed — mark story as needing review, do NOT archive
+                updateStoryStatus(storyPath, 'review');
+                await updateStoryStatusInApp(storyPath, 'review');
+
+                log('✗', `Feature build FAILED: ${story.feature.name}`);
+                for (const e of (result.errors || []).slice(0, 5)) {
+                    log('  ', `  • ${e.slice(0, 200)}`);
+                }
+                console.log('');
+                process.exit(1);  // non-zero → queue/start route marks this item 'failed'
+            }
         }
         default:
             console.error(`Unknown feature command: ${subcommand}`);

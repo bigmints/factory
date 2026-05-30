@@ -3012,15 +3012,13 @@ function MobileKanbanBoard({
     { title: 'Completed', desc: 'Code written and tests passed', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10', stories: doneStories, status: 'done', dot: 'bg-emerald-400' },
   ] as const;
 
-  // eslint-disable-next-line react-compiler/react-compiler
-  const onScroll = useCallback(() => {
+  const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     const colWidth = el.scrollWidth / COLS.length;
     const idx = Math.round(el.scrollLeft / colWidth);
     setActiveCol(Math.max(0, Math.min(COLS.length - 1, idx)));
-
-  }, []);
+  };
 
   // Scroll to a column on dot click
   const scrollToCol = (i: number) => {

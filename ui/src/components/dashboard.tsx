@@ -108,6 +108,7 @@ export default function Dashboard() {
   const [isBuildingAll, setIsBuildingAll] = useState(false);
   const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
   const [queueRunning, setQueueRunning] = useState(false);
+  const [hasLoopWarning, setHasLoopWarning] = useState(false);
 
   const logOffsetRef = useRef(0);
   const isInitialLoad = useRef(true);
@@ -143,7 +144,7 @@ export default function Dashboard() {
 
   const fetchReports = useCallback(async () => {
     try {
-      const res = await fetch('/api/knowledge?limit=100');
+      const res = await fetch('/api/reports');
       const data = await res.json();
       setReportEntries(data.entries || []);
       setReportStats(data.stats || null);
@@ -217,6 +218,13 @@ export default function Dashboard() {
     const interval = setInterval(pollLog, 1500);
     return () => clearInterval(interval);
   }, [queueRunning]);
+
+  useEffect(() => {
+    const isLoop = buildOutput.includes('⚠ CLI intervention: LOOP') || 
+                   buildOutput.includes('loop detected') || 
+                   buildOutput.includes('intervention: LOOP');
+    setHasLoopWarning(isLoop);
+  }, [buildOutput]);
 
   const handleValidate = async (file: string) => {
     setActiveAction({ type: 'validate', file });
@@ -568,6 +576,8 @@ export default function Dashboard() {
         }}
         onAddProject={() => setShowAddProject(true)}
         projectRefreshKey={projectRefreshKey}
+        queueRunning={queueRunning}
+        hasLoopWarning={hasLoopWarning}
       />
 
       <SidebarInset className="h-screen overflow-hidden flex flex-col">
@@ -599,8 +609,8 @@ export default function Dashboard() {
                 <Terminal className="h-4 w-4" />
                 {queueRunning && (
                   <span className="absolute top-0.5 right-0.5 flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                    <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", hasLoopWarning ? "bg-amber-400" : "bg-emerald-400")} />
+                    <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", hasLoopWarning ? "bg-amber-500" : "bg-emerald-500")} />
                   </span>
                 )}
                 <span className="sr-only">Toggle Output Panel</span>
@@ -690,8 +700,8 @@ export default function Dashboard() {
               <span className="text-sm font-medium">Output</span>
               {(activeAction || queueRunning) && (
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", hasLoopWarning ? "bg-amber-400" : "bg-emerald-400")} />
+                  <span className={cn("relative inline-flex rounded-full h-2 w-2", hasLoopWarning ? "bg-amber-500" : "bg-emerald-500")} />
                 </span>
               )}
             </div>
@@ -723,8 +733,8 @@ export default function Dashboard() {
                 <span className="text-sm font-medium">Output</span>
                 {(activeAction || queueRunning) && (
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", hasLoopWarning ? "bg-amber-400" : "bg-emerald-400")} />
+                    <span className={cn("relative inline-flex rounded-full h-2 w-2", hasLoopWarning ? "bg-amber-500" : "bg-emerald-500")} />
                   </span>
                 )}
               </div>

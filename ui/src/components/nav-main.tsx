@@ -14,11 +14,15 @@ export function NavMain({
   items,
   activeId,
   onSelect,
+  queueRunning,
+  hasLoopWarning,
 }: {
   label: string
   items: { title: string; id: string; icon: LucideIcon }[]
   activeId: string
   onSelect: (id: string) => void
+  queueRunning?: boolean
+  hasLoopWarning?: boolean
 }) {
   return (
     <SidebarGroup>
@@ -33,6 +37,12 @@ export function NavMain({
             >
               <item.icon />
               <span>{item.title}</span>
+              {item.id === 'build' && queueRunning && (
+                <span className="ml-auto flex h-2 w-2 relative">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${hasLoopWarning ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${hasLoopWarning ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                </span>
+              )}
             </SidebarMenuButton>
           </SidebarMenuItem>
         ))}

@@ -8,6 +8,7 @@ import {
   IconCircleCheckFilled, 
   IconCircleDashed,
   IconChevronRight,
+  IconChevronLeft,
   IconLoader2,
   IconDots,
   IconArchive,
@@ -490,15 +491,35 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">Projects</h1>
+          <div className="flex items-center gap-2">
+            {onNavigateToPlan && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 mr-1"
+                onClick={onNavigateToPlan}
+                title="Back to Stories Board"
+              >
+                <IconChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <h1 className="text-xl font-semibold tracking-tight">Projects</h1>
+          </div>
           <p className="text-sm text-muted-foreground">
             Manage your connected repositories
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowModal(true)} className="text-xs">
-            <IconPlus className="h-3.5 w-3.5 mr-2" />
-            Add Project
-        </Button>
+        <div className="flex items-center gap-2">
+          {onNavigateToPlan && (
+            <Button variant="outline" size="sm" onClick={onNavigateToPlan} className="text-xs">
+              Back to Board
+            </Button>
+          )}
+          <Button size="sm" onClick={() => setShowModal(true)} className="text-xs">
+              <IconPlus className="h-3.5 w-3.5 mr-2" />
+              Add Project
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-2 sm:space-y-3">

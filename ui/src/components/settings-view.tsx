@@ -935,6 +935,11 @@ export function SettingsView() {
                     ) : (
                       /* No Models State - Manual Entry Input */
                       <div className="space-y-1.5 p-3 rounded-lg border border-dashed border-border/60 bg-muted/10">
+                        {(selectedTypeToAdd === 'ollama' || editingProvider?.id === 'ollama') && (
+                          <div className="mb-2.5 text-[10px] text-amber-600 dark:text-amber-400 font-medium bg-amber-500/5 p-2.5 border border-amber-500/15 rounded-md leading-normal">
+                            <strong>No models detected:</strong> Make sure Ollama is running locally (<code>ollama serve</code>) and that you have pulled a model (e.g., <code>ollama pull qwen2.5:7b</code>).
+                          </div>
+                        )}
                         <span className="text-[10px] text-muted-foreground block leading-relaxed mb-1">
                           No models discovered. Enter a reference model name manually to continue:
                         </span>

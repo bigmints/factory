@@ -6,9 +6,11 @@ stack:
   framework: node
   packageManager: npm
   linter: eslint
+conventions:
+  rules: .factory/knowledge
+  agents: .factory/AGENTS.md
 agentic:
-  blueprint_dir: .factory/blueprint
-  context_dir: .factory/context
+  logs_dir: .factory/logs
   task_queue: .factory/task-manager/todo.yaml
   skill_index: .factory/skill-index.yaml
   workflows_dir: .factory/workflows

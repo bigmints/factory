@@ -34,6 +34,8 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onTabChange?: (tab: string) => void
   onAddProject?: () => void
   projectRefreshKey?: number
+  queueRunning?: boolean
+  hasLoopWarning?: boolean
 }
 
 const navMain = [
@@ -60,6 +62,8 @@ export function AppSidebar({
   onTabChange = () => {},
   onAddProject = () => {},
   projectRefreshKey,
+  queueRunning = false,
+  hasLoopWarning = false,
   ...props
 }: AppSidebarProps) {
   return (
@@ -90,6 +94,8 @@ export function AppSidebar({
           items={navMain}
           activeId={activeTab}
           onSelect={onTabChange}
+          queueRunning={queueRunning}
+          hasLoopWarning={hasLoopWarning}
         />
         <NavMain
           label="Analytics"

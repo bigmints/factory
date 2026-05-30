@@ -2318,7 +2318,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       {/* Enqueue / Build Button */}
                       <Button
                         size="sm"
-                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-primary hover:bg-primary/90 text-white rounded-lg shadow-lg hover:shadow-primary/20 transition-all flex items-center"
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg hover:shadow-indigo-500/20 transition-all flex items-center"
                         onClick={() => {
                           handleEnqueue(selectedItem.data.file, selectedItem.data.kind);
                           setDrawerOpen(false);

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T15:40:18Z"
+  last_seen: "2026-05-30T15:40:32Z"
   host: "Mac"
-  task: "post-commit: fix(ui): solve list-view story details drawer empty layout bug by deriving target type correctly"
+  task: "post-commit: fix(ui): move local dev server controls and project sync button to Validation Gates tab"
   status: alive

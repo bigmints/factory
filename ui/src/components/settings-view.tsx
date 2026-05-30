@@ -526,11 +526,11 @@ export function SettingsView() {
             <p className="text-[11px] text-muted-foreground">Manage configured API integrations, keys, and base reference models.</p>
           </div>
 
-          <div className="w-full max-w-5xl mx-auto space-y-4">
+          <div className="w-full max-w-xl mx-auto">
             {enabledProviders.length > 0 ? (
-              <div className="space-y-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">Configured Integrations</span>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none px-1">Configured Integrations</span>
+                <div className="border border-border/50 bg-card rounded-xl overflow-hidden divide-y divide-border/30 shadow-sm">
                   {enabledProviders.map(p => {
                     const meta = getProviderMeta(p.id, p.name);
                     const isActiveDefault = settings?.activeProvider === p.id;
@@ -549,52 +549,42 @@ export function SettingsView() {
                           setIsAddingManualModel(false);
                           setManualModelInput('');
                         }}
-                        className={cn(
-                          "flex flex-col justify-between p-5 rounded-xl border bg-card text-left transition-all duration-300 cursor-pointer group shadow-sm min-h-[145px] hover:-translate-y-0.5 select-none",
-                          isActiveDefault 
-                            ? "border-primary/50 shadow-[0_0_15px_rgba(59,130,246,0.04)] bg-primary/[0.01]" 
-                            : "border-border/60 hover:border-primary/45 hover:bg-accent/[0.01]"
-                        )}
+                        className="w-full flex items-center justify-between p-4 hover:bg-muted/15 transition-all duration-150 cursor-pointer group select-none"
                       >
-                        <div className="space-y-3.5">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className={cn(
-                                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
-                                meta.bg
-                              )}>
-                                {meta.icon}
-                              </div>
-                              <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors truncate max-w-[140px]">{p.name}</span>
-                            </div>
-                            
-                            {isActiveDefault ? (
-                              <Badge className="text-[8px] font-bold py-0.5 px-1.5 bg-primary/10 text-primary border-primary/20 hover:bg-primary/15 uppercase tracking-wider select-none">
-                                Active
-                              </Badge>
-                            ) : (
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 mt-2" title="Connected" />
-                            )}
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className={cn(
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+                            meta.bg
+                          )}>
+                            {meta.icon}
                           </div>
-
-                          <div className="space-y-1">
-                            <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider select-none">Default Model</span>
-                            <span className="text-[10px] text-foreground font-mono block truncate py-1 px-2 rounded-md bg-muted/30 border border-border/30">
-                              {p.defaultModel || 'None Selected'}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">{p.name}</span>
+                              {isActiveDefault && (
+                                <Badge className="text-[8px] font-bold py-0.2 px-1 bg-primary/10 text-primary border-primary/20 hover:bg-primary/15 uppercase tracking-wider">
+                                  Active
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground mt-0.5 block truncate max-w-[200px] sm:max-w-md font-mono">
+                              Model: {p.defaultModel || 'None Selected'}
                             </span>
                           </div>
                         </div>
                         
-                        <div className="flex items-center justify-between pt-3 border-t border-border/30 mt-3.5 text-[10px] text-muted-foreground group-hover:text-primary transition-colors">
-                          <span className="font-medium group-hover:underline">Configure Settings</span>
-                          <ChevronRight className="h-3.5 w-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          {!isActiveDefault && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1" title="Connected" />
+                          )}
+                          <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
                         </div>
                       </div>
                     );
                   })}
 
-                  {/* Dash border add button card inside the grid on desktop */}
-                  <div
+                  {/* Connect API Provider Row inside the same container */}
+                  <button
                     onClick={() => {
                       setIsAddingProvider(true);
                       setSelectedTypeToAdd(null);
@@ -607,16 +597,19 @@ export function SettingsView() {
                       setIsAddingManualModel(false);
                       setManualModelInput('');
                     }}
-                    className="flex flex-col items-center justify-center p-5 rounded-xl border border-dashed border-border/80 hover:border-primary/50 bg-card hover:bg-accent/[0.01] text-center transition-all duration-300 cursor-pointer group shadow-sm min-h-[145px] hover:-translate-y-0.5 gap-2"
+                    className="w-full flex items-center justify-between p-4 hover:bg-primary/[0.02] active:bg-primary/[0.04] transition-all duration-150 cursor-pointer group select-none text-primary border-t border-border/30"
                   >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/20 text-muted-foreground/60 group-hover:text-primary group-hover:border-primary/45 transition-colors">
-                      <Plus className="h-4 w-4" />
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-primary/40 bg-primary/5 text-primary group-hover:bg-primary/10 transition-colors">
+                        <Plus className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold block text-primary group-hover:underline">Connect API Provider</span>
+                        <span className="text-[10px] text-primary/70 block mt-0.5">Add direct keys or custom models</span>
+                      </div>
                     </div>
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors block">Connect API Provider</span>
-                      <span className="text-[9px] text-muted-foreground">Add new direct keys or custom models.</span>
-                    </div>
-                  </div>
+                    <ChevronRight className="h-4 w-4 text-primary/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  </button>
                 </div>
               </div>
             ) : (

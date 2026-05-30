@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T14:57:55Z"
+  last_seen: "2026-05-30T15:00:22Z"
   host: "Mac"
-  task: "post-commit: feat(ui): implement manual model override and desktop responsive grid layouts"
+  task: "post-commit: fix(ui): remove hardcoded IP placeholder in settings view"
   status: alive

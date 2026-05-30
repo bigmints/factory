@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T22:09:53Z"
+  last_seen: "2026-05-30T22:45:53Z"
   host: "Mac"
-  task: "post-commit: feat(engine): parse TPM brief and CLI outcome logs for distillation"
+  task: "post-commit: feat(queue): implement sequential retry queue and individual start/stop task controls"
   status: alive

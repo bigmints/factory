@@ -32,7 +32,7 @@ export interface QueueItem {
     id: string;
     storyFile: string;
     kind: 'AppStory' | 'FeatureStory';
-    status: 'pending' | 'running' | 'completed' | 'failed' | 'needs-attention' | 'blocked';
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'needs-attention' | 'blocked';
     priority: number;
     phase: number;
     dependsOn: string[];
@@ -433,13 +433,14 @@ export function getItem(id: string): QueueItem | null {
 /** Get all queue items, ordered by status then added time. */
 export function listQueue(): QueueItem[] {
     const queue = loadQueue();
-    const statusOrder = {
+    const statusOrder: Record<QueueItem['status'], number> = {
         'running': 0,
         'pending': 1,
         'needs-attention': 2,
         'blocked': 3,
         'failed': 4,
         'completed': 5,
+        'cancelled': 6,
     };
 
     return queue.sort((a, b) => {

@@ -11,12 +11,18 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, createWriteStream } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
-import { spawn, execSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log, logError } from './log.ts';
 import { writeHeartbeat } from './toon.ts';
 import { updateStoryStatus } from './story.ts';
 import { loadSettings } from './config.ts';
+import {
+    buildCliInvocation,
+    buildSpawnEnv,
+    detectAvailableCli,
+    verifyCli,
+} from './cli-adapter.ts';
 import { loadQueue, saveQueue } from './queue.ts';
 import type {
     AppStory, FeatureStory, ProjectBlueprint,
@@ -85,33 +91,20 @@ export async function orchestrateFeatureStory(
 function resolveCliName(settings: FactorySettings): string {
     if (settings.defaultCli) {
         log('→', `Using configured CLI: ${settings.defaultCli}`);
+        // Verify it is actually installed (gives a clear error message if not)
+        try { verifyCli(settings.defaultCli); } catch (e) {
+            logError(`Configured CLI "${settings.defaultCli}" not found: ${(e as Error).message}`);
+            throw e;
+        }
         return settings.defaultCli;
     }
-    // Auto-detect
-    for (const bin of ['pi', 'gemini', 'claude', 'agy']) {
-        try {
-            execSync(`which ${bin}`, { stdio: 'ignore' });
-            log('→', `Auto-detected CLI: ${bin}`);
-            return bin;
-        } catch { /* not found, try next */ }
-    }
-    throw new Error(
-        'No CLI configured. Run: factory worker default-cli <pi|gemini|claude|agy>\n' +
-        'Or install one of: pi, gemini, claude, agy'
-    );
+    // Auto-detect using the adapter (macOS + Linux PATH aware)
+    const detected = detectAvailableCli();
+    log('→', `Auto-detected CLI: ${detected}`);
+    return detected;
 }
 
-/** Non-interactive (yolo) flags per CLI */
-const CLI_YOLO_FLAGS: Record<string, string[]> = {
-    gemini: ['--yolo'],
-    claude: ['--dangerously-skip-permissions'],
-    agy:    ['--dangerously-skip-permissions'],
-    // --no-session:    skip loading/saving session (avoids corrupted settings stall)
-    // --no-extensions: skip MCP adapter init which blocks stdout for 30-60s
-    // --no-skills:     skip toon-context skill which reads ALL project files before responding
-    //                  (183 files = 300s stall on local models)
-    pi:     ['--no-session', '--no-extensions', '--no-skills'],
-};
+// CLI invocation is now handled by cli-adapter.ts — see buildCliInvocation().
 
 // ─── Orchestrator Loop ───────────────────────────────────
 
@@ -543,13 +536,13 @@ async function toolDelegateToCli(
     const resolvedCwd = resolve(cwd);
     if (!existsSync(resolvedCwd)) mkdirSync(resolvedCwd, { recursive: true });
 
-    const yoloFlags = CLI_YOLO_FLAGS[ctx.cliName] || [];
-    const cliArgs = ['-p', prompt, ...yoloFlags];
-    if (ctx.cliName === 'agy' && ctx.threadId) {
-        cliArgs.push('--conversation', ctx.threadId);
-    }
+    // Build the correct invocation for this CLI (pi uses positional args, others use -p flag)
+    const invocation = buildCliInvocation(ctx.cliName, prompt, {
+        conversationId: ctx.threadId,
+    });
 
     log('→', `Running: ${ctx.cliName} in ${resolvedCwd}`);
+    log('→', `Args: ${invocation.binary} ${invocation.args.slice(0, 3).join(' ')}${invocation.args.length > 3 ? ' …' : ''}`);
     log('→', `Prompt (${prompt.length} chars): ${prompt.slice(0, 120)}${prompt.length > 120 ? '…' : ''}`);
 
     // ── Live log file (tail -f .factory/logs/cli-<slug>.log) ──────────
@@ -562,21 +555,11 @@ async function toolDelegateToCli(
     log('→', `CLI log: tail -f ${cliLogPath}`);
 
     return new Promise<ToolResult>((resolve: (r: ToolResult) => void) => {
-        const child = spawn(ctx.cliName, cliArgs, {
+        const child = spawn(invocation.binary, invocation.args, {
             cwd: resolvedCwd,
             stdio: ['ignore', 'pipe', 'pipe'],
-            env: {
-                ...process.env,
-                // Ensure nvm-installed CLIs (pi, claude) and locally installed CLIs
-                // (gemini at ~/.local/bin) are on PATH when Node.js spawns the child process.
-                PATH: [
-                    `/home/${process.env.USER || 'bigmints'}/.local/bin`,
-                    `/home/${process.env.USER || 'bigmints'}/.nvm/versions/node/v22.22.2/bin`,
-                    `/home/${process.env.USER || 'bigmints'}/.nvm/versions/node/v20.20.2/bin`,
-                    `/usr/local/bin`,
-                    process.env.PATH || '',
-                ].join(':'),
-            },
+            // macOS + Linux aware PATH — finds all CLIs regardless of shell environment
+            env: buildSpawnEnv(),
         });
 
         let buffer = '';

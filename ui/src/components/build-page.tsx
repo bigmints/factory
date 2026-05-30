@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  Terminal, Loader2, XCircle, CheckCircle2, RefreshCw,
-  Square, Play, Trash2, Search, Cpu,
-  ChevronRight, Package, Sparkles, ChevronDown, ChevronUp,
+  Terminal, Loader2, XCircle, CheckCircle2,
+  Square, Play, Trash2, Search, Cpu, PauseCircle,
+  ChevronRight, Package, Sparkles, ChevronDown, ChevronUp, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +19,7 @@ interface QueueItem {
   storyFile?: string;
   displayName?: string;
   kind: string;
-  status: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'needs-attention' | 'blocked' | string;
   priority: number;
   phase?: number;
   engine?: string;
@@ -41,7 +41,7 @@ interface QueueStats {
   total: number;
 }
 
-type StatusFilter = 'all' | 'active' | 'completed' | 'failed';
+type StatusFilter = 'all' | 'active' | 'completed' | 'stopped';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,6 +136,7 @@ function StatusPill({
     pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     failed: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    cancelled: 'bg-zinc-700/30 text-zinc-400 border-zinc-600/30',
     blocked: 'bg-zinc-700/40 text-zinc-400 border-zinc-600/30',
     'needs-attention': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
   };
@@ -149,7 +150,7 @@ function StatusPill({
         {status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
         {status === 'completed' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
         {status === 'failed' && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
-        {status}
+        {status === 'cancelled' ? 'stopped' : status}
       </span>
       {duration && (
         <span className="text-[10px] text-zinc-500 font-mono">({duration})</span>
@@ -351,7 +352,7 @@ export function BuildPage() {
     queueItems.forEach(i => {
       if (i.status === 'running') s.running++;
       else if (i.status === 'completed') s.completed++;
-      else if (i.status === 'failed') s.failed++;
+      else if (i.status === 'failed' || i.status === 'cancelled') s.failed++;
       else if (i.status === 'blocked') s.blocked++;
       else s.pending++;
     });
@@ -368,7 +369,7 @@ export function BuildPage() {
 
       if (filterStatus === 'active') return item.status === 'running' || item.status === 'pending';
       if (filterStatus === 'completed') return item.status === 'completed';
-      if (filterStatus === 'failed') return item.status === 'failed' || item.status === 'blocked';
+      if (filterStatus === 'stopped') return item.status === 'failed' || item.status === 'cancelled' || item.status === 'blocked';
       return true;
     });
   }, [queueItems, filterStatus, searchQuery]);
@@ -526,24 +527,17 @@ export function BuildPage() {
           </div>
         </div>
 
-        {/* Controls */}
+        {/* Queue-level controls */}
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={fetchQueue}
-            className="tap-shrink h-8 px-2.5 flex items-center gap-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 text-[11px] font-sans"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-
-          <button
-            disabled={stats.completed === 0}
-            onClick={handleClearQueue}
-            className="tap-shrink h-8 px-2.5 flex items-center gap-1.5 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 text-[11px] font-sans disabled:opacity-40"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Clear done</span>
-          </button>
+          {stats.completed > 0 && (
+            <button
+              onClick={handleClearQueue}
+              className="tap-shrink h-8 px-2.5 flex items-center gap-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 text-[11px] font-sans"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Clear done</span>
+            </button>
+          )}
 
           {!queueRunning ? (
             <button
@@ -554,15 +548,16 @@ export function BuildPage() {
               {startingQueue
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <Play className="h-3.5 w-3.5 fill-white" />}
-              Run
+              Run queue
             </button>
           ) : (
             <button
               onClick={handleStopQueue}
-              className="tap-shrink h-8 px-3 flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-rose-400 font-semibold text-[11px] font-sans border border-zinc-700"
+              className="tap-shrink h-8 px-3 flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-[11px] font-sans border border-zinc-700"
+              title="Pause queue — running builds finish normally"
             >
-              <Square className="h-3.5 w-3.5 fill-rose-400" />
-              Stop
+              <PauseCircle className="h-3.5 w-3.5" />
+              Pause queue
             </button>
           )}
         </div>
@@ -622,15 +617,15 @@ export function BuildPage() {
               />
             </div>
             <div className="flex items-center gap-1">
-              {(['all', 'active', 'completed', 'failed'] as StatusFilter[]).map(f => {
-                const label = f === 'all' ? 'All' : f === 'active' ? 'Active' : f === 'completed' ? 'Completed' : 'Failed';
+              {(['all', 'active', 'completed', 'stopped'] as StatusFilter[]).map(f => {
+                const label = f === 'all' ? 'All' : f === 'active' ? 'Active' : f === 'completed' ? 'Done' : 'Stopped';
                 const count = f === 'all' ? stats.total
                   : f === 'active' ? (stats.running + stats.pending)
                   : f === 'completed' ? stats.completed
                   : (stats.failed + stats.blocked);
                 const countColor = f === 'active' ? 'text-violet-400'
                   : f === 'completed' ? 'text-emerald-400'
-                  : f === 'failed' ? 'text-rose-400'
+                  : f === 'stopped' ? 'text-zinc-400'
                   : 'text-zinc-400';
 
                 return (
@@ -660,7 +655,9 @@ export function BuildPage() {
               filteredItems.map((item, idx) => {
                 const isSelected = item.id === selectedId;
                 const isRunning = item.status === 'running';
+                const isCancelled = item.status === 'cancelled';
                 const isFailed = item.status === 'failed' || item.status === 'blocked';
+                const isStopped = isCancelled || isFailed;
                 const isDone = item.status === 'completed';
 
                 return (
@@ -684,11 +681,13 @@ export function BuildPage() {
                       isRunning ? 'bg-violet-500/10 border-violet-500/30 text-violet-400' :
                       isDone ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
                       isFailed ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
+                      isCancelled ? 'bg-zinc-800/60 border-zinc-700/40 text-zinc-500' :
                       'bg-zinc-800/80 border-zinc-700/50 text-zinc-400'
                     )}>
                       {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
                        isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> :
                        isFailed ? <XCircle className="h-3.5 w-3.5" /> :
+                       isCancelled ? <Square className="h-3.5 w-3.5" /> :
                        <Package className="h-3.5 w-3.5" />}
                     </div>
 
@@ -725,75 +724,68 @@ export function BuildPage() {
                         {getLogPreview(item)}
                       </p>
 
-                      {/* Always-visible touch actions (mobile) + hover on desktop */}
+                      {/* Mobile quick actions */}
                       <div className="flex items-center gap-1 mt-2 md:hidden" onClick={e => e.stopPropagation()}>
-                        {isRunning ? (
+                        {isRunning && (
                           <button
-                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-rose-400 bg-rose-950/20 hover:bg-rose-900/30 flex items-center gap-1 border border-rose-900/40 font-semibold"
+                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-300 bg-zinc-800 hover:bg-zinc-700 flex items-center gap-1 border border-zinc-700 font-semibold"
                             onClick={() => handleStopTask(item.id)}
                           >
-                            <Square className="h-3 w-3 fill-rose-400" /> Stop
-                          </button>
-                        ) : (
-                          <button
-                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-emerald-400 bg-emerald-950/20 hover:bg-emerald-900/30 flex items-center gap-1 border border-emerald-900/40 font-semibold"
-                            onClick={() => handleStartTask(item.id)}
-                          >
-                            <Play className="h-3 w-3 fill-emerald-400" /> Start
+                            <Square className="h-3 w-3" /> Stop
                           </button>
                         )}
-                        {isFailed && (
+                        {(isStopped || item.status === 'pending') && (
                           <button
-                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 flex items-center gap-1"
-                            onClick={() => handleRetry(item.id)}
+                            className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-300 bg-zinc-800 hover:bg-zinc-700 flex items-center gap-1 border border-zinc-700 font-semibold"
+                            onClick={() => isStopped ? handleRetry(item.id) : handleStartTask(item.id)}
                           >
-                            <RefreshCw className="h-3 w-3" /> Retry
+                            {isStopped
+                              ? <><RotateCcw className="h-3 w-3" /> Retry</>
+                              : <><Play className="h-3 w-3 fill-current" /> Start</>
+                            }
                           </button>
                         )}
-                        <button
-                          className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-500 hover:text-rose-400 bg-zinc-800 hover:bg-rose-950/30 flex items-center gap-1"
-                          onClick={() => handleRemove(item.id)}
-                        >
-                          <XCircle className="h-3 w-3" /> Remove
-                        </button>
                       </div>
                     </div>
 
                     {/* Desktop hover actions */}
                     <div className="hidden md:group-hover:flex items-center gap-1 shrink-0 absolute right-2 top-3" onClick={e => e.stopPropagation()}>
-                      {isRunning ? (
+                      {isRunning && (
                         <button
-                          className="p-1 rounded text-rose-400 hover:bg-rose-950/30"
-                          title="Stop active task"
+                          className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700"
+                          title="Stop this build"
                           onClick={() => handleStopTask(item.id)}
                         >
-                          <Square className="h-3.5 w-3.5 fill-rose-400" />
-                        </button>
-                      ) : (
-                        <button
-                          className="p-1 rounded text-emerald-400 hover:bg-emerald-950/30"
-                          title="Start task"
-                          onClick={() => handleStartTask(item.id)}
-                        >
-                          <Play className="h-3.5 w-3.5 fill-emerald-400" />
+                          <Square className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {isFailed && (
+                      {item.status === 'pending' && (
                         <button
-                          className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-700"
+                          className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700"
+                          title="Start now"
+                          onClick={() => handleStartTask(item.id)}
+                        >
+                          <Play className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {isStopped && (
+                        <button
+                          className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700"
                           title="Retry"
                           onClick={() => handleRetry(item.id)}
                         >
-                          <RefreshCw className="h-3 w-3" />
+                          <RotateCcw className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      <button
-                        className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30"
-                        title="Remove"
-                        onClick={() => handleRemove(item.id)}
-                      >
-                        <XCircle className="h-3 w-3" />
-                      </button>
+                      {!isRunning && (
+                        <button
+                          className="p-1.5 rounded-md text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30"
+                          title="Remove"
+                          onClick={() => handleRemove(item.id)}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     {isSelected && (
@@ -853,45 +845,46 @@ export function BuildPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {selectedItem.status === 'running' ? (
+                    {/* Story-level actions — single button per state */}
+                    {selectedItem.status === 'running' && (
                       <Button
                         size="sm"
                         onClick={() => handleStopTask(selectedItem.id)}
-                        className="h-7 px-2.5 gap-1 text-[10px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-semibold"
+                        className="h-7 px-2.5 gap-1.5 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 font-semibold"
                       >
-                        <Square className="h-3 w-3 fill-rose-400" />
+                        <Square className="h-3 w-3" />
                         Stop
                       </Button>
-                    ) : (
+                    )}
+                    {selectedItem.status === 'pending' && (
                       <Button
                         size="sm"
                         onClick={() => handleStartTask(selectedItem.id)}
-                        className="h-7 px-2.5 gap-1 text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold"
+                        className="h-7 px-2.5 gap-1.5 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 font-semibold"
                       >
-                        <Play className="h-3 w-3 fill-emerald-400" />
+                        <Play className="h-3 w-3" />
                         Start
                       </Button>
                     )}
-                    {selectedItem.status === 'failed' || selectedItem.status === 'blocked' ? (
+                    {(selectedItem.status === 'cancelled' || selectedItem.status === 'failed' || selectedItem.status === 'blocked') && (
                       <Button
                         size="sm"
                         onClick={() => handleRetry(selectedItem.id)}
-                        className="h-7 px-2.5 gap-1 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-sans border border-zinc-700 font-medium"
+                        className="h-7 px-2.5 gap-1.5 text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 font-semibold"
                       >
-                        <RefreshCw className="h-3 w-3" />
+                        <RotateCcw className="h-3 w-3" />
                         Retry
                       </Button>
-                    ) : null}
+                    )}
                     {selectedItem.status !== 'running' && (
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => handleRemove(selectedItem.id)}
-                        className="h-7 px-2 text-[10px] text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 font-sans font-medium flex items-center gap-1"
+                        className="h-7 px-2 text-[10px] text-zinc-600 hover:text-rose-400 hover:bg-rose-950/20 font-sans font-medium flex items-center gap-1"
                         title="Remove from queue"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        <span>Remove</span>
                       </Button>
                     )}
                     <StatusPill
@@ -968,6 +961,15 @@ export function BuildPage() {
                     <p className="text-[11.5px] text-zinc-400 font-sans leading-relaxed line-clamp-2">
                       {selectedItem.output.split('\n').filter(l => l.trim() && !l.includes('===') && !l.startsWith('[')).at(-1)}
                     </p>
+                  </div>
+                )}
+
+                {!isSelectedRunning && selectedItem.status === 'cancelled' && (
+                  <div className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/40 px-5 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <Square className="h-3.5 w-3.5 text-zinc-500" />
+                      <span className="text-[12px] font-semibold text-zinc-400 font-sans">Stopped by user</span>
+                    </div>
                   </div>
                 )}
 

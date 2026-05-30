@@ -159,6 +159,9 @@ function ToolChip({ tc, onInspect }: { tc: ToolCall; onInspect: (tc: ToolCall) =
   );
 }
 
+const EMPTY_MESSAGES: ChatMessage[] = [];
+const EMPTY_MENTIONS: MentionItem[] = [];
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -166,7 +169,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   const messages = useSyncExternalStore(
     (cb) => tpmStore.subscribe(cb),
     () => tpmStore.messages,
-    () => [] as ChatMessage[],
+    () => EMPTY_MESSAGES,
   );
   const streaming = useSyncExternalStore(
     (cb) => tpmStore.subscribe(cb),
@@ -176,7 +179,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   const mentionItems = useSyncExternalStore(
     (cb) => tpmStore.subscribe(cb),
     () => tpmStore.mentionItems,
-    () => [] as MentionItem[],
+    () => EMPTY_MENTIONS,
   );
 
   // ── Local UI state (non-persistent) ──────────────────────────────────────

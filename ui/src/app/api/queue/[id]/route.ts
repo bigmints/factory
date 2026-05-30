@@ -75,7 +75,7 @@ export async function PATCH(
       } catch {}
 
       const res = updateItem(id, {
-        status: 'failed',
+        status: 'cancelled',
         error: 'Stopped by user',
         completedAt: new Date().toISOString(),
       });
@@ -84,10 +84,10 @@ export async function PATCH(
       }
     }
 
-    // Retry: reset failed/needs-attention to pending
+    // Retry: reset failed/cancelled/needs-attention to pending
     if (body.action === 'retry') {
-      if (!['failed', 'needs-attention'].includes(item.status)) {
-        return NextResponse.json({ error: 'Can only retry failed items' }, { status: 400 });
+      if (!['failed', 'cancelled', 'needs-attention'].includes(item.status)) {
+        return NextResponse.json({ error: 'Can only retry failed or cancelled items' }, { status: 400 });
       }
 
       const res = retryItem(id);

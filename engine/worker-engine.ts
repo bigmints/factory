@@ -11,6 +11,13 @@ import { parse as parseYaml } from 'yaml';
 import type { AppStory, FeatureStory, ProjectBlueprint, BuildResult, GeneratedFile } from './types.ts';
 import { storySlug } from './types.ts';
 import { log, logError } from './log.ts';
+import {
+    buildCliInvocation,
+    buildSpawnEnv,
+    detectAvailableCli,
+    isCliAvailable,
+    type CliName,
+} from './cli-adapter.ts';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -95,36 +102,7 @@ function featureStoryToTasks(story: FeatureStory): WorkerTask[] {
     ];
 }
 
-// ─── Yolo Flags ──────────────────────────────────────────
-
-/**
- * Non-interactive (yolo) flags per CLI — confirmed from each CLI's --help:
- *   gemini → --yolo
- *   claude → --dangerously-skip-permissions
- *   agy    → --dangerously-skip-permissions
- *   pi     → non-interactive by default with -p
- */
-const CLI_YOLO_FLAGS: Record<string, string[]> = {
-    gemini: ['--yolo'],
-    claude: ['--dangerously-skip-permissions'],
-    agy:    ['--dangerously-skip-permissions'],
-    pi:     [],
-};
-
-function getYoloFlags(cliName: string): string[] {
-    return CLI_YOLO_FLAGS[cliName] || [];
-}
-
-/**
- * Detect a compatible CLI binary ('agy', 'claude', 'gemini', or 'pi').
- */
-export function detectCLI(): string {
-    for (const bin of ['pi', 'gemini', 'claude', 'agy']) {
-        const result = spawnSync('which', [bin], { encoding: 'utf8' });
-        if (result.status === 0) return bin;
-    }
-    throw new Error("No compatible CLI found. Please install one of: pi, gemini, claude, or agy.");
-}
+// CLI invocation is handled by cli-adapter.ts — see buildCliInvocation().
 
 // ─── Queue Runner ────────────────────────────────────────
 
@@ -157,7 +135,7 @@ export async function runQueueTasks(
 
     if (!cli && !dryRun) {
         try {
-            cli = detectCLI();
+            cli = detectAvailableCli();
         } catch (err) {
             if (err instanceof Error) {
                 logError(err.message);
@@ -172,12 +150,9 @@ export async function runQueueTasks(
     }
 
     // Verify the selected/detected CLI is actually installed
-    if (!dryRun) {
-        const checkResult = spawnSync('which', [cli], { encoding: 'utf8' });
-        if (checkResult.status !== 0) {
-            logError(`Selected CLI "${cli}" is not installed or not in PATH.`);
-            return { success: false, passed: 0, failed: tasks.length };
-        }
+    if (!dryRun && !isCliAvailable(cli)) {
+        logError(`Selected CLI "${cli}" is not installed or not in PATH.`);
+        return { success: false, passed: 0, failed: tasks.length };
     }
 
     if (!quiet) {
@@ -203,11 +178,18 @@ export async function runQueueTasks(
         const taskWorkdir = task.workdir ? resolve(task.workdir) : workdir;
         const taskModel = task.model ?? options.model;
 
-        const cliArgs = ['-p', task.prompt, ...getYoloFlags(cli!)];
-        if (taskModel) cliArgs.push('--model', taskModel);
+        // Build the correct invocation for this CLI:
+        //   pi     → pi [--no-session --no-extensions --no-skills] "<prompt>"
+        //   gemini → gemini -p "<prompt>" --yolo
+        //   agy    → agy -p "<prompt>" --dangerously-skip-permissions
+        //   claude → claude -p "<prompt>" --dangerously-skip-permissions
+        const invocation = buildCliInvocation(cli! as CliName, task.prompt, {
+            model: taskModel,
+        });
 
         if (!quiet) {
             console.log(`\n[${i + 1}/${tasks.length}] ${task.name}`);
+            console.log(`  cli:     ${invocation.binary}`);
             console.log(`  workdir: ${taskWorkdir}`);
             if (taskModel) console.log(`  model: ${taskModel}`);
             console.log(`  prompt: ${task.prompt.slice(0, 120)}${task.prompt.length > 120 ? '…' : ''}`);
@@ -221,10 +203,12 @@ export async function runQueueTasks(
         }
 
         const start = Date.now();
-        const result = spawnSync(cli!, cliArgs, {
+        const result = spawnSync(invocation.binary, invocation.args, {
             cwd: taskWorkdir,
-            stdio: quiet ? 'ignore' : [ 'ignore', 'inherit', 'inherit' ],
+            stdio: quiet ? 'ignore' : ['ignore', 'inherit', 'inherit'],
             encoding: 'utf8',
+            // macOS + Linux aware PATH — ensures all CLIs are found
+            env: buildSpawnEnv(),
         });
         const elapsed = ((Date.now() - start) / 1000).toFixed(1);
         const success = result.status === 0;

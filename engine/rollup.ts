@@ -386,6 +386,99 @@ export function getAppRollup(appId: string): AppRollupData | null {
         const storiesDir = resolve(project.path, '.factory', 'stories');
         const queueItems = listQueue();
 
+        // ── Discover physical story files not yet in scaffold.yaml ──────────────
+        // Scan features/, apps/, done/ and inject any untracked stories as
+        // synthetic epics into the in-memory app object.
+        // This is read-only — no disk writes, no queue interference.
+        {
+            // Build a set of all filenames already tracked in scaffold.yaml
+            const trackedStems = new Set<string>();
+            if (app.features) {
+                for (const feature of app.features) {
+                    for (const story of (feature.stories || [])) {
+                        if (story.file) {
+                            trackedStems.add(story.file.split('/').pop()?.replace(/\.ya?ml$/i, '') || '');
+                        }
+                    }
+                }
+            }
+
+            if (!app.features) app.features = [];
+
+            const subDirs: Array<{ dir: string; subfolder: string }> = [
+                { dir: resolve(storiesDir, 'features'), subfolder: 'features' },
+                { dir: resolve(storiesDir, 'apps'),     subfolder: 'apps'     },
+                { dir: resolve(storiesDir, 'done'),     subfolder: 'done'     },
+            ];
+
+            for (const { dir, subfolder } of subDirs) {
+                if (!existsSync(dir)) continue;
+                let files: string[];
+                try { files = readdirSync(dir).filter((f: string) => f.endsWith('.yaml') || f.endsWith('.yml')); }
+                catch { continue; }
+
+                for (const file of files) {
+                    const stem = file.replace(/\.ya?ml$/i, '');
+                    if (trackedStems.has(stem)) continue;   // already in scaffold.yaml
+                    trackedStems.add(stem);
+
+                    try {
+                        const raw = readFileSync(resolve(dir, file), 'utf-8');
+                        const parsed = parseYaml(raw) as any;
+                        if (!parsed) continue;
+
+                        const isFeature = !!(parsed.feature || parsed.target || 'phase' in parsed);
+                        const name = isFeature
+                            ? (parsed.feature?.name || parsed.name || stem)
+                            : (parsed.appName || parsed.metadata?.name || stem);
+
+                        const storyStatus = parsed.status
+                            || (subfolder === 'done' ? 'done' : 'draft');
+
+                        // Determine epic group
+                        const epicName = isFeature ? (parsed.feature?.name || name) : '⚙️ Scaffold & Foundation';
+
+                        // Find or create a matching feature/epic
+                        let epic = app.features.find((f: any) =>
+                            f.name.toLowerCase() === epicName.toLowerCase()
+                        );
+                        if (!epic) {
+                            epic = { name: epicName, description: '', status: 'pending', stories: [] };
+                            app.features.push(epic);
+                        }
+
+                        // Build synthetic tasks from requirements / acceptance_criteria
+                        const reqs: string[] = Array.isArray(parsed.requirements)
+                            ? parsed.requirements
+                            : Array.isArray(parsed.acceptanceCriteria)
+                            ? parsed.acceptanceCriteria
+                            : Array.isArray(parsed.acceptance_criteria)
+                            ? parsed.acceptance_criteria
+                            : [];
+
+                        const tasks = reqs.length > 0
+                            ? reqs.map((r: string, i: number) => ({
+                                id: `task-${stem}-${i + 1}`,
+                                title: r.slice(0, 180),
+                                status: storyStatus === 'done' ? 'completed' : 'pending',
+                            }))
+                            : [{
+                                id: `task-${stem}-default`,
+                                title: `Implement ${name}`,
+                                status: storyStatus === 'done' ? 'completed' : 'pending',
+                            }];
+
+                        epic.stories.push({
+                            name,
+                            file: `${subfolder}/${file}`,
+                            status: storyStatus,
+                            tasks,
+                        });
+                    } catch { /* skip unparseable files */ }
+                }
+            }
+        }
+
         // Resolve physical story status from filesystem BEFORE running rollup
         // This ensures done/in-progress status is always current, not stale YAML
         if (app.features) {

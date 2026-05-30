@@ -1,20 +1,10 @@
 heartbeat:
-  last_seen: "2026-05-30T13:54:43Z"
+  last_seen: "2026-05-30T14:06:33Z"
   host: "Mac"
-  task: "post-commit: fix(queue): archive story to done/ and update YAML status on successful build
+  task: "post-commit: fix(orchestrate): add ~/.local/bin to CLI spawn PATH so gemini is found
 
-Root cause: runBuild() never updated story YAML status or moved files to
-done/ after a successful build. When the queue was cleared, queueStatus
-became undefined and getEffectiveStatus() fell back to the YAML status
-('ready'), causing completed stories to bounce back to Ready to Build.
-
-Fix:
-- engine/queue.ts runBuild(): on success, (1) write status:done to story
-  YAML, (2) archive (move) the file from features/|apps/ to done/, and
-  (3) update scaffold.yaml rollup via updateStoryStatusInApp()
-- ui/api/queue/clear/route.ts: same three-step patch for any completed
-  items before wiping the queue, so manually clearing doesn't lose state
-
-Also: manually ran the fix script to clear the existing 3 completed items
-from local queue.yaml and verify they're properly archived in done/"
+gemini CLI is installed at ~/.local/bin/gemini but that directory was
+missing from the PATH injected when spawning CLI child processes, causing
+ENOENT. Added ~/.local/bin (and /usr/local/bin) ahead of nvm bin paths
+so all common install locations are covered."
   status: alive

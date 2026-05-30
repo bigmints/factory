@@ -1731,7 +1731,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* 1. TOP HEADER CONSOLE                                                  */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <div className="pb-3 select-none shrink-0 border-b border-border/40 px-1">
+      <div className="pt-3 md:pt-4 pb-3 select-none shrink-0 border-b border-border/40 px-1">
 
 
         {/* Controls & Filter Bar — single row on mobile, two rows on desktop */}
@@ -3012,7 +3012,7 @@ function MobileKanbanBoard({
     { title: 'Completed', desc: 'Code written and tests passed', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10', stories: doneStories, status: 'done', dot: 'bg-emerald-400' },
   ] as const;
 
-  // Update active dot based on scroll position
+  // eslint-disable-next-line react-compiler/react-compiler
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;

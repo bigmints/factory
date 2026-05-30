@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { slugify } from './types.ts';
 import { getActiveProject, isBootstrapped } from './config.ts';
+import { updateStoryStatus, archiveStory } from './story.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -697,6 +698,34 @@ async function runBuild(item: QueueItem): Promise<boolean> {
                 log('✓', 'Project marked as bootstrapped — feature stories are now unlocked');
             } catch {
                 // Non-fatal: don’t fail the build over a flag write error
+            }
+        }
+
+        // On success: persist 'done' status back into the story YAML, scaffold.yaml,
+        // and physically archive the file to done/ directory.
+        // This is critical — without all three, clearing the queue causes stories to bounce
+        // back to "Ready to Build" because queueStatus becomes undefined.
+        if (result.success) {
+            try {
+                const { updateStoryStatusInApp } = await import('./rollup.ts');
+
+                // 1. Update the YAML status field in-place (before archiving, in case archive fails)
+                updateStoryStatus(item.storyFile, 'done');
+
+                // 2. Archive (move) the story file from features/|apps/ to done/
+                //    so the board's file-path check (item.file.startsWith('done/')) works too
+                const archivedPath = archiveStory(item.storyFile);
+                const canonicalFile = archivedPath
+                    ? `done/${basename(archivedPath)}`
+                    : item.storyFile;
+
+                // 3. Update scaffold.yaml story status + rollup — use archived path so
+                //    the done/ path match in updateStoryStatusInApp finds the right entry
+                await updateStoryStatusInApp(canonicalFile, 'done');
+                log('✓', `Story archived and marked done: ${canonicalFile}`);
+            } catch (e) {
+                // Non-fatal: story YAML update failure doesn't fail the build
+                logError(`Failed to archive/update story YAML status: ${e}`);
             }
         }
 

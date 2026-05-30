@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T12:35:20Z"
+  last_seen: "2026-05-30T13:43:16Z"
   host: "Mac"
-  task: "post-commit: feat(ui): remove yellow scaffold required first warning banner from ready to build column"
+  task: "post-commit: fix(ui): mark stories in done/ folder as completed in getEffectiveStatus"
   status: alive

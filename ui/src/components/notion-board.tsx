@@ -341,6 +341,9 @@ function getRelatedStories(item: any, allStories: any[]) {
 }
 
 const getEffectiveStatus = (item: any) => {
+  // If the story file is in the 'done' directory, it is completed/done by definition
+  if (item.file && (item.file.startsWith('done/') || item.file.includes('/done/'))) return 'done';
+
   // Queue status is authoritative only while a build is actively running
   if (item.queueStatus === 'running') return 'running';
   if (item.queueStatus === 'completed') return 'done';

@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T12:33:41Z"
+  last_seen: "2026-05-30T12:35:20Z"
   host: "Mac"
-  task: "post-commit: feat(ui): ask to add scaffold to ready to build if draft when triggered"
+  task: "post-commit: feat(ui): remove yellow scaffold required first warning banner from ready to build column"
   status: alive

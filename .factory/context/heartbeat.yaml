@@ -1,10 +1,13 @@
 heartbeat:
-  last_seen: "2026-05-30T14:06:33Z"
+  last_seen: "2026-05-30T14:12:23Z"
   host: "Mac"
-  task: "post-commit: fix(orchestrate): add ~/.local/bin to CLI spawn PATH so gemini is found
+  task: "post-commit: fix(rollup): roadmap now shows all physical stories, not just scaffold.yaml entries
 
-gemini CLI is installed at ~/.local/bin/gemini but that directory was
-missing from the PATH injected when spawning CLI child processes, causing
-ENOENT. Added ~/.local/bin (and /usr/local/bin) ahead of nvm bin paths
-so all common install locations are covered."
+getAppRollup now scans features/, apps/, done/ for story files not yet
+tracked in scaffold.yaml and injects them as in-memory synthetic epics
+before rollup computation. Read-only — no disk writes, no queue impact.
+
+This makes the Roadmap view match the Sprint board: all stories appear
+regardless of whether they were added via scaffold.yaml or directly as
+physical YAML files."
   status: alive

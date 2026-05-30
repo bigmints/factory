@@ -2139,8 +2139,8 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                                 )}
                               </div>
                               <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                                {isFailed && (
-                                  <Button size="icon" variant="ghost" className="h-5 w-5 text-primary hover:bg-primary/10 rounded" onClick={() => handleRetryItem(item.id)}>
+                                {(isFailed || isDone) && (
+                                  <Button size="icon" variant="ghost" title="Rebuild" className="h-5 w-5 text-primary hover:bg-primary/10 rounded" onClick={() => handleRetryItem(item.id)}>
                                     <RefreshCw className="h-3 w-3" />
                                   </Button>
                                 )}
@@ -2220,9 +2220,33 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                     </Badge>
                   )}
                 </span>
-                <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider shrink-0 ml-2">
-                  {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
+                    {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
+                  </span>
+                  {selectedQueueItem && !isSelectedRunning && (selectedQueueItem.status === 'completed' || selectedQueueItem.status === 'failed') && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-[10px] text-primary hover:bg-primary/10 rounded gap-1"
+                      onClick={() => { handleRetryItem(selectedQueueItem.id); setBuildLogsOpen(false); }}
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Rebuild
+                    </Button>
+                  )}
+                  {selectedQueueItem && !isSelectedRunning && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-[10px] text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded gap-1"
+                      onClick={() => { handleRemoveQueueItem(selectedQueueItem.id); setBuildLogsOpen(false); }}
+                    >
+                      <X className="h-3 w-3" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
                 {panelLog ? (

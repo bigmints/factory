@@ -1,17 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-30T14:17:29Z"
+  last_seen: "2026-05-30T14:39:59Z"
   host: "Mac"
-  task: "post-commit: feat(ui): replace roadmap/sprint tabs with single flat task list
-
-Remove the hierarchical backlog tree and kanban sprint board. Replace both
-with FlatTaskList — a single, clean, scrollable list of all tasks sorted
-by status priority (running → ready → draft → done), with:
-- Status dot + badge
-- Epic tag (colour-coded)
-- Phase indicator
-- Scaffold tag
-- Hover: Build button (ready stories) or Running pill + open button
-- Done tasks are struck-through at 60% opacity
-
-No tabs, no hierarchy, no columns. One list."
+  task: "post-commit: feat(ui): redesign settings page to be simple and professional with tabbed layout"
   status: alive

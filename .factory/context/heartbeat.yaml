@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-26T12:36:51Z"
+  last_seen: "2026-05-26T12:40:15Z"
   host: "BigMac-2"
-  task: "post-commit: fix(ui): resolve nextjs standalone compilation type errors for local and gx10 prod"
+  task: "post-commit: fix(tpm-chat): full-height layout on desktop — always-mounted flex sibling, correct min-h-0 chain, mobile fixed drawer"
   status: alive

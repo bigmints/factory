@@ -956,17 +956,83 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
     // Bootstrap gate: block FeatureStory builds until scaffold is built
     if (kind === 'FeatureStory' && !bootstrapped) {
-      toast.error('Scaffold not built yet', {
-        description: 'Build the "Scaffold & Foundation" epic first. Feature stories cannot compile without a base app scaffold.',
-        duration: 6000,
-        action: scaffoldStoryFile
-          ? {
-              label: 'Build Scaffold',
-              onClick: () => handleSingleBuild(scaffoldStoryFile, 'AppStory'),
+      const scaffoldStory = scaffoldStoryFile
+        ? mergedStories.find(s => s.file === scaffoldStoryFile || getSlug(s.file) === getSlug(scaffoldStoryFile))
+        : null;
+      const scaffoldStatus = scaffoldStory ? getEffectiveStatus(scaffoldStory) : 'unknown';
+
+      if (scaffoldStatus === 'draft') {
+        const confirmMove = window.confirm(
+          "The 'Scaffold & Foundation' story must be built first, but it is currently in Draft status. Would you like to add it to 'Ready to Build' now?"
+        );
+        if (confirmMove) {
+          try {
+            const res = await fetch('/api/stories/update-status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file: scaffoldStoryFile, status: 'ready' }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              toast.success("Scaffold story moved to 'Ready to Build'");
+              fetchStories();
+              if (scaffoldStoryFile) {
+                setTimeout(() => {
+                  handleSingleBuild(scaffoldStoryFile!, 'AppStory');
+                }, 300);
+              }
+              return;
+            } else {
+              toast.error(data.error || 'Could not update status');
             }
-          : undefined,
-      });
+          } catch (iEx) {
+            toast.error('Failed to update status');
+          }
+        }
+      } else {
+        toast.error('Scaffold not built yet', {
+          description: 'Build the "Scaffold & Foundation" epic first. Feature stories cannot compile without a base app scaffold.',
+          duration: 6000,
+          action: scaffoldStoryFile
+            ? {
+                label: 'Build Scaffold',
+                onClick: () => handleSingleBuild(scaffoldStoryFile, 'AppStory'),
+              }
+            : undefined,
+        });
+      }
       return;
+    }
+
+    // If building scaffold and it is in 'draft' status, ask to move it to 'ready'
+    if (file === scaffoldStoryFile) {
+      const scaffoldStory = mergedStories.find(s => s.file === file || getSlug(s.file) === getSlug(file));
+      const scaffoldStatus = scaffoldStory ? getEffectiveStatus(scaffoldStory) : 'unknown';
+      if (scaffoldStatus === 'draft') {
+        const confirmMove = window.confirm(
+          "The Scaffold story is currently in Draft status. Would you like to move it to 'Ready to Build' first?"
+        );
+        if (confirmMove) {
+          try {
+            const res = await fetch('/api/stories/update-status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file, status: 'ready' }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              toast.success("Scaffold story moved to 'Ready to Build'");
+              fetchStories();
+            } else {
+              toast.error(data.error || 'Could not update status');
+              return; // Abort build since move failed
+            }
+          } catch (iEx) {
+            toast.error('Failed to update status');
+            return; // Abort build since error occurred
+          }
+        }
+      }
     }
 
     // ─── Dependency resolution ──────────────────────────────────────────────────────

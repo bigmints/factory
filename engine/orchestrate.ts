@@ -546,10 +546,13 @@ async function toolDelegateToCli(
             stdio: ['ignore', 'pipe', 'pipe'],
             env: {
                 ...process.env,
-                // Ensure nvm-installed CLIs (pi, claude) are on PATH
+                // Ensure nvm-installed CLIs (pi, claude) and locally installed CLIs
+                // (gemini at ~/.local/bin) are on PATH when Node.js spawns the child process.
                 PATH: [
+                    `/home/${process.env.USER || 'bigmints'}/.local/bin`,
                     `/home/${process.env.USER || 'bigmints'}/.nvm/versions/node/v22.22.2/bin`,
                     `/home/${process.env.USER || 'bigmints'}/.nvm/versions/node/v20.20.2/bin`,
+                    `/usr/local/bin`,
                     process.env.PATH || '',
                 ].join(':'),
             },

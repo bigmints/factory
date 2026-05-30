@@ -1609,14 +1609,15 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
   }, [queueItems]);
 
   // Trigger Drawer View
-  const handleOpenDrawer = (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => {
-    setSelectedItem({ type, data: item, parentStory, parentFeature });
+  const handleOpenDrawer = (item: any, type?: 'task' | 'story', parentStory?: any, parentFeature?: any) => {
+    const resolvedType = type || (item.fullId ? 'task' : 'story');
+    setSelectedItem({ type: resolvedType, data: item, parentStory, parentFeature });
     setDrawerOpen(true);
     setEditMode(false);
     setDeleteConfirm(false);
     setStoryTab('spec');
     setYamlContent(null);
-    if (type === 'story' && item.file) {
+    if (resolvedType === 'story' && item.file) {
       fetchStoryYaml(item.file);
     }
   };
@@ -1773,62 +1774,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
             </div>
           </div>
 
-          {/* Right: Compact Action Toolbar */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {/* Dev App Server Controls Pill */}
-            <div className="flex items-center border border-border/60 rounded-md bg-background/40 backdrop-blur-xs p-0.5 h-6.5 text-[10px] select-none">
-              <div className="flex items-center gap-1 px-1">
-                <Activity className={cn("h-2.5 w-2.5", runStatus === 'running' ? "text-emerald-500" : "text-muted-foreground")} />
-                <Badge className={cn(
-                  "text-[8px] font-bold px-1 h-3.5 rounded-sm items-center justify-center hidden sm:flex",
-                  runStatus === 'running' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                  runStatus === 'starting' ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse" :
-                  "bg-muted text-muted-foreground border border-border"
-                )}>
-                  {runStatus === 'running' ? `:${runPort || 3000}` : runStatus}
-                </Badge>
-              </div>
-              <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-              {runStatus === 'stopped' ? (
-                <button
-                  onClick={handleStartApp}
-                  disabled={isActionLoading}
-                  className="tap-shrink h-5 w-5 flex items-center justify-center text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-sm"
-                >
-                  <Play className="h-2.5 w-2.5" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleStopApp}
-                  disabled={isActionLoading}
-                  className="tap-shrink h-5 w-5 flex items-center justify-center text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-sm"
-                >
-                  <Square className="h-2.5 w-2.5" />
-                </button>
-              )}
-              {runStatus === 'running' && (
-                <>
-                  <Separator orientation="vertical" className="h-3.5 mx-0.5" />
-                  <button
-                    onClick={() => window.open(`http://localhost:${runPort || 3000}`, '_blank')}
-                    className="tap-shrink h-5 w-5 flex items-center justify-center text-primary hover:bg-primary/10 rounded-sm"
-                  >
-                    <ExternalLink className="h-2.5 w-2.5" />
-                  </button>
-                </>
-              )}
-            </div>
 
-            {/* Refresh */}
-            <button
-              onClick={handleSyncRoadmap}
-              disabled={syncing}
-              className="tap-shrink h-6.5 w-6.5 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="Refresh project data"
-            >
-              <RefreshCw className={cn("h-3 w-3", syncing && "animate-spin")} />
-            </button>
-          </div>
         </div>
 
         {/* Controls & Filter Bar — single row on mobile, two rows on desktop */}
@@ -3075,33 +3021,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
         </SheetContent>
       </Sheet>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* 7. LOCAL SERVER LOGS DRAWER (SIDEBAR)                                 */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <Sheet open={serverLogsOpen} onOpenChange={setServerLogsOpen}>
-        <SheetContent className="w-[90%] sm:w-[480px] p-0 flex flex-col bg-zinc-950 border-l border-border/40 select-text focus:outline-none">
-          <SheetHeader className="p-4 border-b border-border/40 shrink-0">
-            <SheetTitle className="flex items-center gap-2 text-zinc-300 text-xs font-bold font-mono">
-              <TerminalSquare className="h-4 w-4 text-emerald-500" />
-              <span>LOCAL SERVER CONSOLE OUTPUT</span>
-            </SheetTitle>
-            <SheetDescription className="text-[10px] text-zinc-500 font-mono">
-              Real-time terminal logs from modern Next.js development server.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] text-zinc-300 space-y-1 scrollbar-thin">
-            {runLogs ? (
-              runLogs.split('\n').map((l, i) => (
-                <div key={i} className="leading-5 whitespace-pre-wrap">{l || '\u00A0'}</div>
-              ))
-            ) : (
-              <div className="text-zinc-500 italic py-6 text-center">
-                No server outputs yet. Click Play button in project header to start.
-              </div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+
     </div>
   );
 }

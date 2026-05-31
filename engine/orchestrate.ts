@@ -112,7 +112,7 @@ const MAX_TURNS = 12;              // max LLM turns before giving up
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 
 // ─── CLI Health Monitor Thresholds ──────────────────────
-const STALL_TIMEOUT_MS  = 5 * 60_000;   // 5 min — local models need time to think + write files
+const STALL_TIMEOUT_MS  = 10 * 60_000;  // 10 min — agy/claude have 2-3 min silent planning phases
 const LOOP_WINDOW_BYTES = 500;      // bytes to compare for loop detection
 const LOOP_CHECK_MS     = 15_000;   // how often to run loop check
 const QUESTION_PATTERNS: RegExp[] = [
@@ -581,24 +581,47 @@ async function toolDelegateToCli(
         let lastActivityAt = Date.now();
         let interventionReason: string | null = null;
         let killed = false;
+        let resolved = false;           // prevents double-resolve
         let rateLimitHits = 0;   // consecutive rate-limit messages — kill fast
+        let deliveryDetected = false; // true once DELIVERY COMPLETE seen in buffer
+
+        // Helper: resolve once and clean up
+        function resolveOnce(result: ToolResult) {
+            if (resolved) return;
+            resolved = true;
+            clearTimers();
+            try { logStream.write(`\n[${new Date().toISOString()}] delegate_to_cli resolved\n`); logStream.end(); } catch { /* non-fatal */ }
+            resolve(result);
+        }
+
+        // ── clear timers helper — called on delivery or kill ──
+        function clearTimers() {
+            clearInterval(stallTimer);
+            clearInterval(loopTimer);
+        }
 
         // ── kill helper ────────────────────────────
-        function killChild(reason: string) {
+        function killProcessGroup(reason: string) {
             if (killed) return;
             killed = true;
             interventionReason = reason;
             log('⚠', `CLI intervention: ${reason}`);
-            child.kill('SIGTERM');
-            setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* ignore */ } }, 3000);
+            // Kill entire process group (kills agy AND all its child processes)
+            const pid = child.pid;
+            if (pid) {
+                try { process.kill(-pid, 'SIGKILL'); } catch {
+                    // Fall back to direct kill if process group kill fails
+                    try { child.kill('SIGKILL'); } catch { /* already dead */ }
+                }
+            }
         }
 
         // ── stall detector ─────────────────────────
         const stallTimer = setInterval(() => {
-            if (killed) return;
+            if (killed || deliveryDetected) return;
             const silentMs = Date.now() - lastActivityAt;
             if (silentMs >= STALL_TIMEOUT_MS) {
-                killChild(`STALL: No output for ${Math.round(silentMs / 1000)}s`);
+                killProcessGroup(`STALL: No output for ${Math.round(silentMs / 1000)}s`);
             }
         }, 10_000);
 
@@ -606,12 +629,12 @@ async function toolDelegateToCli(
         let prevTail = '';
         let loopRepeatCount = 0;
         const loopTimer = setInterval(() => {
-            if (killed) return;
+            if (killed || deliveryDetected) return;
             const tail = buffer.slice(-LOOP_WINDOW_BYTES);
             if (tail.length >= LOOP_WINDOW_BYTES && tail === prevTail) {
                 loopRepeatCount++;
                 if (loopRepeatCount >= 3) {
-                    killChild(`LOOP: Output unchanged for ${LOOP_CHECK_MS * 3 / 1000}s — CLI is repeating itself`);
+                    killProcessGroup(`LOOP: Output unchanged for ${LOOP_CHECK_MS * 3 / 1000}s — CLI is repeating itself`);
                 }
             } else {
                 loopRepeatCount = 0;
@@ -665,25 +688,49 @@ async function toolDelegateToCli(
             }
 
             if (!killed) {
+                // ── DELIVERY COMPLETE fast-exit ───────────────────
+                // Resolve the Promise immediately — do NOT wait for the process to
+                // exit. agy/pi/claude may stay alive in interactive mode indefinitely.
+                // After resolving, kill the entire process group so no orphan
+                // workers linger.
+                if (!deliveryDetected && buffer.includes('DELIVERY COMPLETE')) {
+                    deliveryDetected = true;
+                    clearTimers();
+                    const deliveryTail = buffer.slice(-3000);
+                    const fileTree = scanDirTree(resolvedCwd);
+                    ctx.files = fileTree;
+                    const fileCount = fileTree.length;
+                    const fileSummary = fileCount > 0
+                        ? `\n\nFiles in target directory: ${fileCount}\n${fileTree.slice(0, 30).map(f => `  ${f.filename}`).join('\n')}${fileCount > 30 ? `\n  ... and ${fileCount - 30} more` : ''}`
+                        : '';
+                    log('✓', 'DELIVERY COMPLETE — resolving immediately and killing process group');
+                    resolveOnce({ content: `DELIVERED\n\n${deliveryTail}${fileSummary}`, isError: false });
+                    // Kill the entire process group (including agy's own children)
+                    const pid = child.pid;
+                    if (pid) {
+                        setTimeout(() => {
+                            try { process.kill(-pid, 'SIGKILL'); } catch {
+                                try { child.kill('SIGKILL'); } catch { /* already dead */ }
+                            }
+                        }, 1_000); // 1s grace for final writes
+                    }
+                }
+
                 // ── Rate-limit / quota-exhausted fast kill ──────────
-                // Gemini (and others) retry 429s indefinitely, producing output
-                // every ~5s. This prevents the stall timer from firing.
-                // If we see rate-limit messages RATE_LIMIT_REPEAT_THRESHOLD times
-                // in a row, kill immediately.
                 const isRateLimited = RATE_LIMIT_PATTERNS.some(p => p.test(text));
                 if (isRateLimited) {
                     rateLimitHits++;
                     if (rateLimitHits >= RATE_LIMIT_REPEAT_THRESHOLD) {
-                        killChild(`RATE_LIMIT: CLI is quota-exhausted (hit ${rateLimitHits}x). Switch CLI with: factory worker default-cli <agy|pi|claude>`);
+                        killProcessGroup(`RATE_LIMIT: CLI is quota-exhausted (hit ${rateLimitHits}x). Switch CLI with: factory worker default-cli <agy|pi|claude>`);
                     }
                 } else {
-                    rateLimitHits = 0; // reset on non-rate-limit output
+                    rateLimitHits = 0;
                 }
 
                 // ── Question / blocking prompt detection ────────────
                 for (const pattern of QUESTION_PATTERNS) {
                     if (pattern.test(text)) {
-                        killChild(`ASKING: CLI asked for input — "${text.trim().slice(0, 200)}"`);
+                        killProcessGroup(`ASKING: CLI asked for input — "${text.trim().slice(0, 200)}"`);
                         break;
                     }
                 }
@@ -694,8 +741,8 @@ async function toolDelegateToCli(
         child.stderr?.on('data', onData);
 
         child.on('close', (code: number | null) => {
-            clearInterval(stallTimer);
-            clearInterval(loopTimer);
+            if (resolved) return; // already resolved on DELIVERY COMPLETE — ignore
+            clearTimers();
             try { logStream.write(`\n[${new Date().toISOString()}] CLI exited with code ${code}\n`); logStream.end(); } catch { /* non-fatal */ }
 
             const tail = buffer.slice(-3000);
@@ -707,7 +754,7 @@ async function toolDelegateToCli(
                 : '\n\nNo files detected in target directory.';
 
             if (interventionReason) {
-                resolve({
+                resolveOnce({
                     content: `INTERVENTION [${interventionReason}]\n\nLast output from CLI:\n${tail}${fileSummary}`,
                     isError: true,
                 });
@@ -716,7 +763,7 @@ async function toolDelegateToCli(
 
             log(code === 0 ? '✓' : '!', `CLI exited with code ${code}`);
 
-            resolve({
+            resolveOnce({
                 content: code === 0
                     ? `DELIVERED\n\n${tail}${fileSummary}`
                     : `FAILED (exit ${code})\n\n${tail}${fileSummary}`,
@@ -727,7 +774,7 @@ async function toolDelegateToCli(
         child.on('error', (err: Error) => {
             clearInterval(stallTimer);
             clearInterval(loopTimer);
-            resolve({ content: `CLI spawn error: ${err.message}`, isError: true });
+            resolveOnce({ content: `CLI spawn error: ${err.message}`, isError: true });
         });
     });
 }
@@ -1071,12 +1118,10 @@ function scanDirTree(dir: string): GeneratedFile[] {
                 walk(full);
             } else {
                 const rel = relative(dir, full);
-                try {
-                    const content = readFileSync(full, 'utf-8');
-                    files.push({ filename: rel, content });
-                } catch {
-                    // Skip binary files
-                }
+                // Only collect filenames — reading full content blocks the event loop
+                // for repos with hundreds of files. The content field is never used;
+                // only filename list and count appear in the orchestrator context.
+                files.push({ filename: rel, content: '' });
             }
         }
     }

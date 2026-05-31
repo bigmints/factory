@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-31T08:47:24Z"
+  last_seen: "2026-05-31T08:50:13Z"
   host: "Mac"
-  task: "post-commit: feat(ui): refine dashboard layout to construct a 3-panel layout with TpmChat outside main inset container"
+  task: "post-commit: fix(ui): establish rigid full-screen viewport boundary by constraining SidebarProvider and TpmChat height to h-screen to prevent layout overflow"
   status: alive

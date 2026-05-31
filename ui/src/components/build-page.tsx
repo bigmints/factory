@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Terminal, Loader2, XCircle, CheckCircle2,
-  Square, Play, Trash2, Search, Cpu, PauseCircle,
+  Square, Play, Search, Cpu, PauseCircle,
   ChevronRight, Package, Sparkles, ChevronDown, ChevronUp, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -72,6 +72,10 @@ function formatRelativeTime(iso: string): string {
   return `${Math.floor(diff / 3600_000)}h ago`;
 }
 
+function formatAbsoluteTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 function formatDuration(ms: number | null): string | null {
   if (!ms) return null;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
@@ -101,14 +105,21 @@ function kindLabel(kind: string): string {
 }
 
 /** Map heartbeat task strings to plain English. */
-function taskToLabel(task: string | null): string | null {
+function taskToLabel(task: string | null, elapsed: number): string | null {
   if (!task) return null;
   if (/orchestrat.*turn\s*(\d+)/i.test(task)) {
     const m = task.match(/(\d+)/);
     const n = m ? parseInt(m[1]) : 1;
-    if (n === 1) return 'Preparing task brief…';
-    if (n === 2) return 'AI engineer is working on it…';
-    return 'Reviewing and fixing…';
+    if (n === 1) {
+      // Show time-aware message for turn 1 (agy is planning silently)
+      if (elapsed < 30)  return 'Preparing task brief…';
+      if (elapsed < 90)  return 'AI engineer is reading the codebase…';
+      if (elapsed < 180) return 'AI engineer is planning the changes…';
+      if (elapsed < 300) return 'AI engineer is writing code…';
+      return `AI engineer is working hard… (${Math.floor(elapsed / 60)}m)`;
+    }
+    if (n === 2) return 'Reviewing output…';
+    return `Reviewing and refining… (pass ${n})`;
   }
   if (/delegat/i.test(task)) return 'AI engineer is coding…';
   if (/interven/i.test(task)) return 'Reviewing progress…';
@@ -117,6 +128,7 @@ function taskToLabel(task: string | null): string | null {
   if (/build/i.test(task)) return 'Writing code…';
   if (/test/i.test(task)) return 'Running tests…';
   if (/commit/i.test(task)) return 'Committing changes…';
+  if (/mark_story_done/i.test(task)) return 'Wrapping up…';
   return null;
 }
 
@@ -188,6 +200,42 @@ function LogLine({ line }: { line: string }) {
       !isError && !isSuccess && !isStep && !isWarn && 'text-zinc-300',
     )}>
       {line || '\u00A0'}
+    </div>
+  );
+}
+
+// ─── Completed Summary Banner ────────────────────────────────────────────────
+
+function CompletedSummaryBanner({ itemId, durationMs, completedAt }: { itemId: string; durationMs: number | null; completedAt: string | null }) {
+  const [summary, setSummary] = useState<string | null>(null);
+  const [cli, setCli] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/queue/${itemId}/summary`)
+      .then(r => r.json())
+      .then(d => {
+        setSummary(d.summary || null);
+        setCli(d.meta?.cli || null);
+      })
+      .catch(() => {});
+  }, [itemId]);
+
+  return (
+    <div className="shrink-0 border-b border-zinc-800/60 bg-emerald-950/20 px-5 py-3.5">
+      <div className="flex items-center gap-2 mb-1.5">
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+        <span className="text-[12px] font-semibold text-emerald-400 font-sans">Done</span>
+        {cli && <span className="text-[10px] text-zinc-600 font-mono ml-1">via {cli}</span>}
+        <span className="text-[10px] text-zinc-600 font-sans ml-auto flex items-center gap-2">
+          {durationMs && <span>took {formatDuration(durationMs)}</span>}
+          {completedAt && <span className="text-emerald-700/80">· {formatAbsoluteTime(completedAt)}</span>}
+        </span>
+      </div>
+      {summary ? (
+        <p className="text-[11.5px] text-zinc-300 font-sans leading-relaxed">{summary}</p>
+      ) : (
+        <p className="text-[11px] text-zinc-600 font-sans italic">Loading delivery summary…</p>
+      )}
     </div>
   );
 }
@@ -360,18 +408,33 @@ export function BuildPage() {
   }, [queueItems]);
 
   const filteredItems = useMemo(() => {
-    return queueItems.filter(item => {
-      const name = humanName(item, queueItems.indexOf(item), storyNameMap).toLowerCase();
-      const matchesSearch = !searchQuery || name.includes(searchQuery.toLowerCase()) ||
-        item.kind.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.status.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchesSearch) return false;
-
-      if (filterStatus === 'active') return item.status === 'running' || item.status === 'pending';
-      if (filterStatus === 'completed') return item.status === 'completed';
-      if (filterStatus === 'stopped') return item.status === 'failed' || item.status === 'cancelled' || item.status === 'blocked';
-      return true;
-    });
+    const statusOrder: Record<string, number> = {
+      running: 0, pending: 1, blocked: 2, failed: 3, cancelled: 4, completed: 5,
+    };
+    return queueItems
+      .filter(item => {
+        const name = humanName(item, queueItems.indexOf(item), storyNameMap).toLowerCase();
+        const matchesSearch = !searchQuery || name.includes(searchQuery.toLowerCase()) ||
+          item.kind.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          item.status.toLowerCase().includes(searchQuery.toLowerCase());
+        if (!matchesSearch) return false;
+        if (filterStatus === 'active') return item.status === 'running' || item.status === 'pending';
+        if (filterStatus === 'completed') return item.status === 'completed';
+        if (filterStatus === 'stopped') return item.status === 'failed' || item.status === 'cancelled' || item.status === 'blocked';
+        return true;
+      })
+      .sort((a, b) => {
+        const groupDiff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+        if (groupDiff !== 0) return groupDiff;
+        // Within completed group: most recently completed first
+        if (a.status === 'completed' && b.status === 'completed') {
+          const aT = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+          const bT = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+          return bT - aT;
+        }
+        // Within other groups: preserve original queue order (addedAt asc)
+        return new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime();
+      });
   }, [queueItems, filterStatus, searchQuery]);
 
   const selectedItem = queueItems.find(i => i.id === selectedId) ?? null;
@@ -385,8 +448,8 @@ export function BuildPage() {
   const heartbeatTask = useMemo(() => {
     if (!heartbeatRaw) return null;
     const m = heartbeatRaw.match(/task:\s*(.+)/);
-    return m ? taskToLabel(m[1].trim()) : null;
-  }, [heartbeatRaw]);
+    return m ? taskToLabel(m[1].trim(), elapsed) : null;
+  }, [heartbeatRaw, elapsed]);
 
   // Strip internal headers/separators from log before display
   const cleanLog = (raw: string) =>
@@ -526,19 +589,7 @@ export function BuildPage() {
             </p>
           </div>
         </div>
-
-        {/* Queue-level controls */}
         <div className="flex items-center gap-1.5">
-          {stats.completed > 0 && (
-            <button
-              onClick={handleClearQueue}
-              className="tap-shrink h-8 px-2.5 flex items-center gap-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 text-[11px] font-sans"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Clear done</span>
-            </button>
-          )}
-
           {!queueRunning ? (
             <button
               disabled={startingQueue || stats.pending === 0}
@@ -701,7 +752,9 @@ export function BuildPage() {
                           {humanName(item, idx, storyNameMap)}
                         </span>
                         <span className="text-[10px] text-zinc-600 font-mono shrink-0 tabular-nums">
-                          {formatRelativeTime(item.addedAt)}
+                          {isDone && item.completedAt
+                            ? <span className="text-emerald-700">✓ {formatRelativeTime(item.completedAt)}</span>
+                            : formatRelativeTime(item.addedAt)}
                         </span>
                       </div>
 
@@ -777,15 +830,6 @@ export function BuildPage() {
                           <RotateCcw className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {!isRunning && (
-                        <button
-                          className="p-1.5 rounded-md text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30"
-                          title="Remove"
-                          onClick={() => handleRemove(item.id)}
-                        >
-                          <XCircle className="h-3.5 w-3.5" />
-                        </button>
-                      )}
                     </div>
 
                     {isSelected && (
@@ -836,9 +880,11 @@ export function BuildPage() {
                     </h2>
                     <p className="text-[11px] text-zinc-500 font-sans mt-0.5">
                       {kindLabel(selectedItem.kind)}
-                      {selectedItem.startedAt && (
+                      {selectedItem.status === 'completed' && selectedItem.completedAt ? (
+                        <span className="text-emerald-600"> · done at {formatAbsoluteTime(selectedItem.completedAt)}</span>
+                      ) : selectedItem.startedAt ? (
                         <span className="text-zinc-600"> · started {formatRelativeTime(selectedItem.startedAt)}</span>
-                      )}
+                      ) : null}
                       {selectedItem.durationMs && (
                         <span className="text-zinc-600"> · took {formatDuration(selectedItem.durationMs)}</span>
                       )}
@@ -876,17 +922,6 @@ export function BuildPage() {
                         Retry
                       </Button>
                     )}
-                    {selectedItem.status !== 'running' && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRemove(selectedItem.id)}
-                        className="h-7 px-2 text-[10px] text-zinc-600 hover:text-rose-400 hover:bg-rose-950/20 font-sans font-medium flex items-center gap-1"
-                        title="Remove from queue"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
                     <StatusPill
                       status={selectedItem.status}
                       startedAt={selectedItem.startedAt}
@@ -921,7 +956,7 @@ export function BuildPage() {
                       )}
                     </div>
 
-                    {/* AI summary bullets */}
+                    {/* AI summary bullets OR time-aware fallback */}
                     {aiSummary ? (
                       <div className="space-y-1.5 pl-4 border-l border-zinc-800">
                         <div className="flex items-center gap-1.5 mb-2">
@@ -935,33 +970,29 @@ export function BuildPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="pl-4 border-l border-zinc-800">
-                        <p className="text-[12px] text-zinc-500 font-sans">
+                      <div className="pl-4 border-l border-zinc-800 space-y-1">
+                        <p className="text-[12px] text-zinc-400 font-sans">
                           {elapsed < 30
-                            ? 'Starting up…'
-                            : elapsed < 120
-                            ? 'Thinking… the AI is reading the codebase and planning.'
-                            : 'Working on it… this task is taking a bit longer than usual.'}
+                            ? 'Sending task to AI engineer…'
+                            : elapsed < 90
+                            ? 'AI engineer is reading through the codebase.'
+                            : elapsed < 180
+                            ? 'AI engineer is planning the implementation.'
+                            : elapsed < 360
+                            ? 'AI engineer is writing code. This typically takes 3–6 minutes.'
+                            : `AI engineer has been working for ${Math.floor(elapsed / 60)}m. Complex tasks can take up to 10 minutes.`}
+                        </p>
+                        <p className="text-[10px] text-zinc-600 font-sans">
+                          Output will appear in the log below once the AI starts writing files.
                         </p>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Completed / failed summary */}
-                {!isSelectedRunning && selectedItem.status === 'completed' && selectedItem.output && (
-                  <div className="shrink-0 border-b border-zinc-800/60 bg-emerald-950/20 px-5 py-3.5">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-[12px] font-semibold text-emerald-400 font-sans">Done</span>
-                      {selectedItem.durationMs && (
-                        <span className="text-[11px] text-zinc-500 font-sans ml-auto">Finished in {formatDuration(selectedItem.durationMs)}</span>
-                      )}
-                    </div>
-                    <p className="text-[11.5px] text-zinc-400 font-sans leading-relaxed line-clamp-2">
-                      {selectedItem.output.split('\n').filter(l => l.trim() && !l.includes('===') && !l.startsWith('[')).at(-1)}
-                    </p>
-                  </div>
+                {/* Completed summary — uses build receipt prose */}
+                {!isSelectedRunning && selectedItem.status === 'completed' && (
+                  <CompletedSummaryBanner itemId={selectedItem.id} durationMs={selectedItem.durationMs} completedAt={selectedItem.completedAt} />
                 )}
 
                 {!isSelectedRunning && selectedItem.status === 'cancelled' && (

@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Play, Square, Trash2, RotateCcw, CheckCircle2, XCircle, Clock, Loader2,
   AlertTriangle, ChevronDown, ChevronRight, Zap, FileCode2, Brain, FlaskConical,
-  Wrench, ShieldCheck, FolderOpen, Terminal, Sparkles, RefreshCw,
+  Wrench, ShieldCheck, FolderOpen, Terminal, Sparkles, RefreshCw, BookOpen,
 } from 'lucide-react';
 
 interface QueueItem {
@@ -132,7 +132,90 @@ function getStepIcon(label: string): any {
   return Zap;
 }
 
+// ── Delivery Summary Card ────────────────────────────────────────────────────
+interface SummaryData {
+  summary: string | null;
+  meta: { date: string | null; files: number | null; cli: string | null; duration: string | null };
+  raw: string | null;
+}
+
+function DeliverySummary({ itemId }: { itemId: string }) {
+  const [data, setData] = useState<SummaryData | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/queue/${itemId}/summary`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [itemId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading delivery summary…
+      </div>
+    );
+  }
+
+  if (!data?.summary && !data?.raw) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/10 p-4 sm:p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Delivery Summary</span>
+          {data.meta?.cli && (
+            <Badge variant="outline" className="text-[9px] ml-auto border-border px-1.5 rounded-md bg-muted text-muted-foreground">
+              via {data.meta.cli}
+            </Badge>
+          )}
+        </div>
+        {data.summary ? (
+          <p className="text-xs text-foreground/80 leading-relaxed">{data.summary}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">No summary available.</p>
+        )}
+        {(data.meta?.files || data.meta?.duration) && (
+          <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/40 text-[10px] text-muted-foreground">
+            {data.meta.files && (
+              <span className="flex items-center gap-1">
+                <FileCode2 className="h-3 w-3" />
+                <span className="font-semibold text-foreground">{data.meta.files}</span> files in project
+              </span>
+            )}
+            {data.meta.duration && (
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                built in {data.meta.duration}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {data.raw && (
+        <div className="flex flex-col items-start">
+          <Button variant="ghost" size="sm" onClick={() => setShowRaw(!showRaw)}
+            className="text-[10px] text-muted-foreground hover:text-foreground h-7 px-2.5 rounded-full bg-muted hover:bg-secondary border border-border">
+            <BookOpen className="h-3.5 w-3.5 mr-1 text-sky-400" />
+            {showRaw ? 'Hide Build Receipt' : 'Show Build Receipt'}
+          </Button>
+          {showRaw && (
+            <div className="rounded-xl bg-card border p-3 sm:p-4 max-h-80 w-full overflow-y-auto mt-2 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+              <pre className="text-[10px] sm:text-xs font-mono text-foreground/80 whitespace-pre-wrap leading-relaxed">{data.raw}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CircularProgress({ completed, total }: { completed: number; total: number }) {
+
   const progress = total > 0 ? (completed / total) * 100 : 0;
   const strokeDashoffset = 100 - progress;
   return (
@@ -151,7 +234,7 @@ function StepIndicator({ status, isActive }: { status: 'success' | 'error' | 'ru
   return <div className="mt-1.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-muted-foreground/30 bg-muted" />;
 }
 
-function ActivityTimeline({ output, error, itemStatus }: { output: string; error: string | null; itemStatus: string }) {
+function ActivityTimeline({ output, error, itemStatus, itemId }: { output: string; error: string | null; itemStatus: string; itemId: string }) {
   const [showRaw, setShowRaw] = useState(false);
   const [openStepId, setOpenStepId] = useState<string | null>(null);
 
@@ -175,6 +258,10 @@ function ActivityTimeline({ output, error, itemStatus }: { output: string; error
   const completedCount = activities.filter(s => s.status === 'success').length;
 
   if (activities.length === 0 && !error) {
+    // Completed item with no parseable activity log — show delivery summary from build receipt
+    if (itemStatus === 'completed') {
+      return <DeliverySummary itemId={itemId} />;
+    }
     return output ? (
       <div className="rounded-xl border bg-card text-card-foreground p-3 max-h-64 overflow-y-auto">
         <pre className="text-[10px] sm:text-xs font-mono text-foreground/80 whitespace-pre-wrap">{output}</pre>
@@ -631,7 +718,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                           </div>
                         )}
                       </div>
-                      <ActivityTimeline output={item.output} error={item.error} itemStatus={item.status} />
+                      <ActivityTimeline output={item.output} error={item.error} itemStatus={item.status} itemId={item.id} />
                     </div>
                   )}
                 </div>

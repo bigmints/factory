@@ -668,22 +668,22 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-
-          {/* TPM Chat Backdrop on Mobile */}
-          {tpmChatOpen && (
-            <div
-              className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 md:hidden animate-in fade-in duration-200"
-              onClick={() => setTpmChatOpen(false)}
-            />
-          )}
-
-          {/* TPM Chat — always mounted to keep SSE streams alive across tab switches */}
-          <TpmChat
-            isOpen={tpmChatOpen}
-            onClose={() => setTpmChatOpen(false)}
-          />
         </div>
       </SidebarInset>
+
+      {/* TPM Chat Backdrop on Mobile */}
+      {tpmChatOpen && (
+        <div
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 md:hidden animate-in fade-in duration-200"
+          onClick={() => setTpmChatOpen(false)}
+        />
+      )}
+
+      {/* TPM Chat — always mounted to keep SSE streams alive across tab switches */}
+      <TpmChat
+        isOpen={tpmChatOpen}
+        onClose={() => setTpmChatOpen(false)}
+      />
 
       {/* TPM Chat is inside SidebarInset flex row above */}
 

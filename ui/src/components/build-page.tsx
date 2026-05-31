@@ -396,7 +396,7 @@ export function BuildPage() {
     queueItems.forEach(i => {
       if (i.status === 'building') s.building++;
       else if (i.status === 'done') s.done++;
-      else if (i.status === 'failed' || i.status === 'paused') s.failed++;
+      else if (i.status === 'failed') s.failed++;
       else s['ready-to-build']++;
     });
     return s;
@@ -415,7 +415,7 @@ export function BuildPage() {
         if (!matchesSearch) return false;
         if (filterStatus === 'active') return item.status === 'building' || item.status === 'ready-to-build';
         if (filterStatus === 'completed') return item.status === 'done';
-        if (filterStatus === 'stopped') return item.status === 'failed' || item.status === 'paused';
+        if (filterStatus === 'stopped') return item.status === 'failed';
         return true;
       })
       .sort((a, b) => {
@@ -701,7 +701,7 @@ export function BuildPage() {
               filteredItems.map((item, idx) => {
                 const isSelected = item.id === selectedId;
                 const isRunning = item.status === 'building';
-                const isFailed = item.status === 'failed' || item.status === 'paused';
+                const isFailed = item.status === 'failed';
                 const isStopped = isFailed;
                 const isDone = item.status === 'done';
 
@@ -726,13 +726,11 @@ export function BuildPage() {
                       isRunning ? 'bg-violet-500/10 border-violet-500/30 text-violet-400' :
                       isDone ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
                       isFailed ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
-                      isPaused ? 'bg-zinc-800/60 border-zinc-700/40 text-zinc-500' :
                       'bg-zinc-800/80 border-zinc-700/50 text-zinc-400'
                     )}>
                       {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
                        isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> :
                        isFailed ? <XCircle className="h-3.5 w-3.5" /> :
-                       isPaused ? <Square className="h-3.5 w-3.5" /> :
                        <Package className="h-3.5 w-3.5" />}
                     </div>
 
@@ -906,7 +904,7 @@ export function BuildPage() {
                         Start
                       </Button>
                     )}
-                    {(selectedItem.status === 'failed' || selectedItem.status === 'paused') && (
+                    {(selectedItem.status === 'failed') && (
                       <Button
                         size="sm"
                         onClick={() => handleRetry(selectedItem.id)}
@@ -989,16 +987,9 @@ export function BuildPage() {
                   <CompletedSummaryBanner itemId={selectedItem.id} durationMs={selectedItem.durationMs} completedAt={selectedItem.completedAt} />
                 )}
 
-                {!isSelectedRunning && selectedItem.status === 'paused' && (
-                  <div className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/40 px-5 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <Square className="h-3.5 w-3.5 text-zinc-500" />
-                      <span className="text-[12px] font-semibold text-zinc-400 font-sans">Stopped by user</span>
-                    </div>
-                  </div>
-                )}
 
-                {!isSelectedRunning && (selectedItem.status === 'failed' || selectedItem.status === 'paused') && (
+
+                {!isSelectedRunning && (selectedItem.status === 'failed') && (
                   <div className="shrink-0 border-b border-zinc-800/60 bg-rose-950/20 px-5 py-3.5">
                     <div className="flex items-center gap-2 mb-1">
                       <XCircle className="h-3.5 w-3.5 text-rose-400" />

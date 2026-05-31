@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-31T14:39:34Z"
+  last_seen: "2026-05-31T16:16:04Z"
   host: "Mac"
-  task: "post-commit: feat(queue): remove blocked item logic, trust LLM dependency ordering completely"
+  task: "post-commit: feat(queue): purge blocked/paused status entirely — items are either ready-to-build, building, done, or failed"
   status: alive

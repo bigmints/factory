@@ -565,7 +565,7 @@ export default function Dashboard() {
 
   // ─── Main Layout ─────────────────────────────────────────
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-screen overflow-hidden">
       <AppSidebar
         activeTab={showAddProject ? 'projects' : activeTab}
         onTabChange={(tab) => {

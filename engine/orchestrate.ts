@@ -126,6 +126,21 @@ const QUESTION_PATTERNS: RegExp[] = [
     /please (specify|provide|enter|choose)/i,
 ];
 
+/**
+ * Patterns that indicate a CLI is rate-limited / quota-exhausted.
+ * When seen RATE_LIMIT_REPEAT_THRESHOLD times in a row, kill immediately
+ * rather than waiting the full STALL_TIMEOUT_MS.
+ */
+const RATE_LIMIT_PATTERNS: RegExp[] = [
+    /exhausted your (capacity|quota)/i,
+    /rate.?limit(ed)?/i,
+    /quota.*(exceeded|exhausted|reset)/i,
+    /too many requests/i,
+    /429/,
+    /retrying after \d+ms/i,   // gemini CLI retry noise
+];
+const RATE_LIMIT_REPEAT_THRESHOLD = 5; // kill after 5 rate-limit hits in a row
+
 async function runOrchestratorLoop(
     story: AppStory | FeatureStory,
     blueprint: ProjectBlueprint,
@@ -566,6 +581,7 @@ async function toolDelegateToCli(
         let lastActivityAt = Date.now();
         let interventionReason: string | null = null;
         let killed = false;
+        let rateLimitHits = 0;   // consecutive rate-limit messages — kill fast
 
         // ── kill helper ────────────────────────────
         function killChild(reason: string) {
@@ -649,6 +665,22 @@ async function toolDelegateToCli(
             }
 
             if (!killed) {
+                // ── Rate-limit / quota-exhausted fast kill ──────────
+                // Gemini (and others) retry 429s indefinitely, producing output
+                // every ~5s. This prevents the stall timer from firing.
+                // If we see rate-limit messages RATE_LIMIT_REPEAT_THRESHOLD times
+                // in a row, kill immediately.
+                const isRateLimited = RATE_LIMIT_PATTERNS.some(p => p.test(text));
+                if (isRateLimited) {
+                    rateLimitHits++;
+                    if (rateLimitHits >= RATE_LIMIT_REPEAT_THRESHOLD) {
+                        killChild(`RATE_LIMIT: CLI is quota-exhausted (hit ${rateLimitHits}x). Switch CLI with: factory worker default-cli <agy|pi|claude>`);
+                    }
+                } else {
+                    rateLimitHits = 0; // reset on non-rate-limit output
+                }
+
+                // ── Question / blocking prompt detection ────────────
                 for (const pattern of QUESTION_PATTERNS) {
                     if (pattern.test(text)) {
                         killChild(`ASKING: CLI asked for input — "${text.trim().slice(0, 200)}"`);

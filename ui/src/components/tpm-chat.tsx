@@ -517,7 +517,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
       className={cn(
         // Always flex on desktop so the component stays mounted (keeps SSE streams alive)
         // Width collapses to 0 when closed rather than display:none
-        'md:flex md:shrink-0 md:self-stretch transition-all duration-300',
+        'md:flex md:shrink-0 md:self-stretch md:h-screen md:overflow-hidden transition-all duration-300',
         isOpen ? 'md:w-auto' : 'md:w-0 md:overflow-hidden',
         // Mobile: fixed full-height drawer when open, hidden otherwise
         isOpen ? 'fixed right-0 top-0 bottom-0 z-40 flex md:static md:z-auto shadow-2xl md:shadow-none' : 'hidden md:flex',

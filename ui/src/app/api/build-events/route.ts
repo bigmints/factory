@@ -32,40 +32,36 @@ interface ProviderConfig {
 
 function loadLLMConfig(): { baseUrl: string; apiKey: string; model: string } | null {
   try {
-    const settingsPath = join(resolve(process.cwd(), '..'), 'settings.json');
-    const candidates = [
-      settingsPath,
-      join(process.cwd(), 'settings.json'),
-      join(resolve(process.cwd(), '../..'), 'settings.json'),
-    ];
-    for (const p of candidates) {
-      if (!existsSync(p)) continue;
-      const settings = JSON.parse(readFileSync(p, 'utf-8'));
-      const activeId  = settings.activeProvider;
-      const providers: ProviderConfig[] = settings.providers || [];
+    // Always read from the canonical global settings path: ~/.factory/settings.json
+    // Do NOT use relative paths from process.cwd() — those point to the wrong file.
+    const globalSettings = join(FACTORY_ROOT, 'settings.json');
+    if (!existsSync(globalSettings)) return null;
 
-      // Prefer active provider, fall back to first enabled one
-      const provider = providers.find(p => p.id === activeId) || providers.find(p => p.enabled);
-      if (!provider) continue;
+    const settings = JSON.parse(readFileSync(globalSettings, 'utf-8'));
+    const activeId  = settings.activeProvider;
+    const providers: ProviderConfig[] = settings.providers || [];
 
-      const model = settings.buildModel || provider.defaultModel || 'gpt-4o-mini';
+    // Prefer active provider, fall back to first enabled one
+    const provider = providers.find(p => p.id === activeId && p.enabled) || providers.find(p => p.enabled);
+    if (!provider) return null;
 
-      if (provider.kind === 'openai-compat' && provider.baseUrl) {
-        return { baseUrl: provider.baseUrl, apiKey: provider.apiKey || 'none', model };
-      }
-      if (provider.id === 'gemini' && provider.apiKey && provider.apiKey !== 'YOUR_GEMINI_API_KEY') {
-        return {
-          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-          apiKey: provider.apiKey,
-          model,
-        };
-      }
-      if (provider.id === 'openai' && provider.apiKey) {
-        return { baseUrl: 'https://api.openai.com/v1', apiKey: provider.apiKey, model };
-      }
-      if (provider.id === 'ollama') {
-        return { baseUrl: provider.baseUrl || 'http://localhost:11434/v1', apiKey: 'ollama', model };
-      }
+    const model = settings.buildModel || provider.defaultModel || 'gpt-4o-mini';
+
+    if (provider.kind === 'openai-compat' && provider.baseUrl) {
+      return { baseUrl: provider.baseUrl, apiKey: provider.apiKey || 'none', model };
+    }
+    if (provider.id === 'gemini' && provider.apiKey && provider.apiKey !== 'YOUR_GEMINI_API_KEY') {
+      return {
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        apiKey: provider.apiKey,
+        model,
+      };
+    }
+    if (provider.id === 'openai' && provider.apiKey) {
+      return { baseUrl: 'https://api.openai.com/v1', apiKey: provider.apiKey, model };
+    }
+    if (provider.id === 'ollama') {
+      return { baseUrl: provider.baseUrl || 'http://localhost:11434/v1', apiKey: 'ollama', model };
     }
   } catch {}
   return null;
@@ -150,6 +146,7 @@ export async function GET(request: Request) {
       let fullLogBuffer     = '';   // accumulates the whole log for summarization
       let lastSummarizeAt   = 0;
       let summarizing       = false;
+      let bytesWrittenSinceLastSummarize = 0;  // only summarize when log is growing
       const SUMMARIZE_EVERY = 8_000; // ms
 
       function send(event: string, data: unknown) {
@@ -194,6 +191,7 @@ export async function GET(request: Request) {
               const newText = buf.toString('utf-8');
               fileOffset    = size;
               fullLogBuffer += newText;
+              bytesWrittenSinceLastSummarize += newText.length;
               send('log', { text: newText, offset: fileOffset });
             } else if (size < fileOffset) {
               // Rotated
@@ -216,16 +214,20 @@ export async function GET(request: Request) {
           } catch {}
         }
 
-        // LLM summary (every 8s, non-blocking, if we have a provider)
+        // LLM summary (every 8s, non-blocking, ONLY when log is actively growing)
+        // Guard: bytesWrittenSinceLastSummarize > 0 prevents firing when no build is running.
+        // Without this every open browser tab hammers GX10 indefinitely.
         const now = Date.now();
         if (
           llmConfig &&
           !summarizing &&
+          bytesWrittenSinceLastSummarize > 0 &&
           fullLogBuffer.trim().length > 100 &&
           now - lastSummarizeAt > SUMMARIZE_EVERY
         ) {
           summarizing    = true;
           lastSummarizeAt = now;
+          bytesWrittenSinceLastSummarize = 0;  // reset — next summarize needs fresh bytes
           summarizeLog(fullLogBuffer, llmConfig)
             .then(summary => {
               if (summary) send('summary', { text: summary, ts: new Date().toISOString() });

@@ -1617,10 +1617,9 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                 <div className="p-3 space-y-2.5">
                     {queueItems.map((item, idx) => {
                       const specName = item.storyFile || item.specFile || '';
-                      const isRunning = item.status === 'running';
+                      const isRunning = item.status === 'building' || item.status === 'running';
                       const isFailed = item.status === 'failed';
                       const isDone = item.status === 'done';
-                      const isBlocked = item.status === 'blocked';
                       const isSelected = item.id === selectedQueueItemId;
                       const matchedStory = mergedStories.find(s => s.file === specName || getSlug(s.file) === getSlug(specName));
                       const humanReadableName = matchedStory?.name || matchedStory?.metadata?.name || matchedStory?.feature?.name || matchedStory?.dbName || (item as any).displayName || specName.replace(/^(features|apps|done)\//, '').replace(/\.ya?ml$/, '') || `Queue item ${idx + 1}`;
@@ -1630,7 +1629,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       const totalTasks = matchedStory?.checklistTasks?.length || 0;
                       const doneTasks = matchedStory?.checklistTasks?.filter((t: any) => t.status === 'done').length || 0;
                       const durationSec = item.durationMs ? Math.round(item.durationMs / 1000) : null;
-                      const statusCfg = isRunning ? storyStatusMap.running : isFailed ? storyStatusMap.failed : isDone ? storyStatusMap.done : isBlocked ? { label: 'Blocked', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dot: 'bg-rose-500' } : storyStatusMap.draft;
+                      const statusCfg = isRunning ? storyStatusMap.running : isFailed ? storyStatusMap.failed : isDone ? storyStatusMap.done : storyStatusMap.draft;
 
                       return (
                         <div
@@ -1640,8 +1639,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                             isRunning && "border-primary/40 bg-primary/5 shadow-sm",
                             isFailed && "border-rose-500/30 bg-rose-500/5",
                             isDone && "border-emerald-500/20 bg-emerald-500/5",
-                            isBlocked && "border-border/40 bg-muted/10 opacity-60",
-                            !isRunning && !isFailed && !isDone && !isBlocked && "border-border/50 bg-background/40",
+                            !isRunning && !isFailed && !isDone && "border-border/50 bg-background/40",
                             isSelected && "ring-2 ring-primary/60 ring-offset-1 ring-offset-background",
                             epicColor && "border-l-2",
                             epicColor?.border
@@ -1668,7 +1666,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                                 )}
                               </div>
                               <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                                {(isFailed || isDone) && (
+                                {(isFailed || isDone || item.status === 'paused' || item.status === 'blocked') && (
                                   <Button size="icon" variant="ghost" title="Rebuild" className="h-5 w-5 text-primary hover:bg-primary/10 rounded" onClick={() => handleRetryItem(item.id)}>
                                     <RefreshCw className="h-3 w-3" />
                                   </Button>

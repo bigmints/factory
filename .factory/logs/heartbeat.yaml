@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-31T14:36:39Z"
+  last_seen: "2026-05-31T14:39:34Z"
   host: "Mac"
-  task: "post-commit: fix(queue): block duplicates regardless of status to prevent paused/blocked items from infinitely duplicating"
+  task: "post-commit: feat(queue): remove blocked item logic, trust LLM dependency ordering completely"
   status: alive

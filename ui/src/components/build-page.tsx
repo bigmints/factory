@@ -19,7 +19,7 @@ interface QueueItem {
   storyFile?: string;
   displayName?: string;
   kind: string;
-  status: 'draft' | 'ready-to-build' | 'building' | 'paused' | 'failed' | 'done' | string;
+  status: 'draft' | 'ready-to-build' | 'building' | 'failed' | 'done' | string;
   priority: number;
   phase?: number;
   engine?: string;
@@ -37,7 +37,7 @@ interface QueueStats {
   building: number;
   done: number;
   failed: number;
-  paused: number;
+  stopped: number;
   total: number;
 }
 
@@ -94,7 +94,7 @@ function getLogPreview(item: QueueItem): string {
   if (item.status === 'building') return 'Compiling — validation gates in progress...';
   if (item.status === 'ready-to-build') return 'Queued — waiting for dependencies to resolve';
   if (item.status === 'done') return 'Artifacts emitted • AGENTS.md written • committed';
-  if (item.status === 'paused') return 'Paused — stopped by user or blocked by dependency';
+  if (item.status === 'ready-to-build') return 'Queued — waiting to be picked up by the engine';
   return 'No output yet';
 }
 
@@ -148,7 +148,6 @@ function StatusPill({
     'ready-to-build': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     done: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     failed: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-    paused: 'bg-zinc-700/40 text-zinc-400 border-zinc-600/30',
   };
   const duration = durationMs ? formatDuration(durationMs) : null;
   return (
@@ -160,7 +159,6 @@ function StatusPill({
         {status === 'building' && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
         {status === 'done' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
         {status === 'failed' && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
-        {status === 'paused' && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
       </span>
       {duration && (
         <span className="text-[10px] text-zinc-500 font-mono">({duration})</span>
@@ -394,12 +392,11 @@ export function BuildPage() {
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const stats = useMemo<QueueStats>(() => {
-    const s = { 'ready-to-build': 0, building: 0, done: 0, failed: 0, paused: 0, total: queueItems.length };
+    const s = { 'ready-to-build': 0, building: 0, done: 0, failed: 0, total: queueItems.length };
     queueItems.forEach(i => {
       if (i.status === 'building') s.building++;
       else if (i.status === 'done') s.done++;
-      else if (i.status === 'failed') s.failed++;
-      else if (i.status === 'paused') s.paused++;
+      else if (i.status === 'failed' || i.status === 'paused') s.failed++;
       else s['ready-to-build']++;
     });
     return s;
@@ -407,7 +404,7 @@ export function BuildPage() {
 
   const filteredItems = useMemo(() => {
     const statusOrder: Record<string, number> = {
-      building: 0, 'ready-to-build': 1, paused: 2, failed: 3, done: 5,
+      building: 0, 'ready-to-build': 1, failed: 3, done: 5,
     };
     return queueItems
       .filter(item => {
@@ -671,7 +668,7 @@ export function BuildPage() {
                 const count = f === 'all' ? stats.total
                   : f === 'active' ? (stats.building + stats["ready-to-build"])
                   : f === 'completed' ? stats.done
-                  : (stats.failed + stats.paused);
+                  : (stats.failed);
                 const countColor = f === 'active' ? 'text-violet-400'
                   : f === 'completed' ? 'text-emerald-400'
                   : f === 'stopped' ? 'text-zinc-400'
@@ -704,9 +701,8 @@ export function BuildPage() {
               filteredItems.map((item, idx) => {
                 const isSelected = item.id === selectedId;
                 const isRunning = item.status === 'building';
-                const isPaused = item.status === 'paused';
-                const isFailed = item.status === 'failed';
-                const isStopped = isPaused || isFailed;
+                const isFailed = item.status === 'failed' || item.status === 'paused';
+                const isStopped = isFailed;
                 const isDone = item.status === 'done';
 
                 return (
@@ -910,7 +906,7 @@ export function BuildPage() {
                         Start
                       </Button>
                     )}
-                    {(selectedItem.status === 'paused' || selectedItem.status === 'failed') && (
+                    {(selectedItem.status === 'failed' || selectedItem.status === 'paused') && (
                       <Button
                         size="sm"
                         onClick={() => handleRetry(selectedItem.id)}
@@ -1007,7 +1003,7 @@ export function BuildPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <XCircle className="h-3.5 w-3.5 text-rose-400" />
                       <span className="text-[12px] font-semibold text-rose-400 font-sans">
-                        {selectedItem.status === 'paused' ? 'Waiting on another task' : 'Something went wrong'}
+                        {'Something went wrong'}
                       </span>
                     </div>
                     {selectedItem.error && (

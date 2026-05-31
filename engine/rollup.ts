@@ -540,8 +540,8 @@ export function getAppRollup(appId: string): AppRollupData | null {
                                     if (story.tasks) {
                                         for (const task of story.tasks) task.status = 'done';
                                     }
-                                } else if (qi.status === 'failed' || qi.status === 'paused') {
-                                    story.status = 'paused';
+                                } else if (qi.status === 'failed') {
+                                    story.status = 'failed';
                                     if (story.tasks && story.tasks.length > 0) {
                                         const hasFailed = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
                                         if (!hasFailed) {

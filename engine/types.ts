@@ -103,7 +103,7 @@ export interface DeploymentConfig {
     region?: string;
 }
 
-export type LifecycleStatus = 'draft' | 'ready-to-build' | 'building' | 'paused' | 'failed' | 'done';
+export type LifecycleStatus = 'draft' | 'ready-to-build' | 'building' | 'failed' | 'done';
 
 export type StoryStatus = LifecycleStatus;
 

@@ -364,7 +364,7 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
     if (item.kind === 'FeatureStory' && item.targetApp) {
         const latestApp = getLatestDependencyItem(item.targetApp);
         if (latestApp) {
-            if (latestApp.status === 'failed' || latestApp.status === 'paused') {
+            if (latestApp.status === 'failed') {
                 return { ready: false, reason: `App story "${latestApp.storyFile}" ${latestApp.status}. Cannot build feature on a broken app.` };
             }
             if (latestApp.status === 'ready-to-build' || latestApp.status === 'building') {
@@ -396,7 +396,7 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
     for (const depSlug of dependsOn) {
         const latestDep = getLatestDependencyItem(depSlug);
         if (latestDep) {
-            if (latestDep.status === 'failed' || latestDep.status === 'paused') {
+            if (latestDep.status === 'failed') {
                 return { ready: false, reason: `Dependency "${depSlug}" (${latestDep.storyFile}) ${latestDep.status}. Cannot proceed.` };
             }
             if (latestDep.status !== 'done') {
@@ -467,10 +467,9 @@ export function getItem(id: string): QueueItem | null {
 /** Get all queue items, ordered by status then added time. */
 export function listQueue(): QueueItem[] {
     const queue = loadQueue();
-    const statusOrder: Record<QueueItem['status'], number> = {
+    const statusOrder: Record<string, number> = {
         'building': 0,
         'ready-to-build': 1,
-        'paused': 2,
         'failed': 3,
         'done': 4,
         'draft': 5,

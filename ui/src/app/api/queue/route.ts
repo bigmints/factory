@@ -402,9 +402,9 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      // Check if already in queue
+      // Check if already in queue (regardless of status - to prevent duplicating failed/paused items)
       const existing = queue.some(
-        item => item.storyFile === storyFile && ['ready-to-build', 'building'].includes(item.status)
+        item => item.storyFile === storyFile
       );
 
       if (existing) {

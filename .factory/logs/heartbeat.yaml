@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-31T14:27:44Z"
+  last_seen: "2026-05-31T14:30:35Z"
   host: "Mac"
-  task: "post-commit: fix(queue): resolve dependency duplication and turbopack async compilation errors"
+  task: "post-commit: fix(queue): strip .factory/stories/ prefix from frontend payloads to reliably prevent UI queue duplicates"
   status: alive

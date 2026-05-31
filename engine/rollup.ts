@@ -75,7 +75,7 @@ export function calculateRollups(app: any, appSlug: string): any {
                             featureTotalTasks++;
                             appTotalTasks++;
 
-                            if (task.status === 'completed') {
+                            if (task.status === 'done') {
                                 storyCompletedTasks++;
                                 featureCompletedTasks++;
                                 appCompletedTasks++;
@@ -90,14 +90,14 @@ export function calculateRollups(app: any, appSlug: string): any {
 
                     // Rollup story status based on tasks
                     if (story.tasks && story.tasks.length > 0) {
-                        const allCompleted = story.tasks.every((t: any) => t.status === 'completed');
-                        const anyStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                        const allCompleted = story.tasks.every((t: any) => t.status === 'done');
+                        const anyStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
 
                         if (allCompleted) {
                             story.status = 'done';
                         } else if (anyStarted) {
-                            if (!['validation', 'review', 'done'].includes(story.status)) {
-                                story.status = 'in-progress';
+                            if (!['paused', 'done'].includes(story.status)) {
+                                story.status = 'building';
                             }
                         }
                         // Otherwise keep the original status (e.g. draft, ready)
@@ -105,7 +105,7 @@ export function calculateRollups(app: any, appSlug: string): any {
 
                     if (story.status === 'done') {
                         doneStories++;
-                    } else if (['in-progress', 'validation', 'review'].includes(story.status)) {
+                    } else if (['building', 'paused'].includes(story.status)) {
                         inProgressStories++;
                     }
                 }
@@ -119,19 +119,19 @@ export function calculateRollups(app: any, appSlug: string): any {
             // Rollup feature status based on stories
             if (totalStories > 0) {
                 if (doneStories === totalStories) {
-                    feature.status = 'completed';
+                    feature.status = 'done';
                 } else if (inProgressStories > 0 || doneStories > 0) {
-                    feature.status = 'in-progress';
+                    feature.status = 'building';
                 } else {
-                    feature.status = 'pending';
+                    feature.status = 'ready-to-build';
                 }
             } else {
-                feature.status = feature.status || 'pending';
+                feature.status = feature.status || 'ready-to-build';
             }
 
-            if (feature.status === 'completed') {
+            if (feature.status === 'done') {
                 completedFeatures++;
-            } else if (feature.status === 'in-progress') {
+            } else if (feature.status === 'building') {
                 inProgressFeatures++;
             }
         }
@@ -147,7 +147,7 @@ export function calculateRollups(app: any, appSlug: string): any {
         if (completedFeatures === totalFeatures) {
             app.status = 'done';
         } else if (inProgressFeatures > 0 || completedFeatures > 0) {
-            app.status = 'in-progress';
+            app.status = 'building';
         } else {
             app.status = 'draft';
         }
@@ -265,7 +265,7 @@ export function syncAppRoadmapSync(scaffoldYamlPath: string): void {
                 feature = {
                     name: featureName,
                     description: featureDescription,
-                    status: 'pending',
+                    status: 'ready-to-build',
                     stories: []
                 };
                 app.features.push(feature);
@@ -275,14 +275,14 @@ export function syncAppRoadmapSync(scaffoldYamlPath: string): void {
             const tasks: any[] = story.requirements.map((req: string, idx: number) => ({
                 id: `task-${slugify(story.name)}-${idx + 1}`,
                 title: req.slice(0, 180),
-                status: story.status === 'done' ? 'completed' : 'pending'
+                status: story.status === 'done' ? 'done' : 'ready-to-build'
             }));
 
             if (tasks.length === 0) {
                 tasks.push({
                     id: `task-${slugify(story.name)}-default`,
                     title: `Implement core requirements for ${story.name}`,
-                    status: story.status === 'done' ? 'completed' : 'pending'
+                    status: story.status === 'done' ? 'done' : 'ready-to-build'
                 });
             }
 
@@ -313,17 +313,17 @@ export function syncAppRoadmapSync(scaffoldYamlPath: string): void {
                                     // If story is physically done, ensure all tasks are marked completed
                                     if (physicalStatus === 'done' && story.tasks) {
                                         for (const task of story.tasks) {
-                                            task.status = 'completed';
+                                            task.status = 'done';
                                         }
                                     } else if (physicalStatus === 'draft' && story.tasks) {
                                         for (const task of story.tasks) {
-                                            task.status = 'pending';
+                                            task.status = 'ready-to-build';
                                         }
-                                    } else if (['in-progress', 'validation', 'review'].includes(physicalStatus) && story.tasks) {
+                                    } else if (['building', 'paused'].includes(physicalStatus) && story.tasks) {
                                         // Ensure at least one task is started to support the rollup logic
-                                        const hasStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                                        const hasStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
                                         if (!hasStarted && story.tasks.length > 0) {
-                                            story.tasks[0].status = physicalStatus === 'review' ? 'failed' : 'running';
+                                            story.tasks[0].status = physicalStatus === 'paused' ? 'failed' : 'building';
                                         }
                                     }
                                 }
@@ -443,7 +443,7 @@ export function getAppRollup(appId: string): AppRollupData | null {
                             f.name.toLowerCase() === epicName.toLowerCase()
                         );
                         if (!epic) {
-                            epic = { name: epicName, description: '', status: 'pending', stories: [] };
+                            epic = { name: epicName, description: '', status: 'ready-to-build', stories: [] };
                             app.features.push(epic);
                         }
 
@@ -460,12 +460,12 @@ export function getAppRollup(appId: string): AppRollupData | null {
                             ? reqs.map((r: string, i: number) => ({
                                 id: `task-${stem}-${i + 1}`,
                                 title: r.slice(0, 180),
-                                status: storyStatus === 'done' ? 'completed' : 'pending',
+                                status: storyStatus === 'done' ? 'done' : 'ready-to-build',
                             }))
                             : [{
                                 id: `task-${stem}-default`,
                                 title: `Implement ${name}`,
-                                status: storyStatus === 'done' ? 'completed' : 'pending',
+                                status: storyStatus === 'done' ? 'done' : 'ready-to-build',
                             }];
 
                         epic.stories.push({
@@ -495,7 +495,7 @@ export function getAppRollup(appId: string): AppRollupData | null {
                             if (existsSync(doneFile) || existsSync(doneFileYml)) {
                                 story.status = 'done';
                                 if (story.tasks) {
-                                    for (const task of story.tasks) task.status = 'completed';
+                                    for (const task of story.tasks) task.status = 'done';
                                 }
                                 continue;
                             }
@@ -514,7 +514,7 @@ export function getAppRollup(appId: string): AppRollupData | null {
                                     if (physicalStatus) {
                                         story.status = physicalStatus;
                                         if (physicalStatus === 'done' && story.tasks) {
-                                            for (const task of story.tasks) task.status = 'completed';
+                                            for (const task of story.tasks) task.status = 'done';
                                         }
                                     }
                                     break;
@@ -527,23 +527,23 @@ export function getAppRollup(appId: string): AppRollupData | null {
                                 return slugify(qiFile) === slugify(story.file) || slugify(qiFile.split('/').pop() || '') === slugify(stem);
                             });
                             if (qi) {
-                                if (qi.status === 'running') {
-                                    story.status = 'in-progress';
+                                if (qi.status === 'building') {
+                                    story.status = 'building';
                                     if (story.tasks && story.tasks.length > 0) {
-                                        const hasStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                                        const hasStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
                                         if (!hasStarted) {
-                                            story.tasks[0].status = 'running';
+                                            story.tasks[0].status = 'building';
                                         }
                                     }
-                                } else if (qi.status === 'completed') {
+                                } else if (qi.status === 'done') {
                                     story.status = 'done';
                                     if (story.tasks) {
-                                        for (const task of story.tasks) task.status = 'completed';
+                                        for (const task of story.tasks) task.status = 'done';
                                     }
-                                } else if (qi.status === 'failed' || qi.status === 'needs-attention') {
-                                    story.status = 'review';
+                                } else if (qi.status === 'failed' || qi.status === 'paused') {
+                                    story.status = 'paused';
                                     if (story.tasks && story.tasks.length > 0) {
-                                        const hasFailed = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                                        const hasFailed = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
                                         if (!hasFailed) {
                                             story.tasks[0].status = 'failed';
                                         }
@@ -594,7 +594,7 @@ export function getAppRollup(appId: string): AppRollupData | null {
                     id: featureId,
                     name: feature.name,
                     description: feature.description || '',
-                    status: feature.status || 'pending',
+                    status: feature.status || 'ready-to-build',
                     progressPercent: feature.progressPercent || 0,
                     stories: resultStories
                 });
@@ -693,12 +693,12 @@ export async function updateStoryStatusInApp(storyFile: string, newStatus: strin
                         story.status = newStatus;
                         if (newStatus === 'done' && story.tasks) {
                             for (const task of story.tasks) {
-                                task.status = 'completed';
+                                task.status = 'done';
                             }
-                        } else if (['in-progress', 'validation', 'review'].includes(newStatus) && story.tasks) {
-                            const hasStarted = story.tasks.some((t: any) => ['completed', 'running', 'failed'].includes(t.status));
+                        } else if (['building', 'paused'].includes(newStatus) && story.tasks) {
+                            const hasStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
                             if (!hasStarted && story.tasks.length > 0) {
-                                story.tasks[0].status = newStatus === 'review' ? 'failed' : 'running';
+                                story.tasks[0].status = newStatus === 'paused' ? 'failed' : 'building';
                             }
                         }
                         found = true;

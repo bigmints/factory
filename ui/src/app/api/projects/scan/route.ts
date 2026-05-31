@@ -42,6 +42,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required field: path' }, { status: 400 });
     }
 
+    const isUrl = repoPath.startsWith('http://') || repoPath.startsWith('https://') || repoPath.startsWith('git@');
+    if (isUrl) {
+      return NextResponse.json({ stack: null });
+    }
+
     const absPath = resolve(repoPath);
     if (!existsSync(absPath)) {
       return NextResponse.json({ error: 'Path does not exist' }, { status: 400 });

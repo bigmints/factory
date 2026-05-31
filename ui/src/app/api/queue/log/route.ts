@@ -44,7 +44,7 @@ export async function GET(request: Request) {
         try {
             const isRunning = isQueueRunning();
             const queue = loadQueue();
-            const runningCount = queue.filter(item => item.status === 'running').length;
+            const runningCount = queue.filter(item => item.status === 'building').length;
             done = !isRunning && runningCount === 0;
         } catch { 
             /* assume done on errors */

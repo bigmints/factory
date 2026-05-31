@@ -52,8 +52,7 @@ function isAppStoryQueued(targetApp: string, queue: QueueItem[]): boolean {
         if (slug === targetApp) {
           // Found in apps/ — check if it's been queued at any point
           return queue.some(
-            item => (item.storyFile === file || item.storyFile === `apps/${file}`) &&
-              ['pending', 'running', 'completed'].includes(item.status)
+            item => (item.storyFile === file || item.storyFile === `apps/${file}`)
           );
         }
       } catch {}
@@ -227,8 +226,9 @@ function resolveAllDependencies(
 
   const scanDir = (dir: string, defaultKind: 'AppStory' | 'FeatureStory') => {
     if (!existsSync(dir)) return;
-    const files = readdirSync(dir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-    for (const f of files) {
+    const files = readdirSync(dir, { recursive: true }) as string[];
+    const validFiles = files.filter(f => typeof f === 'string' && (f.endsWith('.yaml') || f.endsWith('.yml')));
+    for (const f of validFiles) {
       try {
         const fullPath = join(dir, f);
         const raw = readFileSync(fullPath, 'utf-8');
@@ -248,18 +248,23 @@ function resolveAllDependencies(
         const isAppStory = Boolean(parsed?.appName && !parsed?.feature && !parsed?.target);
         const storyKind: 'AppStory' | 'FeatureStory' = isAppStory ? 'AppStory' : defaultKind;
         
-        const slug = parsed.feature?.slug || parsed.metadata?.slug || f.replace(/\.ya?ml$/, '');
+        const fileStem = f.split(/[\\/]/).pop()?.replace(/\.ya?ml$/, '') || '';
+        const slug = parsed.feature?.slug || parsed.metadata?.slug || fileStem;
         const displayName = parsed.feature?.name || parsed.metadata?.name || parsed.appName || slug;
         const phase = parsed.phase ?? (storyKind === 'AppStory' ? 0 : 1);
         const dependsOn = parsed.dependsOn || [];
         
-        slugToStory.set(slug, {
+        const spec = {
           file: relativeFile,
           kind: storyKind,
           phase,
           dependsOn,
           displayName
-        });
+        };
+        slugToStory.set(slug, spec);
+        if (fileStem && fileStem !== slug) {
+          slugToStory.set(fileStem, spec);
+        }
       } catch {}
     }
   };
@@ -273,8 +278,7 @@ function resolveAllDependencies(
   const isAlreadyQueuedOrBuilt = (file: string, slug: string) => {
     // 1. Check the current queue (pending/running/completed)
     const inQueue = queue.some(
-      item => (item.storyFile === file || item.storyFile.split('/').pop()?.replace(/\.ya?ml$/i, '') === slug) &&
-        ['pending', 'running', 'completed'].includes(item.status)
+      item => (item.storyFile === file || item.storyFile.split('/').pop()?.replace(/\.ya?ml$/i, '') === slug)
     );
     if (inQueue) return true;
 
@@ -324,9 +328,10 @@ function resolveAllDependencies(
       }
 
       // 2. Visit defined dependsOn features that are not yet queued or built
-      for (const depSlug of dependsOn) {
-        const depStory = slugToStory.get(depSlug);
-        if (depStory && !isAlreadyQueuedOrBuilt(depStory.file, depSlug)) {
+      for (const depSlugRaw of dependsOn) {
+        const depSlugStem = depSlugRaw.split(/[\\/]/).pop()?.replace(/\.ya?ml$/, '') || '';
+        const depStory = slugToStory.get(depSlugRaw) || slugToStory.get(depSlugStem);
+        if (depStory && !isAlreadyQueuedOrBuilt(depStory.file, depSlugRaw)) {
           visit(depStory.file, depStory.kind);
         }
       }
@@ -379,7 +384,7 @@ export async function POST(request: Request) {
       // Enqueue resolved missing items in correct topological order!
       for (let i = 0; i < resolved.length; i++) {
         const spec = resolved[i];
-        const item = enqueue(spec.file, spec.kind, { 
+        const item = await enqueue(spec.file, spec.kind, { 
           phase: spec.phase, 
           dependsOn: spec.dependsOn, 
           engine: engine || 'factory' 
@@ -395,7 +400,7 @@ export async function POST(request: Request) {
     } else {
       // Check if already in queue
       const existing = queue.some(
-        item => item.storyFile === storyFile && ['pending', 'running'].includes(item.status)
+        item => item.storyFile === storyFile && ['ready-to-build', 'building'].includes(item.status)
       );
 
       if (existing) {
@@ -421,7 +426,7 @@ export async function POST(request: Request) {
         }
       } catch {}
 
-      enqueuedItem = enqueue(storyFile, kind, { 
+      enqueuedItem = await enqueue(storyFile, kind, { 
         phase: resolvedPhase ?? (kind === 'AppStory' ? 0 : 1), 
         dependsOn: resolvedDeps ?? [], 
         engine: engine || 'factory' 
@@ -456,14 +461,14 @@ export async function DELETE(request: Request) {
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
     }
-    if (item.status === 'running') {
+    if (item.status === 'building') {
       return NextResponse.json(
         { error: 'Cannot delete currently running items.' },
         { status: 409 }
       );
     }
 
-    const removed = removeItem(id);
+    const removed = await removeItem(id);
 
     return NextResponse.json({ removed });
   } catch (error) {

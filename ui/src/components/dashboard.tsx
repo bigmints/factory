@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { useFactoryStore, type StoryItem, type FeatureStoryItem } from '@/stores/factory-store';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb';
@@ -34,29 +35,7 @@ import { cn } from '@/lib/utils';
 import { CheckCircle2, AlertCircle, X, Terminal, PanelRight } from 'lucide-react';
 
 
-interface Story {
-  file: string;
-  valid: boolean;
-  status: string;
-  metadata: Record<string, any>;
-  deployment?: Record<string, any>;
-  database?: Record<string, any>;
-  api?: Record<string, any>;
-  features?: Record<string, any>;
-}
-
-interface FeatureStoryItem {
-  file: string;
-  kind: 'FeatureStory';
-  valid: boolean;
-  status: string;
-  feature: Record<string, any>;
-  target: Record<string, any>;
-  pages: any[];
-  model: Record<string, any>;
-  phase?: number;
-  dependsOn?: string[];
-}
+// Story and FeatureStoryItem types imported from '@/stores/factory-store'
 
 interface ValidationCheck {
   passed: boolean;
@@ -85,10 +64,28 @@ export default function Dashboard() {
   const [showAddProject, setShowAddProject] = useState(false);
   const [tpmChatOpen, setTpmChatOpen] = useState(false);
 
-  const [stories, setStories] = useState<Story[]>([]);
-  const [featureStories, setFeatureStories] = useState<FeatureStoryItem[]>([]);
-  const [reportEntries, setReportEntries] = useState<any[]>([]);
-  const [reportStats, setReportStats] = useState<any>(null);
+  // ─── Store selectors (data-fetching state) ───────────────
+  const stories = useFactoryStore(s => s.stories);
+  const featureStories = useFactoryStore(s => s.featureStories);
+  const reportEntries = useFactoryStore(s => s.reportEntries);
+  const reportStats = useFactoryStore(s => s.reportStats);
+  const queueStatusMap = useFactoryStore(s => s.queueStatusMap);
+  const queueRunning = useFactoryStore(s => s.queueRunning);
+  const hasProjects = useFactoryStore(s => s.hasProjects);
+  const activeProject = useFactoryStore(s => s.activeProject);
+  const projectCount = useFactoryStore(s => s.projectCount);
+  const initialLoadDone = useFactoryStore(s => s.initialLoadDone);
+
+  // ─── Store actions ────────────────────────────────────────
+  const fetchStories = useFactoryStore(s => s.fetchStories);
+  const fetchQueue = useFactoryStore(s => s.fetchQueue);
+  const fetchProjects = useFactoryStore(s => s.fetchProjects);
+  const fetchReports = useFactoryStore(s => s.fetchReports);
+  const fetchAll = useFactoryStore(s => s.fetchAll);
+  const startPolling = useFactoryStore(s => s.startPolling);
+  const stopPolling = useFactoryStore(s => s.stopPolling);
+
+  // ─── UI-local state ───────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [buildOutput, setBuildOutput] = useState('');
   const [validationResult, setValidationResult] = useState<{
@@ -100,74 +97,18 @@ export default function Dashboard() {
     file: string;
   } | null>(null);
   const [outputPanelOpen, setOutputPanelOpen] = useState(false);
-  const [hasProjects, setHasProjects] = useState(true);
-  const [activeProject, setActiveProject] = useState<{ id: string; name: string; path: string } | null>(null);
-  const [projectCount, setProjectCount] = useState(0);
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
   const [isBuildingAll, setIsBuildingAll] = useState(false);
-  const [queueStatusMap, setQueueStatusMap] = useState<Record<string, { status: string; id: string }>>({});
-  const [queueRunning, setQueueRunning] = useState(false);
   const [hasLoopWarning, setHasLoopWarning] = useState(false);
 
   const logOffsetRef = useRef(0);
   const isInitialLoad = useRef(true);
 
-  const fetchQueueStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/queue');
-      const data = await res.json();
-      const map: Record<string, { status: string; id: string }> = {};
-      for (const item of (data.items || [])) {
-        // API returns camelCase: storyFile / specFile
-        const file = item.storyFile || item.specFile || item.story_file || item.spec_file;
-        if (file) {
-          map[file] = { status: item.status, id: item.id };
-        }
-      }
-      setQueueStatusMap(map);
-      const running = (data.items || []).some((i: any) => i.status === 'running');
-      setQueueRunning(running || data.isRunning || false);
-    } catch {}
-  }, []);
 
-  const fetchStories = useCallback(async () => {
-    try {
-      const res = await fetch('/api/stories');
-      const data = await res.json();
-      setStories(data.stories || []);
-      setFeatureStories(data.featureStories || []);
-    } catch {
-      console.error('Failed to fetch stories');
-    }
-  }, []);
-
-  const fetchReports = useCallback(async () => {
-    try {
-      const res = await fetch('/api/reports');
-      const data = await res.json();
-      setReportEntries(data.entries || []);
-      setReportStats(data.stats || null);
-    } catch {
-      console.error('Failed to fetch reports');
-    }
-  }, []);
-
-  const fetchProjects = useCallback(async () => {
-    try {
-      const res = await fetch('/api/projects');
-      const data = await res.json();
-      const projects = data.projects || [];
-      setProjectCount(projects.length);
-      setHasProjects(projects.length > 0);
-      if (!projects.length) setShowAddProject(true);
-      const active = projects.find((p: any) => p.id === data.activeId);
-      setActiveProject(active || null);
-    } catch {}
-  }, []);
 
   useEffect(() => {
-    Promise.all([fetchProjects(), fetchStories(), fetchReports(), fetchQueueStatus()]).finally(() => {
+    fetchAll().finally(() => {
       setLoading(false);
       setTimeout(() => {
         isInitialLoad.current = false;
@@ -189,7 +130,10 @@ export default function Dashboard() {
         }
       }
     }
-  }, [fetchProjects, fetchStories, fetchReports, fetchQueueStatus]);
+    // Start coordinated polling
+    startPolling(5000);
+    return () => stopPolling();
+  }, [fetchAll, startPolling, stopPolling]);
 
   useEffect(() => {
     const tab = showAddProject ? 'projects' : activeTab;
@@ -372,7 +316,7 @@ export default function Dashboard() {
       if (res.ok) {
         setBuildOutput(`✓ Added "${storyFile}" to build queue`);
         toast.success('Added to queue', { description: storyFile });
-        fetchQueueStatus();
+        fetchQueue();
         setActiveTab('build');
       } else {
         setBuildOutput(`✗ ${data.error}`);
@@ -461,7 +405,7 @@ export default function Dashboard() {
           description: parts.length > 0 ? parts.join(', ') : 'Switch to Build tab to start processing',
         });
         setActiveTab('build');
-        fetchQueueStatus();
+        fetchQueue();
       } else if (errors > 0 || skipped > 0) {
         toast.error(`No stories queued`, { description: parts.join(', ') });
       } else {
@@ -638,7 +582,6 @@ export default function Dashboard() {
                 <AddProject
                   onProjectAdded={() => {
                     setShowAddProject(false);
-                    setHasProjects(true);
                     setProjectRefreshKey((k) => k + 1);
                     fetchProjects();
                     fetchStories();

@@ -4,6 +4,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec } from './types.ts';
 import { storySlug, storyPort } from './types.ts';
 import { log } from './log.ts';
+import { AppStorySchema, FeatureStorySchema } from './schemas.ts';
 import { execSync } from 'node:child_process';
 
 import { getActiveProject } from './config.ts';
@@ -94,42 +95,20 @@ export function listStories(repoPath: string): { apps: string[]; features: strin
 export function validateStory(story: AppStory): ValidationResult {
     const errors: string[] = [];
 
-    // Required: appName
-    if (!story.appName || story.appName.trim().length === 0) {
-        errors.push('appName is required');
+    // Structural validation via Zod
+    const result = AppStorySchema.safeParse(story);
+    if (!result.success) {
+        for (const issue of result.error.issues) {
+            const path = issue.path.length > 0 ? issue.path.join('.') + ': ' : '';
+            errors.push(`${path}${issue.message}`);
+        }
     }
 
-    // Required: description
-    if (!story.description || story.description.trim().length === 0) {
-        errors.push('description is required');
-    }
-
-    // Slug must be valid
-    const slug = storySlug(story);
-    if (slug && !/^[a-z][a-z0-9-]*$/.test(slug)) {
-        errors.push(`Invalid slug "${slug}" — must be lowercase alphanumeric with hyphens`);
-    }
-
-    // Required: stack.framework
-    if (!story.stack?.framework) {
-        errors.push('stack.framework is required');
-    }
-
-    // Port range (if specified)
-    const port = storyPort(story);
-    if (story.deployment?.port && (port < 1024 || port > 65535)) {
-        errors.push(`Port ${port} is out of range (1024–65535)`);
-    }
-
-    // Data tables: each must have a name and at least one field
-    if (story.data?.tables) {
-        for (const table of story.data.tables) {
-            if (!table.name) {
-                errors.push('Each data table must have a name');
-            }
-            if (!table.fields || Object.keys(table.fields).length === 0) {
-                errors.push(`Table "${table.name}" must have at least one field`);
-            }
+    // Slug must be valid (domain rule not encoded in schema)
+    if (story.appName) {
+        const slug = storySlug(story);
+        if (slug && !/^[a-z][a-z0-9-]*$/.test(slug)) {
+            errors.push(`Invalid slug "${slug}" — must be lowercase alphanumeric with hyphens`);
         }
     }
 
@@ -141,11 +120,6 @@ export function validateStory(story: AppStory): ValidationResult {
         }
     }
 
-    // Engine: if specified, must be 'factory' or 'worker'
-    if (story.engine && !['factory', 'worker'].includes(story.engine)) {
-        errors.push(`Unknown engine "${story.engine}". Known: factory, worker`);
-    }
-
     return { passed: errors.length === 0, errors };
 }
 
@@ -153,40 +127,22 @@ export function validateStory(story: AppStory): ValidationResult {
 export function validateFeatureStory(story: FeatureStory): ValidationResult {
     const errors: string[] = [];
 
-    if (!story.feature?.name) {
-        errors.push('feature.name is required');
-    }
-    if (!story.feature?.slug) {
-        errors.push('feature.slug is required');
-    }
-    if (!story.target?.app) {
-        errors.push('target.app is required');
-    }
-
-    // Validate phase
-    if (story.phase !== undefined && (typeof story.phase !== 'number' || story.phase < 1 || story.phase > 10)) {
-        errors.push('phase must be a number between 1 and 10');
-    }
-
-    // Validate dependsOn
-    if (story.dependsOn) {
-        if (!Array.isArray(story.dependsOn)) {
-            errors.push('dependsOn must be an array of story slugs');
-        } else {
-            for (const dep of story.dependsOn) {
-                if (typeof dep !== 'string' || !/^[a-z][a-z0-9-]*$/.test(dep)) {
-                    errors.push(`Invalid dependency slug "${dep}" — must be lowercase alphanumeric with hyphens`);
-                }
-                if (dep === story.feature?.slug) {
-                    errors.push(`Story cannot depend on itself ("${dep}")`);
-                }
-            }
+    // Structural validation via Zod
+    const result = FeatureStorySchema.safeParse(story);
+    if (!result.success) {
+        for (const issue of result.error.issues) {
+            const path = issue.path.length > 0 ? issue.path.join('.') + ': ' : '';
+            errors.push(`${path}${issue.message}`);
         }
     }
 
-    // Engine: if specified, must be 'factory' or 'worker'
-    if (story.engine && !['factory', 'worker'].includes(story.engine)) {
-        errors.push(`Unknown engine "${story.engine}". Known: factory, worker`);
+    // Self-dependency check (domain rule not encoded in schema)
+    if (story.dependsOn && Array.isArray(story.dependsOn)) {
+        for (const dep of story.dependsOn) {
+            if (dep === story.feature?.slug) {
+                errors.push(`Story cannot depend on itself ("${dep}")`);
+            }
+        }
     }
 
     return { passed: errors.length === 0, errors };
@@ -328,7 +284,9 @@ export function restoreStory(storyPath: string): string | null {
         const raw = readFileSync(absPath, 'utf-8');
         const parsed = parseYaml(raw) as any;
         isFeature = !!(parsed && (parsed.feature || parsed.target || 'phase' in parsed));
-    } catch {}
+    } catch (err) {
+        log('!', `Could not parse story to determine type: ${(err as Error).message?.slice(0, 100) || err}`);
+    }
 
     const targetSubdir = isFeature ? 'features' : 'apps';
     const destDir = join(parentDir, targetSubdir);
@@ -375,16 +333,16 @@ ${dbSection ? dbSection + '\n' : ''}${authSection ? authSection + '\n' : ''}${pa
 
     // Map features/stories/tasks
     const coreTasks: TaskItemSpec[] = [
-        { id: 'task-skeleton', title: 'Scaffold project skeleton and configurations', status: 'pending' },
-        { id: 'task-pages', title: 'Implement main pages, layout, and styling views', status: 'pending' },
+        { id: 'task-skeleton', title: 'Scaffold project skeleton and configurations', status: 'ready-to-build' },
+        { id: 'task-pages', title: 'Implement main pages, layout, and styling views', status: 'ready-to-build' },
     ];
 
     if (story.auth?.provider && story.auth.provider !== 'none') {
-        coreTasks.push({ id: 'task-auth', title: `Integrate and configure ${story.auth.provider} authentication`, status: 'pending' });
+        coreTasks.push({ id: 'task-auth', title: `Integrate and configure ${story.auth.provider} authentication`, status: 'ready-to-build' });
     }
 
     if (story.stack.database) {
-        coreTasks.push({ id: 'task-database', title: `Setup ${story.stack.database} schema, connection, and seed data`, status: 'pending' });
+        coreTasks.push({ id: 'task-database', title: `Setup ${story.stack.database} schema, connection, and seed data`, status: 'ready-to-build' });
     }
 
     const appSpec: AppSpec = {
@@ -398,7 +356,7 @@ ${dbSection ? dbSection + '\n' : ''}${authSection ? authSection + '\n' : ''}${pa
             {
                 name: 'Core Foundation',
                 description: `Foundational scaffolding and layout styling for ${story.appName}.`,
-                status: 'pending',
+                status: 'ready-to-build',
                 stories: [
                     {
                         name: story.appName,

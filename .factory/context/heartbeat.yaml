@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-31T08:50:13Z"
+  last_seen: "2026-05-31T10:31:45Z"
   host: "Mac"
-  task: "post-commit: fix(ui): establish rigid full-screen viewport boundary by constraining SidebarProvider and TpmChat height to h-screen to prevent layout overflow"
+  task: "post-commit: feat(ui): robust delivery summary and graceful CLI process group termination"
   status: alive

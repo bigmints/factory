@@ -363,9 +363,9 @@ api:
     // Force status to ready in the metadata block of the YAML
     if (storyContent.includes('metadata:')) {
       if (/^  status:\s*.*$/m.test(storyContent)) {
-        storyContent = storyContent.replace(/^  status:\s*.*$/m, '  status: ready');
+        storyContent = storyContent.replace(/^  status:\s*.*$/m, '  status: ready-to-build');
       } else {
-        storyContent = storyContent.replace(/(metadata:[\s\S]*?)([\r\n]+)/, '$1$2  status: ready$2');
+        storyContent = storyContent.replace(/(metadata:[\s\S]*?)([\r\n]+)/, '$1$2  status: ready-to-build$2');
       }
     }
 

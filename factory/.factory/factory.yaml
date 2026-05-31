@@ -17,8 +17,8 @@ stack:
 
 agentic:
   logs_dir: .factory/logs
-  task_queue: .factory/task-manager/todo.toon
-  skill_index: .factory/skill-index.toon
+  task_queue: .factory/task-manager/todo.yaml
+  skill_index: .factory/skill-index.yaml
   workflows_dir: .factory/workflows
   knowledge_dir: .factory/knowledge
 
@@ -34,8 +34,8 @@ skills:
   files:
     - factory/scripts/heartbeat/pulse.sh
     - factory/scripts/heartbeat/check.sh
-    - factory/scripts/auto-context/update-context.sh
-    - factory/scripts/auto-context/update-context.mjs
+    - factory/scripts/auto-blueprint/update-blueprint.sh
+    - factory/scripts/auto-blueprint/update-blueprint.mjs
     - factory/scripts/compress-worklog/compress.sh
     - factory/scripts/compress-worklog/compress.mjs
     - factory/scripts/validate-code/validate.sh

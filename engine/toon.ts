@@ -11,6 +11,7 @@ import { join, dirname } from 'node:path';
 import { hostname as osHostname } from 'node:os';
 import { encode, decode } from '@toon-format/toon';
 import { stringify as toYaml } from 'yaml';
+import { log } from './log.ts';
 
 // ─── Read ────────────────────────────────────────────────
 
@@ -21,7 +22,8 @@ export function readToonFile(path: string): Record<string, unknown> | null {
     if (!content.trim()) return {};
     try {
         return decode(content) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+        log('!', `Failed to decode TOON file ${path}: ${(err as Error).message?.slice(0, 100) || err}`);
         return null;
     }
 }

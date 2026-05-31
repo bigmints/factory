@@ -17,9 +17,9 @@ authority: CANONICAL — overrides all other files
 | **Heartbeat** — before every task and after every commit | `FACTORY_PROJECT_ROOT=$(pwd) /path/to/pulse.sh "<task>"` |
 | **Token budget** — keep every prompt under 64k tokens | Stay under 50k working input; split large tasks |
 | **Validate before commit** — zero broken code committed | `npx tsc --noEmit && npx eslint .` |
-| **Context reflects reality** — update after structural changes | Update `context.toon` + write ADR if architectural |
+| **Context reflects reality** — update after structural changes | Update context + write ADR if architectural |
 
-> Scripts path: `/Users/pretheesh/Projects/ag-starter/.agents/skills/`
+> Scripts path: `factory/scripts/` (relative to repo root)
 
 ---
 
@@ -59,14 +59,14 @@ START → bootstrap.md → [WORK LOOP] → SESSION END (§6) → END
 |---------|-----|
 | `tsc --noEmit` fails 3+ times | STOP → escalate |
 | Context size > 50k tokens | compress worklog → trim → retry |
-| `context.toon` parse error | `git checkout .factory/context/context.toon` |
-| Task not in `todo.toon` | `manage.sh list` → find or add it |
+| Context parse error | `git checkout .factory/logs/state.yaml` |
+| Task not in `todo.yaml` | `manage.sh list` → find or add it |
 | Heartbeat stale (> 30 min) | `pulse.sh "resuming"` → continue |
 
 **Stuck checklist:**
 ```
 [ ] Heartbeat fresh (< 30 min)?    NO → pulse.sh "resuming"
-[ ] Task claimed in todo.toon?     NO → manage.sh start <id>
+[ ] Task claimed in todo.yaml?     NO → manage.sh start <id>
 [ ] Context < 50k tokens?          NO → compress worklog
 [ ] ADR covers this decision?      NO → write ADR first
 [ ] Requirements clear?            NO → STOP, ask the user
@@ -90,12 +90,12 @@ A **structural change** = new engine module, new dependency, new/modified CLI co
 Bug fixes and styling → **not structural**, skip this.
 
 **Steps:**
-1. Update `context.toon` — only relevant sections (stack, key_decisions, architecture, project.last_updated)
-2. Update `todo.toon` via manage.sh — complete or add tasks
+1. Update `.factory/logs/state.yaml` — only relevant sections (stack, key_decisions, architecture, project.last_updated)
+2. Update `todo.yaml` via manage.sh — complete or add tasks
 3. Append to worklog:
    ```bash
    FACTORY_PROJECT_ROOT=$(pwd) \
-     /Users/pretheesh/Projects/ag-starter/.agents/skills/auto-context/update-context.sh "<what changed>"
+     factory/scripts/auto-blueprint/update-blueprint.sh "<what changed>"
    ```
 4. Commit context:
    ```bash
@@ -111,11 +111,11 @@ Bug fixes and styling → **not structural**, skip this.
 FACTORY_PROJECT_ROOT=$(pwd) pulse.sh "Session end: <task_id>"
 
 # 2. Complete task
-TASKS_FILE=.factory/task-manager/todo.toon \
-  manage.sh complete --id <id> --summary "<what was done>"
+TASKS_FILE=.factory/task-manager/todo.yaml \
+  .factory/task-manager/manage.sh complete --id <id> --summary "<what was done>"
 
 # 3. Update worklog
-FACTORY_PROJECT_ROOT=$(pwd) update-context.sh "<session summary>"
+FACTORY_PROJECT_ROOT=$(pwd) factory/scripts/auto-blueprint/update-blueprint.sh "<session summary>"
 
 # 4. Commit context
 git add .factory/ && git commit -m "chore(context): session end — <task_id>"
@@ -143,10 +143,10 @@ Valid ADR: Context · Decision · Consequences · Status (all four required)
 | `.factory/workflows/process.md` | All rules (this file) |
 | `.factory/workflows/bootstrap.md` | Session start checklist |
 | `.factory/workflows/commit.md` | Pre-commit validation gate |
-| `.factory/context/context.toon` | Live project state — single source of truth |
-| `.factory/context/heartbeat.toon` | Liveness timestamp (overwrite, never append) |
-| `.factory/task-manager/todo.toon` | Task queue — only via manage.sh |
-| `.factory/skill-index.toon` | Available skills with script paths |
+| `.factory/logs/state.yaml` | Live project state — single source of truth |
+| `.factory/logs/heartbeat.yaml` | Liveness timestamp (overwrite, never append) |
+| `.factory/task-manager/todo.yaml` | Task queue — only via manage.sh |
+| `.factory/skill-index.yaml` | Available skills with script paths |
 | `.factory/knowledge/builds/` | Build history from Factory engine |
 
 ---
@@ -156,21 +156,18 @@ Valid ADR: Context · Decision · Consequences · Status (all four required)
 ```bash
 # Heartbeat
 FACTORY_PROJECT_ROOT=$(pwd) \
-  /Users/pretheesh/Projects/ag-starter/.agents/skills/heartbeat/pulse.sh "<msg>"
+  factory/scripts/heartbeat/pulse.sh "<msg>"
 
 # Task management
-TASKS_FILE=.factory/task-manager/todo.toon \
-  /Users/pretheesh/Projects/fikr-workspace/cowork/.agents/skills/task-manager/manage.sh list
-  
-TASKS_FILE=$(pwd)/.factory/task-manager/todo.toon \
-  /Users/pretheesh/Projects/fikr-workspace/cowork/.agents/skills/task-manager/manage.sh start <id>
+.factory/task-manager/manage.sh list
 
-TASKS_FILE=.factory/task-manager/todo.toon \
-  /Users/pretheesh/Projects/ag-starter/.agents/skills/task-manager/manage.sh complete --id <id> --summary "<what>"
+.factory/task-manager/manage.sh start <id>
+
+.factory/task-manager/manage.sh complete --id <id> --summary "<what>"
 
 # Worklog
 FACTORY_PROJECT_ROOT=$(pwd) \
-  /Users/pretheesh/Projects/ag-starter/.agents/skills/auto-context/update-context.sh "<msg>"
+  factory/scripts/auto-blueprint/update-blueprint.sh "<msg>"
 
 # Git
 git log --oneline -20

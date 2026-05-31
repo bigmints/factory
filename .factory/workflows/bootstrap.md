@@ -12,7 +12,7 @@ trigger: Every new agent session — mandatory
 **0 — Verify git hooks installed** *(one-time check)*
 ```bash
 ls .git/hooks/pre-commit .git/hooks/post-commit 2>/dev/null || \
-  bash /Users/pretheesh/Projects/ag-starter/.agents/skills/heartbeat/setup-hooks.sh
+  echo "Git hooks not installed — run setup if needed"
 ```
 
 **1 — Verify repository root**
@@ -26,25 +26,24 @@ git rev-parse --show-toplevel  # must be .../factory
 |---|------|---------| 
 | 1 | `agents.md` | Your role and quick commands |
 | 2 | `.factory/workflows/process.md` | All rules |
-| 3 | `.factory/context/context.toon` | Project state, stack, key decisions |
+| 3 | `.factory/logs/state.yaml` | Project state, stack, key decisions |
 
 **3 — Load context (on demand)**
 
 | File | When to load |
 |------|-------------|
-| `.factory/task-manager/todo.toon` | Picking a task, checking priorities |
+| `.factory/task-manager/todo.yaml` | Picking a task, checking priorities |
 | `.factory/knowledge/builds/` | Understanding what's already built |
 | `git log --oneline -20` | Recent changes |
 
 ```bash
 # Quick check — in_progress task to resume?
-TASKS_FILE=$(pwd)/.factory/task-manager/todo.toon \
-  /Users/pretheesh/Projects/fikr-workspace/cowork/.agents/skills/task-manager/manage.sh list --status in_progress
+.factory/task-manager/manage.sh list --status in_progress
 ```
 
 **4 — Check heartbeat**
 ```bash
-cat .factory/context/heartbeat.toon
+cat .factory/logs/heartbeat.yaml
 ```
 | Age | Action |
 |-----|--------|
@@ -54,23 +53,21 @@ cat .factory/context/heartbeat.toon
 
 ```bash
 FACTORY_PROJECT_ROOT=$(pwd) \
-  /Users/pretheesh/Projects/ag-starter/.agents/skills/heartbeat/pulse.sh "Session start"
+  factory/scripts/heartbeat/pulse.sh "Session start"
 ```
 
 **5 — Claim a task**
 ```bash
-TASKS_FILE=$(pwd)/.factory/task-manager/todo.toon \
-  /Users/pretheesh/Projects/fikr-workspace/cowork/.agents/skills/task-manager/manage.sh list
+.factory/task-manager/manage.sh list
 
-TASKS_FILE=$(pwd)/.factory/task-manager/todo.toon \
-  /Users/pretheesh/Projects/fikr-workspace/cowork/.agents/skills/task-manager/manage.sh start <task_id>
+.factory/task-manager/manage.sh start <task_id>
 ```
 Rules: lowest priority first · never claim `in_progress` · never re-claim `completed`
 
 **6 — Start heartbeat**
 ```bash
 FACTORY_PROJECT_ROOT=$(pwd) \
-  /Users/pretheesh/Projects/ag-starter/.agents/skills/heartbeat/pulse.sh "<task_id>: starting"
+  factory/scripts/heartbeat/pulse.sh "<task_id>: starting"
 ```
 
 ---
@@ -83,7 +80,7 @@ Bootstrap complete → follow `.factory/workflows/process.md`
 
 | Problem | Fix |
 |---------|-----|
-| `context.toon` parse error | `git checkout .factory/context/context.toon` |
-| `todo.toon` corrupted | `git checkout .factory/task-manager/todo.toon` |
+| `state.yaml` parse error | `git checkout .factory/logs/state.yaml` |
+| `todo.yaml` corrupted | `git checkout .factory/task-manager/todo.yaml` |
 | No tasks | `manage.sh add "summary" --priority 2` |
-| Skills not found | Check `.factory/skill-index.toon` · verify paths exist |
+| Skills not found | Check `.factory/skill-index.yaml` · verify paths exist |

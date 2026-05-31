@@ -717,7 +717,7 @@ async function handleApplyStory(
 
     if (kind === 'feature') {
       try {
-        enqueue(relativePath, 'FeatureStory', {
+        await enqueue(relativePath, 'FeatureStory', {
           phase: phase || 1,
           dependsOn: dependsOn || [],
           engine: 'factory',

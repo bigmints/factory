@@ -82,7 +82,7 @@ function writeQueueBlueprint(item: QueueItem) {
   try {
     const queue = loadQueue();
     const completed = queue
-      .filter(c => c.status === 'completed')
+      .filter(c => c.status === 'done')
       .sort((a, b) => (a.completedAt || '').localeCompare(b.completedAt || ''));
 
     if (completed.length === 0) return;
@@ -184,8 +184,8 @@ Built in ${(durationMs / 1000).toFixed(1)}s.
  * Process queue items sequentially in the background.
  */
 function processQueueInBackground() {
-  function processNext() {
-    const item = dequeue();
+  async function processNext() {
+    const item = await dequeue();
 
     if (!item) {
       setQueueRunning(false);
@@ -205,8 +205,8 @@ function processQueueInBackground() {
     const startTime = Date.now();
 
     // Mark item as running
-    updateItem(item.id, {
-      status: 'running',
+    await updateItem(item.id, {
+      status: 'building',
       startedAt: new Date().toISOString()
     });
 
@@ -253,7 +253,7 @@ function processQueueInBackground() {
       try { appendFileSync(LOG_FILE, chunk); } catch { /* ignore */ }
     });
 
-    child.on('close', (code: number | null) => {
+    child.on('exit', async (code: number | null) => {
       // Recovery check: if item was stopped by user, do not overwrite status and error!
       const currentItem = getItem(item.id);
       if (currentItem && currentItem.error === 'Stopped by user') {
@@ -266,8 +266,8 @@ function processQueueInBackground() {
 
       if (code === 0) {
         // Success
-        updateItem(item.id, {
-          status: 'completed',
+        await updateItem(item.id, {
+          status: 'done',
           output,
           completedAt: new Date().toISOString(),
           durationMs
@@ -277,7 +277,7 @@ function processQueueInBackground() {
       } else {
         // Failed
         const realError = extractRealError(stdout, stderr, code);
-        updateItem(item.id, {
+        await updateItem(item.id, {
           status: 'failed',
           output,
           error: stripAnsi(realError),
@@ -291,7 +291,7 @@ function processQueueInBackground() {
       processNext();
     });
 
-    child.on('error', (err: Error) => {
+    child.on('error', async (err: Error) => {
       // Recovery check: if item was stopped by user, do not overwrite status and error!
       const currentItem = getItem(item.id);
       if (currentItem && currentItem.error === 'Stopped by user') {
@@ -300,7 +300,7 @@ function processQueueInBackground() {
       }
 
       const durationMs = Date.now() - startTime;
-      updateItem(item.id, {
+      await updateItem(item.id, {
         status: 'failed',
         output: '',
         error: err.message,
@@ -322,7 +322,7 @@ export async function POST() {
     // Check if already running
     if (isQueueRunning()) {
       const statsObj = getQueueStats();
-      const pendingCount = statsObj.pending || 0;
+      const pendingCount = statsObj['ready-to-build'] || 0;
       return NextResponse.json({
         success: true,
         message: 'Queue is already running. New items will be processed automatically.',
@@ -333,7 +333,7 @@ export async function POST() {
 
     // Check for pending items
     const statsObj = getQueueStats();
-    const pendingCount = statsObj.pending || 0;
+    const pendingCount = statsObj['ready-to-build'] || 0;
     if (pendingCount === 0) {
       return NextResponse.json({ error: 'No pending items in queue' }, { status: 400 });
     }

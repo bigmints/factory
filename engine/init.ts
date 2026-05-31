@@ -165,7 +165,7 @@ export function analyzeExistingProject(repoPath: string): Record<string, unknown
 }
 
 /** Build a simplified 2-level file tree, skipping noise dirs. */
-function buildFileTree(dir: string, depth: number, _current = 0): string[] {
+export function buildFileTree(dir: string, depth: number, _current = 0): string[] {
     const SKIP = new Set(['.git', 'node_modules', '.next', 'dist', 'build', '.cache', 'coverage', '.turbo']);
     if (_current >= depth) return [];
     try {
@@ -433,9 +433,9 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
     const features: FeatureEpicSpec[] = [];
     
     if (isExistingCodebase) {
-        const epicStatus = 'completed';
+        const epicStatus = 'done';
         const storyStatus = 'done';
-        const taskStatus = 'completed';
+        const taskStatus = 'done';
 
         // 1. Foundational Scaffold Feature
         features.push({
@@ -561,7 +561,7 @@ ${description}
 
 // ─── initBridge ──────────────────────────────────────────
 
-export function initBridge(repoPath: string): InitResult {
+export async function initBridge(repoPath: string): Promise<InitResult> {
     const files: InitResult['files'] = [];
     const factoryRoot = getFactoryRoot();
     const factoryDir = join(repoPath, '.factory');
@@ -583,8 +583,17 @@ export function initBridge(repoPath: string): InitResult {
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     }
 
-    // Auto-detect stack
-    const stack = detectStack(repoPath);
+    // Run LLM Analysis if possible
+    let analysisResult = null;
+    try {
+        const { llmAnalyzeProject } = await import('./analyze.ts');
+        analysisResult = await llmAnalyzeProject(repoPath);
+    } catch (e) {
+        logError(`LLM analysis skipped: ${e}`);
+    }
+
+    // Auto-detect stack (fallback)
+    const stack = analysisResult?.stack || detectStack(repoPath);
 
     // 1. factory.yaml — always refresh (to update factory_home on re-init)
     const yamlPath = join(factoryDir, 'factory.yaml');
@@ -612,7 +621,10 @@ export function initBridge(repoPath: string): InitResult {
     // 2. state.yaml — analyze codebase (skip if already exists)
     const statePath = join(factoryDir, 'logs', 'state.yaml');
     if (!existsSync(statePath)) {
-        const stateData = analyzeExistingProject(repoPath);
+        let stateData: any = analyzeExistingProject(repoPath);
+        if (analysisResult?.context) {
+            stateData = { ...stateData, ...analysisResult.context };
+        }
         writeFileSync(statePath, toYaml(stateData));
         files.push({ path: '.factory/logs/state.yaml', action: 'created' });
     } else {

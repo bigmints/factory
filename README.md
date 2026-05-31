@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">🏭 Factory</h1>
   <p align="center">
-    <strong>Autonomous app scaffolding from YAML specs — plan, build, test, fix, push.</strong>
+    <strong>Autonomous TPM-driven build engine — delegate to CLI agents, monitor, ship.</strong>
   </p>
   <p align="center">
     <a href="#quick-start">Quick Start</a> •
@@ -19,20 +19,19 @@
 
 ---
 
-The Factory generates **production-ready applications** from declarative YAML specifications. It scaffolds, validates, builds, tests with real toolchains, self-corrects, and pushes working code to your repo — all autonomously.
+The Factory generates **production-ready applications** from declarative YAML stories. A TPM orchestrator delegates code generation to CLI agents (agy, gemini, claude, pi), monitors for dysfunction, self-corrects, and pushes working code to your repo — all autonomously.
 
-Write a spec. Queue it up. Go to sleep. Wake up to working code.
+Write a story. Queue it up. Go to sleep. Wake up to working code.
 
 ## ✨ Features
 
-- **🤖 Autonomous Build Pipeline** — Plan → Build → Test → Iterate → Push, no manual steps
-- **🧪 Real Toolchain Testing** — Runs `npm install`, `tsc`, ESLint/Biome, Vitest/Jest, and runtime smoke tests
-- **🔧 Self-Correcting** — Targeted iteration: parses errors, identifies broken files, sends only those to the LLM for fixing
-- **📦 Module-by-Module Generation** — Large apps (>15 files) are decomposed into ordered modules with cross-module context
-- **🔗 Integration-Aware Features** — Feature builds read the target app's package.json, tsconfig, and file tree
+- **🤖 TPM Orchestrator** — LLM acts as a TPM: briefs CLI agents, monitors sessions, makes go/no-go calls
+- **🔧 CLI Delegation** — Delegates code generation to CLI agents (agy, gemini, claude, pi) with stream monitoring
+- **🛡️ Dysfunction Detection** — Detects stalls, loops, rate limits, and questions from CLI agents; auto-intervenes
 - **📋 Dependency-Aware Queue** — Phase ordering and `dependsOn` gating — queue everything, the engine figures out the build order
+- **📝 Chronicle System** — Auto-distills build history into compressed context for future builds
 - **🌐 Multi-Provider LLM** — Gemini, OpenAI, or Ollama (local). Bring your own models.
-- **🖥️ Web Dashboard** — Next.js UI for spec management, queue monitoring, build history, and settings
+- **🖥️ Web Dashboard** — Next.js UI for story management, queue monitoring, build history, and settings
 
 ## Quick Start
 
@@ -67,30 +66,30 @@ cp settings.example.json settings.json
 npx tsx engine/cli.ts project add /path/to/your/repo
 
 # This creates a .factory/ directory in your repo with:
-#   factory.yaml     — project config
-#   specs/apps/      — app spec files
-#   specs/features/  — feature spec files
+#   factory.yaml          — project config
+#   stories/apps/         — app story files
+#   stories/features/     — feature story files
 ```
 
 ### Build
 
 ```bash
-# Write a spec (see template.yaml for the full schema)
-# Place it in your repo: .factory/specs/apps/my-app.yaml
+# Write a story (see template.yaml for the full schema)
+# Place it in your repo: .factory/stories/apps/my-app.yaml
 
-# Build a single spec
-npx tsx engine/cli.ts build .factory/specs/apps/my-app.yaml
+# Build a single story
+npx tsx engine/cli.ts build .factory/stories/apps/my-app.yaml
 
-# Or queue multiple specs and process autonomously
-npx tsx engine/cli.ts queue add .factory/specs/apps/my-app.yaml
-npx tsx engine/cli.ts queue add .factory/specs/features/auth.yaml
+# Or queue multiple stories and process autonomously
+npx tsx engine/cli.ts queue add .factory/stories/apps/my-app.yaml
+npx tsx engine/cli.ts queue add .factory/stories/features/auth.yaml
 npx tsx engine/cli.ts queue start
 ```
 
 ### Dashboard
 
 ```bash
-npm run dev    # http://localhost:4040
+./start.sh     # http://localhost:11498
 ```
 
 ## CLI Reference
@@ -101,9 +100,9 @@ factory <command> [options]
 
 | Command                   | Description                                                    |
 | ------------------------- | -------------------------------------------------------------- |
-| `build <spec.yaml>`       | Full pipeline: validate → plan → build → test → iterate → push |
-| `validate <spec.yaml>`    | Validate a spec without building                               |
-| `status`                  | Show all spec statuses                                         |
+| `build <story.yaml>`      | Full pipeline: validate → orchestrate → delegate → push        |
+| `validate <story.yaml>`   | Validate a story without building                              |
+| `status`                  | Show all story statuses                                        |
 | `sync <repo-path>`        | Check .factory sync state                                      |
 | `init-bridge <repo-path>` | Initialize .factory bridge in a repo                           |
 
@@ -118,58 +117,49 @@ factory <command> [options]
 
 ### Feature Builds
 
-| Command                        | Description                          |
-| ------------------------------ | ------------------------------------ |
-| `feature build <spec.yaml>`    | Build a feature into an existing app |
-| `feature validate <spec.yaml>` | Validate a feature spec              |
+| Command                         | Description                          |
+| ------------------------------- | ------------------------------------ |
+| `feature build <story.yaml>`    | Build a feature into an existing app |
+| `feature validate <story.yaml>` | Validate a feature story             |
 
 ### Build Queue
 
 | Command                 | Description                            |
 | ----------------------- | -------------------------------------- |
-| `queue list`            | List all queue items with status       |
-| `queue add <spec.yaml>` | Add spec to the build queue            |
-| `queue start`           | Process all pending items autonomously |
-| `queue stats`           | Show queue statistics                  |
-| `queue clear`           | Clear completed items                  |
-| `queue retry <id>`      | Retry a failed item                    |
-| `queue remove <id>`     | Remove an item from the queue          |
+| `queue list`             | List all queue items with status        |
+| `queue add <story.yaml>` | Add story to the build queue            |
+| `queue start`            | Process all pending items autonomously  |
+| `queue stats`            | Show queue statistics                   |
+| `queue clear`            | Clear completed items                   |
+| `queue retry <id>`       | Retry a failed item                     |
+| `queue remove <id>`      | Remove an item from the queue           |
+| `queue daemon start`     | Start persistent queue daemon           |
+| `queue watch start`      | Start file-watching queue               |
 
 > All CLI commands run via `npx tsx engine/cli.ts <command>`.
 
 ## How It Works
 
 ```
-You write a spec → Queue it → Factory builds it → You wake up to working code
+You write a story → Queue it → Factory builds it → You wake up to working code
 ```
 
 ### The Build Pipeline
 
-Each spec goes through this pipeline:
+Each story goes through this pipeline:
 
-1. **Gather** — Reads spec, `factory.yaml`, knowledge files, repo conventions
-2. **Validate** — Checks spec schema before burning LLM tokens
-3. **Plan** — LLM creates a build plan (file list, architecture, decisions)
-4. **Build** — LLM generates code. Apps >15 files use module-by-module generation
-5. **Test** — Real toolchain: `npm install` → `tsc` → lint → test → runtime smoke test
-6. **Iterate** — If tests fail, targeted fix: only broken files + their importers are resent to the LLM
-7. **Write** — Files written to repo, `npm install` run in the app directory
-8. **Push** — Git commit and push
+1. **Load** — Reads story YAML, validates schema (`story.ts`)
+2. **Gather** — Builds blueprint: knowledge files, conventions, chronicle, build logs (`blueprint.ts`)
+3. **Orchestrate** — TPM orchestrator builds system prompt with full context (`orchestrate.ts`)
+4. **Delegate** — TPM delegates to a CLI agent (agy/gemini/claude/pi) with a complete brief
+5. **Monitor** — Stream monitoring detects stalls, loops, rate limits, and questions
+6. **Decide** — TPM makes go/no-go: `mark_story_done`, `create_fix_task`, or `mark_story_failed`
+7. **Write** — CLI agent writes files directly to disk; engine runs `npm install`, generates `AGENTS.md`
+8. **Push** — Git commit and push, archive story to `done/`, distill chronicle
 
-### Task Classification
+## Story Format
 
-The engine classifies each spec and applies appropriate validation:
-
-| Task Type  | Install | tsc | Lint | Tests | Runtime | Max Iterations |
-| ---------- | ------- | --- | ---- | ----- | ------- | -------------- |
-| `full-app` | ✓       | ✓   | ✓    | ✓     | ✓       | 5              |
-| `frontend` | ✓       | ✓   | ✓    | ✓     | ✓       | 4              |
-| `scaffold` | ✓       | ✗   | ✗    | ✗     | ✗       | 2              |
-| `config`   | ✗       | ✗   | ✗    | ✗     | ✗       | 0              |
-
-## Spec Format
-
-### App Spec
+### App Story
 
 ```yaml
 appName: "Inventory Tracker"
@@ -206,7 +196,7 @@ deployment:
 
 See [template.yaml](template.yaml) for the full schema with all options.
 
-### Feature Spec
+### Feature Story
 
 ```yaml
 feature:
@@ -234,31 +224,41 @@ pages:
 
 ```
 factory/
-├── engine/                 ← Core build engine (TypeScript CLI)
+├── engine/                 ← Core build engine (TypeScript, runs via npx tsx)
 │   ├── cli.ts              ← CLI entry point & command dispatcher
 │   ├── config.ts           ← Config loading (projects, settings, bridge)
-│   ├── spec.ts             ← YAML spec parsing & validation
-│   ├── context.ts          ← Repo context & knowledge gathering
-│   ├── generate.ts         ← LLM pipeline (plan → build → test → iterate)
-│   ├── task-classifier.ts  ← Task profiling & validation gates
-│   ├── writer.ts           ← File writing, npm install, git ops
-│   ├── db.ts               ← SQLite database (queue, build history)
-│   ├── queue.ts            ← Dependency-aware build queue
-│   ├── health.ts           ← Self-healing & heartbeat monitoring
-│   ├── autofix.ts          ← LLM-powered spec auto-fixing
+│   ├── story.ts            ← YAML story parsing & validation
+│   ├── blueprint.ts        ← Knowledge, conventions & project context gathering
+│   ├── orchestrate.ts      ← TPM orchestrator: LLM loop → CLI delegation → monitoring
+│   ├── generate.ts         ← LLM API client (callProviderWithTools) + pipeline wrappers
+│   ├── cli-adapter.ts      ← CLI binary resolution (agy, gemini, claude, pi)
+│   ├── writer.ts           ← File writing, npm install, git ops, knowledge feedback
+│   ├── db.ts               ← Build logs (YAML-based)
+│   ├── queue.ts            ← Dependency-aware build queue (YAML-based)
+│   ├── health.ts           ← State audit, heartbeat, error categorisation
+│   ├── chronicle.ts        ← Auto-distill build history into knowledge context
+│   ├── rollup.ts           ← Scaffold.yaml sync & progress rollup
+│   ├── skills.ts           ← Skill registry and execution
+│   ├── init.ts             ← Project initialisation & bridge setup
+│   ├── toon.ts             ← TOON/YAML read/write helpers, heartbeat writer
+│   ├── build-tools.ts      ← Build tool definitions for LLM tool-calling
+│   ├── worker-engine.ts    ← Worker engine for YAML prompt queue processing
+│   ├── daemon.ts           ← Daemon lifecycle (start/stop)
+│   ├── repl.ts             ← Interactive REPL for LLM providers
 │   ├── types.ts            ← Shared TypeScript types
 │   └── log.ts              ← Structured coloured logging
-├── ui/                     ← Next.js dashboard (port 4040)
-├── template.yaml           ← App spec template
+├── ui/                     ← Next.js dashboard (port 11498)
+├── start.sh                ← Start script
+├── template.yaml           ← Story template
 └── package.json
 ```
 
 ## UI Dashboard
 
-Start with `npm run dev` → **http://localhost:4040**
+Start with `./start.sh` → **http://localhost:11498**
 
-- **Dashboard** — Project overview and spec statuses
-- **Spec Generator** — AI-assisted spec creation from natural language
+- **Dashboard** — Project overview and story statuses
+- **Story Editor** — Create and edit story YAML files
 - **Queue View** — Monitor builds in real time
 - **Build History** — Browse past builds and results
 - **Settings** — Configure LLM providers, API keys, and models
@@ -297,8 +297,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, project structure,
 
 - [userguide.md](userguide.md) — Detailed walkthrough of how the factory works
 - [AGENTS.md](AGENTS.md) — Project structure, conventions, and common tasks
-- [SKILL.md](SKILL.md) — Commands, spec formats, and output structure
-- [SPEC_GENERATION.md](SPEC_GENERATION.md) — AI-powered spec generation workflow
 
 ## License
 

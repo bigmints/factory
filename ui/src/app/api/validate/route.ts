@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
  */
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 
@@ -142,10 +142,10 @@ export async function POST(request: Request) {
       env: { ...process.env, npm_config_cache: '/tmp/factory-npm-cache', TMPDIR: '/tmp/factory-npm-cache' }
     };
 
-    const result = execSync(
-      `factory validate "${storyPath}" 2>&1`,
-      execOptions
-    );
+    const result = execFileSync(
+      'factory', ['validate', storyPath],
+      { ...execOptions, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).toString();
 
     // Strip ANSI escape codes
     const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');

@@ -17,7 +17,7 @@ cp settings.example.json settings.json   # Edit with your LLM API keys
 cp projects.example.json projects.json   # Edit with your project paths
 
 # Start the UI dashboard
-npm run dev    # http://localhost:4040
+./start.sh     # http://localhost:11498
 
 # Run the CLI
 npx tsx engine/cli.ts status
@@ -27,25 +27,35 @@ npx tsx engine/cli.ts status
 
 ```
 factory/
-├── engine/                 ← Core build engine (TypeScript)
+├── engine/                 ← Core build engine (TypeScript, runs via npx tsx)
 │   ├── cli.ts              ← CLI entry point & command dispatcher
 │   ├── config.ts           ← Config loading (projects, settings, bridge)
-│   ├── spec.ts             ← YAML spec parsing & validation
-│   ├── context.ts          ← Repo context gathering
-│   ├── generate.ts         ← LLM pipeline (plan → build → test → iterate)
-│   ├── task-classifier.ts  ← Task profiling & validation gates
+│   ├── story.ts            ← YAML story parsing & validation
+│   ├── blueprint.ts        ← Knowledge, conventions & project context gathering
+│   ├── orchestrate.ts      ← TPM orchestrator: LLM loop → CLI delegation → monitoring
+│   ├── generate.ts         ← LLM API client (callProviderWithTools) + pipeline wrappers
+│   ├── cli-adapter.ts      ← CLI binary resolution (agy, gemini, claude, pi)
 │   ├── writer.ts           ← File writing, git ops, knowledge feedback
-│   ├── db.ts               ← SQLite database (queue, build history)
-│   ├── queue.ts            ← Dependency-aware build queue
-│   ├── health.ts           ← Self-healing & heartbeat monitoring
-│   ├── autofix.ts          ← LLM-powered spec auto-fixing
+│   ├── db.ts               ← Build logs (YAML-based)
+│   ├── queue.ts            ← Dependency-aware build queue (YAML-based)
+│   ├── health.ts           ← State audit, heartbeat, error categorisation
+│   ├── chronicle.ts        ← Auto-distill build history into knowledge context
+│   ├── rollup.ts           ← Scaffold.yaml sync & progress rollup
+│   ├── skills.ts           ← Skill registry and execution
+│   ├── init.ts             ← Project initialisation & bridge setup
+│   ├── toon.ts             ← TOON/YAML read/write helpers
+│   ├── build-tools.ts      ← Build tool definitions for LLM tool-calling
+│   ├── worker-engine.ts    ← Worker engine for YAML prompt queue processing
+│   ├── daemon.ts           ← Daemon lifecycle (start/stop)
+│   ├── repl.ts             ← Interactive REPL for LLM providers
 │   ├── types.ts            ← Shared TypeScript types
 │   └── log.ts              ← Structured coloured logging
-├── ui/                     ← Next.js dashboard (port 4040)
+├── ui/                     ← Next.js dashboard (port 11498)
 │   └── src/
 │       ├── app/api/        ← API routes
 │       └── components/     ← UI components
-├── template.yaml           ← App spec template
+├── start.sh                ← Start script
+├── template.yaml           ← Story template
 └── package.json
 ```
 
@@ -59,11 +69,11 @@ factory/
 4. If the command needs a new engine module, create `engine/<module>.ts`
 5. Add an API route in `ui/src/app/api/` if UI access is needed
 
-### Adding a New Spec Field
+### Adding a New Story Field
 
-1. Update the type in `engine/types.ts` (`AppSpec` or `FeatureSpec`)
-2. Add validation in `engine/spec.ts` → `validateSpec()`
-3. Update prompts in `engine/generate.ts` to use the new field
+1. Update the type in `engine/types.ts` (`AppStory` or `FeatureStory`)
+2. Add validation in `engine/story.ts` → `validateStory()`
+3. Update prompts in `engine/orchestrate.ts` to use the new field in context
 4. Update `template.yaml` with an example
 
 ### Adding a New UI Feature
@@ -77,8 +87,8 @@ factory/
 
 - **Engine**: Pure TypeScript, runs via `npx tsx`. No transpilation step.
 - **UI**: Next.js 15, App Router, shadcn/ui, Tailwind CSS.
-- **State**: SQLite for queue/builds (`factory.db`), JSON for projects.
-- **Specs**: YAML, validated against typed schemas in `types.ts`.
+- **State**: YAML files for queue/builds (`~/.factory/`), JSON for projects/settings (`~/.factory/`).
+- **Stories**: YAML, validated against typed schemas in `types.ts`.
 - Run `npm run lint` and `npm run typecheck` before submitting.
 
 ## Pull Request Guidelines

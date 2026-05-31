@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync, readdir
 import { join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
-import { slugify } from './types.ts';
+import { slugify, LifecycleStatus } from './types.ts';
 import { getActiveProject, isBootstrapped } from './config.ts';
 import { updateStoryStatus, archiveStory } from './story.ts';
 import lockfile from 'proper-lockfile';
@@ -61,7 +61,7 @@ export interface QueueItem {
     id: string;
     storyFile: string;
     kind: 'AppStory' | 'FeatureStory';
-    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'needs-attention' | 'blocked';
+    status: LifecycleStatus;
     priority: number;
     phase: number;
     dependsOn: string[];
@@ -174,7 +174,8 @@ export function resolveThreadIdForStory(storyFile: string, dependsOn: string[]):
             for (const subDir of ['done', 'features', 'apps']) {
                 const dirPath = join(storiesDir, subDir);
                 if (!existsSync(dirPath)) continue;
-                const file = readdirSync(dirPath).find(f => f.replace(/\.ya?ml$/, '') === depSlug);
+                const files = readdirSync(dirPath, { recursive: true }) as string[];
+                const file = files.find(f => typeof f === 'string' && f.split(/[\\/]/).pop()?.replace(/\.ya?ml$/, '') === depSlug);
                 if (file) {
                     const parsed = parseYaml(readFileSync(join(dirPath, file), 'utf-8')) as any;
                     if (parsed?.threadId) return parsed.threadId;
@@ -248,7 +249,7 @@ function _enqueueSync(
         id,
         storyFile,
         kind,
-        status: 'pending',
+        status: 'ready-to-build',
         priority: 0,
         phase,
         dependsOn,
@@ -314,8 +315,9 @@ export function isDependencyCompleted(depSlug: string): boolean {
             const dirPath = join(storiesDir, subDir);
             if (!existsSync(dirPath)) continue;
 
-            const files = readdirSync(dirPath).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-            for (const file of files) {
+            const files = readdirSync(dirPath, { recursive: true }) as string[];
+            const validFiles = files.filter(f => typeof f === 'string' && (f.endsWith('.yaml') || f.endsWith('.yml')));
+            for (const file of validFiles) {
                 const filePath = join(dirPath, file);
                 try {
                     const raw = readFileSync(filePath, 'utf-8');
@@ -323,7 +325,7 @@ export function isDependencyCompleted(depSlug: string): boolean {
                     if (!parsed) continue;
 
                     // Match by filename stem — this is what dependsOn actually uses
-                    const fileStem = file.replace(/\.ya?ml$/, '');
+                    const fileStem = file.split(/[\\/]/).pop()?.replace(/\.ya?ml$/, '') || '';
 
                     let isMatch = fileStem === depSlug;
 
@@ -362,10 +364,10 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
     if (item.kind === 'FeatureStory' && item.targetApp) {
         const latestApp = getLatestDependencyItem(item.targetApp);
         if (latestApp) {
-            if (latestApp.status === 'failed' || latestApp.status === 'blocked') {
+            if (latestApp.status === 'failed' || latestApp.status === 'paused') {
                 return { ready: false, reason: `App story "${latestApp.storyFile}" ${latestApp.status}. Cannot build feature on a broken app.` };
             }
-            if (latestApp.status === 'pending' || latestApp.status === 'running') {
+            if (latestApp.status === 'ready-to-build' || latestApp.status === 'building') {
                 return { ready: false, reason: `App story "${latestApp.storyFile}" has not completed yet.` };
             }
             // completed — fall through, ready
@@ -394,10 +396,10 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
     for (const depSlug of dependsOn) {
         const latestDep = getLatestDependencyItem(depSlug);
         if (latestDep) {
-            if (latestDep.status === 'failed' || latestDep.status === 'blocked') {
+            if (latestDep.status === 'failed' || latestDep.status === 'paused') {
                 return { ready: false, reason: `Dependency "${depSlug}" (${latestDep.storyFile}) ${latestDep.status}. Cannot proceed.` };
             }
-            if (latestDep.status === 'pending' || latestDep.status === 'running') {
+            if (latestDep.status !== 'done') {
                 return { ready: false, reason: `Dependency "${depSlug}" has not completed yet.` };
             }
         } else {
@@ -419,7 +421,7 @@ export function isItemReady(item: QueueItem): { ready: boolean; reason: string |
 export async function dequeue(): Promise<QueueItem | null> {
     const queue = loadQueue();
     const pendingItems = queue
-        .filter(item => item.status === 'pending')
+        .filter(item => item.status === 'ready-to-build')
         .sort((a, b) => {
             if (a.phase !== b.phase) return a.phase - b.phase;
             if (a.priority !== b.priority) return b.priority - a.priority;
@@ -433,7 +435,7 @@ export async function dequeue(): Promise<QueueItem | null> {
         } else if (status.reason && (status.reason.includes('failed') || status.reason.includes('blocked') || status.reason.includes('missing'))) {
             // Permanently block item with failed prerequisites
             await updateItem(item.id, {
-                status: 'blocked',
+                status: 'paused',
                 error: status.reason,
                 completedAt: timestamp()
             });
@@ -453,7 +455,7 @@ export function areDependenciesMet(dependsOn: string[]): boolean {
     for (const depSlug of dependsOn) {
         const latestDep = getLatestDependencyItem(depSlug);
         if (latestDep) {
-            if (latestDep.status !== 'completed') {
+            if (latestDep.status !== 'done') {
                 return false;
             }
         } else {
@@ -476,13 +478,12 @@ export function getItem(id: string): QueueItem | null {
 export function listQueue(): QueueItem[] {
     const queue = loadQueue();
     const statusOrder: Record<QueueItem['status'], number> = {
-        'running': 0,
-        'pending': 1,
-        'needs-attention': 2,
-        'blocked': 3,
-        'failed': 4,
-        'completed': 5,
-        'cancelled': 6,
+        'building': 0,
+        'ready-to-build': 1,
+        'paused': 2,
+        'failed': 3,
+        'done': 4,
+        'draft': 5,
     };
 
     return queue.sort((a, b) => {
@@ -530,13 +531,13 @@ export async function markRunning(id: string): Promise<QueueItem | null> {
     } catch {
         // ignore heartbeat errors
     }
-    return withQueueLock(() => _updateItemSync(id, { status: 'running', startedAt: timestamp() }));
+    return withQueueLock(() => _updateItemSync(id, { status: 'building', startedAt: timestamp() }));
 }
 
 /** Mark an item as completed (async, locked). */
 export async function markCompleted(id: string, output: string, durationMs: number): Promise<QueueItem | null> {
     return withQueueLock(() => _updateItemSync(id, {
-        status: 'completed',
+        status: 'done',
         output,
         completedAt: timestamp(),
         durationMs,
@@ -611,7 +612,7 @@ export async function clearCompleted(): Promise<number> {
     return withQueueLock(() => {
         const queue = loadQueue();
         const originalLength = queue.length;
-        const filtered = queue.filter(item => item.status !== 'completed');
+        const filtered = queue.filter(item => item.status !== 'done');
         const removedCount = originalLength - filtered.length;
         if (removedCount > 0) {
             saveQueue(filtered);
@@ -623,7 +624,7 @@ export async function clearCompleted(): Promise<number> {
 /** Retry a failed item — reset to pending (async, locked). */
 export async function retryItem(id: string): Promise<QueueItem | null> {
     return withQueueLock(() => _updateItemSync(id, {
-        status: 'pending',
+        status: 'ready-to-build',
         error: null,
         output: '',
         startedAt: null,
@@ -638,7 +639,7 @@ export async function retryItem(id: string): Promise<QueueItem | null> {
 export function getQueueStats(): Record<string, number> {
     const queue = loadQueue();
     const stats: Record<string, number> = {
-        pending: 0, running: 0, completed: 0, failed: 0, 'needs-attention': 0, blocked: 0, total: 0,
+        'draft': 0, 'ready-to-build': 0, 'building': 0, 'paused': 0, 'failed': 0, 'done': 0, total: 0,
     };
     for (const item of queue) {
         if (stats[item.status] !== undefined) {
@@ -702,10 +703,10 @@ export async function startQueueDaemon(): Promise<void> {
     while (running) {
         try {
             const stats = getQueueStats();
-            const pending = stats.pending || 0;
+            const pending = stats['ready-to-build'] || 0;
 
             if (pending > 0) {
-                log('●', `Processing ${pending} pending item(s)...`);
+                log('●', `Processing ${pending} ready-to-build item(s)...`);
                 const item = await dequeue();
                 if (item) {
                     let lastError: string | null = null;
@@ -738,7 +739,7 @@ export async function startQueueDaemon(): Promise<void> {
                     }
                 }
             } else {
-                log('  ', 'No pending items — polling in 30s...');
+                log('  ', 'No ready-to-build items — polling in 30s...');
             }
 
             // Wait before next check

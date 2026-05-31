@@ -40,7 +40,8 @@ export function getBuildLogs(): BuildLog[] {
         const raw = readFileSync(BUILDS_YAML, 'utf-8');
         const parsed = parseYaml(raw);
         return Array.isArray(parsed) ? parsed : [];
-    } catch {
+    } catch (err) {
+        log('!', `Failed to parse builds.yaml: ${(err as Error).message?.slice(0, 100) || err}`);
         return [];
     }
 }

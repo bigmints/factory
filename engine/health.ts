@@ -10,7 +10,7 @@ import { log } from './log.ts';
  * 1. If is_running is true but no heartbeat recently, set it to false.
  * 2. Find any tasks stuck in 'running' and reset them to 'pending'.
  */
-export function performStateAudit(): void {
+export async function performStateAudit(): Promise<void> {
     // 1. Check for stale is_running flag
     const state = loadQueueState();
     
@@ -28,13 +28,13 @@ export function performStateAudit(): void {
 
     // 2. Find zombie tasks ('running' but runner isn't active)
     const queue = loadQueue();
-    const runningTasks = queue.filter(item => item.status === 'running');
+    const runningTasks = queue.filter(item => item.status === 'building');
     
     if (runningTasks.length > 0) {
         log('🔧', `Found ${runningTasks.length} interrupted task(s) — resetting to pending`);
         for (const task of runningTasks) {
-            updateItem(task.id, { 
-                status: 'pending', 
+            await updateItem(task.id, { 
+                status: 'ready-to-build', 
                 startedAt: null, 
                 error: 'Interrupted by process exit' 
             });

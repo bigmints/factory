@@ -103,7 +103,9 @@ export interface DeploymentConfig {
     region?: string;
 }
 
-export type StoryStatus = 'draft' | 'ready' | 'in-progress' | 'validation' | 'review' | 'done';
+export type LifecycleStatus = 'draft' | 'ready-to-build' | 'building' | 'paused' | 'failed' | 'done';
+
+export type StoryStatus = LifecycleStatus;
 
 /** Blueprint about an existing app that feature builds need for integration */
 export interface AppIntegrationBlueprint {
@@ -378,9 +380,9 @@ export function storyRegion(story: AppStory): string {
 
 // ─── Hierarchical App Roadmaps (App -> Feature/Epic -> Story -> Task) ───
 
-export type AppStatus = 'draft' | 'in-progress' | 'testing' | 'done';
-export type EpicStatus = 'pending' | 'in-progress' | 'completed' | 'blocked';
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type AppStatus = LifecycleStatus;
+export type EpicStatus = LifecycleStatus;
+export type TaskStatus = LifecycleStatus;
 
 export interface AppSpec {
     name: string;

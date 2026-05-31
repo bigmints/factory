@@ -1,5 +1,5 @@
 #!/bin/bash
-# Task Manager - manage tasks in todo.toon (single source of truth)
+# Task Manager - manage tasks in todo.yaml (single source of truth)
 # Usage: manage.sh <command> [options]
 
 set -euo pipefail

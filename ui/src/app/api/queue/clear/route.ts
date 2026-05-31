@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import { execSync } from 'node:child_process';
 import { basename } from 'node:path';
-import { saveQueue, setQueueRunning, loadQueue } from '@engine/queue';
+import { saveQueue, setQueueRunning, loadQueue, withQueueLock } from '@engine/queue';
 import { updateStoryStatus, archiveStory } from '@engine/story';
 import { updateStoryStatusInApp } from '@engine/rollup';
 
@@ -27,7 +27,7 @@ export async function POST() {
     // Before clearing: persist 'done' status + archive story files for completed items.
     // This prevents completed stories from bouncing back to "Ready to Build" when
     // their queueStatus entry is removed from the queue.
-    const completedItems = queue.filter(item => item.status === 'completed');
+    const completedItems = queue.filter(item => item.status === 'done');
     let patched = 0;
     for (const item of completedItems) {
       try {
@@ -48,8 +48,10 @@ export async function POST() {
       }
     }
 
-    // Direct atomic YAML write of empty array
-    saveQueue([]);
+    // Direct atomic YAML write of empty array — under lock
+    await withQueueLock(() => {
+      saveQueue([]);
+    });
     setQueueRunning(false);
 
     return NextResponse.json({

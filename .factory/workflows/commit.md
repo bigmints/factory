@@ -41,14 +41,14 @@ git commit -m "<type>(<scope>): <what and why>"
 **5 — Post-commit heartbeat**
 ```bash
 FACTORY_PROJECT_ROOT=$(pwd) \
-  /Users/pretheesh/Projects/ag-starter/.agents/skills/heartbeat/pulse.sh \
+  factory/scripts/heartbeat/pulse.sh \
   "Committed: $(git log -1 --format='%s')"
 ```
 
 **6 — Post-commit worklog**
 ```bash
 FACTORY_PROJECT_ROOT=$(pwd) \
-  /Users/pretheesh/Projects/ag-starter/.agents/skills/auto-context/update-context.sh \
+  factory/scripts/auto-blueprint/update-blueprint.sh \
   "$(git log -1 --format='%s')"
 ```
 

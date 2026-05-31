@@ -4,7 +4,7 @@
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import type { GeneratedFile, AppStory, FeatureStory, BuildResult, StackConfig } from './types.ts';
 import { log, logError } from './log.ts';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
@@ -17,6 +17,11 @@ export function writeFiles(targetDir: string, files: GeneratedFile[]): string[] 
     const writtenPaths: string[] = [];
 
     for (const file of files) {
+        // Skip files with empty content — these come from scanDirTree() in the
+        // orchestrator/CLI delegation path where the CLI writes files directly.
+        // Writing them would overwrite the CLI-generated files with empty content.
+        if (!file.content) continue;
+
         const absPath = resolve(targetDir, file.filename);
         const dir = dirname(absPath);
 
@@ -80,12 +85,12 @@ export function gitCommit(repoPath: string, message: string): boolean {
         // Init git repo if not present
         if (!existsSync(join(repoPath, '.git'))) {
             log('●', 'Initializing git repo');
-            execSync('git init', { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
+            execFileSync('git', ['init'], { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
             log('✓', 'Git repo initialized');
         }
 
-        execSync('git add -A', { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
-        execSync(`git commit -m "${message}"`, { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
+        execFileSync('git', ['add', '-A'], { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
+        execFileSync('git', ['commit', '-m', message], { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
         log('✓', `Committed: ${message}`);
         return true;
     } catch (error) {
@@ -112,7 +117,7 @@ export function gitPush(repoPath: string, branch?: string): boolean {
 
         // Check if a remote is configured
         try {
-            const remotes = execSync('git remote', { cwd: repoPath, stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 }).toString().trim();
+            const remotes = execFileSync('git', ['remote'], { cwd: repoPath, stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 }).toString().trim();
             if (!remotes) {
                 log('!', 'No git remote configured — skipping push');
                 return true; // Not an error
@@ -122,8 +127,7 @@ export function gitPush(repoPath: string, branch?: string): boolean {
             return true;
         }
 
-        const cmd = branch ? `git push origin ${branch}` : 'git push';
-        execSync(cmd, { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
+        execFileSync('git', branch ? ['push', 'origin', branch] : ['push'], { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
         log('✓', 'Pushed to remote');
         return true;
     } catch (error) {

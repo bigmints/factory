@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 const PROJECTS_FILE = join(FACTORY_ROOT, 'projects.json');
@@ -36,10 +36,10 @@ export async function PATCH(
     };
 
     // Switch active project via CLI
-    const output = stripAnsi(execSync(
-      `factory project switch "${id}" 2>&1`,
-      execOptions
-    ));
+    const output = stripAnsi(execFileSync(
+      'factory', ['project', 'switch', id],
+      { ...execOptions, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).toString());
 
     // Re-read to get the project data
     const config = loadProjectsConfig();
@@ -48,9 +48,9 @@ export async function PATCH(
     if (project) {
       // Re-sync reference for the new active project
       try {
-        execSync(
-          `factory sync "${project.path}" 2>&1`,
-          execOptions
+        execFileSync(
+          'factory', ['sync', project.path],
+          { ...execOptions, stdio: ['pipe', 'pipe', 'pipe'] }
         );
       } catch {
         // Sync failure shouldn't block switching
@@ -82,10 +82,10 @@ export async function DELETE(
       env: { ...process.env, npm_config_cache: '/tmp/factory-npm-cache', TMPDIR: '/tmp/factory-npm-cache' }
     };
 
-    const output = stripAnsi(execSync(
-      `factory project remove "${id}" 2>&1`,
-      execOptions
-    ));
+    const output = stripAnsi(execFileSync(
+      'factory', ['project', 'remove', id],
+      { ...execOptions, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).toString());
 
     return NextResponse.json({ success: true, output });
   } catch (err: any) {

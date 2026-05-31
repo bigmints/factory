@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
@@ -68,10 +68,10 @@ export async function POST(request: Request) {
       env: { ...process.env, npm_config_cache: '/tmp/factory-npm-cache', TMPDIR: '/tmp/factory-npm-cache' }
     };
 
-    const result = stripAnsi(execSync(
-      `factory build "${storyPath}" 2>&1`,
-      execOptions
-    ));
+    const result = stripAnsi(execFileSync(
+      'factory', ['build', storyPath],
+      { ...execOptions, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).toString());
 
     const success = result.includes('BUILD COMPLETE') || result.includes('All tests passed');
 

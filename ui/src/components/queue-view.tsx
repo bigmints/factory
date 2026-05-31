@@ -33,11 +33,11 @@ interface QueueItem {
 }
 
 interface QueueStats {
-  pending: number;
-  running: number;
-  completed: number;
+  'ready-to-build': number;
+  building: number;
+  done: number;
   failed: number;
-  'needs-attention': number;
+  paused: number;
   total: number;
 }
 
@@ -51,11 +51,12 @@ interface ActivityStep {
 }
 
 const statusConfig: Record<string, { label: string; color: string; glowClass: string; icon: any; bg: string }> = {
-  pending: { label: 'Pending', color: 'text-muted-foreground', glowClass: 'border-border shadow-sm', icon: Clock, bg: 'bg-muted' },
-  running: { label: 'Running', color: 'text-primary', glowClass: 'border-border shadow-sm', icon: Loader2, bg: 'bg-muted' },
-  completed: { label: 'Completed', color: 'text-emerald-500', glowClass: 'border-border shadow-sm', icon: CheckCircle2, bg: 'bg-muted' },
+  'ready-to-build': { label: 'Ready', color: 'text-amber-500', glowClass: 'border-border shadow-sm', icon: Clock, bg: 'bg-muted' },
+  building: { label: 'Building', color: 'text-primary', glowClass: 'border-border shadow-sm', icon: Loader2, bg: 'bg-muted' },
+  done: { label: 'Done', color: 'text-emerald-500', glowClass: 'border-border shadow-sm', icon: CheckCircle2, bg: 'bg-muted' },
   failed: { label: 'Failed', color: 'text-rose-500 dark:text-rose-400', glowClass: 'border-rose-200 dark:border-rose-950 shadow-sm', icon: XCircle, bg: 'bg-rose-500/5 dark:bg-rose-950/15' },
-  'needs-attention': { label: 'Attention', color: 'text-amber-500 dark:text-amber-400', glowClass: 'border-amber-200 dark:border-amber-950 shadow-sm', icon: AlertTriangle, bg: 'bg-amber-500/5 dark:bg-amber-950/15' },
+  paused: { label: 'Paused', color: 'text-muted-foreground', glowClass: 'border-amber-200 dark:border-amber-950 shadow-sm', icon: AlertTriangle, bg: 'bg-amber-500/5 dark:bg-amber-950/15' },
+  draft: { label: 'Draft', color: 'text-muted-foreground', glowClass: 'border-border shadow-sm', icon: FolderOpen, bg: 'bg-muted' },
 };
 
 function parseActivities(output: string): ActivityStep[] {
@@ -244,7 +245,7 @@ function ActivityTimeline({ output, error, itemStatus, itemId }: { output: strin
       const lastStep = steps[steps.length - 1];
       if (lastStep.status === 'running') lastStep.status = 'error';
     }
-    if (itemStatus === 'completed') { for (const s of steps) { if (s.status === 'running') s.status = 'success'; } }
+    if (itemStatus === 'done') { for (const s of steps) { if (s.status === 'running') s.status = 'success'; } }
     return steps;
   }, [output, itemStatus]);
 
@@ -259,7 +260,7 @@ function ActivityTimeline({ output, error, itemStatus, itemId }: { output: strin
 
   if (activities.length === 0 && !error) {
     // Completed item with no parseable activity log — show delivery summary from build receipt
-    if (itemStatus === 'completed') {
+    if (itemStatus === 'done') {
       return <DeliverySummary itemId={itemId} />;
     }
     return output ? (
@@ -299,7 +300,7 @@ function ActivityTimeline({ output, error, itemStatus, itemId }: { output: strin
                   }`}>
                     <div className="flex items-start gap-3 py-3.5 px-4">
                       <div className="shrink-0 relative z-10 bg-background rounded-full p-0.5">
-                        <StepIndicator status={step.status} isActive={itemStatus === 'running'} />
+                        <StepIndicator status={step.status} isActive={itemStatus === 'building'} />
                       </div>
                       <div className="grow min-w-0">
                         <button
@@ -311,14 +312,14 @@ function ActivityTimeline({ output, error, itemStatus, itemId }: { output: strin
                               step.status === 'success' ? 'text-emerald-500' :
                               step.status === 'error' ? 'text-rose-500 dark:text-rose-400' :
                               step.status === 'warning' ? 'text-amber-500 dark:text-amber-400' :
-                              step.status === 'running' && itemStatus === 'running' ? 'text-primary animate-pulse' :
+                              step.status === 'running' && itemStatus === 'building' ? 'text-primary animate-pulse' :
                               'text-muted-foreground'
                             }`} />}
                             <h4 className={`text-xs sm:text-sm font-medium truncate ${
                               step.status === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
                               step.status === 'error' ? 'text-rose-600 dark:text-rose-400' :
                               step.status === 'warning' ? 'text-amber-600 dark:text-amber-400' :
-                              step.status === 'running' && itemStatus === 'running' ? 'text-primary' :
+                              step.status === 'running' && itemStatus === 'building' ? 'text-primary' :
                               'text-foreground/90'
                             }`}>{step.label}</h4>
                           </div>
@@ -326,7 +327,7 @@ function ActivityTimeline({ output, error, itemStatus, itemId }: { output: strin
                              {step.status === 'success' && <Badge variant="outline" className="text-[9px] border-emerald-500 text-emerald-500 bg-emerald-500/5 dark:bg-emerald-950/10 px-1.5 py-0 rounded-md font-medium">Done</Badge>}
                              {step.status === 'error' && <Badge variant="outline" className="text-[9px] border-rose-500 text-rose-500 dark:border-rose-400/30 dark:text-rose-400 bg-rose-500/5 dark:bg-rose-950/10 px-1.5 py-0 rounded-md font-medium">Failed</Badge>}
                              {step.status === 'warning' && <Badge variant="outline" className="text-[9px] border-amber-500 text-amber-500 dark:border-amber-400/30 dark:text-amber-400 bg-amber-500/5 dark:bg-amber-950/10 px-1.5 py-0 rounded-md font-medium">Warning</Badge>}
-                             {step.status === 'running' && itemStatus === 'running' && <Badge variant="outline" className="text-[9px] border-primary text-primary bg-primary/5 px-1.5 py-0 rounded-md font-medium animate-pulse">Active</Badge>}
+                             {step.status === 'running' && itemStatus === 'building' && <Badge variant="outline" className="text-[9px] border-primary text-primary bg-primary/5 px-1.5 py-0 rounded-md font-medium animate-pulse">Active</Badge>}
                              <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ${isOpen ? 'rotate-90 text-foreground' : ''}`} />
                            </div>
                         </button>
@@ -407,7 +408,7 @@ interface QueueViewProps {
 
 export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: QueueViewProps = {}) {
   const [items, setItems] = useState<QueueItem[]>([]);
-  const [stats, setStats] = useState<QueueStats>({ pending: 0, running: 0, completed: 0, failed: 0, 'needs-attention': 0, total: 0 });
+  const [stats, setStats] = useState<QueueStats>({ 'ready-to-build': 0, building: 0, done: 0, failed: 0, paused: 0, total: 0 });
   const [isRunning, setIsRunning] = useState(false);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
@@ -459,7 +460,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
       const res = await fetch('/api/queue');
       const data = await res.json();
       setItems(data.items || []);
-      setStats(data.stats || { pending: 0, running: 0, completed: 0, failed: 0, 'needs-attention': 0, total: 0 });
+      setStats(data.stats || { 'ready-to-build': 0, building: 0, done: 0, failed: 0, paused: 0, total: 0 });
       setIsRunning(data.isRunning || false);
     } catch { console.error('Failed to fetch queue'); }
   }, []);
@@ -579,11 +580,11 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
               <span>Stop Execution</span>
             </Button>
           )}
-          <Button onClick={handleStart} disabled={isRunning || stats.pending === 0} size="sm" className="text-xs gap-1.5 h-9 font-semibold">
+          <Button onClick={handleStart} disabled={isRunning || stats['ready-to-build'] === 0} size="sm" className="text-xs gap-1.5 h-9 font-semibold">
             {isRunning ? (
               <><Loader2 className="h-4 w-4 animate-spin" /><span>Running Queue...</span></>
             ) : (
-              <><Play className="h-4 w-4 fill-current" /><span>Start Build Queue ({stats.pending})</span></>
+              <><Play className="h-4 w-4 fill-current" /><span>Start Build Queue ({stats['ready-to-build']})</span></>
             )}
           </Button>
         </div>
@@ -592,11 +593,11 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
       {/* Collapse Stats into a clean inline horizontal summary */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground bg-muted/40 px-4 py-2.5 rounded-lg border border-border">
         <span className="font-semibold text-foreground">Summary:</span>
-        <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> <span className="font-semibold text-foreground">{stats.pending}</span> pending</span>
+        <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> <span className="font-semibold text-foreground">{stats['ready-to-build']}</span> ready</span>
         <span className="text-muted-foreground/30">·</span>
-        <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin text-primary" /> <span className="font-semibold text-foreground">{stats.running}</span> running</span>
+        <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin text-primary" /> <span className="font-semibold text-foreground">{stats.building}</span> building</span>
         <span className="text-muted-foreground/30">·</span>
-        <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> <span className="font-semibold text-emerald-500">{stats.completed}</span> completed</span>
+        <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> <span className="font-semibold text-emerald-500">{stats.done}</span> done</span>
         <span className="text-muted-foreground/30">·</span>
         <span className="flex items-center gap-1.5"><XCircle className="h-3 w-3 text-rose-500 dark:text-rose-400" /> <span className="font-semibold text-rose-500 dark:text-rose-400">{stats.failed}</span> failed</span>
       </div>
@@ -613,7 +614,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
       ) : (
         <div className="border border-border rounded-xl divide-y divide-border/60 bg-card/10 overflow-hidden">
           {items.map((item) => {
-            const cfg = statusConfig[item.status] || statusConfig.pending;
+            const cfg = statusConfig[item.status] || statusConfig['ready-to-build'];
             const Icon = cfg.icon;
             const isExpanded = expandedItem === item.id;
 
@@ -626,7 +627,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                       onClick={() => setExpandedItem(isExpanded ? null : item.id)}
                     >
                       <div className="shrink-0 p-1 rounded bg-muted border border-border">
-                        <Icon className={`h-3.5 w-3.5 ${cfg.color} ${item.status === 'running' ? 'animate-spin' : ''}`} />
+                        <Icon className={`h-3.5 w-3.5 ${cfg.color} ${item.status === 'building' ? 'animate-spin' : ''}`} />
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -653,15 +654,15 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                       </span>
                       
                       <Badge variant="outline" className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded font-semibold ${
-                        item.status === 'completed' ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5 dark:bg-emerald-950/10' :
+                        item.status === 'done' ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/5 dark:bg-emerald-950/10' :
                         item.status === 'failed' ? 'border-rose-500/30 text-rose-500 bg-rose-500/5 dark:bg-rose-950/10' :
-                        item.status === 'running' ? 'border-primary/30 text-primary bg-primary/5 animate-pulse' :
+                        item.status === 'building' ? 'border-primary/30 text-primary bg-primary/5 animate-pulse' :
                         'border-border text-muted-foreground bg-muted/40'
                       }`}>
                         {item.status}
                       </Badge>
                       
-                      {item.status === 'running' ? (
+                      {item.status === 'building' ? (
                         <Button variant="ghost" size="icon" onClick={() => handleStopTask(item.id)} className="h-8 w-8 rounded hover:bg-muted border border-border/80 text-rose-500 hover:text-rose-400" title="Stop active task">
                           <Square className="h-3.5 w-3.5 fill-rose-500" />
                         </Button>
@@ -675,7 +676,7 @@ export function QueueView({ onToggleOutput, outputPanelOpen, queueRunning }: Que
                           <RotateCcw className="h-3.5 w-3.5 text-foreground" />
                         </Button>
                       )}
-                      {item.status !== 'running' && (
+                      {item.status !== 'building' && (
                         <Button variant="ghost" size="icon" onClick={() => handleRemove(item.id)} className="h-8 w-8 rounded hover:bg-muted hover:text-destructive border border-border/80">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

@@ -19,7 +19,7 @@ stack:
 features:
   - name: Project Foundation
     description: Scaffold and baseline project setup.
-    status: completed
+    status: done
     stories:
       - name: Scaffold Environment
         file: stories/apps/factory.yaml
@@ -27,19 +27,19 @@ features:
         tasks:
           - id: task-init-setup
             title: Initialize project, configurations, and environment dependencies
-            status: completed
+            status: done
         progressPercent: 100
     progressPercent: 100
   - name: Core Application Pages
     description: Main user-facing layouts and pages.
-    status: completed
+    status: done
     stories:
       - name: Root Application Page
         status: done
         tasks:
           - id: task-root-page
             title: Scaffold application root homepage view and components
-            status: completed
+            status: done
         progressPercent: 100
     progressPercent: 100
   - name: "💬 Ask TPM Chat Interface"

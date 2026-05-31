@@ -15,10 +15,10 @@ export async function POST(request: Request) {
     }
 
     // Allow user-settable statuses. Engine manages in-progress/validation automatically.
-    const userAllowedStatuses = ['draft', 'ready', 'review', 'done'];
+    const userAllowedStatuses = ['draft', 'ready-to-build', 'building', 'paused', 'failed', 'done'];
     if (!userAllowedStatuses.includes(status)) {
       return NextResponse.json(
-        { error: `Invalid status "${status}". Use: draft, ready, review, or done.` },
+        { error: `Invalid status "${status}". Use: draft, ready-to-build, building, paused, failed, or done.` },
         { status: 400 }
       );
     }

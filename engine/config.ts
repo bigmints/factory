@@ -14,6 +14,7 @@ import type {
 } from './types.ts';
 import { log, logError } from './log.ts';
 import { initBridge } from './init.ts';
+import { BridgeConfigSchema } from './schemas.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ export function getActiveProject(): Project {
 }
 
 /** Add a new project */
-export function addProject(repoPath: string, stack?: ProjectStack): Project {
+export async function addProject(repoPath: string, stack?: ProjectStack): Promise<Project> {
     const absPath = resolve(repoPath);
     if (!existsSync(absPath)) {
         throw new Error(`Path does not exist: ${absPath}`);
@@ -92,7 +93,7 @@ export function addProject(repoPath: string, stack?: ProjectStack): Project {
 
     // Run full bridge initialization in the target repo
     try {
-        initBridge(absPath);
+        await initBridge(absPath);
     } catch (e) {
         logError(`Bridge init failed: ${e}`);
     }
@@ -163,7 +164,18 @@ export function loadBridgeConfig(repoPath: string): BridgeConfig {
     if (!existsSync(yamlPath)) {
         throw new Error(`No .factory/factory.yaml in ${repoPath}`);
     }
-    return parseYaml(readFileSync(yamlPath, 'utf-8')) as BridgeConfig;
+    const data = parseYaml(readFileSync(yamlPath, 'utf-8'));
+
+    // Validate with Zod — warn on invalid but don't crash
+    const result = BridgeConfigSchema.safeParse(data);
+    if (!result.success) {
+        for (const issue of result.error.issues) {
+            const path = issue.path.length > 0 ? issue.path.join('.') + ': ' : '';
+            log('!', `factory.yaml validation: ${path}${issue.message}`);
+        }
+    }
+
+    return data as BridgeConfig;
 }
 
 /**
@@ -180,8 +192,9 @@ export function isBootstrapped(repoPath: string): boolean {
         if (bridge.project?.bootstrapped === false) return false;
         // Absent or true → treat as bootstrapped (existing projects, legacy configs)
         return true;
-    } catch {
-        return true; // If we can’t read the config, don’t block builds
+    } catch (err) {
+        log('!', `Cannot read factory.yaml for bootstrap check: ${(err as Error).message?.slice(0, 100) || err}`);
+        return true; // If we can't read the config, don't block builds
     }
 }
 
@@ -218,7 +231,8 @@ export function loadMcpConfig(): any {
     }
     try {
         return JSON.parse(readFileSync(PATHS.mcp, 'utf-8'));
-    } catch {
+    } catch (err) {
+        log('!', `Failed to parse mcp.json: ${(err as Error).message?.slice(0, 100) || err}`);
         return { mcpServers: {} };
     }
 }

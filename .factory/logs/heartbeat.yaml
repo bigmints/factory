@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: 2026-05-31T10:09:55.159Z
-  host: Mac
-  task: "queue: build started"
+  last_seen: "2026-05-31T13:18:59Z"
+  host: "Mac"
+  task: "post-commit: fix(queue): normalize dependsOn paths and prevent duplicate queue additions"
   status: alive

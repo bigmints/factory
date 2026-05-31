@@ -156,11 +156,10 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
   const [openStepId, setOpenStepId] = useState<string | null>("location");
   const [completedSteps, setCompletedSteps] = useState<Record<string, boolean>>({
     location: false,
-    config: false,
     build: false
   });
 
-  const [browseMode, setBrowseMode] = useState<'new' | 'existing' | null>(null);
+  const [browseMode, setBrowseMode] = useState<'new' | 'existing' | 'clone' | null>(null);
 
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [config, setConfig] = useState({
@@ -189,7 +188,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
 
   const resetOnboarding = () => {
     setOpenStepId("location");
-    setCompletedSteps({ location: false, config: false, build: false });
+    setCompletedSteps({ location: false, build: false });
     setPendingPath(null);
     setShowModal(false);
   };
@@ -273,42 +272,15 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
     }
   };
 
-  const [isScanning, setIsScanning] = useState(false);
-
   const handleFolderSelected = async (path: string) => {
     setPendingPath(path);
     setBrowseMode(null);
     setCompletedSteps(prev => ({ ...prev, location: true }));
-    setOpenStepId("config");
-    setIsScanning(true);
-
-    try {
-      const res = await fetch('/api/projects/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.stack) {
-           setConfig(prev => ({
-             ...prev,
-             framework: data.stack.framework !== 'node' ? data.stack.framework : prev.framework,
-             packageManager: data.stack.packageManager !== 'npm' ? data.stack.packageManager : prev.packageManager,
-             linter: data.stack.linter !== 'None' ? data.stack.linter : prev.linter,
-             testing: data.stack.testing !== 'None' ? data.stack.testing : prev.testing,
-           }));
-        }
-      }
-    } catch {
-      // silently fail discovery
-    } finally {
-      setIsScanning(false);
-    }
+    setOpenStepId("build");
   };
 
   const completedCount = Object.values(completedSteps).filter(Boolean).length;
-  const totalSteps = 3;
+  const totalSteps = 2;
 
   const steps = [
     {
@@ -317,7 +289,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
       description: "Select an existing project folder or create a new one to initialize the factory bridge.",
       icon: <IconFolder className="size-3 sm:size-4" />,
       content: (
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-3 sm:mt-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-3 sm:mt-4">
             <div
                role="button"
                tabIndex={0}
@@ -347,9 +319,27 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                  <IconFolderOpen className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
                </div>
                <div>
-                 <p className="text-[10px] sm:text-xs font-semibold">Existing Project</p>
+                 <p className="text-[10px] sm:text-xs font-semibold">Existing</p>
                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
                    Connect local path
+                 </p>
+               </div>
+            </div>
+
+            <div
+               role="button"
+               tabIndex={0}
+               className="cursor-pointer rounded-xl border bg-card text-card-foreground shadow-sm flex flex-col items-center gap-2 text-center hover:bg-accent hover:text-accent-foreground transition-colors group p-4 sm:p-6 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+               onClick={() => setBrowseMode('clone')}
+               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setBrowseMode('clone'); } }}
+             >
+               <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-muted group-hover:bg-accent transition-colors">
+                 <IconRocket className="h-4 w-4 sm:h-5 sm:w-5 text-foreground" />
+               </div>
+               <div>
+                 <p className="text-[10px] sm:text-xs font-semibold">Clone Repo</p>
+                 <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+                   From Git URL
                  </p>
                </div>
             </div>
@@ -361,100 +351,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
         </div>
       ) : null
     },
-    {
-      id: "config",
-      title: "Technical Stack",
-      description: "Configure the project framework, package manager, and tools. We'll attempt to auto-discover these if they exist.",
-      icon: <IconSettings className="size-3 sm:size-4" />,
-      content: (
-        <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
-          {isScanning && (
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-foreground bg-secondary border p-2 rounded-md">
-              <IconLoader2 className="h-3 w-3 animate-spin" />
-              Scanning repository for stack configuration...
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2 sm:gap-4">
-            <div className="space-y-1 sm:space-y-1.5">
-              <label className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Framework</label>
-              <select 
-                className="w-full bg-background border rounded-md px-2 py-1.5 text-[10px] sm:text-xs h-8 sm:h-9"
-                value={config.framework}
-                onChange={(e) => setConfig({ ...config, framework: e.target.value })}
-              >
-                <option value="next.js">Next.js</option>
-                <option value="react">React (Vite)</option>
-                <option value="remix">Remix</option>
-                <option value="node">Node.js</option>
-                <option value="flutter">Flutter</option>
-              </select>
-            </div>
 
-            <div className="space-y-1 sm:space-y-1.5">
-              <label className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Package Manager</label>
-              <select 
-                className="w-full bg-background border rounded-md px-2 py-1.5 text-[10px] sm:text-xs h-8 sm:h-9"
-                value={config.packageManager}
-                onChange={(e) => setConfig({ ...config, packageManager: e.target.value })}
-              >
-                <option value="npm">npm</option>
-                <option value="yarn">yarn</option>
-                <option value="pnpm">pnpm</option>
-                <option value="bun">bun</option>
-                <option value="pub">pub</option>
-              </select>
-            </div>
-
-            <div className="space-y-1 sm:space-y-1.5">
-              <label className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Linter / Formatter</label>
-              <select 
-                className="w-full bg-background border rounded-md px-2 py-1.5 text-[10px] sm:text-xs h-8 sm:h-9"
-                value={config.linter}
-                onChange={(e) => setConfig({ ...config, linter: e.target.value })}
-              >
-                <option value="EsLint + Prettier">EsLint + Prettier</option>
-                <option value="Biome">Biome</option>
-                <option value="None">None</option>
-              </select>
-            </div>
-
-            <div className="space-y-1 sm:space-y-1.5">
-              <label className="text-[9px] sm:text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Testing Tool</label>
-              <select 
-                className="w-full bg-background border rounded-md px-2 py-1.5 text-[10px] sm:text-xs h-8 sm:h-9"
-                value={config.testing}
-                onChange={(e) => setConfig({ ...config, testing: e.target.value })}
-              >
-                <option value="jest">Jest</option>
-                <option value="vitest">Vitest</option>
-                <option value="playwright">Playwright</option>
-                <option value="flutter_test">Flutter test</option>
-                <option value="None">None</option>
-              </select>
-            </div>
-          </div>
-          <Button 
-            size="sm" 
-            className="w-full h-8 text-[10px] sm:text-xs" 
-            onClick={() => {
-              setCompletedSteps(prev => ({ ...prev, config: true }));
-              setOpenStepId("build");
-            }}
-          >
-            Confirm Configuration
-          </Button>
-        </div>
-      ),
-      summary: completedSteps.config ? (
-        <div className="mt-2 flex flex-wrap gap-1 sm:gap-2">
-          {Object.entries(config).map(([key, val]) => (
-            <span key={key} className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              {val}
-            </span>
-          ))}
-        </div>
-      ) : null
-    },
     {
       id: "build",
       title: "Initialize & Connect",
@@ -464,7 +361,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
         <div className="mt-3 sm:mt-4">
           <Button 
             className="w-full text-xs" 
-            disabled={loading || !completedSteps.config}
+            disabled={loading}
             onClick={handleConnect}
           >
             {loading ? (
@@ -790,15 +687,42 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
 
       {/* Folder browser dialog */}
       <FolderBrowser
-        open={browseMode !== null}
+        open={browseMode === 'new' || browseMode === 'existing'}
         onClose={() => setBrowseMode(null)}
         onSelect={handleFolderSelected}
-        mode={browseMode || 'existing'}
+        mode={browseMode === 'new' ? 'new' : 'existing'}
         title={browseMode === 'new'
           ? 'Create Project'
           : 'Select Folder'
         }
       />
+
+      {/* Clone Repo Dialog */}
+      <Dialog open={browseMode === 'clone'} onOpenChange={(v) => !v && setBrowseMode(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Clone Repository</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-xs font-medium mb-2 block text-muted-foreground">Git Repository URL</label>
+            <input 
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="https://github.com/user/repo.git" 
+              value={newProjectPath}
+              onChange={(e) => setNewProjectPath(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newProjectPath.trim()) {
+                  handleFolderSelected(newProjectPath.trim());
+                }
+              }}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setBrowseMode(null)} className="text-xs">Cancel</Button>
+            <Button disabled={!newProjectPath.trim()} onClick={() => handleFolderSelected(newProjectPath.trim())} className="text-xs">Continue</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Getting-started prompt guide */}
       <NewProjectGuide

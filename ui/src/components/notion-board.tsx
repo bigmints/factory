@@ -34,446 +34,20 @@ import {
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
 
-// ─── Interfaces ───
+// ─── Board sub-modules ───
+import type {
+  Task, PhysicalStory, QueueItem, QueueStats, FeatureEpic, AppRollupData, ActivityStep, NotionBoardProps,
+} from './board/types';
+import { storyStatusMap, epicStatusMap, EPIC_COLORS, taskStatusMap } from './board/constants';
+import {
+  getStepIcon, parseActivities, getBasename, getSlug, getStorySlugs,
+  getRelatedStories, getEffectiveStatus, topoSort, resolveDependencyChain,
+} from './board/utils';
+import { YamlViewer } from './board/yaml-viewer';
+import { MobileKanbanBoard } from './board/mobile-kanban-board';
+import { FlatTaskList } from './board/flat-task-list';
+import { ListStoryRow } from './board/list-story-row';
 
-interface Task {
-  id: string;
-  fullId: string;
-  title: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-}
-
-interface Story {
-  id: string;
-  name: string;
-  file: string;
-  status: string;
-  progressPercent: number;
-  tasks: Task[];
-}
-
-interface FeatureEpic {
-  id: string;
-  name: string;
-  description: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'blocked';
-  progressPercent: number;
-  stories: Story[];
-}
-
-interface AppRollupData {
-  id: string;
-  name: string;
-  description: string;
-  brd: string;
-  version: string;
-  status: string;
-  stack: {
-    framework: string;
-    packageManager?: string;
-    language?: string;
-    linter?: string;
-    testing?: string;
-    database?: string;
-    cloud?: string;
-  };
-  progressPercent: number;
-  features: FeatureEpic[];
-}
-
-interface PhysicalStory {
-  file: string;
-  kind?: 'AppStory' | 'FeatureStory';
-  valid: boolean;
-  status: string;
-  metadata?: {
-    name?: string;
-    slug?: string;
-    description?: string;
-    icon?: string;
-    color?: string;
-    group?: string;
-  };
-  deployment?: {
-    port?: number;
-    region?: string;
-    customDomain?: string;
-  };
-  database?: {
-    firestoreId?: string;
-    collections?: string[];
-  };
-  api?: {
-    resources?: Array<{ name: string }>;
-  };
-  feature?: {
-    name?: string;
-    description?: string;
-  };
-  target?: {
-    app?: string;
-  };
-  pages?: any[];
-  model?: {
-    collection?: string;
-  };
-  phase?: number;
-  dependsOn?: string[];
-}
-
-interface QueueItem {
-  id: string;
-  specFile?: string;
-  storyFile?: string;
-  kind: string;
-  status: string;
-  priority: number;
-  engine?: string;
-  addedAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  output: string;
-  error: string | null;
-  durationMs: number | null;
-}
-
-interface QueueStats {
-  pending: number;
-  running: number;
-  completed: number;
-  failed: number;
-  total: number;
-}
-
-interface ActivityStep {
-  id: string;
-  label: string;
-  status: 'success' | 'error' | 'running' | 'info' | 'warning';
-  icon: any;
-  details: string[];
-  substeps: { text: string; status: 'success' | 'error' | 'info' | 'warning' }[];
-}
-
-interface NotionBoardProps {
-  initialView?: 'board' | 'list' | 'queue';
-  onNavigateToBuild?: () => void;
-  /** Increment this key whenever the active project changes to force a full data reset. */
-  projectRefreshKey?: number;
-  /** Callback to switch to the Ask TPM chat tab */
-  onOpenStoryChat?: () => void;
-  className?: string;
-}
-
-// ─── Constants & Configurations ───
-
-const storyStatusMap: Record<string, { label: string; bg: string; dot: string }> = {
-  done:         { label: 'Done',          bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 font-semibold', dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
-  completed:    { label: 'Done',          bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 font-semibold', dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.5)]' },
-  review:       { label: 'In Review',     bg: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/25 font-semibold',   dot: 'bg-purple-500 shadow-[0_0_6px_rgba(192,132,252,0.5)]' },
-  validation:   { label: 'Validation',    bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/25 font-semibold',            dot: 'bg-cyan-500 shadow-[0_0_6px_rgba(34,211,238,0.5)]' },
-  'in-progress':{ label: 'In Progress',   bg: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25 font-semibold',            dot: 'bg-blue-500 shadow-[0_0_6px_rgba(96,165,250,0.5)]' },
-  running:      { label: 'Building',      bg: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25 font-semibold',            dot: 'bg-blue-500 shadow-[0_0_8px_rgba(96,165,250,0.8)] animate-pulse' },
-  ready:        { label: 'Ready to Build',bg: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/25 font-semibold',            dot: 'bg-teal-500 shadow-[0_0_6px_rgba(45,212,191,0.5)]' },
-  failed:       { label: 'Failed',        bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25 font-semibold',            dot: 'bg-rose-500 shadow-[0_0_6px_rgba(248,113,113,0.5)]' },
-  draft:        { label: 'Draft',         bg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/25 font-semibold',        dot: 'bg-amber-500 shadow-[0_0_6px_rgba(251,191,36,0.5)]' },
-  unknown:      { label: 'Draft',         bg: 'bg-muted/50 border-border text-muted-foreground',                                              dot: 'bg-muted-foreground/60' }
-};
-
-const epicStatusMap: Record<string, { label: string; bg: string }> = {
-  completed:    { label: 'Completed',  bg: 'bg-emerald-500/15 border-emerald-500/25 text-emerald-700 dark:text-emerald-300' },
-  'in-progress':{ label: 'In Progress',bg: 'bg-blue-500/15 border-blue-500/25 text-blue-700 dark:text-blue-300' },
-  blocked:      { label: 'Blocked',    bg: 'bg-rose-500/15 border-rose-500/25 text-rose-700 dark:text-rose-300' },
-  pending:      { label: 'Pending',    bg: 'bg-muted/50 border-border text-muted-foreground' }
-};
-
-// Rotating palette of epic accent colors (border-left + badge tints)
-const EPIC_COLORS = [
-  { border: 'border-l-violet-500',  badge: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/25 font-medium' },
-  { border: 'border-l-sky-500',     badge: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/25 font-medium' },
-  { border: 'border-l-emerald-500', badge: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25 font-medium' },
-  { border: 'border-l-rose-500',    badge: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25 font-medium' },
-  { border: 'border-l-teal-500',    badge: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/25 font-medium' },
-  { border: 'border-l-fuchsia-500', badge: 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/25 font-medium' },
-  { border: 'border-l-amber-500',   badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/25 font-medium' },
-  { border: 'border-l-pink-500',    badge: 'bg-pink-500/15 text-pink-700 dark:text-pink-300 border-pink-500/25 font-medium' },
-];
-
-const taskStatusMap: Record<string, { label: string; bg: string; dot: string }> = {
-  completed: { label: 'Completed', bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/25', dot: 'bg-emerald-500' },
-  running:   { label: 'Running',   bg: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/25',             dot: 'bg-blue-500 animate-pulse' },
-  failed:    { label: 'Failed',    bg: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/25',             dot: 'bg-rose-500' },
-  pending:   { label: 'Pending',   bg: 'bg-muted/50 text-muted-foreground border-border',                                dot: 'bg-muted-foreground' }
-};
-
-function getStepIcon(label: string) {
-  const l = label.toLowerCase();
-  if (l.includes('validate') || l.includes('lint') || l.includes('check')) return ShieldCheck;
-  if (l.includes('plan')) return Brain;
-  if (l.includes('build') || l.includes('scaffold')) return Wrench;
-  if (l.includes('test')) return FlaskConical;
-  if (l.includes('git') || l.includes('commit') || l.includes('push')) return FolderOpen;
-  return Activity;
-}
-
-function parseActivities(output: string): ActivityStep[] {
-  if (!output || output.trim().length === 0) return [];
-  const lines = output.split('\n');
-  const steps: ActivityStep[] = [];
-  let current: ActivityStep | null = null;
-  let stepCounter = 0;
-
-  const pushCurrent = () => { if (current) steps.push(current); };
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    const stepMatch = line.match(/^●\s*\[(\d+)\/(\d+)\]\s*(.+)/);
-    if (stepMatch) {
-      pushCurrent();
-      stepCounter++;
-      const label = stepMatch[3].replace(/\.{3}$/, '');
-      current = { id: `step-${stepCounter}`, label, status: 'running', icon: getStepIcon(label), details: [], substeps: [] };
-      continue;
-    }
-
-    const genericStepMatch = line.match(/^●\s+(.+)/);
-    if (genericStepMatch) {
-      const text = genericStepMatch[1];
-      if (current && (text.startsWith('Testing in ') || text.startsWith('Feeding errors') || text.startsWith('Using '))) {
-        current.substeps.push({ text, status: 'info' });
-      } else {
-        pushCurrent();
-        stepCounter++;
-        current = { id: `step-${stepCounter}`, label: text.replace(/\.{3}$/, ''), status: 'running', icon: getStepIcon(text), details: [], substeps: [] };
-      }
-      continue;
-    }
-
-    const successMatch = line.match(/^✓\s+(.+)/);
-    if (successMatch && current) { current.status = 'success'; current.substeps.push({ text: successMatch[1], status: 'success' }); }
-
-    const errorMatch = line.match(/^[✗✘]\s+(.+)/);
-    if (errorMatch && current) { current.status = 'error'; current.substeps.push({ text: errorMatch[1], status: 'error' }); }
-
-    const warningMatch = line.match(/^!\s+(.+)/);
-    if (warningMatch && current) { current.status = 'warning'; current.substeps.push({ text: warningMatch[1], status: 'warning' }); }
-
-    const arrowMatch = line.match(/^→\s+(.+)/);
-    if (arrowMatch && current) { current.substeps.push({ text: arrowMatch[1], status: 'info' }); }
-  }
-
-  pushCurrent();
-  return steps;
-}
-
-const getBasename = (path: string) => {
-  if (!path) return '';
-  return path.split('/').pop() || '';
-};
-
-/** Strip directory prefix + yaml extension for slug-level comparison. */
-const getSlug = (path: string) => getBasename(path).replace(/\.ya?ml$/i, '');
-
-/**
- * Resolves all possible identifier slugs for a given story.
- * Handles file paths (stripping directories and extensions), metadata slugs, and feature slugs.
- */
-function getStorySlugs(story: any): string[] {
-  if (!story) return [];
-  const slugs = new Set<string>();
-  
-  if (story.file) {
-    slugs.add(getSlug(story.file));
-  }
-  if (story.metadata?.slug) {
-    slugs.add(story.metadata.slug);
-  }
-  if (story.feature?.slug) {
-    slugs.add(story.feature.slug);
-  }
-  if (story.slug) {
-    slugs.add(story.slug);
-  }
-  
-  return Array.from(slugs);
-}
-
-/**
- * Calculate the family of related stories for a given story.
- * Prerequisites: Stories that the current story directly depends on.
- * Dependents: Stories that directly depend on the current story.
- * Peers: Stories that share at least one dependency, or target the same AppStory, or are within the same Epic/feature group.
- */
-function getRelatedStories(item: any, allStories: any[]) {
-  if (!item) return { prerequisites: [], dependents: [], peers: [] };
-
-  const itemSlugs = getStorySlugs(item);
-
-  // Prerequisites: Stories in item.dependsOn (matching any of s's slugs)
-  const prerequisites = allStories.filter(s => {
-    const sSlugs = getStorySlugs(s);
-    return item.dependsOn && item.dependsOn.some((dep: string) => sSlugs.includes(dep));
-  });
-
-  // Dependents: Stories that depend on any of item's slugs
-  const dependents = allStories.filter(s => 
-    s.dependsOn && s.dependsOn.some((dep: string) => itemSlugs.includes(dep))
-  );
-
-  // Peers:
-  // 1. Share at least one dependency with this story.
-  // 2. Belong to the same Epic/feature group (excluding prerequisites and dependents).
-  const currentDeps = item.dependsOn || [];
-  const currentEpicId = item.epicParent?.id;
-
-  const peers = allStories.filter(s => {
-    const sSlugs = getStorySlugs(s);
-    
-    // Exclude self (if any slugs overlap)
-    if (sSlugs.some(slug => itemSlugs.includes(slug))) return false;
-    
-    // Check if it's already in prerequisites or dependents
-    const isPrereq = item.dependsOn && item.dependsOn.some((dep: string) => sSlugs.includes(dep));
-    const isDep = s.dependsOn && s.dependsOn.some((dep: string) => itemSlugs.includes(dep));
-    if (isPrereq || isDep) return false;
-
-    // Condition 1: Share a dependency
-    const sDeps = s.dependsOn || [];
-    const shareDependency = sDeps.some((d: string) => currentDeps.includes(d));
-
-    // Condition 2: Belong to the same Epic
-    const shareEpic = currentEpicId && s.epicParent?.id === currentEpicId;
-
-    return shareDependency || shareEpic;
-  });
-
-  return { prerequisites, dependents, peers };
-}
-
-const getEffectiveStatus = (item: any) => {
-  // If the story file is in the 'done' directory, it is completed/done by definition
-  if (item.file && (item.file.startsWith('done/') || item.file.includes('/done/'))) return 'done';
-
-  // Queue status is authoritative only while a build is actively running
-  if (item.queueStatus === 'running') return 'running';
-  if (item.queueStatus === 'completed') return 'done';
-  if (item.queueStatus === 'failed' || item.queueStatus === 'needs-attention') return 'failed';
-
-  // YAML status is the source of truth for everything else
-  if (item.status && item.status !== 'unknown') return item.status;
-  return 'unknown';
-};
-
-// ─── Topological Dependency Sort ─────────────────────────────────────────────
-
-/**
- * Returns stories sorted so every story appears AFTER all its unbuilt prerequisites.
- *
- * Algorithm: recursive DFS — for each story in `targets`, first visit its
- * dependsOn stories (looking them up in `allStories`), then emit the story
- * itself. Stories already at a "done" status are skipped (they don't need to
- * be re-built). Cycles are broken by the `visiting` guard set.
- *
- * @param targets  The stories the caller wants to build (subset of allStories)
- * @param allStories  Full story pool used for dependency lookup
- * @returns Deduplicated, topologically-ordered list ready for sequential queuing
- */
-function topoSort(targets: any[], allStories: any[]): any[] {
-  const DONE_STATUSES = new Set(['done', 'completed']);
-  const visited  = new Set<string>();   // fully processed
-  const visiting = new Set<string>();   // in the current DFS stack (cycle guard)
-  const result: any[] = [];
-
-  function visit(story: any) {
-    const key = story.file;
-    if (visited.has(key)) return;
-    if (visiting.has(key)) return; // cycle — skip to avoid infinite loop
-
-    visiting.add(key);
-
-    // Recurse into each unbuilt prerequisite first
-    const deps: string[] = story.dependsOn || [];
-    for (const dep of deps) {
-      // Find the story that matches this dep slug
-      const depStory = allStories.find(s => {
-        const slugs = getStorySlugs(s);
-        return slugs.includes(dep);
-      });
-      if (depStory && !DONE_STATUSES.has(getEffectiveStatus(depStory))) {
-        visit(depStory);
-      }
-    }
-
-    visiting.delete(key);
-    visited.add(key);
-
-    // Only emit if not already done
-    if (!DONE_STATUSES.has(getEffectiveStatus(story))) {
-      result.push(story);
-    }
-  }
-
-  for (const story of targets) {
-    visit(story);
-  }
-
-  return result;
-}
-
-/**
- * For a single story: returns the full ordered chain of unbuilt prerequisites
- * followed by the story itself.  If story is already done, returns [].
- */
-function resolveDependencyChain(story: any, allStories: any[]): any[] {
-  if (!story) return [];
-  const DONE_STATUSES = new Set(['done', 'completed']);
-  if (DONE_STATUSES.has(getEffectiveStatus(story))) return [];
-  return topoSort([story], allStories);
-}
-
-
-// ─── YAML Viewer ─────────────────────────────────────────────────────────────
-function YamlViewer({ content }: { content: string }) {
-  const lines = content.split('\n');
-  return (
-    <div className="p-4 font-mono text-[11px] leading-6 select-text overflow-auto">
-      {lines.map((line, i) => {
-        const isComment = line.trimStart().startsWith('#');
-        const keyMatch = !isComment && line.match(/^(\s*)([a-zA-Z0-9_\-]+)(\s*:.*)$/);
-        const isList = /^\s*-\s/.test(line);
-        if (isComment) {
-          return <div key={i} className="text-zinc-600 italic">{line || '\u00A0'}</div>;
-        }
-        if (keyMatch) {
-          const [, indent, key, rest] = keyMatch;
-          const valueRaw = rest.replace(/^\s*:\s*/, '');
-          const isStr = /^["\']/.test(valueRaw);
-          const isNum = /^[\d.]+$/.test(valueRaw);
-          const isBool = /^(true|false|yes|no|null)$/.test(valueRaw);
-          return (
-            <div key={i}>
-              <span>{indent}</span>
-              <span className="text-sky-300 font-semibold">{key}</span>
-              <span className="text-zinc-500">: </span>
-              {valueRaw ? <span className={isStr ? 'text-emerald-400' : isNum ? 'text-amber-400' : isBool ? 'text-violet-400' : 'text-zinc-200'}>{valueRaw}</span> : null}
-            </div>
-          );
-        }
-        if (isList) {
-          const m = line.match(/^(\s*-\s*)(.*)$/);
-          if (m) return (
-            <div key={i}>
-              <span className="text-zinc-500">{m[1]}</span>
-              <span className={/^["\']/.test(m[2]) ? 'text-emerald-400' : 'text-zinc-300'}>{m[2]}</span>
-            </div>
-          );
-        }
-        return <div key={i} className="text-zinc-300">{line || '\u00A0'}</div>;
-      })}
-    </div>
-  );
-}
 
 export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRefreshKey = 0, onOpenStoryChat, className }: NotionBoardProps) {
   // ─── State ───
@@ -846,7 +420,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
             const nextTasks = s.tasks.map(t =>
               t.fullId === taskFullId ? { ...t, status: nextStatus } : t
             );
-            const comp = nextTasks.filter(t => t.status === 'completed').length;
+            const comp = nextTasks.filter(t => t.status === 'done').length;
             const progress = nextTasks.length > 0 ? Math.round((comp / nextTasks.length) * 100) : 0;
             return {
               ...s,
@@ -897,7 +471,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
             if (!hasTask) return s;
 
             const nextTasks = s.tasks.filter(t => t.fullId !== taskFullId);
-            const comp = nextTasks.filter(t => t.status === 'completed').length;
+            const comp = nextTasks.filter(t => t.status === 'done').length;
             const progress = nextTasks.length > 0 ? Math.round((comp / nextTasks.length) * 100) : 0;
             return {
               ...s,
@@ -1384,15 +958,6 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       if (res.ok) {
         toast.success('Retrying item');
         fetchQueue();
-        const startRes = await fetch('/api/queue/start', { method: 'POST' });
-        if (startRes.ok) {
-          if (onNavigateToBuild) {
-            onNavigateToBuild();
-          } else {
-            setViewMode('queue');
-            setBuildLogsOpen(true);
-          }
-        }
       }
     } catch {
       toast.error('Failed to retry queue item');
@@ -1578,7 +1143,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
   const doneStories = useMemo(() => {
     return filteredStoriesList.filter(item => {
       const status = getEffectiveStatus(item);
-      return status === 'done' || status === 'completed';
+      return status === 'done' || status === 'done';
     });
   }, [filteredStoriesList]);
 
@@ -1594,13 +1159,15 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
   // Queue Item Stats
   const queueStats = useMemo<QueueStats>(() => {
-    const stats = { pending: 0, running: 0, completed: 0, failed: 0, total: 0 };
+    const stats: QueueStats = { draft: 0, 'ready-to-build': 0, building: 0, paused: 0, failed: 0, done: 0, total: 0 };
     queueItems.forEach(item => {
       stats.total++;
-      if (item.status === 'running') stats.running++;
-      else if (item.status === 'completed') stats.completed++;
+      if (item.status === 'building') stats.building++;
+      else if (item.status === 'done') stats.done++;
       else if (item.status === 'failed') stats.failed++;
-      else stats.pending++;
+      else if (item.status === 'ready-to-build') stats['ready-to-build']++;
+      else if (item.status === 'paused') stats.paused++;
+      else if (item.status === 'draft') stats.draft++;
     });
     return stats;
   }, [queueItems]);
@@ -2029,7 +1596,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
               <div>
                 <CardTitle className="text-sm font-bold text-foreground">Build Timeline</CardTitle>
                 <CardDescription className="text-[11px] text-muted-foreground mt-0.5">
-                  {queueStats.total} total · {queueStats.pending} pending · {queueStats.running} running · {queueStats.completed} done · {queueStats.failed} failed
+                  {queueStats.total} total · {queueStats['ready-to-build']} pending · {queueStats.building} running · {queueStats.done} done · {queueStats.failed} failed
                 </CardDescription>
               </div>
               <div className="flex items-center gap-1.5">
@@ -2052,7 +1619,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       const specName = item.storyFile || item.specFile || '';
                       const isRunning = item.status === 'running';
                       const isFailed = item.status === 'failed';
-                      const isDone = item.status === 'completed';
+                      const isDone = item.status === 'done';
                       const isBlocked = item.status === 'blocked';
                       const isSelected = item.id === selectedQueueItemId;
                       const matchedStory = mergedStories.find(s => s.file === specName || getSlug(s.file) === getSlug(specName));
@@ -2061,7 +1628,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       const epicColor = epicParent ? epicColorMap.get(epicParent.id) : undefined;
                       const desc = matchedStory?.metadata?.description || matchedStory?.feature?.description || '';
                       const totalTasks = matchedStory?.checklistTasks?.length || 0;
-                      const doneTasks = matchedStory?.checklistTasks?.filter((t: any) => t.status === 'completed').length || 0;
+                      const doneTasks = matchedStory?.checklistTasks?.filter((t: any) => t.status === 'done').length || 0;
                       const durationSec = item.durationMs ? Math.round(item.durationMs / 1000) : null;
                       const statusCfg = isRunning ? storyStatusMap.running : isFailed ? storyStatusMap.failed : isDone ? storyStatusMap.done : isBlocked ? { label: 'Blocked', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dot: 'bg-rose-500' } : storyStatusMap.draft;
 
@@ -2175,7 +1742,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                     <Badge variant="outline" className={cn(
                       "text-[8px] font-bold h-4 px-1.5 rounded uppercase border ml-1 shrink-0",
                       selectedQueueItem.status === 'failed' ? "bg-rose-500/10 text-rose-400 border-rose-500/25" :
-                      selectedQueueItem.status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
+                      selectedQueueItem.status === 'done' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" :
                       "bg-muted border-border text-muted-foreground"
                     )}>
                       {selectedQueueItem.status}
@@ -2186,7 +1753,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                   <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
                     {isSelectedRunning ? 'live' : selectedQueueItem ? 'stored log' : 'idle'}
                   </span>
-                  {selectedQueueItem && !isSelectedRunning && (selectedQueueItem.status === 'completed' || selectedQueueItem.status === 'failed') && (
+                  {selectedQueueItem && !isSelectedRunning && (selectedQueueItem.status === 'done' || selectedQueueItem.status === 'failed') && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -2272,7 +1839,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       </select>
                     ) : (
                       <select
-                        value={selectedItem.data.status ?? 'pending'}
+                        value={selectedItem.data.status ?? 'draft'}
                         onChange={e => {
                           handleUpdateTaskStatus(selectedItem.data.fullId, e.target.value as any);
                           setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, status: e.target.value } } : null);
@@ -2782,14 +2349,14 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                         Checklist Sub-tasks
                       </span>
                       <span className="text-[10px] text-zinc-550 font-mono">
-                        {(selectedItem.data.checklistTasks || []).filter((t: any) => t.status === 'completed').length}/{(selectedItem.data.checklistTasks || []).length} completed
+                        {(selectedItem.data.checklistTasks || []).filter((t: any) => t.status === 'done').length}/{(selectedItem.data.checklistTasks || []).length} completed
                       </span>
                     </div>
 
                     {selectedItem.data.checklistTasks && selectedItem.data.checklistTasks.length > 0 ? (
                       <div className="space-y-2.5">
                         {selectedItem.data.checklistTasks.map((task: any) => {
-                          const isDone = task.status === 'completed';
+                          const isDone = task.status === 'done';
                           return (
                             <div
                               key={task.fullId}
@@ -2803,7 +2370,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                               <div className="flex items-start gap-3 min-w-0 flex-1">
                                 <button
                                   onClick={() => {
-                                    const nextStatus = isDone ? 'pending' : 'completed';
+                                    const nextStatus = isDone ? 'ready-to-build' : 'done';
                                     handleUpdateTaskStatus(task.fullId, nextStatus);
                                     // Update locally immediately for responsiveness
                                     setSelectedItem(prev => {
@@ -2871,11 +2438,13 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                         </span>
                         
                         {(() => {
-                          const status = selectedItem.data.status || 'pending';
+                          const status = selectedItem.data.status || 'draft';
                           const dotColorMap: Record<string, string> = {
-                            pending: 'bg-zinc-500',
-                            running: 'bg-blue-500 animate-pulse',
-                            completed: 'bg-emerald-500',
+                            draft: 'bg-zinc-500',
+                            'ready-to-build': 'bg-amber-500',
+                            building: 'bg-blue-500 animate-pulse',
+                            paused: 'bg-orange-500',
+                            done: 'bg-emerald-500',
                             failed: 'bg-rose-500',
                           };
                           return (
@@ -3012,767 +2581,6 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       </Sheet>
 
 
-    </div>
-  );
-}
-
-// ─── Sub-Components ───
-
-interface EpicColor { border: string; badge: string; }
-
-interface KanbanColumnProps {
-  title: string;
-  description: string;
-  badgeColor: string;
-  stories: any[];
-  epicColorMap: Map<string, typeof EPIC_COLORS[0]>;
-  onSelect: (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => void;
-  onValidate: (file: string, kind: string) => void;
-  onBuild: (file: string, kind: string) => void;
-  activeAction: { type: string; file: string } | null;
-  allStories?: any[];
-  /** When false, show a scaffold-first banner in the Ready to Build column */
-  bootstrapped?: boolean;
-  scaffoldStoryFile?: string | null;
-}
-
-// ─── MobileKanbanBoard ── unified board with reactive dots & proper height ──
-
-function MobileKanbanBoard({
-  backlogStories, readyStories, buildingStories, doneStories,
-  mergedStories, epicColorMap,
-  handleOpenDrawer, handleValidateStory, handleSingleBuild, activeAction,
-  showEpicLegend, appRollup, bootstrapped, scaffoldStoryFile,
-}: {
-  backlogStories: any[]; readyStories: any[]; buildingStories: any[]; doneStories: any[];
-  mergedStories: any[]; epicColorMap: Map<string, any>;
-  handleOpenDrawer: any; handleValidateStory: any; handleSingleBuild: any; activeAction: any;
-  showEpicLegend: boolean; appRollup: any;
-  bootstrapped: boolean; scaffoldStoryFile: string | null;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [activeCol, setActiveCol] = useState(0);
-
-  const COLS = [
-    { title: 'Backlog', desc: 'Scaffold drafts or spec blueprints', badge: 'bg-amber-500/5 text-amber-300 border-amber-500/10', stories: backlogStories, status: 'draft', dot: 'bg-amber-400' },
-    { title: 'Ready to Build', desc: 'Verified specifications awaiting launch', badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10', stories: readyStories, status: 'ready', dot: 'bg-teal-400' },
-    { title: 'In Progress', desc: 'Actively compiling or iterating', badge: 'bg-blue-500/5 text-blue-300 border-blue-500/10', stories: buildingStories, status: 'in-progress', dot: 'bg-blue-400' },
-    { title: 'Completed', desc: 'Code written and tests passed', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10', stories: doneStories, status: 'done', dot: 'bg-emerald-400' },
-  ] as const;
-
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const colWidth = el.scrollWidth / COLS.length;
-    const idx = Math.round(el.scrollLeft / colWidth);
-    setActiveCol(Math.max(0, Math.min(COLS.length - 1, idx)));
-  };
-
-  // Scroll to a column on dot click
-  const scrollToCol = (i: number) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const colWidth = el.scrollWidth / COLS.length;
-    el.scrollTo({ left: i * colWidth, behavior: 'smooth' });
-  };
-
-  return (
-    <div className="space-y-3">
-      {/* Epic Legend (desktop only, mobile would be too crowded) */}
-      {showEpicLegend && appRollup?.features && appRollup.features.length > 0 && (
-        <div className="shrink-0 hidden md:flex flex-wrap items-center gap-2 px-3 py-2 mb-3 bg-muted/15 border border-border/40 rounded-xl select-none">
-          <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-muted-foreground/70 shrink-0">Epic Colors:</span>
-          {appRollup.features.map((f: any, idx: number) => {
-            const swatchColors = ['#8b5cf6','#0ea5e9','#f59e0b','#f43f5e','#14b8a6','#d946ef','#84cc16','#f97316'];
-            const color = EPIC_COLORS[idx % EPIC_COLORS.length];
-            return (
-              <span key={f.id} className="flex items-center gap-1.5 text-[10px] text-foreground">
-                <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: swatchColors[idx % swatchColors.length] }} />
-                <span className="font-medium">{f.name}</span>
-                <Badge variant="outline" className={cn('text-[7.5px] font-bold h-3.5 px-1 rounded border ml-0.5', color.badge)}>
-                  {f.stories?.length ?? 0} stories
-                </Badge>
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Desktop: 4-column Kanban (view-only) ── */}
-      <div className="hidden md:grid md:grid-cols-2 xl:grid-cols-4 gap-4" style={{ height: 'calc(100vh - 220px)' }}>
-        {COLS.map((col) => (
-          <KanbanColumn
-            key={col.title}
-            title={col.title}
-            description={col.desc}
-            badgeColor={col.badge}
-            stories={col.stories}
-            epicColorMap={epicColorMap}
-            onSelect={handleOpenDrawer}
-            onValidate={handleValidateStory}
-            onBuild={handleSingleBuild}
-            activeAction={activeAction}
-            allStories={mergedStories}
-            bootstrapped={bootstrapped}
-            scaffoldStoryFile={scaffoldStoryFile}
-          />
-        ))}
-      </div>
-
-      {/* ── Mobile: full-height horizontal snap carousel ── */}
-      <div
-        className="flex md:hidden flex-col"
-        style={{
-          height: 'calc(100dvh - 176px - env(safe-area-inset-bottom, 0px))',
-        }}
-      >
-        {/* Column dot indicator */}
-        <div className="flex items-center justify-center gap-2 pb-2 shrink-0">
-          {COLS.map((col, i) => (
-            <button
-              key={col.title}
-              onClick={() => scrollToCol(i)}
-              className="flex flex-col items-center gap-1 tap-shrink"
-            >
-              <div className={cn(
-                'rounded-full transition-all duration-300',
-                activeCol === i
-                  ? `h-2 w-6 ${col.dot}`
-                  : 'h-1.5 w-1.5 bg-muted-foreground/30'
-              )} />
-            </button>
-          ))}
-          <span className="text-[9px] text-muted-foreground/40 ml-1 font-medium">
-            {COLS[activeCol].title}
-          </span>
-        </div>
-
-        {/* Scrollable columns — each takes full screen width */}
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          className="flex flex-1 min-h-0 overflow-x-auto snap-x-mandatory gap-0"
-          style={{ scrollbarWidth: 'none' } as React.CSSProperties}
-        >
-          {COLS.map((col, i) => (
-            <div
-              key={col.title}
-              className="kanban-slide snap-center px-1"
-            >
-              <KanbanColumn
-                title={col.title}
-                description={col.desc}
-                badgeColor={col.badge}
-                stories={col.stories}
-                epicColorMap={epicColorMap}
-                onSelect={handleOpenDrawer}
-                onValidate={handleValidateStory}
-                onBuild={handleSingleBuild}
-                activeAction={activeAction}
-                allStories={mergedStories}
-                bootstrapped={bootstrapped}
-                scaffoldStoryFile={scaffoldStoryFile}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-
-    </div>
-  );
-}
-
-// ─── FlatTaskList ─────────────────────────────────────────────────────────────
-// Simple, clean flat list of all stories. No hierarchy, no kanban columns.
-
-const STATUS_SORT_ORDER: Record<string, number> = {
-  running: 0, 'in-progress': 1, review: 2, validation: 3,
-  ready: 4, draft: 5, done: 6, completed: 6, unknown: 7,
-};
-
-function FlatTaskList({
-  stories, mergedStories, epicColorMap,
-  handleOpenDrawer, handleValidateStory, handleSingleBuild,
-  activeAction, bootstrapped, scaffoldStoryFile,
-}: {
-  stories: any[];
-  mergedStories: any[];
-  epicColorMap: Map<string, { border: string; badge: string }>;
-  handleOpenDrawer: (item: any, ...args: any[]) => void;
-  handleValidateStory: (file: string, ...args: any[]) => void;
-  handleSingleBuild: (file: string, ...args: any[]) => void;
-  activeAction: { type: string; file: string } | null;
-  bootstrapped: boolean;
-  scaffoldStoryFile: string | null;
-}) {
-  const sorted = useMemo(() => {
-    return [...stories].sort((a, b) => {
-      const sa = STATUS_SORT_ORDER[getEffectiveStatus(a)] ?? 99;
-      const sb = STATUS_SORT_ORDER[getEffectiveStatus(b)] ?? 99;
-      if (sa !== sb) return sa - sb;
-      const na = a.name || a.metadata?.name || a.feature?.name || a.file;
-      const nb = b.name || b.metadata?.name || b.feature?.name || b.file;
-      return na.localeCompare(nb);
-    });
-  }, [stories]);
-
-  if (sorted.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground gap-3">
-        <ListTodo className="h-8 w-8 opacity-30" />
-        <p className="text-sm">No tasks found. Add stories or adjust your filters.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-border/70 bg-background/55 backdrop-blur-md shadow-sm overflow-hidden">
-      <div className="divide-y divide-border/40">
-        {sorted.map((item) => {
-          const status = getEffectiveStatus(item);
-          const statusCfg = storyStatusMap[status] || storyStatusMap.unknown;
-          const name = item.name || item.metadata?.name || item.feature?.name || item.file.split('/').pop()?.replace(/\.ya?ml$/, '') || item.file;
-          const epicName = item.epicParent?.name || item.feature?.name || item.metadata?.group || null;
-          const epicColor = item.epicParent?.id ? (epicColorMap.get(item.epicParent.id) || EPIC_COLORS[0]) : null;
-          const phase = item.phase ?? item.metadata?.phase;
-          const isBuilding = status === 'running' || status === 'in-progress';
-          const isDone = status === 'done' || status === 'completed';
-          const isReady = status === 'ready';
-          const isActioning = !!(activeAction && activeAction.file === item.file);
-          const isScaffold = item.file === scaffoldStoryFile;
-
-          return (
-            <div
-              key={item.file}
-              className={cn(
-                'group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/25 cursor-pointer',
-                isDone && 'opacity-60 hover:opacity-100',
-              )}
-              onClick={() => handleOpenDrawer(item)}
-            >
-              {/* Status dot */}
-              <span className={cn('h-2 w-2 rounded-full shrink-0 mt-px', statusCfg.dot)} />
-
-              {/* Name */}
-              <span className={cn(
-                'flex-1 min-w-0 text-[13px] font-medium truncate',
-                isDone ? 'line-through text-muted-foreground' : 'text-foreground',
-              )}>
-                {name}
-              </span>
-
-              {/* Tags row */}
-              <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-                {/* Status badge */}
-                <Badge className={cn('text-[9px] py-0 px-1.5 h-4 rounded border font-semibold', statusCfg.bg)}>
-                  {statusCfg.label}
-                </Badge>
-
-                {/* Epic tag */}
-                {epicName && epicColor && (
-                  <span className={cn('text-[9px] px-1.5 py-0 h-4 rounded border font-medium flex items-center', epicColor.badge)}>
-                    {epicName.length > 20 ? epicName.slice(0, 20) + '…' : epicName}
-                  </span>
-                )}
-
-                {/* Phase */}
-                {phase != null && (
-                  <span className="text-[9px] px-1.5 py-0 h-4 rounded border font-mono flex items-center bg-muted/50 text-muted-foreground border-border/50">
-                    P{phase}
-                  </span>
-                )}
-
-                {/* Scaffold tag */}
-                {isScaffold && (
-                  <span className="text-[9px] px-1.5 py-0 h-4 rounded border font-medium flex items-center bg-violet-500/10 text-violet-400 border-violet-500/20">
-                    scaffold
-                  </span>
-                )}
-              </div>
-
-              {/* Actions — visible on hover */}
-              <div
-                className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={e => e.stopPropagation()}
-              >
-                {isReady && !isDone && bootstrapped && (
-                  <button
-                    disabled={isActioning}
-                    onClick={() => handleSingleBuild(item.file)}
-                    title="Add to build queue"
-                    className={cn(
-                      'h-6 px-2 text-[10px] font-semibold rounded border transition-all flex items-center gap-1',
-                      'bg-teal-500/10 border-teal-500/30 text-teal-400 hover:bg-teal-500/20 active:scale-95',
-                      isActioning && 'opacity-50 cursor-not-allowed',
-                    )}
-                  >
-                    {isActioning ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Play className="h-2.5 w-2.5" />}
-                    Build
-                  </button>
-                )}
-                {isBuilding && (
-                  <span className="h-6 px-2 text-[10px] font-semibold rounded border bg-blue-500/10 border-blue-500/25 text-blue-400 flex items-center gap-1">
-                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                    Running
-                  </span>
-                )}
-                <button
-                  onClick={() => handleOpenDrawer(item)}
-                  title="Open details"
-                  className="h-6 w-6 flex items-center justify-center rounded border border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                >
-                  <Eye className="h-3 w-3" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function KanbanColumn({
-  title,
-  description,
-  badgeColor,
-  stories,
-  epicColorMap,
-  onSelect,
-  onValidate,
-  onBuild,
-  activeAction,
-  allStories,
-  bootstrapped = true,
-  scaffoldStoryFile,
-}: KanbanColumnProps) {
-  // Group stories into clusters of related items using their prerequisite, dependent, and peer links
-  const clusters = useMemo(() => {
-    if (!stories || stories.length === 0) return [];
-    
-    // Only group stories in "Ready to Build" column to keep the interface simple and clean.
-    if (title !== 'Ready to Build') {
-      return stories.map(s => [s]);
-    }
-    
-    const pool = allStories || stories;
-    
-    const visited = new Set<string>();
-    const result: any[][] = [];
-
-    const getStoryBySlug = (slug: string) => {
-      return stories.find(s => getSlug(s.file) === slug);
-    };
-
-    stories.forEach(story => {
-      const slug = getSlug(story.file);
-      if (visited.has(slug)) return;
-
-      const cluster: any[] = [];
-      const queue: any[] = [story];
-      visited.add(slug);
-
-      while (queue.length > 0) {
-        const current = queue.shift();
-        cluster.push(current);
-
-        const { prerequisites, dependents, peers } = getRelatedStories(current, pool);
-        const related = [...prerequisites, ...dependents, ...peers];
-
-        related.forEach(rel => {
-          const relSlug = getSlug(rel.file);
-          const storyInCol = getStoryBySlug(relSlug);
-          if (storyInCol && !visited.has(relSlug)) {
-            visited.add(relSlug);
-            queue.push(storyInCol);
-          }
-        });
-      }
-      result.push(cluster);
-    });
-
-    // Sort stories within each cluster in execution order by their index in the input stories array
-    const sortedResult = result.map(cluster => {
-      return [...cluster].sort((a, b) => {
-        const idxA = stories.findIndex(s => getSlug(s.file) === getSlug(a.file));
-        const idxB = stories.findIndex(s => getSlug(s.file) === getSlug(b.file));
-        return idxA - idxB;
-      });
-    });
-
-    // Sort the clusters themselves based on the original index of their first story
-    return sortedResult.sort((a, b) => {
-      const idxA = stories.findIndex(s => getSlug(s.file) === getSlug(a[0].file));
-      const idxB = stories.findIndex(s => getSlug(s.file) === getSlug(b[0].file));
-      return idxA - idxB;
-    });
-  }, [stories, allStories, title]);
-
-  return (
-    <div
-      className="flex flex-col h-full bg-muted/30 border border-border/40 rounded-xl overflow-hidden transition-all duration-300 hover:bg-muted/40"
-    >
-      {/* Header info */}
-      <div className="p-4 bg-muted/20 border-b border-border/30 space-y-1 shrink-0 select-none">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-sm text-foreground/90 tracking-tight">{title}</h2>
-          <Badge variant="outline" className={cn("text-[9px] font-bold px-2.5 h-4.5 rounded-full border backdrop-blur-md select-none", badgeColor)}>
-            {stories.length}
-          </Badge>
-        </div>
-        <p className="text-[10px] text-muted-foreground/60 leading-normal line-clamp-1">{description}</p>
-      </div>
-
-
-      {/* Story list */}
-      <div className="flex-1 overflow-y-auto divide-y divide-border/20 scrollbar-thin scrollbar-thumb-muted-foreground/10 scrollbar-track-transparent">
-        {clusters.length > 0 ? (
-          clusters.map((cluster, clusterIdx) => {
-            if (cluster.length === 1) {
-              const item = cluster[0];
-              return (
-                <StoryKanbanCard
-                  key={item.file}
-                  item={item}
-                  epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
-                  onSelect={onSelect}
-                  onValidate={onValidate}
-                  onBuild={onBuild}
-                  activeAction={activeAction}
-                  allStories={allStories}
-                  bootstrapped={bootstrapped}
-                />
-              );
-            }
-
-            // Cluster group
-            return (
-              <div key={`cluster-${clusterIdx}-${cluster[0].file}`}>
-                {/* Group label */}
-                <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 border-b border-border/30">
-                  <span className="text-[9px] text-muted-foreground/50 font-semibold uppercase tracking-wider">Build Sequence</span>
-                  <span className="text-[9px] text-muted-foreground/40">{cluster.length} items</span>
-                </div>
-                <div>
-                  {cluster.map((item) => (
-                    <StoryKanbanCard
-                      key={item.file}
-                      item={item}
-                      epicColor={item.epicParent ? epicColorMap.get(item.epicParent.id) : undefined}
-                      onSelect={onSelect}
-                      onValidate={onValidate}
-                      onBuild={onBuild}
-                      activeAction={activeAction}
-                      allStories={allStories}
-                      bootstrapped={bootstrapped}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="h-32 border border-dashed border-border/60 rounded-xl flex items-center justify-center text-center p-4 select-none">
-            <span className="text-[10px] text-muted-foreground/50 italic font-semibold">Column empty</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StoryKanbanCard({
-  item,
-  epicColor,
-  onSelect,
-  onValidate,
-  onBuild,
-  activeAction,
-  allStories,
-  bootstrapped = true
-}: {
-  item: any;
-  epicColor?: EpicColor;
-  onSelect: (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => void;
-  onValidate: (file: string, kind: string) => void;
-  onBuild: (file: string, kind: string) => void;
-  activeAction: { type: string; file: string } | null;
-  allStories?: any[];
-  bootstrapped?: boolean;
-}) {
-  const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
-  const effectiveStatus = getEffectiveStatus(item);
-  const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
-  const totalTasks = item.checklistTasks ? item.checklistTasks.length : 0;
-  const doneTasks = item.checklistTasks ? item.checklistTasks.filter((t: any) => t.status === 'completed').length : 0;
-  const desc = item.metadata?.description || item.feature?.description || '';
-  const isActive = effectiveStatus === 'running' || effectiveStatus === 'validation';
-
-  // Architect-level Gating Visualizer: Check if base app scaffold exists and if there are pending prerequisites
-  const targetApp = item.target?.app || item.targetApp;
-  const isFeature = item.kind === 'FeatureStory' || !!item.feature;
-  let isScaffoldGated = false;
-  if (isFeature && targetApp && !bootstrapped) {
-    const parentApp = allStories?.find(s => 
-      s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
-    );
-    const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
-    isScaffoldGated = parentStatus !== 'done' && parentStatus !== 'completed';
-  }
-
-  const { prerequisites } = getRelatedStories(item, allStories || []);
-  const pendingPrereqs = prerequisites.filter(p => {
-    const s = getEffectiveStatus(p);
-    return s !== 'done' && s !== 'completed';
-  });
-  const isPrereqGated = pendingPrereqs.length > 0;
-
-  return (
-    <div
-      onClick={() => onSelect(item, 'story')}
-      className={cn(
-        "group flex flex-col gap-1.5 px-3 py-2.5 cursor-pointer select-none transition-colors border-b border-border/30 last:border-b-0 border-l-2 hover:bg-muted/40",
-        item.placeholder && "opacity-50",
-        isActive && "bg-primary/5 border-l-primary",
-        !isActive && (epicColor?.border?.replace('border-l-', 'border-l-') || "border-l-border/40")
-      )}
-    >
-      {/* Name + status dot */}
-      <div className="flex items-start justify-between gap-1.5">
-        <span className="font-medium text-xs text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2 flex-1" title={name}>
-          {name.replace('features/', '')}
-        </span>
-        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
-      </div>
-
-      {/* Meta row */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {item.epicParent && epicColor && (
-          <Badge variant="outline" className={cn("text-[7.5px] font-semibold h-3.5 px-1.5 rounded border leading-none shrink-0", epicColor.badge)}>
-            {item.epicParent.name}
-          </Badge>
-        )}
-        {item.phase !== undefined && (
-          <Badge variant="outline" className="text-[7.5px] font-semibold h-3.5 px-1 rounded border-border bg-muted/20 shrink-0 leading-none flex items-center">
-            Phase {item.phase}
-          </Badge>
-        )}
-        {item.priority !== undefined && (
-          <Badge variant="outline" className="text-[7.5px] font-extrabold h-3.5 px-1 rounded border-amber-500/20 text-amber-500 bg-amber-500/5 shrink-0 leading-none flex items-center">
-            P{item.priority}
-          </Badge>
-        )}
-        {/* Dependency tree badge — replaces 'Gated' / 'N pending' labels */}
-        {(isScaffoldGated || isPrereqGated) && (effectiveStatus !== 'done' && effectiveStatus !== 'completed') && (() => {
-          // Total unbuilt deps = scaffold (1 if gated) + pending prereqs
-          const total = (isScaffoldGated ? 1 : 0) + pendingPrereqs.length;
-          return (
-            <span
-              className="inline-flex items-center gap-0.5 text-[8px] font-semibold text-amber-400/90 shrink-0"
-              title={[
-                isScaffoldGated ? 'Scaffold not built yet' : '',
-                pendingPrereqs.length > 0 ? `${pendingPrereqs.length} prerequisite${pendingPrereqs.length > 1 ? 's' : ''} pending` : '',
-              ].filter(Boolean).join(' · ')}
-            >
-              {/* Minimal tree icon */}
-              <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 fill-amber-400/80" aria-hidden>
-                <circle cx="6" cy="2" r="1.5"/>
-                <circle cx="2.5" cy="8" r="1.5"/>
-                <circle cx="9.5" cy="8" r="1.5"/>
-                <line x1="6" y1="3.5" x2="6" y2="6" stroke="currentColor" strokeWidth="1"/>
-                <line x1="6" y1="6" x2="2.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
-                <line x1="6" y1="6" x2="9.5" y2="6.5" stroke="currentColor" strokeWidth="1"/>
-              </svg>
-              {total}
-            </span>
-          );
-        })()}
-        {totalTasks > 0 && (
-          <span className="text-[9px] text-muted-foreground/50 ml-auto font-mono tabular-nums">{doneTasks}/{totalTasks}</span>
-        )}
-      </div>
-
-      {/* Dependencies */}
-      {item.dependsOn && item.dependsOn.length > 0 && (
-        <div className="flex items-center gap-1 overflow-hidden">
-          <Link2 className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
-          <div className="flex flex-wrap gap-1 min-w-0">
-            {item.dependsOn.map((depSlug: string) => {
-              const depStory = allStories?.find(s => getStorySlugs(s).includes(depSlug));
-              const status = depStory ? getEffectiveStatus(depStory) : 'unknown';
-              const depColor = (status === 'done' || status === 'completed')
-                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
-                : (status === 'running' || status === 'in-progress')
-                ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25'
-                : 'bg-muted/50 text-muted-foreground border-border';
-              return (
-                <Badge
-                  key={depSlug}
-                  variant="outline"
-                  className={cn("text-[8px] font-medium h-3.5 px-1 rounded-xs cursor-pointer select-none transition-colors hover:bg-muted/60 max-w-[100px] truncate", depColor)}
-                  onClick={(e) => { e.stopPropagation(); if (depStory) onSelect(depStory, 'story'); }}
-                  title={`${depSlug} (${status})`}
-                >
-                  {depSlug}
-                </Badge>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface ListStoryRowProps {
-  item: any;
-  expanded: boolean;
-  onToggleExpand: () => void;
-  onSelect: (item: any, type: 'task' | 'story', parentStory?: any, parentFeature?: any) => void;
-  onValidate: (file: string, kind: string) => void;
-  onBuild: (file: string, kind: string) => void;
-  onToggleTask: (taskId: string, nextStatus: Task['status']) => void;
-  updatingTaskId: string | null;
-  activeAction: { type: string; file: string } | null;
-  allStories?: any[];
-  bootstrapped?: boolean;
-}
-
-function ListStoryRow({
-  item,
-  expanded,
-  onToggleExpand,
-  onSelect,
-  onValidate,
-  onBuild,
-  onToggleTask,
-  updatingTaskId,
-  activeAction,
-  allStories,
-  bootstrapped = true
-}: ListStoryRowProps) {
-  const name = item.name || item.metadata?.name || item.feature?.name || item.dbName || item.file;
-  const isFeature = item.kind === 'FeatureStory' || !!item.feature;
-  const effectiveStatus = getEffectiveStatus(item);
-  const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
-  const hasTasks = item.checklistTasks && item.checklistTasks.length > 0;
-  const isActionLoading = !!(activeAction && activeAction.file === item.file);
-  const isDone = effectiveStatus === 'done' || effectiveStatus === 'completed';
-
-  // Pending deps — shown inline in name only
-  const { prerequisites } = getRelatedStories(item, allStories || []);
-  const pendingPrereqs = prerequisites.filter(p => {
-    const s = getEffectiveStatus(p);
-    return s !== 'done' && s !== 'completed';
-  });
-  const targetApp = item.target?.app || item.targetApp;
-  let isScaffoldGated = false;
-  if (isFeature && targetApp && !bootstrapped) {
-    const parentApp = allStories?.find(s =>
-      s.kind === 'AppStory' && (getSlug(s.file) === getSlug(targetApp) || s.metadata?.slug === targetApp)
-    );
-    const parentStatus = parentApp ? getEffectiveStatus(parentApp) : 'unknown';
-    isScaffoldGated = parentStatus !== 'done' && parentStatus !== 'completed';
-  }
-  const totalPendingDeps = (isScaffoldGated ? 1 : 0) + pendingPrereqs.length;
-
-  return (
-    <div className="overflow-hidden">
-      {/* ── Single-line row ── */}
-      <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/20 transition-colors group">
-        {/* Expand chevron */}
-        {hasTasks ? (
-          <button
-            onClick={onToggleExpand}
-            className="h-4 w-4 flex items-center justify-center text-muted-foreground/40 hover:text-foreground shrink-0"
-          >
-            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-          </button>
-        ) : (
-          <div className="w-4 shrink-0" />
-        )}
-
-        {/* Name */}
-        <span
-          onClick={() => onSelect(item, 'story')}
-          className="flex-1 text-xs font-medium text-foreground hover:text-primary cursor-pointer truncate min-w-0"
-          title={name}
-        >
-          {name.replace('features/', '')}
-          {totalPendingDeps > 0 && !isDone && (
-            <span className="ml-1.5 text-[9px] text-amber-400/60 font-normal">
-              · {totalPendingDeps} dep{totalPendingDeps > 1 ? 's' : ''} pending
-            </span>
-          )}
-        </span>
-
-        {/* Prioritization */}
-        {item.phase !== undefined && (
-          <Badge variant="outline" className="text-[8px] font-semibold h-4 px-1.5 rounded border-border bg-muted/20 shrink-0 select-none leading-none flex items-center text-muted-foreground/80">
-            Phase {item.phase}
-          </Badge>
-        )}
-        {item.priority !== undefined && (
-          <Badge variant="outline" className="text-[8px] font-bold h-4 px-1.5 rounded border-amber-500/20 text-amber-500 bg-amber-500/5 shrink-0 select-none leading-none flex items-center">
-            P{item.priority}
-          </Badge>
-        )}
-
-        {/* Status badge */}
-        <Badge className={cn("text-[8px] font-bold h-4 px-1.5 rounded border shrink-0 select-none", statusCfg.bg)}>
-          {statusCfg.label}
-        </Badge>
-
-        {/* Rocket — hover-only, hidden when done */}
-        {!isDone ? (
-          <button
-            disabled={isActionLoading}
-            onClick={() => onBuild(item.file, item.kind || 'AppStory')}
-            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground/30 hover:text-primary hover:bg-primary/10 transition-all shrink-0 opacity-0 group-hover:opacity-100"
-            title="Build"
-          >
-            {isActionLoading && activeAction?.type === 'build'
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <Rocket className="h-3 w-3" />}
-          </button>
-        ) : (
-          <div className="w-5 shrink-0" />
-        )}
-      </div>
-
-      {/* ── Expanded checklist panel ── */}
-      {expanded && hasTasks && (
-        <div className="px-8 pb-2 pt-1 bg-muted/10 border-t border-border/20 space-y-0.5">
-          {item.checklistTasks.map((task: Task) => {
-            const isComp = task.status === 'completed';
-            return (
-              <div key={task.fullId} className="flex items-center gap-2 py-0.5">
-                <button
-                  disabled={updatingTaskId !== null}
-                  onClick={() => onToggleTask(task.fullId, isComp ? 'pending' : 'completed')}
-                  className={cn(
-                    "h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 transition-all",
-                    isComp ? "bg-emerald-500 border-emerald-500 text-white" : "border-border/60 hover:border-muted-foreground"
-                  )}
-                >
-                  {isComp && <Check className="h-2 w-2 stroke-[3]" />}
-                </button>
-                <span
-                  onClick={() => onSelect(task, 'task', item, item.epicParent)}
-                  className={cn(
-                    "text-[10px] cursor-pointer truncate flex-1",
-                    isComp ? "text-muted-foreground/40 line-through" : "text-foreground hover:text-primary"
-                  )}
-                >
-                  <span className="font-mono text-[8px] text-muted-foreground/30 mr-1">{task.id}</span>
-                  {task.title}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

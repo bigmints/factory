@@ -3,7 +3,7 @@
  */
 import { NextResponse } from 'next/server';
 import { getItem, retryItem, updateItem, loadQueue } from '@engine/queue';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 /** GET — get a specific queue item */
 export async function GET(
@@ -44,8 +44,8 @@ export async function PATCH(
     if (body.action === 'start') {
       const queue = loadQueue();
       const maxPriority = queue.reduce((max, i) => i.priority > max ? i.priority : max, 0);
-      const res = updateItem(id, {
-        status: 'pending',
+      const res = await updateItem(id, {
+        status: 'ready-to-build',
         priority: maxPriority + 1,
         error: null,
         output: '',
@@ -60,22 +60,22 @@ export async function PATCH(
 
     // Stop: kill the process of a running task, and mark failed
     if (body.action === 'stop') {
-      if (item.status !== 'running') {
+      if (item.status !== 'building') {
         return NextResponse.json({ error: 'Only active running items can be stopped' }, { status: 400 });
       }
 
       // Kill process cleanly using pkill by matching the unique story file path and basename
       try {
-        execSync(`pkill -f "${item.storyFile}" 2>/dev/null || true`);
+        execFileSync('pkill', ['-f', item.storyFile], { stdio: 'pipe' });
       } catch {}
 
       const cleanFile = item.storyFile.replace(/^(apps|features|done)\//, '');
       try {
-        execSync(`pkill -f "${cleanFile}" 2>/dev/null || true`);
+        execFileSync('pkill', ['-f', cleanFile], { stdio: 'pipe' });
       } catch {}
 
-      const res = updateItem(id, {
-        status: 'cancelled',
+      const res = await updateItem(id, {
+        status: 'paused',
         error: 'Stopped by user',
         completedAt: new Date().toISOString(),
       });
@@ -90,7 +90,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'Can only retry failed or cancelled items' }, { status: 400 });
       }
 
-      const res = retryItem(id);
+      const res = await retryItem(id);
       if (res) {
         updated = res;
       }
@@ -98,7 +98,7 @@ export async function PATCH(
 
     // Update priority
     if (body.priority !== undefined) {
-      const res = updateItem(id, { priority: Number(body.priority) });
+      const res = await updateItem(id, { priority: Number(body.priority) });
       if (res) {
         updated = res;
       }

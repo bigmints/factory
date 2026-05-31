@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 const PROJECTS_FILE = join(FACTORY_ROOT, 'projects.json');
@@ -95,46 +95,58 @@ export async function POST(request: Request) {
       );
     }
 
-    const absPath = resolve(repoPath);
-    if (!existsSync(absPath)) {
-      return NextResponse.json(
-        { error: `Path does not exist: ${absPath}` },
-        { status: 400 }
-      );
+    const isUrl = repoPath.startsWith('http://') || repoPath.startsWith('https://') || repoPath.startsWith('git@');
+    let targetArg = repoPath;
+    let projectDir = repoPath;
+
+    if (isUrl) {
+      const repoNameMatch = repoPath.match(/([^\/]+)(?:\.git)?$/);
+      const repoName = repoNameMatch ? repoNameMatch[1].replace(/\.git$/, '') : 'factory-project';
+      projectDir = resolve(process.cwd(), repoName);
+    } else {
+      targetArg = resolve(repoPath);
+      projectDir = targetArg;
+      if (!existsSync(projectDir)) {
+        return NextResponse.json(
+          { error: `Path does not exist: ${projectDir}` },
+          { status: 400 }
+        );
+      }
     }
 
     const stack = body.stack || {};
-    let flags = '';
-    if (stack.framework) flags += ` --framework "${stack.framework}"`;
-    if (stack.packageManager) flags += ` --pm "${stack.packageManager}"`;
-    if (stack.linter) flags += ` --linter "${stack.linter}"`;
-    if (stack.testing) flags += ` --testing "${stack.testing}"`;
+    const addArgs: string[] = ['project', 'add', targetArg];
+    if (stack.framework) { addArgs.push('--framework', stack.framework); }
+    if (stack.packageManager) { addArgs.push('--pm', stack.packageManager); }
+    if (stack.linter) { addArgs.push('--linter', stack.linter); }
+    if (stack.testing) { addArgs.push('--testing', stack.testing); }
 
     // Run engine CLI to add project (this handles bridge init + project registration)
     const execOptions = { 
       encoding: 'utf-8' as BufferEncoding, 
-      timeout: 30000,
+      timeout: 600000, // increased timeout for cloning + LLM analysis
+      stdio: 'pipe',
       env: { ...process.env, npm_config_cache: '/tmp/factory-npm-cache', TMPDIR: '/tmp/factory-npm-cache' }
     };
 
-    const output = stripAnsi(execSync(
-      `factory project add "${absPath}"${flags} 2>&1`,
-      execOptions
-    ));
+    const output = stripAnsi(execFileSync(
+      'factory', addArgs,
+      execOptions as any
+    ).toString());
 
     // Now sync reference from the new project
-    const syncOutput = stripAnsi(execSync(
-      `factory sync "${absPath}" 2>&1`,
-      execOptions
-    ));
+    const syncOutput = stripAnsi(execFileSync(
+      'factory', ['sync', projectDir],
+      execOptions as any
+    ).toString());
 
     // Re-read projects.json to get the result
     const config = loadProjectsConfig();
-    const project = config.projects.find((p: any) => p.path === absPath);
+    const project = config.projects.find((p: any) => p.path === projectDir);
 
     // Read bridge config if available
     let bridge = null;
-    const bridgePath = join(absPath, '.factory', 'factory.yaml');
+    const bridgePath = join(projectDir, '.factory', 'factory.yaml');
     if (existsSync(bridgePath)) {
       const { parse: parseYaml } = require('yaml');
       bridge = parseYaml(readFileSync(bridgePath, 'utf-8'));

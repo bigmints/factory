@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # heartbeat/check.sh
 # Usage: check.sh [--timeout-minutes N]
-# Reads .factory/context/heartbeat.toon and reports whether the agent is alive.
+# Reads .factory/logs/heartbeat.yaml and reports whether the agent is alive.
 # Exits 0 if alive, 1 if stalled or heartbeat is missing.
 # Default stale threshold: 10 minutes.
 
@@ -20,8 +20,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_ROOT="${FACTORY_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo ".")}"
-HEARTBEAT_FILE="$PROJECT_ROOT/.factory/context/heartbeat.yaml"
-if [[ ! -f "$HEARTBEAT_FILE" && -f "$PROJECT_ROOT/.factory/context/heartbeat.toon" ]]; then
+HEARTBEAT_FILE="$PROJECT_ROOT/.factory/logs/heartbeat.yaml"
+# Fallback to legacy paths
+if [[ ! -f "$HEARTBEAT_FILE" && -f "$PROJECT_ROOT/.factory/context/heartbeat.yaml" ]]; then
+  HEARTBEAT_FILE="$PROJECT_ROOT/.factory/context/heartbeat.yaml"
+elif [[ ! -f "$HEARTBEAT_FILE" && -f "$PROJECT_ROOT/.factory/context/heartbeat.toon" ]]; then
   HEARTBEAT_FILE="$PROJECT_ROOT/.factory/context/heartbeat.toon"
 fi
 
@@ -69,6 +72,6 @@ else
   echo "  What to do:"
   echo "  1. Check if the agent process is still running."
   echo "  2. Review the last task in the heartbeat file — it may be blocked on a tool call or waiting for input."
-  echo "  3. If stuck, interrupt the agent, read worklog.toon for the last known state, and restart."
+  echo "  3. If stuck, interrupt the agent, read worklog.yaml for the last known state, and restart."
   exit 1
 fi

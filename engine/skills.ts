@@ -84,7 +84,8 @@ function parseSkillFile(filePath: string): Skill | null {
             createdAt: (frontmatter.createdAt as string) || '',
             updatedAt: (frontmatter.updatedAt as string) || '',
         };
-    } catch {
+    } catch (err) {
+        log('!', `Failed to parse skill file ${filePath}: ${(err as Error).message?.slice(0, 100) || err}`);
         return null;
     }
 }
@@ -176,7 +177,7 @@ export function loadAllSkills(): Skill[] {
             }
         }
     } catch (e) {
-        // Silently ignore or log
+        log('!', `Failed to load MCP skills: ${(e as Error).message?.slice(0, 100) || e}`);
     }
 
     return skills.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));

@@ -23,7 +23,7 @@ import {
     detectAvailableCli,
     verifyCli,
 } from './cli-adapter.ts';
-import { loadQueue, saveQueue } from './queue.ts';
+import { loadQueue, saveQueue, withQueueLock } from './queue.ts';
 import type {
     AppStory, FeatureStory, ProjectBlueprint,
     BuildResult, GeneratedFile, FactorySettings, LLMProvider,
@@ -575,6 +575,7 @@ async function toolDelegateToCli(
             stdio: ['ignore', 'pipe', 'pipe'],
             // macOS + Linux aware PATH — finds all CLIs regardless of shell environment
             env: buildSpawnEnv(),
+            detached: true,
         });
 
         let buffer = '';
@@ -674,16 +675,16 @@ async function toolDelegateToCli(
                     }
 
                     // Also update the queue item in-place if it is in the queue!
-                    try {
+                    withQueueLock(() => {
                         const queue = loadQueue();
                         const item = queue.find((q: any) => q.storyFile === ctx.storyFile && ['pending', 'running'].includes(q.status));
                         if (item && item.threadId !== threadId) {
                             item.threadId = threadId;
                             saveQueue(queue);
                         }
-                    } catch {
+                    }).catch(() => {
                         // Ignore queue update errors
-                    }
+                    });
                 }
             }
 
@@ -894,7 +895,7 @@ function toolMarkStoryFailed(
     const reason = String(args.reason || 'Unknown failure');
 
     try {
-        updateStoryStatus(ctx.storyFile, 'review');
+        updateStoryStatus(ctx.storyFile, 'failed');
         log('!', `Story status → review: ${ctx.storyFile}`);
     } catch { /* non-fatal */ }
 
@@ -937,7 +938,7 @@ async function toolCreateFixTask(
         const { enqueue } = await import('./queue.ts');
         const slug = ctx.storyFile.split('/').pop()?.replace(/\.ya?ml$/, '') || 'fix';
         const fixStoryFile = `features/fix-${slug}.yaml`;
-        enqueue(fixStoryFile, 'FeatureStory', { phase: 0, dependsOn: [], engine: 'factory' });
+        await enqueue(fixStoryFile, 'FeatureStory', { phase: 0, dependsOn: [], engine: 'factory' });
         log('✓', `Fix story enqueued with high priority: ${fixStoryFile}`);
     } catch (e) {
         log('!', `Could not enqueue fix story: ${e}`);
@@ -974,7 +975,7 @@ async function toolCreateQaTask(
     const qaStory = {
         name: `QA: Verify ${scope}`,
         description: `Quality assurance task to verify that ${scope} works correctly end-to-end.`,
-        status: 'ready',
+        status: 'ready-to-build',
         feature: { name: 'QA & Testing', slug: 'qa-testing' },
         target: { app: ctx.repoPath.split('/').pop() || 'app' },
         acceptance_criteria: [
@@ -995,7 +996,7 @@ async function toolCreateQaTask(
     // Enqueue with lowest priority so it runs after all features
     try {
         const { enqueue } = await import('./queue.ts');
-        enqueue(`features/${slug}.yaml`, 'FeatureStory', { phase: 99, dependsOn: [], engine: 'factory' });
+        await enqueue(`features/${slug}.yaml`, 'FeatureStory', { phase: 99, dependsOn: [], engine: 'factory' });
         log('✓', `QA task queued: features/${slug}.yaml`);
     } catch (e) {
         log('!', `Could not enqueue QA task: ${e}`);
@@ -1063,7 +1064,7 @@ function createFixStoryFile(ctx: OrchestratorContext, issue: string, fixInstruct
         const fixStory = {
             name: `Fix: ${originalStory.name || slug}`,
             description: `Automated fix task created by Factory TPM.\n\nOriginal story: ${ctx.storyFile}\nIssue: ${issue}`,
-            status: 'ready',
+            status: 'ready-to-build',
             feature: originalStory.feature || { name: 'Fix', slug: 'fix' },
             target: originalStory.target || {},
             stack: originalStory.stack || {},

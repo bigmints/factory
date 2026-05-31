@@ -19,7 +19,7 @@ import { join } from 'node:path';
 try {
     writeHeartbeat('factory', 'daemon-starting');
 } catch {
-    // Ignore heartbeat errors
+    /* expected: heartbeat path may not exist at daemon startup */
 }
 
 // Run the daemon loop

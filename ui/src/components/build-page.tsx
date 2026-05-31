@@ -19,7 +19,7 @@ interface QueueItem {
   storyFile?: string;
   displayName?: string;
   kind: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'needs-attention' | 'blocked' | string;
+  status: 'draft' | 'ready-to-build' | 'building' | 'paused' | 'failed' | 'done' | string;
   priority: number;
   phase?: number;
   engine?: string;
@@ -33,11 +33,11 @@ interface QueueItem {
 }
 
 interface QueueStats {
-  pending: number;
-  running: number;
-  completed: number;
+  'ready-to-build': number;
+  building: number;
+  done: number;
   failed: number;
-  blocked: number;
+  paused: number;
   total: number;
 }
 
@@ -91,10 +91,10 @@ function getLogPreview(item: QueueItem): string {
     const lines = item.output.trim().split('\n').filter(l => l.trim() && !l.includes('.sst'));
     if (lines.length > 0) return lines.at(-1)!.substring(0, 90);
   }
-  if (item.status === 'running') return 'Compiling — validation gates in progress...';
-  if (item.status === 'pending') return 'Queued — waiting for dependencies to resolve';
-  if (item.status === 'completed') return 'Artifacts emitted • AGENTS.md written • committed';
-  if (item.status === 'blocked') return 'Blocked by unresolved dependency';
+  if (item.status === 'building') return 'Compiling — validation gates in progress...';
+  if (item.status === 'ready-to-build') return 'Queued — waiting for dependencies to resolve';
+  if (item.status === 'done') return 'Artifacts emitted • AGENTS.md written • committed';
+  if (item.status === 'paused') return 'Paused — stopped by user or blocked by dependency';
   return 'No output yet';
 }
 
@@ -144,13 +144,11 @@ function StatusPill({
   durationMs?: number | null; 
 }) {
   const map: Record<string, string> = {
-    running: 'bg-violet-500/15 text-violet-300 border-violet-500/30 animate-pulse',
-    pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    building: 'bg-violet-500/15 text-violet-300 border-violet-500/30 animate-pulse',
+    'ready-to-build': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    done: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     failed: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-    cancelled: 'bg-zinc-700/30 text-zinc-400 border-zinc-600/30',
-    blocked: 'bg-zinc-700/40 text-zinc-400 border-zinc-600/30',
-    'needs-attention': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+    paused: 'bg-zinc-700/40 text-zinc-400 border-zinc-600/30',
   };
   const duration = durationMs ? formatDuration(durationMs) : null;
   return (
@@ -159,10 +157,10 @@ function StatusPill({
         'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border font-mono',
         map[status] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'
       )}>
-        {status === 'running' && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
-        {status === 'completed' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+        {status === 'building' && <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />}
+        {status === 'done' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
         {status === 'failed' && <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />}
-        {status === 'cancelled' ? 'stopped' : status}
+        {status === 'paused' && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
       </span>
       {duration && (
         <span className="text-[10px] text-zinc-500 font-mono">({duration})</span>
@@ -261,7 +259,7 @@ export function BuildPage() {
 
   // Live elapsed timer — ticks every second while running
   useEffect(() => {
-    const runningItem = queueItems.find(i => i.status === 'running');
+    const runningItem = queueItems.find(i => i.status === 'building');
     if (!runningItem?.startedAt) { setElapsed(0); return; }
     const tick = () => setElapsed(Math.floor((Date.now() - new Date(runningItem.startedAt!).getTime()) / 1000));
     tick();
@@ -316,7 +314,7 @@ export function BuildPage() {
       const data = await res.json();
       const items: QueueItem[] = data.items ?? data ?? [];
       setQueueItems(items);
-      setQueueRunning(items.some(i => i.status === 'running'));
+      setQueueRunning(items.some(i => i.status === 'building'));
     } catch {}
   }, []);
 
@@ -332,7 +330,7 @@ export function BuildPage() {
     sseRef.current?.close();
     sseRef.current = null;
 
-    const runningItem = queueItems.find(i => i.status === 'running');
+    const runningItem = queueItems.find(i => i.status === 'building');
     if (!runningItem) return;
 
     const slug = (runningItem.storyFile || runningItem.specFile || '')
@@ -376,13 +374,13 @@ export function BuildPage() {
 
     return () => { es.close(); sseRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queueItems.find(i => i.status === 'running')?.id]);
+  }, [queueItems.find(i => i.status === 'building')?.id]);
 
   useEffect(() => { terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [buildOutput, rawLogOpen]);
 
   // Auto-select running item
   useEffect(() => {
-    const running = queueItems.find(i => i.status === 'running');
+    const running = queueItems.find(i => i.status === 'building');
     if (running) {
       setSelectedId(prev => prev && queueItems.some(i => i.id === prev) ? prev : running.id);
     } else {
@@ -396,20 +394,20 @@ export function BuildPage() {
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const stats = useMemo<QueueStats>(() => {
-    const s = { pending: 0, running: 0, completed: 0, failed: 0, blocked: 0, total: queueItems.length };
+    const s = { 'ready-to-build': 0, building: 0, done: 0, failed: 0, paused: 0, total: queueItems.length };
     queueItems.forEach(i => {
-      if (i.status === 'running') s.running++;
-      else if (i.status === 'completed') s.completed++;
-      else if (i.status === 'failed' || i.status === 'cancelled') s.failed++;
-      else if (i.status === 'blocked') s.blocked++;
-      else s.pending++;
+      if (i.status === 'building') s.building++;
+      else if (i.status === 'done') s.done++;
+      else if (i.status === 'failed') s.failed++;
+      else if (i.status === 'paused') s.paused++;
+      else s['ready-to-build']++;
     });
     return s;
   }, [queueItems]);
 
   const filteredItems = useMemo(() => {
     const statusOrder: Record<string, number> = {
-      running: 0, pending: 1, blocked: 2, failed: 3, cancelled: 4, completed: 5,
+      building: 0, 'ready-to-build': 1, paused: 2, failed: 3, done: 5,
     };
     return queueItems
       .filter(item => {
@@ -418,16 +416,16 @@ export function BuildPage() {
           item.kind.toLowerCase().includes(searchQuery.toLowerCase()) ||
           item.status.toLowerCase().includes(searchQuery.toLowerCase());
         if (!matchesSearch) return false;
-        if (filterStatus === 'active') return item.status === 'running' || item.status === 'pending';
-        if (filterStatus === 'completed') return item.status === 'completed';
-        if (filterStatus === 'stopped') return item.status === 'failed' || item.status === 'cancelled' || item.status === 'blocked';
+        if (filterStatus === 'active') return item.status === 'building' || item.status === 'ready-to-build';
+        if (filterStatus === 'completed') return item.status === 'done';
+        if (filterStatus === 'stopped') return item.status === 'failed' || item.status === 'paused';
         return true;
       })
       .sort((a, b) => {
         const groupDiff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
         if (groupDiff !== 0) return groupDiff;
         // Within completed group: most recently completed first
-        if (a.status === 'completed' && b.status === 'completed') {
+        if (a.status === 'done' && b.status === 'done') {
           const aT = a.completedAt ? new Date(a.completedAt).getTime() : 0;
           const bT = b.completedAt ? new Date(b.completedAt).getTime() : 0;
           return bT - aT;
@@ -438,7 +436,7 @@ export function BuildPage() {
   }, [queueItems, filterStatus, searchQuery]);
 
   const selectedItem = queueItems.find(i => i.id === selectedId) ?? null;
-  const isSelectedRunning = selectedItem?.status === 'running';
+  const isSelectedRunning = selectedItem?.status === 'building';
   const panelLog = selectedItem
     ? (isSelectedRunning
       ? (buildOutput || selectedItem.output || '')
@@ -582,9 +580,9 @@ export function BuildPage() {
             <h1 className="text-sm md:text-base font-bold tracking-tight text-white font-sans">Build Pipeline</h1>
             <p className="text-[11px] text-zinc-500 font-sans">
               {queueRunning
-                ? `Running — ${stats.running} active build${stats.running !== 1 ? 's' : ''}`
-                : stats.pending > 0
-                  ? `${stats.pending} build${stats.pending !== 1 ? 's' : ''} queued`
+                ? `Running — ${stats.building} active build${stats.building !== 1 ? 's' : ''}`
+                : stats["ready-to-build"] > 0
+                  ? `${stats["ready-to-build"]} build${stats["ready-to-build"] !== 1 ? 's' : ''} queued`
                   : 'Idle — no pending builds'}
             </p>
           </div>
@@ -592,7 +590,7 @@ export function BuildPage() {
         <div className="flex items-center gap-1.5">
           {!queueRunning ? (
             <button
-              disabled={startingQueue || stats.pending === 0}
+              disabled={startingQueue || stats["ready-to-build"] === 0}
               onClick={handleStartQueue}
               className="tap-shrink h-8 px-3 flex items-center gap-1.5 rounded-md bg-violet-600 hover:bg-violet-500 text-white font-semibold text-[11px] font-sans shadow-lg shadow-violet-900/30 disabled:opacity-40"
             >
@@ -671,9 +669,9 @@ export function BuildPage() {
               {(['all', 'active', 'completed', 'stopped'] as StatusFilter[]).map(f => {
                 const label = f === 'all' ? 'All' : f === 'active' ? 'Active' : f === 'completed' ? 'Done' : 'Stopped';
                 const count = f === 'all' ? stats.total
-                  : f === 'active' ? (stats.running + stats.pending)
-                  : f === 'completed' ? stats.completed
-                  : (stats.failed + stats.blocked);
+                  : f === 'active' ? (stats.building + stats["ready-to-build"])
+                  : f === 'completed' ? stats.done
+                  : (stats.failed + stats.paused);
                 const countColor = f === 'active' ? 'text-violet-400'
                   : f === 'completed' ? 'text-emerald-400'
                   : f === 'stopped' ? 'text-zinc-400'
@@ -705,11 +703,11 @@ export function BuildPage() {
             {filteredItems.length > 0 ? (
               filteredItems.map((item, idx) => {
                 const isSelected = item.id === selectedId;
-                const isRunning = item.status === 'running';
-                const isCancelled = item.status === 'cancelled';
-                const isFailed = item.status === 'failed' || item.status === 'blocked';
-                const isStopped = isCancelled || isFailed;
-                const isDone = item.status === 'completed';
+                const isRunning = item.status === 'building';
+                const isPaused = item.status === 'paused';
+                const isFailed = item.status === 'failed';
+                const isStopped = isPaused || isFailed;
+                const isDone = item.status === 'done';
 
                 return (
                   <div
@@ -732,13 +730,13 @@ export function BuildPage() {
                       isRunning ? 'bg-violet-500/10 border-violet-500/30 text-violet-400' :
                       isDone ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
                       isFailed ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
-                      isCancelled ? 'bg-zinc-800/60 border-zinc-700/40 text-zinc-500' :
+                      isPaused ? 'bg-zinc-800/60 border-zinc-700/40 text-zinc-500' :
                       'bg-zinc-800/80 border-zinc-700/50 text-zinc-400'
                     )}>
                       {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
                        isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> :
                        isFailed ? <XCircle className="h-3.5 w-3.5" /> :
-                       isCancelled ? <Square className="h-3.5 w-3.5" /> :
+                       isPaused ? <Square className="h-3.5 w-3.5" /> :
                        <Package className="h-3.5 w-3.5" />}
                     </div>
 
@@ -787,7 +785,7 @@ export function BuildPage() {
                             <Square className="h-3 w-3" /> Stop
                           </button>
                         )}
-                        {(isStopped || item.status === 'pending') && (
+                        {(isStopped || item.status === 'ready-to-build') && (
                           <button
                             className="tap-shrink px-2 py-1 rounded-md text-[10px] text-zinc-300 bg-zinc-800 hover:bg-zinc-700 flex items-center gap-1 border border-zinc-700 font-semibold"
                             onClick={() => isStopped ? handleRetry(item.id) : handleStartTask(item.id)}
@@ -812,7 +810,7 @@ export function BuildPage() {
                           <Square className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {item.status === 'pending' && (
+                      {item.status === 'ready-to-build' && (
                         <button
                           className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700"
                           title="Start now"
@@ -880,7 +878,7 @@ export function BuildPage() {
                     </h2>
                     <p className="text-[11px] text-zinc-500 font-sans mt-0.5">
                       {kindLabel(selectedItem.kind)}
-                      {selectedItem.status === 'completed' && selectedItem.completedAt ? (
+                      {selectedItem.status === 'done' && selectedItem.completedAt ? (
                         <span className="text-emerald-600"> · done at {formatAbsoluteTime(selectedItem.completedAt)}</span>
                       ) : selectedItem.startedAt ? (
                         <span className="text-zinc-600"> · started {formatRelativeTime(selectedItem.startedAt)}</span>
@@ -892,7 +890,7 @@ export function BuildPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {/* Story-level actions — single button per state */}
-                    {selectedItem.status === 'running' && (
+                    {selectedItem.status === 'building' && (
                       <Button
                         size="sm"
                         onClick={() => handleStopTask(selectedItem.id)}
@@ -902,7 +900,7 @@ export function BuildPage() {
                         Stop
                       </Button>
                     )}
-                    {selectedItem.status === 'pending' && (
+                    {selectedItem.status === 'ready-to-build' && (
                       <Button
                         size="sm"
                         onClick={() => handleStartTask(selectedItem.id)}
@@ -912,7 +910,7 @@ export function BuildPage() {
                         Start
                       </Button>
                     )}
-                    {(selectedItem.status === 'cancelled' || selectedItem.status === 'failed' || selectedItem.status === 'blocked') && (
+                    {(selectedItem.status === 'paused' || selectedItem.status === 'failed') && (
                       <Button
                         size="sm"
                         onClick={() => handleRetry(selectedItem.id)}
@@ -991,11 +989,11 @@ export function BuildPage() {
                 )}
 
                 {/* Completed summary — uses build receipt prose */}
-                {!isSelectedRunning && selectedItem.status === 'completed' && (
+                {!isSelectedRunning && selectedItem.status === 'done' && (
                   <CompletedSummaryBanner itemId={selectedItem.id} durationMs={selectedItem.durationMs} completedAt={selectedItem.completedAt} />
                 )}
 
-                {!isSelectedRunning && selectedItem.status === 'cancelled' && (
+                {!isSelectedRunning && selectedItem.status === 'paused' && (
                   <div className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/40 px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <Square className="h-3.5 w-3.5 text-zinc-500" />
@@ -1004,12 +1002,12 @@ export function BuildPage() {
                   </div>
                 )}
 
-                {!isSelectedRunning && (selectedItem.status === 'failed' || selectedItem.status === 'blocked') && (
+                {!isSelectedRunning && (selectedItem.status === 'failed' || selectedItem.status === 'paused') && (
                   <div className="shrink-0 border-b border-zinc-800/60 bg-rose-950/20 px-5 py-3.5">
                     <div className="flex items-center gap-2 mb-1">
                       <XCircle className="h-3.5 w-3.5 text-rose-400" />
                       <span className="text-[12px] font-semibold text-rose-400 font-sans">
-                        {selectedItem.status === 'blocked' ? 'Waiting on another task' : 'Something went wrong'}
+                        {selectedItem.status === 'paused' ? 'Waiting on another task' : 'Something went wrong'}
                       </span>
                     </div>
                     {selectedItem.error && (
@@ -1050,7 +1048,7 @@ export function BuildPage() {
                       </div>
                     )}
                   </div>
-                ) : selectedItem.status === 'pending' ? (
+                ) : selectedItem.status === 'ready-to-build' ? (
                   <div className="flex flex-col items-center justify-center flex-1 text-center py-16">
                     <div className="h-8 w-8 rounded-full border-2 border-zinc-800 border-t-violet-500 animate-spin mb-4" />
                     <p className="text-sm font-medium text-zinc-400 font-sans">Waiting in queue</p>

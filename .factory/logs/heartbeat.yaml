@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-31T14:30:35Z"
+  last_seen: "2026-05-31T14:36:39Z"
   host: "Mac"
-  task: "post-commit: fix(queue): strip .factory/stories/ prefix from frontend payloads to reliably prevent UI queue duplicates"
+  task: "post-commit: fix(queue): block duplicates regardless of status to prevent paused/blocked items from infinitely duplicating"
   status: alive

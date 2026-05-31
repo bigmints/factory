@@ -428,18 +428,8 @@ export async function dequeue(): Promise<QueueItem | null> {
             return a.addedAt.localeCompare(b.addedAt);
         });
 
-    for (const item of pendingItems) {
-        const status = isItemReady(item);
-        if (status.ready) {
-            return item;
-        } else if (status.reason && (status.reason.includes('failed') || status.reason.includes('blocked') || status.reason.includes('missing'))) {
-            // Permanently block item with failed prerequisites
-            await updateItem(item.id, {
-                status: 'paused',
-                error: status.reason,
-                completedAt: timestamp()
-            });
-        }
+    if (pendingItems.length > 0) {
+        return pendingItems[0];
     }
 
     return null;

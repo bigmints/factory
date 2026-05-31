@@ -275,10 +275,11 @@ function resolveAllDependencies(
   // done/ intentionally excluded — those stories are already built
 
   // Helper to check if already in queue or physically completed
-  const isAlreadyQueuedOrBuilt = (file: string, slug: string) => {
+  const isAlreadyQueuedOrBuilt = (file: string, rawSlug: string) => {
+    const slug = rawSlug.split(/[\\/]/).pop()?.replace(/\.ya?ml$/i, '') || rawSlug;
     // 1. Check the current queue (pending/running/completed)
     const inQueue = queue.some(
-      item => (item.storyFile === file || item.storyFile.split('/').pop()?.replace(/\.ya?ml$/i, '') === slug)
+      item => (item.storyFile === file || item.storyFile.split(/[\\/]/).pop()?.replace(/\.ya?ml$/i, '') === slug)
     );
     if (inQueue) return true;
 
@@ -356,7 +357,7 @@ function resolveAllDependencies(
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const storyFileRaw = body.storyFile || body.specFile;
+    let storyFileRaw = body.storyFile || body.specFile;
     const kindRaw = body.kind === 'AppSpec' ? 'AppStory' : body.kind === 'FeatureSpec' ? 'FeatureStory' : body.kind;
     const { buildAll, engine } = body;
 
@@ -368,6 +369,9 @@ export async function POST(request: Request) {
     if (!projectPath) {
       return NextResponse.json({ error: 'No active project' }, { status: 400 });
     }
+
+    // Always strip `.factory/stories/` prefix to match queue.yaml storage format
+    storyFileRaw = storyFileRaw.replace(/^\.?\/?\.factory\/stories\//, '');
 
     const { file: storyFile, kind } = normalizeStoryFilePath(storyFileRaw, projectPath);
     const queue = loadQueue();

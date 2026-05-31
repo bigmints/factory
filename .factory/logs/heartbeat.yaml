@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-05-31T13:18:59Z"
+  last_seen: "2026-05-31T14:27:44Z"
   host: "Mac"
-  task: "post-commit: fix(queue): normalize dependsOn paths and prevent duplicate queue additions"
+  task: "post-commit: fix(queue): resolve dependency duplication and turbopack async compilation errors"
   status: alive

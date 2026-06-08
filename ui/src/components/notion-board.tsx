@@ -1339,7 +1339,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
             </div>
 
             {/* Right: actions */}
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto sm:ml-auto">
               {/* Search — full width input on desktop, icon-only on mobile */}
               <div className="relative hidden sm:flex w-36 md:w-44">
                 <Search className="absolute left-2.5 top-2 h-3 w-3 text-muted-foreground/75" />
@@ -1354,7 +1354,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
               {/* Mobile search button */}
               <button
                 onClick={() => setShowMobileFilters(true)}
-                className="sm:hidden tap-shrink h-8 w-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                className="sm:hidden tap-shrink h-8 flex-1 sm:w-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
                 title="Search & Filter"
               >
                 <Search className="h-3.5 w-3.5" />
@@ -1372,7 +1372,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                   }
                 }}
                 className={cn(
-                  "h-8 text-[10px] gap-1 rounded-md px-2 sm:px-2.5 border-border bg-background hover:bg-muted/80 shrink-0",
+                  "h-8 text-[10px] gap-1 rounded-md px-2 sm:px-2.5 border-border bg-background hover:bg-muted/80 shrink-0 flex-1 sm:flex-none",
                   (showDesktopFilters || epicFilter !== 'all' || statusFilter !== 'all') && "border-primary text-primary bg-primary/5"
                 )}
               >
@@ -1398,7 +1398,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                 onClick={handleBuildReadyStories}
                 disabled={queueRunning || syncing}
                 className={cn(
-                  'tap-shrink h-8 px-2.5 flex items-center justify-center gap-1.5 rounded-md font-bold text-[10px] transition-all shrink-0',
+                  'tap-shrink h-8 px-2.5 flex items-center justify-center gap-1.5 rounded-md font-bold text-[10px] transition-all shrink-0 flex-1 sm:flex-none',
                   queueRunning ? 'bg-muted text-muted-foreground cursor-not-allowed' : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white'
                 )}
                 title="Build Ready Stories"
@@ -2021,11 +2021,10 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                           Story Metadata
                         </div>
                         <div className="space-y-2 text-xs">
-                          <div className="flex items-center justify-between py-1.5 border-b border-zinc-900 overflow-hidden">
-                            <span className="text-zinc-500 whitespace-nowrap mr-4">File Path</span>
+                          <div className="flex items-start justify-between py-1.5 border-b border-zinc-900 overflow-hidden gap-4">
+                            <span className="text-zinc-500 whitespace-nowrap">File Path</span>
                             <span 
-                              className="font-mono text-zinc-300 truncate text-right select-all max-w-[220px]"
-                              title={selectedItem.data.file}
+                              className="font-mono text-zinc-300 text-right select-all max-w-[240px] break-words whitespace-pre-wrap"
                             >
                               {selectedItem.data.file}
                             </span>

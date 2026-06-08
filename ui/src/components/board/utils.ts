@@ -159,6 +159,7 @@ export const getEffectiveStatus = (item: any) => {
   if (item.queueStatus === 'building') return 'building';
   if (item.queueStatus === 'done') return 'done';
   if (item.queueStatus === 'failed' || item.queueStatus === 'paused') return 'failed';
+  if (item.queueStatus === 'ready-to-build') return 'ready-to-build';
 
   // YAML status is the source of truth for everything else
   if (item.status && item.status !== 'unknown') return item.status;

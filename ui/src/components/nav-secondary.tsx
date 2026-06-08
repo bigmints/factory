@@ -29,13 +29,15 @@ export function NavSecondary({
           {items.map((item) => (
             <SidebarMenuItem key={item.id}>
               <SidebarMenuButton
+                asChild
                 size="sm"
                 tooltip={item.title}
                 isActive={activeId === item.id}
-                onClick={() => onSelect(item.id)}
               >
-                <item.icon />
-                <span>{item.title}</span>
+                <a href={`#${item.id}`} onClick={() => onSelect(item.id)}>
+                  <item.icon />
+                  <span>{item.title}</span>
+                </a>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}

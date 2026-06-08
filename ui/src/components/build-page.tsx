@@ -66,7 +66,7 @@ function humanName(item: QueueItem, idx: number, nameMap?: Map<string, string>):
 }
 
 function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
   if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
   if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
   return `${Math.floor(diff / 3600_000)}h ago`;

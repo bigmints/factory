@@ -65,15 +65,15 @@ export function StoryKanbanCard({
       )}
     >
       {/* Name + status dot */}
-      <div className="flex items-start justify-between gap-1.5">
-        <span className="font-medium text-xs text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2 flex-1" title={name}>
+      <div className="flex items-start justify-between gap-2.5">
+        <span className="font-medium text-xs text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2 flex-1 pr-1" title={name}>
           {name.replace('features/', '')}
         </span>
-        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1", statusCfg.dot)} title={statusCfg.label} />
+        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0 mt-1.5 mr-0.5", statusCfg.dot)} title={statusCfg.label} />
       </div>
 
       {/* Meta row */}
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap pr-1 mt-0.5">
         {item.epicParent && epicColor && item.epicParent.name !== name && (
           <Badge variant="outline" className={cn("text-[7.5px] font-semibold h-3.5 px-1.5 rounded border leading-none shrink-0", epicColor.badge)}>
             {item.epicParent.name}

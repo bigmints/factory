@@ -1,18 +1,5 @@
 heartbeat:
-  last_seen: "2026-06-08T21:32:37Z"
+  last_seen: "2026-06-08T21:52:55Z"
   host: "BigMac-2"
-  task: "post-commit: feat(philosophy): LLM is the runtime — skills are first-class tools
-
-- AGENTS.md: add philosophy section at top encoding the core rule:
-  decisions → skill/prompt, execution → TypeScript tool
-- skill-index.yaml: register story-generator + all flat skills with
-  trigger keywords so the skill routing system can find them
-- engine/tools/tpm/skills.ts: new read_skill + list_skills tools for
-  the autonomous build orchestrator — LLM reads skills, code does I/O
-- engine/tools/tpm/index.ts: import skills.ts
-- engine/orchestrate.ts: import + call resolveSkillsForBuild() /
-  formatSkillsForPrompt() — autonomous builds are now skill-aware
-- ui/src/app/api/tpm/chat/route.ts: add read_skill, invoke_skill,
-  list_skills tools + loadSkillRaw() helper so TPM chat can read any
-  skill from the global library at runtime"
+  task: "post-commit: fix(ui): apply visual polish and syntax fixes"
   status: alive

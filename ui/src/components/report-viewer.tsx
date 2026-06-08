@@ -145,7 +145,10 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
             <span className="text-[10px] font-bold uppercase tracking-wider">Model Usage</span>
           </div>
           {(stats.modelUsage ?? []).length === 0 ? (
-            <p className="text-xs text-muted-foreground py-6">No model data recorded yet</p>
+            <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60 space-y-2">
+              <Cpu className="h-8 w-8 text-muted-foreground/40" />
+              <p className="text-xs font-medium">No model data recorded yet</p>
+            </div>
           ) : (
             <div className="space-y-4">
               {(stats.modelUsage ?? []).map((m) => {

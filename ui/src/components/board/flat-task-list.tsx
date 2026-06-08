@@ -61,6 +61,11 @@ export function FlatTaskList({
           const isActioning = !!(activeAction && activeAction.file === item.file);
           const isScaffold = item.file === scaffoldStoryFile;
 
+          // Check if epic name is redundant (same as name, ignoring case/whitespace)
+          const cleanName = name.trim().toLowerCase();
+          const cleanEpic = epicName ? epicName.trim().toLowerCase() : '';
+          const isRedundantEpic = cleanEpic === cleanName || cleanName.includes(cleanEpic);
+
           return (
             <div
               key={item.file}
@@ -89,7 +94,7 @@ export function FlatTaskList({
                 </Badge>
 
                 {/* Epic tag */}
-                {epicName && epicColor && epicName !== name && (
+                {epicName && epicColor && !isRedundantEpic && (
                   <span className={cn('text-[9px] px-1.5 py-0 h-4 rounded border font-medium flex items-center', epicColor.badge)}>
                     {epicName.length > 20 ? epicName.slice(0, 20) + '…' : epicName}
                   </span>

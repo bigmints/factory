@@ -1,15 +1,18 @@
 heartbeat:
-  last_seen: "2026-06-08T21:18:22Z"
+  last_seen: "2026-06-08T21:32:37Z"
   host: "BigMac-2"
-  task: "post-commit: fix(tpm): fix all 4 audit gaps in TPM chat route
+  task: "post-commit: feat(philosophy): LLM is the runtime — skills are first-class tools
 
-- list_stories: recurse subdirectories with collectYamlFiles()
-  (was missing features in subdirs like pi-app's features/antigravity/)
-- get_project_status + read_heartbeat: read blueprint/worklog.yaml
-  (TOON format) instead of logs/worklog.yaml so agent session logs
-  are actually visible to the TPM
-- decompose_requirements: inject story-generator SKILL.md + full
-  userStory/Given-When-Then acceptanceCriteria schema into prompt
-- TPM system prompt: inject skill-index.yaml at request time so the
-  LLM knows which project skills are available"
+- AGENTS.md: add philosophy section at top encoding the core rule:
+  decisions → skill/prompt, execution → TypeScript tool
+- skill-index.yaml: register story-generator + all flat skills with
+  trigger keywords so the skill routing system can find them
+- engine/tools/tpm/skills.ts: new read_skill + list_skills tools for
+  the autonomous build orchestrator — LLM reads skills, code does I/O
+- engine/tools/tpm/index.ts: import skills.ts
+- engine/orchestrate.ts: import + call resolveSkillsForBuild() /
+  formatSkillsForPrompt() — autonomous builds are now skill-aware
+- ui/src/app/api/tpm/chat/route.ts: add read_skill, invoke_skill,
+  list_skills tools + loadSkillRaw() helper so TPM chat can read any
+  skill from the global library at runtime"
   status: alive

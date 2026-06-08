@@ -27,6 +27,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -66,6 +67,13 @@ export function AppSidebar({
   hasLoopWarning = false,
   ...props
 }: AppSidebarProps) {
+  const { setOpenMobile } = useSidebar()
+
+  const handleTabChange = (tab: string) => {
+    onTabChange(tab)
+    setOpenMobile(false)
+  }
+
   return (
     <Sidebar variant="sidebar" {...props}>
       {/* Header: logo + project switcher */}
@@ -93,7 +101,7 @@ export function AppSidebar({
           label="Workflow"
           items={navMain}
           activeId={activeTab}
-          onSelect={onTabChange}
+          onSelect={handleTabChange}
           queueRunning={queueRunning}
           hasLoopWarning={hasLoopWarning}
         />
@@ -101,13 +109,13 @@ export function AppSidebar({
           label="Analytics"
           items={navAnalytics}
           activeId={activeTab}
-          onSelect={onTabChange}
+          onSelect={handleTabChange}
         />
         <NavSecondary
           label="Configure"
           items={navSecondary}
           activeId={activeTab}
-          onSelect={onTabChange}
+          onSelect={handleTabChange}
           className="mt-auto"
         />
       </SidebarContent>

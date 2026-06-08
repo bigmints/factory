@@ -85,7 +85,7 @@ export function ListStoryRow({
           </Badge>
         )}
         {item.priority !== undefined && (
-          <Badge variant="outline" className="text-[8px] font-bold h-4 px-1.5 rounded border-amber-500/20 text-amber-500 bg-amber-500/5 shrink-0 select-none leading-none flex items-center">
+          <Badge variant="outline" className="text-[8px] font-bold h-4 px-1.5 rounded border-amber-500/20 text-amber-600 dark:text-amber-400 bg-amber-500/10 shrink-0 select-none leading-none flex items-center">
             P{item.priority}
           </Badge>
         )}
@@ -100,7 +100,7 @@ export function ListStoryRow({
           <button
             disabled={isActionLoading}
             onClick={() => onBuild(item.file, item.kind || 'AppStory')}
-            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground/30 hover:text-primary hover:bg-primary/10 transition-all shrink-0 opacity-0 group-hover:opacity-100"
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground/30 hover:text-primary hover:bg-primary/10 transition-all shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
             title="Build"
           >
             {isActionLoading && activeAction?.type === 'build'

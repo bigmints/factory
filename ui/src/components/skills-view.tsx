@@ -305,7 +305,7 @@ export function SkillsView() {
                   <Icon className="h-3 w-3" />
                   {cat.label}
                   {count > 0 && (
-                    <span className="ml-0.5 rounded-full bg-muted px-1.5 py-0 text-[9px] font-medium">
+                    <span className="ml-0.5 rounded-full bg-foreground/15 text-foreground px-1.5 py-0 text-[9px] font-bold">
                       {count}
                     </span>
                   )}
@@ -388,7 +388,7 @@ export function SkillsView() {
                     {/* Right actions and switch */}
                     <div className="flex items-center justify-end gap-2.5 shrink-0 select-none">
                       {skill.trigger && (
-                        <span className="text-[10px] font-mono text-muted-foreground/80 bg-muted/60 border px-2 py-0.5 rounded max-w-[120px] truncate">
+                        <span className="text-[10px] font-mono text-foreground/90 font-medium bg-muted border border-border/50 px-2 py-0.5 rounded max-w-[120px] truncate">
                           {skill.trigger}
                         </span>
                       )}

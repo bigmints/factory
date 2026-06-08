@@ -1042,7 +1042,7 @@ You have access to the following tools. Use them proactively to fulfill user req
 - For "what's the status?" type questions, call get_project_status AND list_stories together.
 - After write operations, confirm the action with the returned result.
 - When writing stories, always use userStory + acceptanceCriteria (Given/When/Then) format.
-- Speak professionally and concisely. Be the intelligent conductor.\${skillSection}\`;
+- Speak professionally and concisely. Be the intelligent conductor.${skillSection}`;
 
           const localMessages: any[] = [
             { role: 'system', content: tpmSystemPrompt },

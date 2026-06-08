@@ -181,7 +181,7 @@ export function TestPlaceholder() {
                   </Badge>
                 </p>
                 <p className="text-[11px] text-muted-foreground leading-normal">
-                  {runStatus === 'running' ? `Dev server listening on port ${runPort || 3000} (PID ${runPid})` :
+                  {runStatus === 'running' ? `Dev server listening on port ${runPort || 3000}${runPid ? ` (PID ${runPid})` : ''}` :
                    runStatus === 'starting' ? "Launching development server process..." :
                    "Server is offline. Start it to manually smoke test and preview features."}
                 </p>
@@ -203,8 +203,8 @@ export function TestPlaceholder() {
                   onClick={handleStopApp}
                   disabled={isActionLoading}
                   size="sm"
-                  variant="destructive"
-                  className="h-8 text-xs gap-1.5 font-semibold"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5 font-semibold text-red-500/90 hover:text-red-600 hover:bg-red-500/10 border-red-500/20 bg-red-500/5"
                 >
                   <Square className="h-3 w-3 fill-current" />
                   Stop Server

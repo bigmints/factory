@@ -524,32 +524,32 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
                           {project.bridge.stack && (
                             <div className="flex flex-wrap gap-1.5">
                               {project.bridge.stack.framework && (
-                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0 bg-background/50">
                                   {project.bridge.stack.framework}
                                 </Badge>
                               )}
                               {project.bridge.stack.packageManager && (
-                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0 bg-background/50">
                                   {project.bridge.stack.packageManager}
                                 </Badge>
                               )}
                               {project.bridge.stack.database && (
-                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0 bg-background/50">
                                   {project.bridge.stack.database}
                                 </Badge>
                               )}
                               {project.bridge.stack.cloud && (
-                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0 bg-background/50">
                                   {project.bridge.stack.cloud}
                                 </Badge>
                               )}
                               {project.bridge.stack.testing && (
-                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0 bg-background/50">
                                   {project.bridge.stack.testing}
                                 </Badge>
                               )}
                               {project.bridge.stack.linter && (
-                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0">
+                                <Badge variant="outline" className="text-xs font-medium rounded-md px-1.5 py-0 bg-background/50">
                                   {project.bridge.stack.linter}
                                 </Badge>
                               )}

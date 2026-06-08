@@ -89,7 +89,7 @@ export function FlatTaskList({
                 </Badge>
 
                 {/* Epic tag */}
-                {epicName && epicColor && (
+                {epicName && epicColor && epicName !== name && (
                   <span className={cn('text-[9px] px-1.5 py-0 h-4 rounded border font-medium flex items-center', epicColor.badge)}>
                     {epicName.length > 20 ? epicName.slice(0, 20) + '…' : epicName}
                   </span>
@@ -110,9 +110,9 @@ export function FlatTaskList({
                 )}
               </div>
 
-              {/* Actions — visible on hover */}
+              {/* Actions — visible on hover (always visible on mobile) */}
               <div
-                className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                 onClick={e => e.stopPropagation()}
               >
                 {isReady && !isDone && bootstrapped && (

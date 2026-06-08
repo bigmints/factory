@@ -148,7 +148,7 @@ export function KanbanColumn({
           })
         ) : (
           <div className="h-32 border border-dashed border-border/60 rounded-xl flex items-center justify-center text-center p-4 select-none">
-            <span className="text-[10px] text-muted-foreground/50 italic font-semibold">Column empty</span>
+            <span className="text-[10px] text-muted-foreground/80 italic font-semibold">Column empty</span>
           </div>
         )}
       </div>

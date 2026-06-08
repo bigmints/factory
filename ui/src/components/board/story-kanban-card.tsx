@@ -74,7 +74,7 @@ export function StoryKanbanCard({
 
       {/* Meta row */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        {item.epicParent && epicColor && (
+        {item.epicParent && epicColor && item.epicParent.name !== name && (
           <Badge variant="outline" className={cn("text-[7.5px] font-semibold h-3.5 px-1.5 rounded border leading-none shrink-0", epicColor.badge)}>
             {item.epicParent.name}
           </Badge>
@@ -85,7 +85,7 @@ export function StoryKanbanCard({
           </Badge>
         )}
         {item.priority !== undefined && (
-          <Badge variant="outline" className="text-[7.5px] font-extrabold h-3.5 px-1 rounded border-amber-500/20 text-amber-500 bg-amber-500/5 shrink-0 leading-none flex items-center">
+          <Badge variant="outline" className="text-[7.5px] font-extrabold h-3.5 px-1 rounded border-amber-500/20 text-amber-600 dark:text-amber-400 bg-amber-500/10 shrink-0 leading-none flex items-center">
             P{item.priority}
           </Badge>
         )}

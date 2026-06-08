@@ -114,30 +114,52 @@ export default function Dashboard() {
         isInitialLoad.current = false;
       }, 200);
     });
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash.replace('#', '');
-      if (hash === 'roadmap' || hash === 'stories') {
-        setActiveTab('plan');
-      } else if (hash === 'dashboard') {
-        setActiveTab('dashboard');
-      } else if (hash === 'queue') {
-        setActiveTab('build');
-      } else if (VALID_TABS.includes(hash)) {
-        if (hash === 'projects') {
-          setShowAddProject(true);
-        } else {
-          setActiveTab(hash);
+    
+    const handleHashChange = () => {
+      if (typeof window !== 'undefined') {
+        const hash = window.location.hash.replace('#', '');
+        if (hash === 'roadmap' || hash === 'stories') {
+          setActiveTab('plan');
+          setShowAddProject(false);
+        } else if (hash === 'dashboard') {
+          setActiveTab('dashboard');
+          setShowAddProject(false);
+        } else if (hash === 'queue') {
+          setActiveTab('build');
+          setShowAddProject(false);
+        } else if (VALID_TABS.includes(hash)) {
+          if (hash === 'projects') {
+            setShowAddProject(true);
+          } else {
+            setActiveTab(hash);
+            setShowAddProject(false);
+          }
         }
       }
-    }
+    };
+
+    handleHashChange(); // Run once on mount
+    window.addEventListener('hashchange', handleHashChange);
+    
     // Start coordinated polling
     startPolling(5000);
-    return () => stopPolling();
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      stopPolling();
+    };
   }, [fetchAll, startPolling, stopPolling]);
 
+  const isHashMounted = useRef(false);
   useEffect(() => {
+    if (!isHashMounted.current) {
+      isHashMounted.current = true;
+      return;
+    }
     const tab = showAddProject ? 'projects' : activeTab;
-    window.location.hash = tab;
+    if (window.location.hash.replace('#', '') !== tab) {
+      window.location.hash = tab;
+    }
   }, [activeTab, showAddProject]);
 
   useEffect(() => {

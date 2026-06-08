@@ -177,7 +177,7 @@ function CollapsibleCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <Card className="relative overflow-hidden">
+    <Card className="relative overflow-hidden border-border/50">
       {accentColor && <div className={`absolute left-0 top-0 h-full w-[3px] ${accentColor}`} />}
       <div className={accentColor ? 'pl-6' : ''}>
         <button
@@ -356,7 +356,7 @@ export function KnowledgeView() {
       )}
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[
           { icon: GitBranch, value: stats.adrs, label: 'ADRs', id: 'adrs' as SectionId },
           { icon: AlertTriangle, value: stats.failures, label: 'Failures', id: 'failures' as SectionId },
@@ -368,7 +368,7 @@ export function KnowledgeView() {
             onClick={() => setActiveSection(stat.id)}
             className="text-left focus:outline-none"
           >
-            <Card className={cn('transition-all hover:border-primary/50', activeSection === stat.id && 'border-primary')}>
+            <Card className={cn('transition-all hover:border-primary/50 border-border/50', activeSection === stat.id && 'border-primary')}>
               <CardContent className="p-4 flex items-center gap-3">
                 <div className={cn(
                   'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
@@ -378,7 +378,7 @@ export function KnowledgeView() {
                 </div>
                 <div>
                   <p className="text-lg font-bold leading-none">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mt-0.5">{stat.label}</p>
+                  <p className="text-xs text-foreground/80 font-bold uppercase tracking-wider mt-1">{stat.label}</p>
                 </div>
               </CardContent>
             </Card>
@@ -431,7 +431,7 @@ export function KnowledgeView() {
                   Project
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0">
+              <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 pt-0">
                 {Object.entries(context.project || {}).map(([k, v]) => (
                   <div key={k} className={cn("flex flex-col gap-0.5", k === 'readme_summary' && "col-span-full mt-2")}>
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{k.replace(/_/g, ' ')}</span>
@@ -458,11 +458,11 @@ export function KnowledgeView() {
                     Stack
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2 pt-0">
+                <CardContent className="space-y-3 pt-0">
                   {Object.entries(context.stack).map(([k, v]) => (
-                    <div key={k} className="flex items-start gap-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-24 shrink-0 mt-0.5">{k.replace(/_/g, ' ')}</span>
-                      <span className="text-xs text-foreground">{String(v)}</span>
+                    <div key={k} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:w-32 shrink-0">{k.replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-foreground font-medium">{String(v)}</span>
                     </div>
                   ))}
                 </CardContent>
@@ -476,11 +476,11 @@ export function KnowledgeView() {
                     Architecture
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2 pt-0">
+                <CardContent className="space-y-3 pt-0">
                   {Object.entries(context.architecture).map(([k, v]) => (
-                    <div key={k} className="flex items-start gap-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-24 shrink-0 mt-0.5">{k.replace(/_/g, ' ')}</span>
-                      <span className="text-xs text-foreground">{String(v)}</span>
+                    <div key={k} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:w-32 shrink-0">{k.replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-foreground font-medium">{String(v)}</span>
                     </div>
                   ))}
                 </CardContent>
@@ -521,7 +521,7 @@ export function KnowledgeView() {
                 {Object.entries(hb).map(([k, v]) => (
                   <div key={k} className="flex flex-col gap-0.5">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{k.replace(/_/g, ' ')}</span>
-                    <span className="text-xs text-foreground font-medium break-all">
+                    <span className="text-xs text-foreground font-medium truncate" title={String(v)}>
                       {k === 'last_seen' ? formatDate(String(v)) : String(v)}
                     </span>
                   </div>
@@ -656,10 +656,10 @@ export function KnowledgeView() {
 
 function EmptyState({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
   return (
-    <Card className="border-dashed flex flex-col items-center justify-center p-8 text-center">
-      <Icon className="h-8 w-8 text-muted-foreground mb-3" />
+    <Card className="border-dashed flex flex-col items-center justify-center p-8 sm:p-10 text-center bg-card/5 border-border/50">
+      <Icon className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
       <h3 className="font-semibold text-sm">{title}</h3>
-      <p className="text-xs text-muted-foreground mt-1 max-w-sm">{description}</p>
+      <p className="text-xs text-muted-foreground mt-1.5 max-w-xs mx-auto leading-relaxed">{description}</p>
     </Card>
   );
 }

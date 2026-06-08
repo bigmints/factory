@@ -18,16 +18,18 @@
 
 import {
     existsSync, readFileSync, writeFileSync,
-    mkdirSync, readdirSync, chmodSync, copyFileSync,
+    mkdirSync, readdirSync, chmodSync, copyFileSync, symlinkSync,
 } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { resolve, join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as toYaml } from 'yaml';
 import type { BridgeConfig, ProjectStack, AppSpec, FeatureEpicSpec, StoryReferenceSpec, TaskItemSpec } from './types.ts';
 import { log, logError } from './log.ts';
 
-// ─── Resolve factory root from this file's location ──────
-// engine/init.ts → factory root is one level up
+// ─── Resolve factory root ──────────────────────────────────
+import { FACTORY_ROOT } from './config.ts';
+
 function getFactoryRoot(): string {
     return resolve(dirname(fileURLToPath(import.meta.url)), '..');
 }
@@ -218,6 +220,14 @@ factory hooks install            # Install git hooks
 | \`.factory/task-manager/todo.yaml\` | Task queue (human + agent readable) |
 | \`.factory/task-manager/manage.sh\` | Task lifecycle CLI |
 
+### Architecture & File Structure Protocols
+You MUST adhere to the following file paths:
+- **Feature Stories**: \`.factory/stories/features/<slug>.yaml\`
+- **App Stories**: \`.factory/stories/apps/<slug>.yaml\`
+- **Skills**: Global skills live in \`~/.factory/skills/\`. Project-specific overrides go in \`.factory/skills/\`
+- **Knowledge / ADRs**: \`.factory/knowledge/\`
+- **Agent Logs**: \`.factory/logs/\`
+
 ### Workflow
 
 1. Start: \`factory task start <id>\` → \`factory pulse "starting <id>"\`
@@ -243,6 +253,16 @@ export function patchEncapsulatedAgentsMd(repoPath: string, factoryDir: string):
     const stackLine = stack ? `**Stack:** ${stack.framework}, ${stack.packageManager}${stack.linter ? `, ${stack.linter}` : ''}${stack.testing ? `, ${stack.testing}` : ''}` : '';
     
     const content = `# Factory Agent — ${name} Instructions
+
+## Architecture & File Structure Protocols
+To ensure the Factory engine functions correctly, you MUST adhere to the following file paths:
+- **Feature Stories**: Must be written to \`.factory/stories/features/<slug>.yaml\`
+- **App Stories**: Must be written to \`.factory/stories/apps/<slug>.yaml\`
+- **Skills**: Global skills live in \`~/.factory/skills/\`. Project-specific overrides go in \`.factory/skills/\`
+- **Knowledge / ADRs**: Must be written to \`.factory/knowledge/\`
+- **Agent Logs**: Must be written to \`.factory/logs/\`
+
+---
 
 ## Role
 You are a senior, highly capable TypeScript/Node.js autonomous engineer designed to safely build, validate, and evolve the **${name}** application. Your mission is to deliver fully functional features and stories in accordance with acceptance criteria, avoiding hallucinations or placeholder code.
@@ -391,14 +411,21 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
         } catch {}
     }
 
-    // Detect whether this is a real existing codebase or a brand-new empty project.
-    // Evidence of an existing codebase: has src/, app/, or components/ dirs, or ≥5 package.json deps.
     const hasSrcDir = existsSync(join(repoPath, 'src'));
     const hasAppDir = existsSync(join(repoPath, 'app'));
-    const hasComponentsDir =
-        existsSync(join(repoPath, 'src', 'components')) ||
-        existsSync(join(repoPath, 'components'));
-    const isExistingCodebase = hasSrcDir || hasAppDir || hasComponentsDir || pkgDepsCount >= 5;
+    const hasComponentsDir = existsSync(join(repoPath, 'src', 'components')) || existsSync(join(repoPath, 'components'));
+
+    // Detect whether this is a real existing codebase or a brand-new empty project.
+    // Evidence of an existing codebase: has > 2 commits in git (a new project usually has 1 or 2 commits for initial scaffold).
+    let isExistingCodebase = false;
+    try {
+        const { execSync } = require('node:child_process');
+        const commitCount = parseInt(execSync('git rev-list --count HEAD', { cwd: repoPath, encoding: 'utf-8' }).trim(), 10);
+        isExistingCodebase = commitCount > 2;
+    } catch {
+        // Fallback: if not a git repo or no commits yet, it's not an existing legacy codebase.
+        isExistingCodebase = (hasSrcDir || hasAppDir || hasComponentsDir || pkgDepsCount >= 5) && existsSync(join(repoPath, '.git'));
+    }
 
     const stack = detectStack(repoPath) || { framework: 'node', packageManager: 'npm' };
 
@@ -431,7 +458,13 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
     }
 
     const features: FeatureEpicSpec[] = [];
-    
+
+    // Helper: convert a story name to a filename slug
+    const toSlug = (s: string) =>
+        s.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
     if (isExistingCodebase) {
         const epicStatus = 'done';
         const storyStatus = 'done';
@@ -460,6 +493,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
 
         if (hasPrisma || hasDrizzle) {
             const dbTech = hasPrisma ? 'Prisma' : 'Drizzle';
+            const dbSlug = toSlug(`${dbTech}-configuration`);
             features.push({
                 name: 'Database Layer',
                 description: `Database connectivity, schema validation, and ORM layer configuration using ${dbTech}.`,
@@ -467,6 +501,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
                 stories: [
                     {
                         name: `${dbTech} Configuration`,
+                        file: `stories/features/${dbSlug}.yaml`,
                         status: storyStatus,
                         tasks: [
                             { id: 'task-db-setup', title: `Setup ${dbTech} ORM, configure database credentials, and seed initial schemas`, status: taskStatus }
@@ -480,8 +515,10 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
         if (possibleRoutes.length > 0) {
             const routeStories: StoryReferenceSpec[] = possibleRoutes.map(route => {
                 const routeName = route.charAt(0).toUpperCase() + route.slice(1);
+                const routeSlug = toSlug(`${routeName}-page`);
                 return {
                     name: `${routeName} Page`,
+                    file: `stories/features/${routeSlug}.yaml`,
                     status: storyStatus,
                     tasks: [
                         { id: `task-route-${route}`, title: `Implement ${route} page layout and visual route components`, status: taskStatus }
@@ -504,6 +541,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
                 stories: [
                     {
                         name: 'Root Application Page',
+                        file: `stories/features/${toSlug('root-application-page')}.yaml`,
                         status: storyStatus,
                         tasks: [
                             { id: 'task-root-page', title: 'Scaffold application root homepage view and components', status: taskStatus }
@@ -522,6 +560,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
                 stories: [
                     {
                         name: 'Common Design System',
+                        file: `stories/features/${toSlug('common-design-system')}.yaml`,
                         status: storyStatus,
                         tasks: [
                             { id: 'task-common-ui', title: 'Scaffold responsive common layout component wrappers and UI elements', status: taskStatus }
@@ -531,6 +570,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
             });
         }
     }
+
 
     // Formulate a beautiful BRD section
     const frameworkName = stack.framework || 'Node.js';
@@ -583,11 +623,16 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     }
 
-    // Run LLM Analysis if possible
+    // Run LLM Analysis with a strict 5-second timeout so init never hangs.
+    // Falls back to static stack detection if LLM is slow, unreachable, or not configured.
     let analysisResult = null;
     try {
         const { llmAnalyzeProject } = await import('./analyze.ts');
-        analysisResult = await llmAnalyzeProject(repoPath);
+        const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
+        analysisResult = await Promise.race([llmAnalyzeProject(repoPath), timeout]);
+        if (!analysisResult) {
+            log('!', 'LLM analysis timed out (>5s) — using static stack detection');
+        }
     } catch (e) {
         logError(`LLM analysis skipped: ${e}`);
     }
@@ -601,7 +646,7 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
         version: 1,
         name,
         description: `Bridge for ${name}`,
-        factory_home: factoryRoot,  // absolute path — resolves scripts correctly
+        factory_home: FACTORY_ROOT,  // points to ~/.factory
         stack,
         conventions: {
             rules: '.factory/knowledge',
@@ -661,22 +706,37 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
         files.push({ path: '.factory/logs/worklog.yaml', action: 'skipped' });
     }
 
-    // 5. skill-index.yaml
-    const skillIndexPath = join(factoryDir, 'skill-index.yaml');
-    if (!existsSync(skillIndexPath)) {
-        writeFileSync(skillIndexPath, toYaml({
+    // 5. skill-index.yaml and skills directory (Global Symlinks)
+    const globalSkillsDir = join(FACTORY_ROOT, 'skills');
+    const globalSkillIndex = join(FACTORY_ROOT, 'skill-index.yaml');
+
+    if (!existsSync(globalSkillsDir)) mkdirSync(globalSkillsDir, { recursive: true });
+    if (!existsSync(globalSkillIndex)) {
+        writeFileSync(globalSkillIndex, toYaml({
             skills: [
-                { name: 'heartbeat', path: `${factoryRoot}/factory/scripts/heartbeat/pulse.sh`, description: 'Write a liveness timestamp' },
-                { name: 'auto-blueprint', path: `${factoryRoot}/factory/scripts/auto-blueprint/update-blueprint.sh`, description: 'Append to worklog' },
-                { name: 'compress-worklog', path: `${factoryRoot}/factory/scripts/compress-worklog/compress.sh`, description: 'Archive old worklog entries' },
-                { name: 'validate-code', path: `${factoryRoot}/factory/scripts/validate-code/validate.sh`, description: 'Run lint and type checks' },
+                { name: 'heartbeat', path: `factory pulse "liveness check"`, description: 'Write a liveness timestamp' },
+                { name: 'auto-blueprint', path: `factory blueprint update "checkpoint"`, description: 'Append to worklog' },
+                { name: 'validate-code', path: `factory validate`, description: 'Run lint and type checks' },
                 { name: 'worker', path: 'factory worker', description: 'Run YAML prompt queue' },
-                { name: 'task-manager', path: '.factory/task-manager/manage.sh', description: 'Manage task lifecycle' },
+                { name: 'task-manager', path: 'factory task', description: 'Manage task lifecycle' },
             ],
         }));
+    }
+
+    const localSkillIndex = join(factoryDir, 'skill-index.yaml');
+    if (!existsSync(localSkillIndex)) {
+        try { symlinkSync(globalSkillIndex, localSkillIndex); } catch (e) { /* fallback or ignore */ }
         files.push({ path: '.factory/skill-index.yaml', action: 'created' });
     } else {
         files.push({ path: '.factory/skill-index.yaml', action: 'skipped' });
+    }
+
+    const localSkillsDir = join(factoryDir, 'skills');
+    if (!existsSync(localSkillsDir)) {
+        try { symlinkSync(globalSkillsDir, localSkillsDir); } catch (e) { /* fallback or ignore */ }
+        files.push({ path: '.factory/skills', action: 'created' });
+    } else {
+        files.push({ path: '.factory/skills', action: 'skipped' });
     }
 
     // 6. todo.yaml
@@ -733,6 +793,34 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
             const appSpec = generateAppYamlFromExistingCodebase(repoPath);
             writeFileSync(scaffoldYamlPath, toYaml(appSpec));
             files.push({ path: '.factory/scaffold.yaml', action: 'created' });
+
+            // Generate physical story files so the UI does not render confusing placeholders
+            if (appSpec.features && Array.isArray(appSpec.features)) {
+                for (const feature of appSpec.features) {
+                    if (feature.stories && Array.isArray(feature.stories)) {
+                        for (const story of feature.stories) {
+                            if (!story.file) continue;
+                            const storyFilePath = join(factoryDir, story.file);
+                            if (!existsSync(storyFilePath)) {
+                                const storyDir = dirname(storyFilePath);
+                                if (!existsSync(storyDir)) mkdirSync(storyDir, { recursive: true });
+
+                                const storyYaml = {
+                                    apiVersion: 'factory.com/v1alpha1',
+                                    kind: story.file.startsWith('stories/features/') ? 'FeatureStory' : 'AppStory',
+                                    name: story.name,
+                                    description: 'Auto-generated baseline story for existing codebase.',
+                                    status: story.status || 'done',
+                                    phase: 1,
+                                    tasks: story.tasks || []
+                                };
+                                writeFileSync(storyFilePath, toYaml(storyYaml));
+                                files.push({ path: `.factory/${story.file}`, action: 'created' });
+                            }
+                        }
+                    }
+                }
+            }
         } catch (e) {
             logError(`scaffold.yaml generation failed: ${e}`);
         }
@@ -741,5 +829,26 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
     }
 
     log('✓', `Initialized .factory/ bridge in ${repoPath} (${files.filter(f => f.action === 'created').length} created, ${files.filter(f => f.action === 'skipped').length} skipped)`);
+
+    // ── Background TPM context generation ────────────────────────────────────
+    // Fire-and-forget: run 'factory blueprint update' in the project dir
+    // so the TPM agent generates deep codebase context asynchronously.
+    // This never blocks the caller — init returns immediately after this.
+    try {
+        const factoryBin = resolve(getFactoryRoot(), '..', 'factory', 'bin', 'factory');
+        const binToUse = existsSync(factoryBin) ? factoryBin : 'factory';
+        const bgProc = spawn(binToUse, ['blueprint', 'update', 'factory init complete'], {
+            cwd: repoPath,
+            detached: true,
+            stdio: 'ignore',
+            env: { ...process.env, FACTORY_PROJECT_ROOT: repoPath },
+        });
+        bgProc.unref(); // Let it run independently after parent exits
+        log('→', 'TPM context generation started in background (factory blueprint update)');
+    } catch (e) {
+        // Non-fatal: context generation is best-effort
+        logError(`Background TPM context generation could not start: ${e}`);
+    }
+
     return { success: true, files };
 }

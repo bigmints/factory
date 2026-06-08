@@ -209,6 +209,9 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
     fetch('/api/projects').then(r => r.json()).then(d => {
       const a = d.projects?.find((p: { id: string }) => p.id === d.activeId);
       setActiveProject(a || null);
+      if (a?.id) {
+        tpmStore.setProject(a.id);
+      }
     }).catch(() => {});
 
     setScanning(true);

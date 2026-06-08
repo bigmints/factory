@@ -39,21 +39,25 @@ export interface MentionItem {
   status?: string;
 }
 
-const STORAGE_KEY = 'tpm-chat-messages-v3';
+const BASE_STORAGE_KEY = 'tpm-chat-messages-v3';
 
-function loadFromStorage(): ChatMessage[] {
+function getStorageKey(projectId?: string) {
+  return projectId ? `${BASE_STORAGE_KEY}-${projectId}` : BASE_STORAGE_KEY;
+}
+
+function loadFromStorage(projectId?: string): ChatMessage[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey(projectId));
     return raw ? (JSON.parse(raw) as ChatMessage[]) : [];
   } catch {
     return [];
   }
 }
 
-function saveToStorage(msgs: ChatMessage[]) {
+function saveToStorage(msgs: ChatMessage[], projectId?: string) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs.slice(-50)));
+    localStorage.setItem(getStorageKey(projectId), JSON.stringify(msgs.slice(-50)));
   } catch {}
 }
 
@@ -64,10 +68,18 @@ class TpmChatStore {
   streaming = false;
   abortController: AbortController | null = null;
   mentionItems: MentionItem[] = [];
+  projectId?: string;
   private listeners = new Set<Listener>();
 
   constructor() {
     this.messages = loadFromStorage();
+  }
+
+  setProject(projectId: string) {
+    if (this.projectId === projectId) return;
+    this.projectId = projectId;
+    this.messages = loadFromStorage(projectId);
+    this.notify();
   }
 
   subscribe(fn: Listener) {
@@ -81,7 +93,7 @@ class TpmChatStore {
 
   setMessages(msgs: ChatMessage[]) {
     this.messages = msgs;
-    saveToStorage(msgs);
+    saveToStorage(msgs, this.projectId);
     this.notify();
   }
 
@@ -91,7 +103,7 @@ class TpmChatStore {
     if (last?.role === 'assistant') {
       last.content += delta;
       this.messages = msgs;
-      saveToStorage(msgs);
+      saveToStorage(msgs, this.projectId);
       this.notify();
     }
   }
@@ -130,7 +142,7 @@ class TpmChatStore {
 
   clear() {
     this.messages = [];
-    saveToStorage([]);
+    saveToStorage([], this.projectId);
     this.notify();
   }
 

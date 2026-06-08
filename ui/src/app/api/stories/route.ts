@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
-import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, writeFileSync, statSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
@@ -25,6 +25,25 @@ function sanitizeYaml(raw: string): { content: string; fixed: boolean } {
     return `${indent}"${pkg}"`;
   });
   return { content: fixed, fixed: fixed !== raw };
+}
+
+/**
+ * Recursively walk a directory and return all relative file paths.
+ */
+function walkDirSync(dir: string, fileList: string[] = [], basePath = ''): string[] {
+  if (!existsSync(dir)) return fileList;
+  const files = readdirSync(dir, { withFileTypes: true });
+  for (const file of files) {
+    const relPath = join(basePath, file.name);
+    if (file.isDirectory()) {
+      if (!file.name.startsWith('.') && !file.name.startsWith('_')) {
+        walkDirSync(join(dir, file.name), fileList, relPath);
+      }
+    } else {
+      fileList.push(relPath);
+    }
+  }
+  return fileList;
 }
 
 /**
@@ -143,18 +162,33 @@ export async function GET() {
 
     // App stories
     if (APPS_DIR && existsSync(APPS_DIR)) {
-      const appFiles = readdirSync(APPS_DIR).filter(
-        (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
+      const appFiles = walkDirSync(APPS_DIR).filter(
+        (f) => (f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.md')) && !basename(f).startsWith('.') && !basename(f).startsWith('_')
       );
 
       stories = appFiles.map((file) => {
         try {
+          const isMarkdown = file.endsWith('.md');
           const raw = readFileSync(join(APPS_DIR, file), 'utf-8');
-          const { content: sanitized, fixed } = sanitizeYaml(raw);
-          if (fixed) {
-            try { writeFileSync(join(APPS_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
+          let parsed: any = {};
+          
+          if (isMarkdown) {
+            const match = raw.match(/^#\s+(.+)$/m);
+            parsed = {
+              metadata: {
+                name: match ? match[1] : basename(file, '.md'),
+                description: raw,
+              },
+              status: 'draft',
+            };
+          } else {
+            const { content: sanitized, fixed } = sanitizeYaml(raw);
+            if (fixed) {
+              try { writeFileSync(join(APPS_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
+            }
+            parsed = parseYaml(sanitized) as any;
           }
-          const parsed = parseYaml(sanitized) as any;
+          
           const meta = scaffoldMeta.get(`apps/${file}`) || scaffoldMeta.get(file);
           return {
             file,
@@ -178,18 +212,31 @@ export async function GET() {
 
     // Feature stories
     if (FEATURES_DIR && existsSync(FEATURES_DIR)) {
-      const featureFiles = readdirSync(FEATURES_DIR).filter(
-        (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
+      const featureFiles = walkDirSync(FEATURES_DIR).filter(
+        (f) => (f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.md')) && !basename(f).startsWith('.') && !basename(f).startsWith('_')
       );
 
       featureStories = featureFiles.map((file) => {
         try {
+          const isMarkdown = file.endsWith('.md');
           const raw = readFileSync(join(FEATURES_DIR, file), 'utf-8');
-          const { content: sanitized, fixed } = sanitizeYaml(raw);
-          if (fixed) {
-            try { writeFileSync(join(FEATURES_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
+          let parsed: any = {};
+
+          if (isMarkdown) {
+            const match = raw.match(/^#\s+(.+)$/m);
+            parsed = {
+              name: match ? match[1] : basename(file, '.md'),
+              feature: { description: raw },
+              status: 'draft',
+            };
+          } else {
+            const { content: sanitized, fixed } = sanitizeYaml(raw);
+            if (fixed) {
+              try { writeFileSync(join(FEATURES_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
+            }
+            parsed = parseYaml(sanitized) as any;
           }
-          const parsed = parseYaml(sanitized) as any;
+
           const meta = scaffoldMeta.get(`features/${file}`) || scaffoldMeta.get(file);
           return {
             file: `features/${file}`,
@@ -214,21 +261,33 @@ export async function GET() {
 
     // Completed/Done stories in 'done' directory
     if (DONE_DIR && existsSync(DONE_DIR)) {
-      const doneFiles = readdirSync(DONE_DIR).filter(
-        (f) => (f.endsWith('.yaml') || f.endsWith('.yml')) && !f.startsWith('.') && !f.startsWith('_')
+      const doneFiles = walkDirSync(DONE_DIR).filter(
+        (f) => (f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.md')) && !basename(f).startsWith('.') && !basename(f).startsWith('_')
       );
 
       for (const file of doneFiles) {
         try {
+          const isMarkdown = file.endsWith('.md');
           const raw = readFileSync(join(DONE_DIR, file), 'utf-8');
-          const { content: sanitized, fixed } = sanitizeYaml(raw);
-          if (fixed) {
-            try { writeFileSync(join(DONE_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
+          let parsed: any = {};
+
+          if (isMarkdown) {
+            const match = raw.match(/^#\s+(.+)$/m);
+            parsed = {
+              name: match ? match[1] : basename(file, '.md'),
+              feature: { description: raw },
+              status: 'done',
+            };
+          } else {
+            const { content: sanitized, fixed } = sanitizeYaml(raw);
+            if (fixed) {
+              try { writeFileSync(join(DONE_DIR, file), sanitized, 'utf-8'); } catch { /* ignore write errors */ }
+            }
+            parsed = parseYaml(sanitized) as any;
           }
-          const parsed = parseYaml(sanitized) as any;
 
           // Determine if it is a FeatureStory or AppStory
-          const isFeature = parsed && (parsed.feature || parsed.target || 'phase' in parsed);
+          const isFeature = isMarkdown || (parsed && (parsed.feature || parsed.target || 'phase' in parsed));
           if (isFeature) {
             const meta = scaffoldMeta.get(`done/${file}`) || scaffoldMeta.get(`features/${file}`) || scaffoldMeta.get(file);
             featureStories.push({

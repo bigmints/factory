@@ -186,6 +186,12 @@ The `spec-chat.tsx` component:
 - Feature specs are **auto-enqueued** to the build queue with their phase and dependency metadata
 - Saved specs go to `.factory/specs/apps/` or `.factory/specs/features/`
 
+### 7. Storage & Formats
+When the Engine reads stories/specs from the file system, it applies the following rules:
+- **Recursive Scanning**: Specs can be organized into subdirectories (e.g., `features/security/`, `features/ui/`). The engine walks the directory tree recursively.
+- **YAML Preferred**: Standard `.yaml` or `.yml` files matching the schema are the primary format.
+- **Markdown Fallback**: The engine can also read `.md` files. For Markdown files, it extracts the first `# Heading` as the story name and uses the rest of the file as the description. This enables manual agent workflows to drop Markdown specs directly into the factory folders.
+
 ---
 
 ## Spec Types
@@ -255,4 +261,5 @@ Once specs are saved and queued, the engine takes over. See [userguide.md](userg
 | 2026-02-18 | Added agents.md (mandatory), conventions, knowledge, full spec YAML to the scan |
 | 2026-02-18 | Added repo scanning — specs now reflect actual project state |
 | 2026-02-18 | Initial document |
+| 2026-06-08 | Added recursive directory scanning and Markdown (`.md`) format fallback support |
 ```

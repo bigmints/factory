@@ -19,18 +19,32 @@ import lockfile from 'proper-lockfile';
 
 // ─── Paths ───────────────────────────────────────────────
 
-const FACTORY_ROOT = resolve(homedir(), '.factory');
-const QUEUE_YAML = resolve(FACTORY_ROOT, 'queue.yaml');
-const QUEUE_STATE_YAML = resolve(FACTORY_ROOT, 'queue_state.yaml');
-
-// Ensure FACTORY_ROOT exists
-if (!existsSync(FACTORY_ROOT)) {
-    mkdirSync(FACTORY_ROOT, { recursive: true });
+export function getQueueYamlPath(): string {
+    try {
+        const project = getActiveProject();
+        if (project && project.path) {
+            const dir = resolve(project.path, '.factory', 'task-manager');
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+            const p = resolve(dir, 'queue.yaml');
+            if (!existsSync(p)) writeFileSync(p, '', 'utf-8');
+            return p;
+        }
+    } catch {}
+    const p = resolve(homedir(), '.factory', 'queue.yaml');
+    if (!existsSync(p)) writeFileSync(p, '', 'utf-8');
+    return p;
 }
 
-// Ensure QUEUE_YAML exists (proper-lockfile requires the target file to exist)
-if (!existsSync(QUEUE_YAML)) {
-    writeFileSync(QUEUE_YAML, '', 'utf-8');
+export function getQueueStateYamlPath(): string {
+    try {
+        const project = getActiveProject();
+        if (project && project.path) {
+            const dir = resolve(project.path, '.factory', 'task-manager');
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+            return resolve(dir, 'queue_state.yaml');
+        }
+    } catch {}
+    return resolve(homedir(), '.factory', 'queue_state.yaml');
 }
 
 // ─── File Locking ────────────────────────────────────────
@@ -41,10 +55,11 @@ if (!existsSync(QUEUE_YAML)) {
  * simultaneously mutate the queue.
  */
 export async function withQueueLock<T>(fn: () => T): Promise<T> {
-    const release = await lockfile.lock(QUEUE_YAML, {
+    const queueYaml = getQueueYamlPath();
+    const release = await lockfile.lock(queueYaml, {
         stale: 10000,        // consider lock stale after 10s
         retries: { retries: 3, minTimeout: 100, maxTimeout: 1000 },
-        lockfilePath: QUEUE_YAML + '.lock',
+        lockfilePath: queueYaml + '.lock',
     });
     try {
         return fn();
@@ -92,11 +107,12 @@ function writeAtomic(filePath: string, content: string): void {
 }
 
 export function loadQueue(): QueueItem[] {
-    if (!existsSync(QUEUE_YAML)) {
+    const queueYaml = getQueueYamlPath();
+    if (!existsSync(queueYaml)) {
         return [];
     }
     try {
-        const raw = readFileSync(QUEUE_YAML, 'utf-8');
+        const raw = readFileSync(queueYaml, 'utf-8');
         const parsed = parseYaml(raw);
         return Array.isArray(parsed) ? parsed : [];
     } catch (err) {
@@ -106,7 +122,7 @@ export function loadQueue(): QueueItem[] {
 }
 
 export function saveQueue(queue: QueueItem[]): void {
-    writeAtomic(QUEUE_YAML, toYaml(queue, { lineWidth: 120 }));
+    writeAtomic(getQueueYamlPath(), toYaml(queue, { lineWidth: 120 }));
 }
 
 export function loadQueueState(): QueueState {
@@ -115,11 +131,12 @@ export function loadQueueState(): QueueState {
         last_run_at: '',
         last_heartbeat_at: '',
     };
-    if (!existsSync(QUEUE_STATE_YAML)) {
+    const queueStateYaml = getQueueStateYamlPath();
+    if (!existsSync(queueStateYaml)) {
         return defaultState;
     }
     try {
-        const raw = readFileSync(QUEUE_STATE_YAML, 'utf-8');
+        const raw = readFileSync(queueStateYaml, 'utf-8');
         const parsed = parseYaml(raw) as any;
         return {
             is_running: parsed?.is_running === true || parsed?.is_running === 'true',
@@ -133,7 +150,7 @@ export function loadQueueState(): QueueState {
 }
 
 export function saveQueueState(state: QueueState): void {
-    writeAtomic(QUEUE_STATE_YAML, toYaml(state));
+    writeAtomic(getQueueStateYamlPath(), toYaml(state));
 }
 
 // ─── Helpers ─────────────────────────────────────────────

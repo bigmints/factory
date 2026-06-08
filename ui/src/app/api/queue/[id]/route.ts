@@ -75,7 +75,7 @@ export async function PATCH(
       } catch {}
 
       const res = await updateItem(id, {
-        status: 'paused',
+        status: 'failed',
         error: 'Stopped by user',
         completedAt: new Date().toISOString(),
       });

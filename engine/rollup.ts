@@ -343,6 +343,7 @@ export function syncAppRoadmapSync(scaffoldYamlPath: string): void {
     // Write the updated spec back to the yaml file
     writeFileSync(absPath, stringifyYaml(updatedApp, { lineWidth: 120 }));
     log('✓', `Synced roadmap structure and statuses successfully: ${scaffoldYamlPath}`);
+    console.log(new Error().stack);
 }
 
 /**
@@ -370,8 +371,8 @@ export function getAppRollup(appId: string): AppRollupData | null {
         let app = parseYaml(raw) as any;
         if (!app) return null;
 
-        // Auto-heal empty or un-synchronized roadmaps on first load
-        if (!app.features || app.features.length === 0) {
+        // Auto-heal un-synchronized roadmaps on first load
+        if (!app.features) {
             try {
                 syncAppRoadmapSync(scaffoldYamlPath);
                 // Reload

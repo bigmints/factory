@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
 
             try {
                 // Run initBridge — it returns a list of {path, action} synchronously
-                const result = initBridge(repoPath);
+                const result = await initBridge(repoPath);
 
                 // Stream each file event with a small delay for UX
                 for (const file of result.files) {

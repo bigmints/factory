@@ -392,7 +392,7 @@ export function BuildPage() {
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const stats = useMemo<QueueStats>(() => {
-    const s = { 'ready-to-build': 0, building: 0, done: 0, failed: 0, total: queueItems.length };
+    const s = { 'ready-to-build': 0, building: 0, done: 0, failed: 0, stopped: 0, total: queueItems.length };
     queueItems.forEach(i => {
       if (i.status === 'building') s.building++;
       else if (i.status === 'done') s.done++;

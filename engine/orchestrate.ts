@@ -1,3 +1,5 @@
+import { tpmToolRegistry } from './tools/registry.ts';
+import './tools/tpm/index.ts';
 /**
  * Orchestrate — TPM-driven story delivery.
  *
@@ -24,6 +26,7 @@ import {
     verifyCli,
 } from './cli-adapter.ts';
 import { loadQueue, saveQueue, withQueueLock } from './queue.ts';
+import { resolveSkillsForBuild, formatSkillsForPrompt } from './skills.ts';
 import type {
     AppStory, FeatureStory, ProjectBlueprint,
     BuildResult, GeneratedFile, FactorySettings, LLMProvider,
@@ -329,11 +332,20 @@ You write briefs, monitor delivery health, and make go/no-go calls.
 ## Your Tools
 - **delegate_to_cli(prompt)** — Hand the story to the CLI engineer with a complete brief. The tool streams the session and returns a structured delivery report.
 - **intervene(reason, new_instructions)** — The CLI got stuck or failed. Re-brief with corrected direction.
-- **create_fix_task(issue, fix_instructions)** — When a story fails, create a targeted fix task and re-queue it with high priority. This is your primary recovery action — prefer this over mark_story_failed.
-- **create_qa_task(scope, test_instructions)** — After an epic or feature set completes, queue a QA task to verify the app works end-to-end.
-- **mark_story_done(summary)** — Delivery accepted. Called when the report shows success.
-- **mark_story_failed(reason)** — Last resort only. Use create_fix_task first.
-- **update_context(message)** — Log a note to the project worklog.
+- **create_fix_task(issue, fix_instructions)** — When a story fails, create a targeted fix task and re-queue it.
+- **create_qa_task(scope, test_instructions)** — After an epic completes, queue a QA task.
+- **mark_story_done(summary)** — Delivery accepted. Call this ONLY after verifying via spot_check_code or run_verification.
+- **mark_story_failed(reason)** — Last resort escalation.
+- **ask_developer(question)** — Suspend the build and ask the human for clarification on business logic.
+- **split_story(original_slug, new_stories)** — Decompose a complex story that the CLI cannot handle into smaller phased feature stories.
+- **update_story_yaml(slug, yaml_content)** — Amend a story's requirements or stack choices.
+- **read_queue()** — Check the task queue to see upcoming dependencies.
+- **run_verification(command)** — Independently run build scripts (npm run build) or tests to verify CLI code.
+- **spot_check_code(filepath)** — Read a specific file to verify the CLI actually implemented the acceptance criteria.
+- **write_adr(title, decision, consequences)** — Explicitly document new architectural decisions and stack changes in .factory/knowledge/.
+- **update_project_state(key, value)** — Manage the living project state (e.g. milestones) in .factory/logs/state.yaml.
+- **read_skill(name)** — Read the full instructions of any skill from the global skill library. Use when a story references a skill or pattern you need guidance on.
+- **list_skills()** — List all available skills in the Factory skill library.
 
 ## Delivery Reports (what delegate_to_cli returns)
 The tool monitors the CLI session and returns one of:
@@ -384,6 +396,14 @@ This is the user's configured CLI agent. It has full filesystem access and handl
         sections.push(`## Conventions\n${blueprint.conventions.join('\n\n---\n\n')}`);
     }
 
+    // ── Skills ──
+    // The LLM reads matched skills and decides how to apply them in the brief.
+    // Code only provides lookup and formatting — no business logic here.
+    const scoredSkills = resolveSkillsForBuild(story as AppStory, blueprint);
+    if (scoredSkills.length > 0) {
+        sections.push(formatSkillsForPrompt(scoredSkills));
+    }
+
     // ── Knowledge files (AGENTS.md etc.) ──
     if (blueprint.knowledgeFiles.length > 0) {
         const kf = blueprint.knowledgeFiles.map(k => `### ${k.app} / ${k.filename}\n${k.content}`).join('\n\n');
@@ -415,7 +435,7 @@ ${(story as any).btw.map((b: string) => `- ${b}`).join('\n')}`);
 
 // ─── Tool Definitions ────────────────────────────────────
 
-export const ORCHESTRATOR_TOOL_DEFINITIONS = [
+const ORCHESTRATOR_TOOL_DEFINITIONS = [
     {
         name: 'delegate_to_cli',
         description: 'Hand the story brief to the CLI engineer. The tool streams the session and monitors for stalls, loops, and questions. Returns a structured delivery report: DELIVERED, FAILED, or INTERVENTION [STALL|LOOP|ASKING]. You write the brief; the CLI does everything else.',
@@ -514,26 +534,7 @@ async function executeOrchestratorTool(
     args: Record<string, unknown>,
     ctx: OrchestratorContext,
 ): Promise<ToolResult> {
-    try {
-        switch (name) {
-            case 'delegate_to_cli':  return toolDelegateToCli(args, ctx);
-            case 'intervene':        return toolIntervene(args, ctx);
-            case 'create_fix_task':  return toolCreateFixTask(args, ctx);
-            case 'create_qa_task':   return toolCreateQaTask(args, ctx);
-            case 'update_context':   return toolUpdateContext(args, ctx);
-            case 'mark_story_done':  return toolMarkStoryDone(args, ctx);
-            case 'mark_story_failed':return toolMarkStoryFailed(args, ctx);
-            // Legacy tool names — redirect gracefully
-            case 'read_output':      return { content: 'read_output is not available. Call mark_story_done if DELIVERED, or create_fix_task if failed.', isError: true };
-            case 'run_check':        return { content: 'run_check is not available. You are the TPM — read the delivery report and call create_fix_task or mark_story_done.', isError: true };
-            case 'update_knowledge': return toolUpdateKnowledge(args, ctx);
-            default:
-                return { content: `Unknown tool: ${name}. Available: delegate_to_cli, intervene, create_fix_task, create_qa_task, mark_story_done, mark_story_failed, update_context.`, isError: true };
-        }
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { content: `Tool ${name} threw: ${msg}`, isError: true };
-    }
+    return tpmToolRegistry.execute(name, args, ctx);
 }
 
 // ── delegate_to_cli ──────────────────────────────────────
@@ -566,6 +567,7 @@ async function toolDelegateToCli(
     const storySlug = ctx.storyFile.split('/').pop()?.replace(/\.ya?ml$/, '') || 'build';
     const cliLogPath = join(logsDir, `cli-${storySlug}.log`);
     const logStream = createWriteStream(cliLogPath, { flags: 'a' });
+    logStream.on('error', () => { /* ignore stream errors to prevent crash */ });
     logStream.write(`\n${'='.repeat(60)}\n[${new Date().toISOString()}] delegate_to_cli → ${ctx.cliName}\nCWD: ${resolvedCwd}\n${'='.repeat(60)}\n`);
     log('→', `CLI log: tail -f ${cliLogPath}`);
 
@@ -649,7 +651,7 @@ async function toolDelegateToCli(
             buffer += text;
             lastActivityAt = Date.now();
             // Stream to log file in real-time
-            try { logStream.write(text); } catch { /* non-fatal */ }
+            try { if (!logStream.writableEnded && !logStream.destroyed) logStream.write(text); } catch { /* non-fatal */ }
 
             // Extract Conversation ID from agy CLI output
             const match = text.match(/Conversation ID:\s*([a-f0-9-]+)/i);
@@ -1183,7 +1185,7 @@ async function callOrchestratorLLM(
     const { callProviderWithTools } = await import('./generate.ts');
 
     // Convert our tool defs to the format callProviderWithTools expects
-    const toolDefs = ORCHESTRATOR_TOOL_DEFINITIONS.map(t => ({
+    const toolDefs = tpmToolRegistry.getDefinitions().map(t => ({
         type: 'function' as const,
         function: {
             name: t.name,
@@ -1208,4 +1210,29 @@ async function callOrchestratorLLM(
         tokensIn: response.tokensIn,
         tokensOut: response.tokensOut,
     };
+}
+
+// ─── Register TPM Tools ──────────────────────────────────────────
+
+const TPM_TOOL_HANDLERS: Record<string, any> = {
+    'delegate_to_cli': toolDelegateToCli,
+    'intervene': toolIntervene,
+    'create_fix_task': toolCreateFixTask,
+    'create_qa_task': toolCreateQaTask,
+    'update_context': toolUpdateContext,
+    'mark_story_done': toolMarkStoryDone,
+    'mark_story_failed': toolMarkStoryFailed,
+    'update_knowledge': toolUpdateKnowledge
+};
+
+for (const def of ORCHESTRATOR_TOOL_DEFINITIONS) {
+    const handler = TPM_TOOL_HANDLERS[def.name];
+    if (handler) {
+        tpmToolRegistry.register({
+            name: def.name,
+            description: def.description,
+            parameters: def.parameters,
+            execute: handler
+        });
+    }
 }

@@ -9,8 +9,19 @@ import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log } from './log.ts';
 
-const FACTORY_ROOT = resolve(homedir(), '.factory');
-const BUILDS_YAML = resolve(FACTORY_ROOT, 'builds.yaml');
+import { getActiveProject } from './config.ts';
+
+function getBuildsYamlPath(): string {
+    try {
+        const project = getActiveProject();
+        if (project && project.path) {
+            return resolve(project.path, '.factory', 'logs', 'builds.yaml');
+        }
+    } catch {
+        // Fallback
+    }
+    return resolve(homedir(), '.factory', 'builds.yaml');
+}
 
 export interface BuildLog {
     id: string;
@@ -33,11 +44,12 @@ export interface BuildLog {
 
 /** Get all build logs from builds.yaml */
 export function getBuildLogs(): BuildLog[] {
-    if (!existsSync(BUILDS_YAML)) {
+    const yamlPath = getBuildsYamlPath();
+    if (!existsSync(yamlPath)) {
         return [];
     }
     try {
-        const raw = readFileSync(BUILDS_YAML, 'utf-8');
+        const raw = readFileSync(yamlPath, 'utf-8');
         const parsed = parseYaml(raw);
         return Array.isArray(parsed) ? parsed : [];
     } catch (err) {
@@ -48,7 +60,7 @@ export function getBuildLogs(): BuildLog[] {
 
 /** Save build logs to builds.yaml */
 export function saveBuildLogs(logs: BuildLog[]): void {
-    writeFileSync(BUILDS_YAML, toYaml(logs, { lineWidth: 120 }), 'utf-8');
+    writeFileSync(getBuildsYamlPath(), toYaml(logs, { lineWidth: 120 }), 'utf-8');
 }
 
 /** Log a build result to the builds.yaml file. */

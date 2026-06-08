@@ -93,6 +93,53 @@ function loadStoryGeneratorSkill(): string {
   return '';
 }
 
+/**
+ * Load a skill's full content by name from the global skill-index.yaml.
+ * Handles both SKILL.md paths and ~/ expansions.
+ * This is the core runtime for the "LLM is the runtime" philosophy:
+ * the TypeScript only reads the file — the LLM decides how to apply it.
+ */
+function loadSkillRaw(name: string): { skill: any; content: string } | null {
+  const indexPath = join(homedir(), '.factory', 'skill-index.yaml');
+  let skills: any[] = [];
+  if (existsSync(indexPath)) {
+    try {
+      const parsed = parseYaml(readFileSync(indexPath, 'utf-8')) as any;
+      skills = parsed?.skills || [];
+    } catch { /* fall through */ }
+  }
+
+  const q = name.toLowerCase().trim();
+  const skill =
+    skills.find((s: any) => s.name?.toLowerCase() === q) ||
+    skills.find((s: any) => s.name?.toLowerCase().startsWith(q)) ||
+    skills.find((s: any) => s.name?.toLowerCase().includes(q)) ||
+    skills.find((s: any) => (s.description || '').toLowerCase().includes(q));
+
+  if (!skill) return null;
+
+  const rawPath: string = skill.path || '';
+  // Resolve ~/... paths
+  const filePath = rawPath.startsWith('~/') ? join(homedir(), rawPath.slice(2)) : rawPath;
+
+  // If path is a factory CLI command (not a file), return the command description
+  if (rawPath.startsWith('factory ')) {
+    return {
+      skill,
+      content: `## Skill: ${skill.name}\n\n**Description:** ${skill.description || 'No description'}\n\n**CLI command:** \`${rawPath}\`\n\nThis skill is executed via the Factory CLI. Run this command in the project directory when needed.`,
+    };
+  }
+
+  if (!filePath || !existsSync(filePath)) return null;
+
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    return { skill, content };
+  } catch {
+    return null;
+  }
+}
+
 // ─── TPM Tool Definitions ───────────────────────────────────────────────────
 export const TPM_TOOLS = [
   {
@@ -284,7 +331,51 @@ export const TPM_TOOLS = [
       required: ['slug', 'content'],
     },
   },
+  {
+    name: 'list_skills',
+    description:
+      'List all skills available in the global Factory skill library (~/.factory/skill-index.yaml). Use to discover what skills exist before reading one.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'read_skill',
+    description:
+      'Read the full instructions of a skill from the global Factory skill library. The LLM reads the skill content and decides how to apply it. ' +
+      'Use this when the user asks you to apply a skill, follow a pattern, or when you need guidance on how to implement something. ' +
+      'Examples: read_skill("story-generator") to get story writing instructions, read_skill("scaffold-shadcn-layout") for layout patterns.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Name of the skill to read. Exact or fuzzy match against skill-index.yaml names.',
+        },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'invoke_skill',
+    description:
+      'Read a skill and apply it to a given context. Returns the full skill instructions so the LLM can use them to respond. ' +
+      'Similar to read_skill but also accepts a context string to help the LLM frame its application of the skill.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Name of the skill to invoke.',
+        },
+        context: {
+          type: 'string',
+          description: 'Optional context or user intent to frame how the skill should be applied.',
+        },
+      },
+      required: ['name'],
+    },
+  },
 ];
+
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
@@ -809,6 +900,61 @@ ${content}
   }
 }
 
+// ─── Skill Tools ─────────────────────────────────────────────────────────────
+// Philosophy: "The LLM is the runtime. Code is just the execution boundary."
+// These tools expose the skill library to the TPM. The LLM reads the skill
+// content and decides how to apply it — no business logic lives here.
+
+/** List all skills in the global library */
+function handleListSkills(): string {
+  const indexPath = join(homedir(), '.factory', 'skill-index.yaml');
+  if (!existsSync(indexPath)) {
+    return `No skill library found at ${indexPath}. Run factory init to set up skills.`;
+  }
+  try {
+    const parsed = parseYaml(readFileSync(indexPath, 'utf-8')) as any;
+    const skills: any[] = parsed?.skills || [];
+    if (!skills.length) return 'Skill library is empty.';
+    const lines = skills.map((s: any) => {
+      const triggers = Array.isArray(s.trigger) ? ` | triggers: ${s.trigger.slice(0, 3).join(', ')}` : '';
+      return `- **${s.name}**: ${s.description || 'No description'}${triggers}`;
+    });
+    return `## Factory Skill Library (${skills.length} skills)\n\n${lines.join('\n')}\n\nUse \`read_skill(name)\` to get the full instructions for any skill.`;
+  } catch (err: any) {
+    return `Failed to read skill index: ${err.message}`;
+  }
+}
+
+/** Read a skill's full instructions by name (exact or fuzzy match) */
+function handleReadSkill(name: string): string {
+  if (!name) return 'name is required — pass the skill name to look up.';
+  const result = loadSkillRaw(name);
+  if (!result) {
+    // Build a helpful error showing what's available
+    const indexPath = join(homedir(), '.factory', 'skill-index.yaml');
+    let available = '';
+    try {
+      const parsed = parseYaml(readFileSync(indexPath, 'utf-8')) as any;
+      available = (parsed?.skills || []).map((s: any) => s.name).join(', ');
+    } catch { /* ignore */ }
+    return `Skill "${name}" not found.${available ? ` Available skills: ${available}` : ' Run list_skills to see what exists.'}`;
+  }
+  return `## Skill: ${result.skill.name}\n\n> ${result.skill.description || ''}\n\n---\n\n${result.content}`;
+}
+
+/** Invoke a skill: reads its instructions and frames them against user context */
+function handleInvokeSkill(name: string, context?: string): string {
+  if (!name) return 'name is required.';
+  const result = loadSkillRaw(name);
+  if (!result) return handleReadSkill(name); // will return the not-found error
+  const header = context
+    ? `## Invoking Skill: ${result.skill.name}\n\n**Context:** ${context}\n\n> ${result.skill.description || ''}\n\nApply the following instructions to the context above:\n\n---\n\n`
+    : `## Skill: ${result.skill.name}\n\n> ${result.skill.description || ''}\n\n---\n\n`;
+  return `${header}${result.content}`;
+}
+
+
+
 // ─── POST Handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -1128,6 +1274,15 @@ You have access to the following tools. Use them proactively to fulfill user req
                         tc.arguments.content,
                         activeProject.path
                       );
+                      break;
+                    case 'list_skills':
+                      result = handleListSkills();
+                      break;
+                    case 'read_skill':
+                      result = handleReadSkill(tc.arguments.name);
+                      break;
+                    case 'invoke_skill':
+                      result = handleInvokeSkill(tc.arguments.name, tc.arguments.context);
                       break;
                     default:
                       result = `Tool "${tc.name}" is not implemented.`;

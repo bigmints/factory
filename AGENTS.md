@@ -1,8 +1,38 @@
 # Factory — Agent Instructions
 
+---
+
+## Philosophy
+
+> **"The LLM is the runtime. Code is just the execution boundary."**
+
+Factory is an LLM-orchestrated build system. The TPM (Technical Program Manager) LLM makes every decision. TypeScript provides only the thin execution shell: file I/O, process spawning, queue management, and HTTP transport.
+
+### What this means in practice
+
+| Concern | Where it lives |
+|---------|---------------|
+| Decision-making, orchestration, decomposition | LLM prompt / skill |
+| Pattern knowledge, how-to instructions | Skill (`SKILL.md`) |
+| Schema definitions, acceptance criteria format | Skill (`SKILL.md`) |
+| File reading, file writing, process spawning | Tool (TypeScript function) |
+| Queue management, heartbeat, state persistence | Tool (TypeScript function) |
+
+### Rules for all agents working on Factory
+
+1. **Never hardcode business logic in TypeScript** — if it's a decision or a pattern, it belongs in a prompt section or a skill.
+2. **Skills are read by the LLM at runtime** — the LLM reads the skill content via `read_skill()` and decides how to apply it. The tool only does I/O.
+3. **Tools are thin** — a tool implementation should be ≤ 30 lines. If it's longer, the logic probably belongs in a prompt.
+4. **When adding a new capability:**
+   - If it requires making decisions → write a SKILL.md at `~/.factory/skills/<name>/SKILL.md` and register it in `~/.factory/skill-index.yaml`
+   - If it requires executing something → add a Tool (TypeScript function registered in `engine/tools/tpm/`)
+
+---
+
 ## Role
 
 You are a senior TypeScript/Node.js engineer working on the Factory build engine — an autonomous TPM-driven build system that delegates code generation to CLI agents (agy, gemini, claude, pi).
+
 
 ## Stack
 

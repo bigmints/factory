@@ -5,6 +5,7 @@ import {
   writeFileSync,
   mkdirSync,
   readdirSync,
+  statSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -15,6 +16,82 @@ import { listQueue, getQueueStats, enqueue } from '@engine/queue';
 import { getBuildLogs } from '@engine/db';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Recursively collect all .yaml/.yml files under a directory */
+function collectYamlFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const results: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry);
+    const stat = statSync(abs);
+    if (stat.isDirectory()) {
+      results.push(...collectYamlFiles(abs));
+    } else if (entry.endsWith('.yaml') || entry.endsWith('.yml')) {
+      results.push(abs);
+    }
+  }
+  return results;
+}
+
+/** Read blueprint/worklog.yaml (TOON format) and return last N entries */
+function readBlueprintWorklog(projectPath: string, limit = 8): string {
+  const blueprintPath = join(projectPath, '.factory', 'blueprint', 'worklog.yaml');
+  const legacyPath    = join(projectPath, '.factory', 'logs', 'worklog.yaml');
+  const filePath = existsSync(blueprintPath) ? blueprintPath : legacyPath;
+  if (!existsSync(filePath)) return 'No worklog found.';
+  try {
+    const raw = readFileSync(filePath, 'utf-8').trim();
+    if (!raw) return 'Worklog is empty.';
+    // TOON format rows look like: "2026-06-08 20:52:37","factory init complete"
+    const lines = raw.split('\n').filter(Boolean);
+    const entries: Array<{date: string; message: string}> = [];
+    for (const line of lines) {
+      if (!line.trimStart().startsWith('"')) continue;
+      const parts = line.match(/"([^"]*)","([^"]*)"/);
+      if (parts) entries.push({ date: parts[1], message: parts[2] });
+    }
+    if (entries.length === 0) {
+      try {
+        const parsed = parseYaml(raw) as any;
+        const ents = parsed?.entries || [];
+        return ents.slice(-limit).reverse()
+          .map((e: any) => `- [${e.date || e.timestamp || ''}] ${e.message || ''}`)
+          .join('\n') || 'No entries.';
+      } catch { return 'Worklog parse error.'; }
+    }
+    return entries.slice(-limit).reverse()
+      .map(e => `- [${e.date}] ${e.message}`)
+      .join('\n');
+  } catch {
+    return 'Could not read worklog.';
+  }
+}
+
+/** Load skill-index.yaml from the active project or ~/.factory/ */
+function loadSkillIndex(projectPath: string): string {
+  const projectIdx = join(projectPath, '.factory', 'skill-index.yaml');
+  const globalIdx  = join(homedir(), '.factory', 'skill-index.yaml');
+  const filePath = existsSync(projectIdx) ? projectIdx
+                 : existsSync(globalIdx)  ? globalIdx : null;
+  if (!filePath) return '';
+  try {
+    const parsed = parseYaml(readFileSync(filePath, 'utf-8')) as any;
+    const skills: any[] = parsed?.skills || [];
+    if (!skills.length) return '';
+    return skills
+      .map((s: any) => `- **${s.name}**: ${s.description || ''}${s.trigger ? ` (trigger: ${(s.trigger as string[]).join(', ')})` : ''}`)
+      .join('\n');
+  } catch { return ''; }
+}
+
+/** Load the story-generator SKILL.md for injection into decompose_requirements */
+function loadStoryGeneratorSkill(): string {
+  const p = join(homedir(), '.factory', 'skills', 'story-generator', 'SKILL.md');
+  if (existsSync(p)) { try { return readFileSync(p, 'utf-8'); } catch {} }
+  return '';
+}
 
 // ─── TPM Tool Definitions ───────────────────────────────────────────────────
 export const TPM_TOOLS = [
@@ -304,19 +381,8 @@ Progress: ${parsed.progressPercent || 0}%`;
     } catch {}
   }
 
-  let worklogSnippet = 'No worklog history.';
-  const worklogPath = join(projectPath, '.factory', 'logs', 'worklog.yaml');
-  if (existsSync(worklogPath)) {
-    try {
-      const raw = readFileSync(worklogPath, 'utf-8');
-      const parsed = parseYaml(raw) as any;
-      const entries = parsed.entries || [];
-      const last5 = entries.slice(-5).reverse();
-      worklogSnippet =
-        'Recent Session Logs:\n' +
-        last5.map((e: any) => `- [${e.timestamp || ''}] ${e.message || ''}`).join('\n');
-    } catch {}
-  }
+  // Read from blueprint/worklog.yaml (TOON format) — the actual agent session log
+  const worklogSnippet = 'Recent Session Logs:\n' + readBlueprintWorklog(projectPath, 5);
 
   return JSON.stringify(
     { scaffold: scaffoldInfo, queue: queueInfo, heartbeat: heartbeatMsg, worklog: worklogSnippet },
@@ -339,16 +405,15 @@ async function handleListStories(projectPath: string, kind?: string, status?: st
 
   for (const { key, label } of folders) {
     const dir = join(projectPath, '.factory', 'stories', key);
-    if (!existsSync(dir)) continue;
+    // Recursively collect so subdirectories (e.g. features/antigravity/) are included
+    const allFiles = collectYamlFiles(dir);
+    if (allFiles.length === 0) continue;
 
-    const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
-    if (files.length === 0) continue;
+    results.push(`\n## ${label} (${allFiles.length})`);
 
-    results.push(`\n## ${label} (${files.length})`);
-
-    for (const file of files) {
+    for (const filePath of allFiles) {
       try {
-        const raw = readFileSync(join(dir, file), 'utf-8');
+        const raw = readFileSync(filePath, 'utf-8');
         const parsed = parseYaml(raw) as any;
         const storyStatus = parsed.status || parsed.metadata?.status || 'draft';
 
@@ -360,8 +425,9 @@ async function handleListStories(projectPath: string, kind?: string, status?: st
           parsed.metadata?.name ||
           parsed.feature?.name ||
           parsed.appName ||
-          file.replace(/\.ya?ml$/, '');
-        const slug = file.replace(/\.ya?ml$/, '');
+          filePath.split('/').pop()?.replace(/\.ya?ml$/, '') || 'unknown';
+        // Show subdir-relative slug so it's meaningful
+        const slug = filePath.replace(dir + '/', '').replace(/\.ya?ml$/, '');
         const phase = parsed.phase ?? parsed.metadata?.phase ?? '—';
         const description =
           (parsed.description || parsed.metadata?.description || '').slice(0, 100);
@@ -370,7 +436,7 @@ async function handleListStories(projectPath: string, kind?: string, status?: st
           `- **${name}** (${slug}) | Status: ${storyStatus} | Phase: ${phase}${description ? `\n  ${description}` : ''}`
         );
       } catch {
-        results.push(`- ${file} (parse error)`);
+        results.push(`- ${filePath.split('/').pop()} (parse error)`);
       }
     }
   }
@@ -580,22 +646,9 @@ async function handleReadHeartbeat(projectPath: string) {
     results.push('No heartbeat file found. Agent has not been run recently.');
   }
 
-  const worklogPath = join(projectPath, '.factory', 'logs', 'worklog.yaml');
-  if (existsSync(worklogPath)) {
-    try {
-      const raw = readFileSync(worklogPath, 'utf-8');
-      const parsed = parseYaml(raw) as any;
-      const entries = (parsed.entries || []).slice(-8).reverse();
-      if (entries.length > 0) {
-        results.push(
-          '\n## Recent Worklog\n' +
-            entries
-              .map((e: any) => `- [${e.timestamp || ''}] ${e.message || ''}`)
-              .join('\n')
-        );
-      }
-    } catch {}
-  }
+  // Read from blueprint/worklog.yaml (TOON format) — the actual agent session log
+  const wl = readBlueprintWorklog(projectPath, 8);
+  results.push(`\n## Recent Worklog (blueprint)\n${wl}`);
 
   return results.join('\n') || 'No heartbeat or worklog data available.';
 }
@@ -810,7 +863,13 @@ export async function POST(request: Request) {
         };
 
         try {
-          const tpmSystemPrompt = `You are the Factory Technical Program Manager (TPM) agent — an expert project orchestrator.
+          // Inject skill-index at request time so the LLM knows available skills
+          const skillIndexText = loadSkillIndex(activeProject.path);
+          const skillSection = skillIndexText
+            ? `\n\n**Available project skills** (reference these when relevant):\n${skillIndexText}`
+            : '';
+
+          const tpmSystemPrompt = `You are the Factory Technical Program Manager (TPM) agent — an expert project orchestrator for the **${activeProject.name}** project.
 
 You have access to the following tools. Use them proactively to fulfill user requests:
 
@@ -836,7 +895,8 @@ You have access to the following tools. Use them proactively to fulfill user req
 - When user references @story-name in their message, call get_story to get its details first.
 - For "what's the status?" type questions, call get_project_status AND list_stories together.
 - After write operations, confirm the action with the returned result.
-- Speak professionally and concisely. Be the intelligent conductor.`;
+- When writing stories, always use userStory + acceptanceCriteria (Given/When/Then) format.
+- Speak professionally and concisely. Be the intelligent conductor.\${skillSection}\`;
 
           const localMessages: any[] = [
             { role: 'system', content: tpmSystemPrompt },

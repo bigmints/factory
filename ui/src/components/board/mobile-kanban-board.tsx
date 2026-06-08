@@ -23,7 +23,7 @@ export function MobileKanbanBoard({
 
   const COLS = [
     { title: 'Backlog', desc: 'Scaffold drafts or spec blueprints', badge: 'bg-amber-500/5 text-amber-300 border-amber-500/10', stories: backlogStories, status: 'draft', dot: 'bg-amber-400' },
-    { title: 'Ready to Build', desc: 'Verified specifications awaiting launch', badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10', stories: readyStories, status: 'ready', dot: 'bg-teal-400' },
+    { title: 'Ready to Build', desc: 'Verified specifications awaiting launch', badge: 'bg-teal-500/5 text-teal-300 border-teal-500/10', stories: readyStories, status: 'ready-to-build', dot: 'bg-teal-400' },
     { title: 'In Progress', desc: 'Actively compiling or iterating', badge: 'bg-blue-500/5 text-blue-300 border-blue-500/10', stories: buildingStories, status: 'in-progress', dot: 'bg-blue-400' },
     { title: 'Completed', desc: 'Code written and tests passed', badge: 'bg-emerald-500/5 text-emerald-300 border-emerald-500/10', stories: doneStories, status: 'done', dot: 'bg-emerald-400' },
   ] as const;

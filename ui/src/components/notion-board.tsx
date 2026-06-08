@@ -560,7 +560,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
             const res = await fetch('/api/stories/update-status', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ file: scaffoldStoryFile, status: 'ready' }),
+              body: JSON.stringify({ file: scaffoldStoryFile, status: 'ready-to-build' }),
             });
             const data = await res.json();
             if (data.success) {
@@ -594,7 +594,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       return;
     }
 
-    // If building scaffold and it is in 'draft' status, ask to move it to 'ready'
+    // If building scaffold and it is in 'draft' status, ask to move it to 'ready-to-build'
     if (file === scaffoldStoryFile) {
       const scaffoldStory = mergedStories.find(s => s.file === file || getSlug(s.file) === getSlug(file));
       const scaffoldStatus = scaffoldStory ? getEffectiveStatus(scaffoldStory) : 'unknown';
@@ -607,7 +607,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
             const res = await fetch('/api/stories/update-status', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ file, status: 'ready' }),
+              body: JSON.stringify({ file, status: 'ready-to-build' }),
             });
             const data = await res.json();
             if (data.success) {
@@ -700,7 +700,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
     // Collect all non-done stories that are ready, failed, or review
     const readyStories = mergedStories.filter(item => {
       const status = getEffectiveStatus(item);
-      return status === 'ready' || status === 'failed' || status === 'review';
+      return status === 'ready-to-build' || status === 'failed' || status === 'review';
     });
 
     if (readyStories.length === 0) {
@@ -1106,7 +1106,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
   const readyStories = useMemo(() => {
     const list = filteredStoriesList.filter(item => {
       const status = getEffectiveStatus(item);
-      return status === 'ready' || status === 'failed' || status === 'review';
+      return status === 'ready-to-build' || status === 'failed' || status === 'review';
     });
 
     const epicIndexMap = new Map<string, number>();
@@ -1441,7 +1441,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                 >
                   <option value="all">All Statuses</option>
                   <option value="draft">Draft</option>
-                  <option value="ready">Ready</option>
+                  <option value="ready-to-build">Ready</option>
                   <option value="in-progress">In Progress</option>
                   <option value="failed">Failed</option>
                   <option value="done">Done</option>
@@ -1809,7 +1809,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
               {/* ── UNIFIED COMPACT HEADER ── */}
               <div className="shrink-0 px-5 pt-3.5 pb-0 bg-zinc-900/40 border-b border-border/20 relative flex flex-col gap-2 select-none">
                 {/* Row 1: Category, Status, & Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2.5 pr-8">
                   {/* Category Label */}
                   <div className="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5 font-mono">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
@@ -1831,7 +1831,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                         className="h-7 rounded border border-zinc-800 bg-zinc-950 text-[10px] font-medium text-zinc-300 px-2 focus:outline-none focus:ring-1 focus:ring-primary/60 font-sans cursor-pointer hover:bg-zinc-900 hover:text-white transition-all shrink-0"
                       >
                         <option value="draft">Draft</option>
-                        <option value="ready">Ready to Build</option>
+                        <option value="ready-to-build">Ready to Build</option>
                         <option value="review">In Review</option>
                         <option value="done">Done</option>
                       </select>
@@ -2021,9 +2021,12 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                           Story Metadata
                         </div>
                         <div className="space-y-2 text-xs">
-                          <div className="flex items-start justify-between py-1.5 border-b border-zinc-900">
-                            <span className="text-zinc-500">File Path</span>
-                            <span className="font-mono text-zinc-300 break-all text-right select-all max-w-[180px]">
+                          <div className="flex items-center justify-between py-1.5 border-b border-zinc-900 overflow-hidden">
+                            <span className="text-zinc-500 whitespace-nowrap mr-4">File Path</span>
+                            <span 
+                              className="font-mono text-zinc-300 truncate text-right select-all max-w-[220px]"
+                              title={selectedItem.data.file}
+                            >
                               {selectedItem.data.file}
                             </span>
                           </div>
@@ -2547,7 +2550,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
               >
                 <option value="all">All Statuses</option>
                 <option value="draft">Draft</option>
-                <option value="ready">Ready</option>
+                <option value="ready-to-build">Ready</option>
                 <option value="in-progress">In Progress</option>
                 <option value="failed">Failed</option>
                 <option value="done">Done</option>

@@ -1066,6 +1066,9 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
     if (statusFilter !== 'all') {
       list = list.filter(item => {
         const status = getEffectiveStatus(item);
+        if (statusFilter === 'in-progress') {
+          return status === 'in-progress' || status === 'validation' || status === 'running' || status === 'building';
+        }
         return status === statusFilter;
       });
     }
@@ -1135,7 +1138,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
   const buildingStories = useMemo(() => {
     return filteredStoriesList.filter(item => {
       const status = getEffectiveStatus(item);
-      return status === 'in-progress' || status === 'validation' || status === 'running';
+      return status === 'in-progress' || status === 'validation' || status === 'running' || status === 'building';
     });
   }, [filteredStoriesList]);
 

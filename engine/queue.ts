@@ -54,7 +54,7 @@ export function getQueueStateYamlPath(): string {
  * This prevents race conditions when multiple processes (daemon, UI API, CLI)
  * simultaneously mutate the queue.
  */
-export async function withQueueLock<T>(fn: () => T): Promise<T> {
+export async function withQueueLock<T>(fn: () => Promise<T> | T): Promise<T> {
     const queueYaml = getQueueYamlPath();
     const release = await lockfile.lock(queueYaml, {
         stale: 10000,        // consider lock stale after 10s
@@ -62,7 +62,7 @@ export async function withQueueLock<T>(fn: () => T): Promise<T> {
         lockfilePath: queueYaml + '.lock',
     });
     try {
-        return fn();
+        return await fn();
     } finally {
         await release();
     }
@@ -445,8 +445,10 @@ export async function dequeue(): Promise<QueueItem | null> {
             return a.addedAt.localeCompare(b.addedAt);
         });
 
-    if (pendingItems.length > 0) {
-        return pendingItems[0];
+    for (const item of pendingItems) {
+        if (isItemReady(item).ready) {
+            return item;
+        }
     }
 
     return null;
@@ -706,6 +708,17 @@ export async function startQueueDaemon(): Promise<void> {
 
     log('●', 'Queue daemon starting...');
 
+    // Heartbeat: Update state periodically to signal liveness
+    const { updateHeartbeat } = await import('./health.ts');
+    const heartbeatTimer = setInterval(() => {
+        try {
+            updateHeartbeat();
+        } catch { /* ignore */ }
+    }, 30 * 1000); // 30s
+    try {
+        updateHeartbeat(); // First heartbeat
+    } catch { /* ignore */ }
+
     while (running) {
         try {
             const stats = getQueueStats();
@@ -756,6 +769,7 @@ export async function startQueueDaemon(): Promise<void> {
         }
     }
 
+    clearInterval(heartbeatTimer);
     log('✓', 'Queue daemon stopped');
 }
 

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
-import { resolve, join, basename, dirname } from 'node:path';
+import { resolve, join, basename, dirname, relative } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec } from './types.ts';
 import { storySlug, storyPort } from './types.ts';
@@ -222,16 +222,23 @@ export function archiveStory(storyPath: string): string | null {
     const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) return null;
 
-    const storiesDir = dirname(absPath);
-    const parentDir = dirname(storiesDir); // .factory/stories
-    const doneDir = join(parentDir, 'done');
-
-    // Only archive if the story is in an apps/ or features/ folder
-    const folderName = basename(storiesDir);
-    if (folderName !== 'apps' && folderName !== 'features') {
-        log('!', `Story not in apps/ or features/ — skipping archive`);
+    const project = getActiveProject();
+    if (!project || !project.path) {
+        log('!', `No active project found — skipping archive`);
         return null;
     }
+
+    const storiesRoot = join(project.path, '.factory', 'stories');
+    const rel = relative(storiesRoot, absPath);
+    const firstPart = rel.split(/[\\/]/)[0];
+
+    // Only archive if the story is in an apps/ or features/ folder
+    if (firstPart !== 'apps' && firstPart !== 'features') {
+        log('!', `Story not in apps/ or features/ — skipping archive (path relative segment: ${firstPart})`);
+        return null;
+    }
+
+    const doneDir = join(storiesRoot, 'done');
 
     // Create done/ directory
     if (!existsSync(doneDir)) {
@@ -432,7 +439,7 @@ export function validateAppSpec(app: AppSpec): ValidationResult {
                                         if (!task.title || task.title.trim().length === 0) {
                                             errors.push(`Task at index ${tIdx} under Story "${story.name}" must have a title`);
                                         }
-                                        if (task.status && !['pending', 'running', 'completed', 'failed'].includes(task.status)) {
+                                        if (task.status && !['pending', 'running', 'completed', 'failed', 'done', 'building', 'ready-to-build', 'paused', 'draft'].includes(task.status)) {
                                             errors.push(`Task "${task.title}" has invalid status "${task.status}"`);
                                         }
                                     }

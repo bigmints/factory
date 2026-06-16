@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'No active project or appId provided.' }, { status: 400 });
     }
 
-    const data = getAppRollup(appId);
+    const data = await getAppRollup(appId);
     if (!data) {
       return NextResponse.json({ error: `App "${appId}" not found or failed to load. Run "factory app sync" first.` }, { status: 404 });
     }
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing taskId or status.' }, { status: 400 });
     }
 
-    if (!['pending', 'running', 'completed', 'failed'].includes(status)) {
+    if (!['pending', 'running', 'completed', 'failed', 'done', 'building', 'ready-to-build', 'paused', 'draft'].includes(status)) {
       return NextResponse.json({ error: `Invalid status: ${status}` }, { status: 400 });
     }
 

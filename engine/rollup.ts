@@ -6,6 +6,38 @@ import { slugify } from './types.ts';
 import { log, logError } from './log.ts';
 import { getActiveProject } from './config.ts';
 import { listQueue } from './queue.ts';
+import lockfile from 'proper-lockfile';
+
+export function getScaffoldYamlPath(): string {
+    const project = getActiveProject();
+    if (!project || !project.path) {
+        throw new Error('No active project found for scaffold.yaml path');
+    }
+    return resolve(project.path, '.factory', 'scaffold.yaml');
+}
+
+export async function withScaffoldLock<T>(fn: () => Promise<T> | T): Promise<T> {
+    try {
+        const yamlPath = getScaffoldYamlPath();
+        if (!existsSync(yamlPath)) {
+            return await fn();
+        }
+        const release = await lockfile.lock(yamlPath, {
+            stale: 10000,
+            retries: { retries: 5, minTimeout: 100, maxTimeout: 1000 },
+            lockfilePath: yamlPath + '.lock',
+        });
+        try {
+            return await fn();
+        } finally {
+            await release();
+        }
+    } catch {
+        // Fall back to executing without lock if locking fails
+        return await fn();
+    }
+}
+
 
 export interface AppRollupData {
     id: string;
@@ -75,33 +107,33 @@ export function calculateRollups(app: any, appSlug: string): any {
                             featureTotalTasks++;
                             appTotalTasks++;
 
-                            if (task.status === 'done') {
-                                storyCompletedTasks++;
-                                featureCompletedTasks++;
-                                appCompletedTasks++;
-                            }
-                        }
-                    }
-
-                    // Calculate story progress percentage
-                    story.progressPercent = storyTotalTasks > 0
-                        ? Math.round((storyCompletedTasks / storyTotalTasks) * 100)
-                        : (story.status === 'done' ? 100 : 0);
-
-                    // Rollup story status based on tasks
-                    if (story.tasks && story.tasks.length > 0) {
-                        const allCompleted = story.tasks.every((t: any) => t.status === 'done');
-                        const anyStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
-
-                        if (allCompleted) {
-                            story.status = 'done';
-                        } else if (anyStarted) {
-                            if (!['paused', 'done'].includes(story.status)) {
-                                story.status = 'building';
-                            }
-                        }
-                        // Otherwise keep the original status (e.g. draft, ready)
-                    }
+                             if (['done', 'completed'].includes(task.status)) {
+                                 storyCompletedTasks++;
+                                 featureCompletedTasks++;
+                                 appCompletedTasks++;
+                             }
+                         }
+                     }
+ 
+                     // Calculate story progress percentage
+                     story.progressPercent = storyTotalTasks > 0
+                         ? Math.round((storyCompletedTasks / storyTotalTasks) * 100)
+                         : (['done', 'completed'].includes(story.status) ? 100 : 0);
+ 
+                     // Rollup story status based on tasks
+                     if (story.tasks && story.tasks.length > 0) {
+                         const allCompleted = story.tasks.every((t: any) => ['done', 'completed'].includes(t.status));
+                         const anyStarted = story.tasks.some((t: any) => ['done', 'completed', 'building', 'running', 'failed'].includes(t.status));
+ 
+                         if (allCompleted) {
+                             story.status = 'done';
+                         } else if (anyStarted) {
+                             if (!['paused', 'done', 'completed'].includes(story.status)) {
+                                 story.status = 'building';
+                             }
+                         }
+                         // Otherwise keep the original status (e.g. draft, ready)
+                     }
 
                     if (story.status === 'done') {
                         doneStories++;
@@ -343,14 +375,15 @@ export function syncAppRoadmapSync(scaffoldYamlPath: string): void {
     // Write the updated spec back to the yaml file
     writeFileSync(absPath, stringifyYaml(updatedApp, { lineWidth: 120 }));
     log('✓', `Synced roadmap structure and statuses successfully: ${scaffoldYamlPath}`);
-    console.log(new Error().stack);
 }
 
 /**
  * Synchronizes the scaffold.yaml specification.
  */
 export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
-    syncAppRoadmapSync(scaffoldYamlPath);
+    return withScaffoldLock(() => {
+        syncAppRoadmapSync(scaffoldYamlPath);
+    });
 }
 
 /**
@@ -359,411 +392,419 @@ export async function syncAppRoadmap(scaffoldYamlPath: string): Promise<void> {
  * Resolves physical story statuses from the filesystem before computing rollups
  * so the UI always reflects real state without needing a manual sync.
  */
-export function getAppRollup(appId: string): AppRollupData | null {
-    try {
-        const project = getActiveProject();
-        const scaffoldYamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
-        if (!existsSync(scaffoldYamlPath)) {
-            return null;
-        }
-
-        let raw = readFileSync(scaffoldYamlPath, 'utf-8');
-        let app = parseYaml(raw) as any;
-        if (!app) return null;
-
-        // Auto-heal un-synchronized roadmaps on first load
-        if (!app.features) {
-            try {
-                syncAppRoadmapSync(scaffoldYamlPath);
-                // Reload
-                raw = readFileSync(scaffoldYamlPath, 'utf-8');
-                app = parseYaml(raw) as any;
-            } catch (e) {
-                logError(`Auto-sync failed on load: ${e}`);
+export async function getAppRollup(appId: string): Promise<AppRollupData | null> {
+    return withScaffoldLock(async () => {
+        try {
+            const project = getActiveProject();
+            const scaffoldYamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
+            if (!existsSync(scaffoldYamlPath)) {
+                return null;
             }
-        }
 
-        const appSlug = slugify(app.name);
-        const storiesDir = resolve(project.path, '.factory', 'stories');
-        const queueItems = listQueue();
+            let raw = readFileSync(scaffoldYamlPath, 'utf-8');
+            let app = parseYaml(raw) as any;
+            if (!app) return null;
 
-        // ── Discover physical story files not yet in scaffold.yaml ──────────────
-        // Scan features/, apps/, done/ and inject any untracked stories as
-        // synthetic epics into the in-memory app object.
-        // This is read-only — no disk writes, no queue interference.
-        {
-            // Build a set of all filenames already tracked in scaffold.yaml
-            const trackedStems = new Set<string>();
-            if (app.features) {
-                for (const feature of app.features) {
-                    for (const story of (feature.stories || [])) {
-                        if (story.file) {
-                            trackedStems.add(story.file.split('/').pop()?.replace(/\.ya?ml$/i, '') || '');
+            // Auto-heal un-synchronized roadmaps on first load
+            if (!app.features) {
+                try {
+                    syncAppRoadmapSync(scaffoldYamlPath);
+                    // Reload
+                    raw = readFileSync(scaffoldYamlPath, 'utf-8');
+                    app = parseYaml(raw) as any;
+                } catch (e) {
+                    logError(`Auto-sync failed on load: ${e}`);
+                }
+            }
+
+            const appSlug = slugify(app.name);
+            const storiesDir = resolve(project.path, '.factory', 'stories');
+            const queueItems = listQueue();
+
+            // ── Discover physical story files not yet in scaffold.yaml ──────────────
+            // Scan features/, apps/, done/ and inject any untracked stories as
+            // synthetic epics into the in-memory app object.
+            // This is read-only — no disk writes, no queue interference.
+            {
+                // Build a set of all filenames already tracked in scaffold.yaml
+                const trackedStems = new Set<string>();
+                if (app.features) {
+                    for (const feature of app.features) {
+                        for (const story of (feature.stories || [])) {
+                            if (story.file) {
+                                trackedStems.add(story.file.split('/').pop()?.replace(/\.ya?ml$/i, '') || '');
+                            }
                         }
+                    }
+                }
+
+                if (!app.features) app.features = [];
+
+                const subDirs: Array<{ dir: string; subfolder: string }> = [
+                    { dir: resolve(storiesDir, 'features'), subfolder: 'features' },
+                    { dir: resolve(storiesDir, 'apps'),     subfolder: 'apps'     },
+                    { dir: resolve(storiesDir, 'done'),     subfolder: 'done'     },
+                ];
+
+                for (const { dir, subfolder } of subDirs) {
+                    if (!existsSync(dir)) continue;
+                    let files: string[];
+                    try { files = readdirSync(dir).filter((f: string) => f.endsWith('.yaml') || f.endsWith('.yml')); }
+                    catch { continue; }
+
+                    for (const file of files) {
+                        const stem = file.replace(/\.ya?ml$/i, '');
+                        if (trackedStems.has(stem)) continue;   // already in scaffold.yaml
+                        trackedStems.add(stem);
+
+                        try {
+                            const raw = readFileSync(resolve(dir, file), 'utf-8');
+                            const parsed = parseYaml(raw) as any;
+                            if (!parsed) continue;
+
+                            const isFeature = !!(parsed.feature || parsed.target || 'phase' in parsed);
+                            const name = isFeature
+                                ? (parsed.feature?.name || parsed.name || stem)
+                                : (parsed.appName || parsed.metadata?.name || stem);
+
+                            const storyStatus = parsed.status
+                                || (subfolder === 'done' ? 'done' : 'draft');
+
+                            // Determine epic group
+                            const epicName = isFeature ? (parsed.feature?.name || name) : '⚙️ Scaffold & Foundation';
+
+                            // Find or create a matching feature/epic
+                            let epic = app.features.find((f: any) =>
+                                f.name.toLowerCase() === epicName.toLowerCase()
+                            );
+                            if (!epic) {
+                                epic = { name: epicName, description: '', status: 'ready-to-build', stories: [] };
+                                app.features.push(epic);
+                            }
+
+                            // Build synthetic tasks from requirements / acceptance_criteria
+                            const reqs: string[] = Array.isArray(parsed.requirements)
+                                ? parsed.requirements
+                                : Array.isArray(parsed.acceptanceCriteria)
+                                ? parsed.acceptanceCriteria
+                                : Array.isArray(parsed.acceptance_criteria)
+                                ? parsed.acceptance_criteria
+                                : [];
+
+                            const tasks = reqs.length > 0
+                                ? reqs.map((r: string, i: number) => ({
+                                    id: `task-${stem}-${i + 1}`,
+                                    title: r.slice(0, 180),
+                                    status: storyStatus === 'done' ? 'done' : 'ready-to-build',
+                                }))
+                                : [{
+                                    id: `task-${stem}-default`,
+                                    title: `Implement ${name}`,
+                                    status: storyStatus === 'done' ? 'done' : 'ready-to-build',
+                                }];
+
+                            epic.stories.push({
+                                name,
+                                file: `${subfolder}/${file}`,
+                                status: storyStatus,
+                                tasks,
+                            });
+                        } catch { /* skip unparseable files */ }
                     }
                 }
             }
 
-            if (!app.features) app.features = [];
+            // Resolve physical story status from filesystem BEFORE running rollup
+            // This ensures done/in-progress status is always current, not stale YAML
+            if (app.features) {
+                for (const feature of app.features) {
+                    if (feature.stories) {
+                        for (const story of feature.stories) {
+                            if (!story.file) continue;
+                            try {
+                                // Check done/ dir first (filename stem match)
+                                const stem = story.file.split('/').pop()?.replace(/\.ya?ml$/i, '') || '';
 
-            const subDirs: Array<{ dir: string; subfolder: string }> = [
-                { dir: resolve(storiesDir, 'features'), subfolder: 'features' },
-                { dir: resolve(storiesDir, 'apps'),     subfolder: 'apps'     },
-                { dir: resolve(storiesDir, 'done'),     subfolder: 'done'     },
-            ];
-
-            for (const { dir, subfolder } of subDirs) {
-                if (!existsSync(dir)) continue;
-                let files: string[];
-                try { files = readdirSync(dir).filter((f: string) => f.endsWith('.yaml') || f.endsWith('.yml')); }
-                catch { continue; }
-
-                for (const file of files) {
-                    const stem = file.replace(/\.ya?ml$/i, '');
-                    if (trackedStems.has(stem)) continue;   // already in scaffold.yaml
-                    trackedStems.add(stem);
-
-                    try {
-                        const raw = readFileSync(resolve(dir, file), 'utf-8');
-                        const parsed = parseYaml(raw) as any;
-                        if (!parsed) continue;
-
-                        const isFeature = !!(parsed.feature || parsed.target || 'phase' in parsed);
-                        const name = isFeature
-                            ? (parsed.feature?.name || parsed.name || stem)
-                            : (parsed.appName || parsed.metadata?.name || stem);
-
-                        const storyStatus = parsed.status
-                            || (subfolder === 'done' ? 'done' : 'draft');
-
-                        // Determine epic group
-                        const epicName = isFeature ? (parsed.feature?.name || name) : '⚙️ Scaffold & Foundation';
-
-                        // Find or create a matching feature/epic
-                        let epic = app.features.find((f: any) =>
-                            f.name.toLowerCase() === epicName.toLowerCase()
-                        );
-                        if (!epic) {
-                            epic = { name: epicName, description: '', status: 'ready-to-build', stories: [] };
-                            app.features.push(epic);
-                        }
-
-                        // Build synthetic tasks from requirements / acceptance_criteria
-                        const reqs: string[] = Array.isArray(parsed.requirements)
-                            ? parsed.requirements
-                            : Array.isArray(parsed.acceptanceCriteria)
-                            ? parsed.acceptanceCriteria
-                            : Array.isArray(parsed.acceptance_criteria)
-                            ? parsed.acceptance_criteria
-                            : [];
-
-                        const tasks = reqs.length > 0
-                            ? reqs.map((r: string, i: number) => ({
-                                id: `task-${stem}-${i + 1}`,
-                                title: r.slice(0, 180),
-                                status: storyStatus === 'done' ? 'done' : 'ready-to-build',
-                            }))
-                            : [{
-                                id: `task-${stem}-default`,
-                                title: `Implement ${name}`,
-                                status: storyStatus === 'done' ? 'done' : 'ready-to-build',
-                            }];
-
-                        epic.stories.push({
-                            name,
-                            file: `${subfolder}/${file}`,
-                            status: storyStatus,
-                            tasks,
-                        });
-                    } catch { /* skip unparseable files */ }
-                }
-            }
-        }
-
-        // Resolve physical story status from filesystem BEFORE running rollup
-        // This ensures done/in-progress status is always current, not stale YAML
-        if (app.features) {
-            for (const feature of app.features) {
-                if (feature.stories) {
-                    for (const story of feature.stories) {
-                        if (!story.file) continue;
-                        try {
-                            // Check done/ dir first (filename stem match)
-                            const stem = story.file.split('/').pop()?.replace(/\.ya?ml$/i, '') || '';
-
-                            const doneFile = resolve(storiesDir, 'done', `${stem}.yaml`);
-                            const doneFileYml = resolve(storiesDir, 'done', `${stem}.yml`);
-                            if (existsSync(doneFile) || existsSync(doneFileYml)) {
-                                story.status = 'done';
-                                if (story.tasks) {
-                                    for (const task of story.tasks) task.status = 'done';
-                                }
-                                continue;
-                            }
-
-                            // Try to read the story file at its declared path
-                            const candidates = [
-                                resolve(storiesDir, story.file),
-                                resolve(storiesDir, 'features', stem + '.yaml'),
-                                resolve(storiesDir, 'apps', stem + '.yaml'),
-                                resolve(project.path, '.factory', story.file),
-                            ];
-
-                            for (const candidate of candidates) {
-                                if (existsSync(candidate)) {
-                                    const physicalStatus = (parseYaml(readFileSync(candidate, 'utf-8')) as any)?.status;
-                                    if (physicalStatus) {
-                                        story.status = physicalStatus;
-                                        if (physicalStatus === 'done' && story.tasks) {
-                                            for (const task of story.tasks) task.status = 'done';
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-
-                            // Check active queue status from SQLite database queue
-                            const qi = queueItems.find(item => {
-                                const qiFile = item.storyFile || '';
-                                return slugify(qiFile) === slugify(story.file) || slugify(qiFile.split('/').pop() || '') === slugify(stem);
-                            });
-                            if (qi) {
-                                if (qi.status === 'building') {
-                                    story.status = 'building';
-                                    if (story.tasks && story.tasks.length > 0) {
-                                        const hasStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
-                                        if (!hasStarted) {
-                                            story.tasks[0].status = 'building';
-                                        }
-                                    }
-                                } else if (qi.status === 'done') {
+                                const doneFile = resolve(storiesDir, 'done', `${stem}.yaml`);
+                                const doneFileYml = resolve(storiesDir, 'done', `${stem}.yml`);
+                                if (existsSync(doneFile) || existsSync(doneFileYml)) {
                                     story.status = 'done';
                                     if (story.tasks) {
                                         for (const task of story.tasks) task.status = 'done';
                                     }
-                                } else if (qi.status === 'failed') {
-                                    story.status = 'failed';
-                                    if (story.tasks && story.tasks.length > 0) {
-                                        const hasFailed = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
-                                        if (!hasFailed) {
-                                            story.tasks[0].status = 'failed';
+                                    continue;
+                                }
+
+                                // Try to read the story file at its declared path
+                                const candidates = [
+                                    resolve(storiesDir, story.file),
+                                    resolve(storiesDir, 'features', stem + '.yaml'),
+                                    resolve(storiesDir, 'apps', stem + '.yaml'),
+                                    resolve(project.path, '.factory', story.file),
+                                ];
+
+                                for (const candidate of candidates) {
+                                    if (existsSync(candidate)) {
+                                        const physicalStatus = (parseYaml(readFileSync(candidate, 'utf-8')) as any)?.status;
+                                        if (physicalStatus) {
+                                            story.status = physicalStatus;
+                                            if (physicalStatus === 'done' && story.tasks) {
+                                                for (const task of story.tasks) task.status = 'done';
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+
+                                // Check active queue status from SQLite database queue
+                                const qi = queueItems.find(item => {
+                                    const qiFile = item.storyFile || '';
+                                    return slugify(qiFile) === slugify(story.file) || slugify(qiFile.split('/').pop() || '') === slugify(stem);
+                                });
+                                if (qi) {
+                                    if (qi.status === 'building') {
+                                        story.status = 'building';
+                                        if (story.tasks && story.tasks.length > 0) {
+                                            const hasStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
+                                            if (!hasStarted) {
+                                                story.tasks[0].status = 'building';
+                                            }
+                                        }
+                                    } else if (qi.status === 'done') {
+                                        story.status = 'done';
+                                        if (story.tasks) {
+                                            for (const task of story.tasks) task.status = 'done';
+                                        }
+                                    } else if (qi.status === 'failed') {
+                                        story.status = 'failed';
+                                        if (story.tasks && story.tasks.length > 0) {
+                                            const hasFailed = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
+                                            if (!hasFailed) {
+                                                story.tasks[0].status = 'failed';
+                                            }
                                         }
                                     }
                                 }
+                            } catch {
+                                // ignore individual file read errors
                             }
-                        } catch {
-                            // ignore individual file read errors
                         }
                     }
                 }
             }
-        }
 
-        // Perform in-memory rollups with the now-correct physical statuses
-        const rolled = calculateRollups(app, appSlug);
+            // Perform in-memory rollups with the now-correct physical statuses
+            const rolled = calculateRollups(app, appSlug);
 
-        const resultFeatures = [];
-        if (rolled.features) {
-            for (const feature of rolled.features) {
-                const featureSlug = slugify(feature.name);
-                const featureId = `${appSlug}:${featureSlug}`;
+            const resultFeatures = [];
+            if (rolled.features) {
+                for (const feature of rolled.features) {
+                    const featureSlug = slugify(feature.name);
+                    const featureId = `${appSlug}:${featureSlug}`;
 
-                const resultStories = [];
-                if (feature.stories) {
-                    for (const story of feature.stories) {
-                        const storySlug = slugify(story.name);
-                        const storyId = `${featureId}:${storySlug}`;
+                    const resultStories = [];
+                    if (feature.stories) {
+                        for (const story of feature.stories) {
+                            const storySlug = slugify(story.name);
+                            const storyId = `${featureId}:${storySlug}`;
 
-                        const tasks = story.tasks ? story.tasks.map((t: any) => ({
-                            id: t.id,
-                            title: t.title,
-                            status: t.status
-                        })) : [];
+                            const tasks = story.tasks ? story.tasks.map((t: any) => ({
+                                id: t.id,
+                                title: t.title,
+                                status: t.status
+                            })) : [];
 
-                        resultStories.push({
-                            id: storyId,
-                            name: story.name,
-                            file: story.file || '',
-                            status: story.status || 'draft',
-                            progressPercent: story.progressPercent || 0,
-                            tasks
-                        });
+                            resultStories.push({
+                                id: storyId,
+                                name: story.name,
+                                file: story.file || '',
+                                status: story.status || 'draft',
+                                progressPercent: story.progressPercent || 0,
+                                tasks
+                            });
+                        }
                     }
+
+                    resultFeatures.push({
+                        id: featureId,
+                        name: feature.name,
+                        description: feature.description || '',
+                        status: feature.status || 'ready-to-build',
+                        progressPercent: feature.progressPercent || 0,
+                        stories: resultStories
+                    });
                 }
-
-                resultFeatures.push({
-                    id: featureId,
-                    name: feature.name,
-                    description: feature.description || '',
-                    status: feature.status || 'ready-to-build',
-                    progressPercent: feature.progressPercent || 0,
-                    stories: resultStories
-                });
             }
-        }
 
-        return {
-            id: appSlug,
-            name: rolled.name,
-            description: rolled.description || '',
-            brd: rolled.brd || '',
-            version: rolled.version || '1.0.0',
-            status: rolled.status || 'draft',
-            stack: rolled.stack || {},
-            progressPercent: rolled.progressPercent || 0,
-            features: resultFeatures
-        };
-    } catch (e: any) {
-        logError(`Failed to rollup app roadmap: ${e?.message || e}`);
-        return null;
-    }
+            return {
+                id: appSlug,
+                name: rolled.name,
+                description: rolled.description || '',
+                brd: rolled.brd || '',
+                version: rolled.version || '1.0.0',
+                status: rolled.status || 'draft',
+                stack: rolled.stack || {},
+                progressPercent: rolled.progressPercent || 0,
+                features: resultFeatures
+            };
+        } catch (e: any) {
+            logError(`Failed to rollup app roadmap: ${e?.message || e}`);
+            return null;
+        }
+    });
 }
 
 /**
  * Updates the status of a specific task within scaffold.yaml directly, recalculating rollups.
  */
 export async function updateTaskStatus(taskId: string, newStatus: string): Promise<void> {
-    const project = getActiveProject();
-    const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
-    if (!existsSync(yamlPath)) {
-        throw new Error(`scaffold.yaml not found at active project: ${yamlPath}`);
-    }
+    return withScaffoldLock(async () => {
+        const project = getActiveProject();
+        const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
+        if (!existsSync(yamlPath)) {
+            throw new Error(`scaffold.yaml not found at active project: ${yamlPath}`);
+        }
 
-    const raw = readFileSync(yamlPath, 'utf-8');
-    const app = parseYaml(raw) as any;
-    if (!app) {
-        throw new Error('Failed to parse scaffold.yaml');
-    }
+        const raw = readFileSync(yamlPath, 'utf-8');
+        const app = parseYaml(raw) as any;
+        if (!app) {
+            throw new Error('Failed to parse scaffold.yaml');
+        }
 
-    // Traverse and update task
-    let found = false;
-    if (app.features) {
-        for (const feature of app.features) {
-            if (feature.stories) {
-                for (const story of feature.stories) {
-                    if (story.tasks) {
-                        for (const task of story.tasks) {
-                            // Match exact taskId or trailing :taskId
-                            if (task.id === taskId || taskId.endsWith(`:${task.id}`)) {
-                                task.status = newStatus;
-                                found = true;
-                                break;
+        // Traverse and update task
+        let found = false;
+        if (app.features) {
+            for (const feature of app.features) {
+                if (feature.stories) {
+                    for (const story of feature.stories) {
+                        if (story.tasks) {
+                            for (const task of story.tasks) {
+                                // Match exact taskId or trailing :taskId
+                                if (task.id === taskId || taskId.endsWith(`:${task.id}`)) {
+                                    task.status = newStatus;
+                                    found = true;
+                                    break;
+                                }
                             }
                         }
+                        if (found) break;
                     }
-                    if (found) break;
                 }
+                if (found) break;
             }
-            if (found) break;
         }
-    }
 
-    if (!found) {
-        throw new Error(`Task with ID "${taskId}" not found in scaffold.yaml`);
-    }
+        if (!found) {
+            throw new Error(`Task with ID "${taskId}" not found in scaffold.yaml`);
+        }
 
-    // Re-run rollup calculations and save
-    const appSlug = slugify(app.name);
-    const updatedApp = calculateRollups(app, appSlug);
-    writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
-    log('✓', `Updated task "${taskId}" status to "${newStatus}" and saved scaffold.yaml`);
+        // Re-run rollup calculations and save
+        const appSlug = slugify(app.name);
+        const updatedApp = calculateRollups(app, appSlug);
+        writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
+        log('✓', `Updated task "${taskId}" status to "${newStatus}" and saved scaffold.yaml`);
+    });
 }
 
 /**
  * Updates the status of a specific story within scaffold.yaml directly, recalculating rollups.
  */
 export async function updateStoryStatusInApp(storyFile: string, newStatus: string): Promise<void> {
-    const project = getActiveProject();
-    if (!project) return;
-    const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
-    if (!existsSync(yamlPath)) return;
+    return withScaffoldLock(async () => {
+        const project = getActiveProject();
+        if (!project) return;
+        const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
+        if (!existsSync(yamlPath)) return;
 
-    const raw = readFileSync(yamlPath, 'utf-8');
-    const app = parseYaml(raw) as any;
-    if (!app) return;
+        const raw = readFileSync(yamlPath, 'utf-8');
+        const app = parseYaml(raw) as any;
+        if (!app) return;
 
-    const basenameOfFile = storyFile.split('/').pop();
+        const basenameOfFile = storyFile.split('/').pop();
 
-    let found = false;
-    if (app.features) {
-        for (const feature of app.features) {
-            if (feature.stories) {
-                for (const story of feature.stories) {
-                    const storyBasename = (story.file || '').split('/').pop();
-                    if (story.file === storyFile || storyBasename === basenameOfFile) {
-                        story.status = newStatus;
-                        if (newStatus === 'done' && story.tasks) {
-                            for (const task of story.tasks) {
-                                task.status = 'done';
+        let found = false;
+        if (app.features) {
+            for (const feature of app.features) {
+                if (feature.stories) {
+                    for (const story of feature.stories) {
+                        const storyBasename = (story.file || '').split('/').pop();
+                        if (story.file === storyFile || storyBasename === basenameOfFile) {
+                            story.status = newStatus;
+                            if (newStatus === 'done' && story.tasks) {
+                                for (const task of story.tasks) {
+                                    task.status = 'done';
+                                }
+                            } else if (['building', 'paused'].includes(newStatus) && story.tasks) {
+                                const hasStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
+                                if (!hasStarted && story.tasks.length > 0) {
+                                    story.tasks[0].status = newStatus === 'paused' ? 'failed' : 'building';
+                                }
                             }
-                        } else if (['building', 'paused'].includes(newStatus) && story.tasks) {
-                            const hasStarted = story.tasks.some((t: any) => ['done', 'building', 'failed'].includes(t.status));
-                            if (!hasStarted && story.tasks.length > 0) {
-                                story.tasks[0].status = newStatus === 'paused' ? 'failed' : 'building';
-                            }
+                            found = true;
+                            break;
                         }
-                        found = true;
-                        break;
                     }
                 }
+                if (found) break;
             }
-            if (found) break;
         }
-    }
 
-    if (!found) return;
+        if (!found) return;
 
-    // Re-run rollup calculations and save
-    const appSlug = slugify(app.name);
-    const updatedApp = calculateRollups(app, appSlug);
-    writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
-    log('✓', `Updated story "${storyFile}" status to "${newStatus}" and saved scaffold.yaml`);
+        // Re-run rollup calculations and save
+        const appSlug = slugify(app.name);
+        const updatedApp = calculateRollups(app, appSlug);
+        writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
+        log('✓', `Updated story "${storyFile}" status to "${newStatus}" and saved scaffold.yaml`);
+    });
 }
 
 /**
  * Removes a specific task from scaffold.yaml by its ID, recalculating rollups.
  */
 export async function deleteTask(taskId: string): Promise<void> {
-    const project = getActiveProject();
-    const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
-    if (!existsSync(yamlPath)) {
-        throw new Error(`scaffold.yaml not found at active project: ${yamlPath}`);
-    }
+    return withScaffoldLock(async () => {
+        const project = getActiveProject();
+        const yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
+        if (!existsSync(yamlPath)) {
+            throw new Error(`scaffold.yaml not found at active project: ${yamlPath}`);
+        }
 
-    const raw = readFileSync(yamlPath, 'utf-8');
-    const app = parseYaml(raw) as any;
-    if (!app) {
-        throw new Error('Failed to parse scaffold.yaml');
-    }
+        const raw = readFileSync(yamlPath, 'utf-8');
+        const app = parseYaml(raw) as any;
+        if (!app) {
+            throw new Error('Failed to parse scaffold.yaml');
+        }
 
-    let found = false;
-    if (app.features) {
-        for (const feature of app.features) {
-            if (feature.stories) {
-                for (const story of feature.stories) {
-                    if (story.tasks) {
-                        const originalLength = story.tasks.length;
-                        story.tasks = story.tasks.filter((t: any) => !(t.id === taskId || taskId.endsWith(`:${t.id}`)));
-                        if (story.tasks.length < originalLength) {
-                            found = true;
-                            break;
+        let found = false;
+        if (app.features) {
+            for (const feature of app.features) {
+                if (feature.stories) {
+                    for (const story of feature.stories) {
+                        if (story.tasks) {
+                            const originalLength = story.tasks.length;
+                            story.tasks = story.tasks.filter((t: any) => !(t.id === taskId || taskId.endsWith(`:${t.id}`)));
+                            if (story.tasks.length < originalLength) {
+                                found = true;
+                                break;
+                            }
                         }
                     }
                 }
+                if (found) break;
             }
-            if (found) break;
         }
-    }
 
-    if (!found) {
-        throw new Error(`Task with ID "${taskId}" not found in scaffold.yaml`);
-    }
+        if (!found) {
+            throw new Error(`Task with ID "${taskId}" not found in scaffold.yaml`);
+        }
 
-    // Re-run rollup calculations and save
-    const appSlug = slugify(app.name);
-    const updatedApp = calculateRollups(app, appSlug);
-    writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
-    log('✓', `Deleted task "${taskId}" from scaffold.yaml`);
+        // Re-run rollup calculations and save
+        const appSlug = slugify(app.name);
+        const updatedApp = calculateRollups(app, appSlug);
+        writeFileSync(yamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
+        log('✓', `Deleted task "${taskId}" from scaffold.yaml`);
+    });
 }
 
 

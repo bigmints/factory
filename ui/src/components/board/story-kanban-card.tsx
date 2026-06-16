@@ -31,7 +31,7 @@ export function StoryKanbanCard({
   const effectiveStatus = getEffectiveStatus(item);
   const statusCfg = storyStatusMap[effectiveStatus] || storyStatusMap.unknown;
   const totalTasks = item.checklistTasks ? item.checklistTasks.length : 0;
-  const doneTasks = item.checklistTasks ? item.checklistTasks.filter((t: any) => t.status === 'completed').length : 0;
+  const doneTasks = item.checklistTasks ? item.checklistTasks.filter((t: any) => ['done', 'completed'].includes(t.status)).length : 0;
   const desc = item.metadata?.description || item.feature?.description || '';
   const isActive = effectiveStatus === 'building';
 

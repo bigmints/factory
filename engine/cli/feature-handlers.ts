@@ -138,7 +138,7 @@ export async function handleAppCommand(): Promise<void> {
         }
 
         const { getAppRollup } = await import('../rollup.ts');
-        const data = getAppRollup(appId);
+        const data = await getAppRollup(appId);
         if (!data) {
             logError(`App with ID "${appId}" not found in scaffold.yaml roadmap. Did you run "factory app sync" first?`);
             process.exit(1);

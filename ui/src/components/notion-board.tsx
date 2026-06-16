@@ -1632,7 +1632,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                       const totalTasks = matchedStory?.checklistTasks?.length || 0;
                       const doneTasks = matchedStory?.checklistTasks?.filter((t: any) => t.status === 'done').length || 0;
                       const durationSec = item.durationMs ? Math.round(item.durationMs / 1000) : null;
-                      const statusCfg = isRunning ? storyStatusMap.running : isFailed ? storyStatusMap.failed : isDone ? storyStatusMap.done : storyStatusMap.draft;
+                      const statusCfg = isRunning ? storyStatusMap.building : isFailed ? storyStatusMap.failed : isDone ? storyStatusMap.done : storyStatusMap.draft;
 
                       return (
                         <div

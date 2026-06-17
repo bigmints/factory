@@ -587,7 +587,7 @@ async function toolDelegateToCli(
             const fileCount = fileTree.length;
             const fileSummary = fileCount > 0
                 ? `\n\nFiles in target directory: ${fileCount}\n${fileTree.slice(0, 30).map(f => `  ${f.filename}`).join('\n')}${fileCount > 30 ? `\n  ... and ${fileCount - 30} more` : ''}`
-                : '';
+                : '\n\nNo files detected in target directory.';
                 
             return { content: `DELIVERED\n\n${output.slice(-3000)}${fileSummary}`, isError: false };
         } catch (e: any) {

@@ -1,0 +1,19 @@
+name: Test PI Native
+description: Test story
+status: done
+appName: test
+feature:
+  name: Fix
+  slug: fix
+target: {}
+stack:
+  framework: node
+  language: typescript
+  packageManager: npm
+  linter: eslint
+acceptance_criteria:
+  - Output hello world
+instructions: 'Create a Node.js + TypeScript project in `/Users/pretheesh/Projects/factory/test` that outputs "hello
+  world". Steps: 1. Create package.json 2. Create tsconfig.json 3. Create src/index.ts with console.log("hello world")
+  4. Print DELIVERY COMPLETE.'
+phase: 0

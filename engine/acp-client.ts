@@ -40,11 +40,13 @@ export class AcpAgentAdapter {
                     const text = params.update.content?.text || '';
                     this.appendLog(text);
                 } else if (params.update.sessionUpdate === 'tool_call') {
-                    this.appendLog(`\n[Tool Call] ${params.update.name} (${JSON.stringify(params.update.arguments)})\n`);
+                    const tc = params.update.toolCall || {};
+                    this.appendLog(`\n[Tool Call] ${tc.name} (${JSON.stringify(tc.arguments)})\n`);
                 } else if (params.update.sessionUpdate === 'tool_call_update') {
                      // stream tool call args if supported, ignoring for now
                 } else if (params.update.sessionUpdate === 'tool_call_complete') {
-                    this.appendLog(`\n[Tool Call Complete] ${params.update.name}\n`);
+                    const tc = params.update.toolCall || {};
+                    this.appendLog(`\n[Tool Call Complete] ${tc.name}\n`);
                 }
             }
         }), stream);

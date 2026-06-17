@@ -6,13 +6,13 @@ This chronicle is a consolidated semantic history of the Factory build engine. I
 
 ## 1. Architectural Context & Key ADR Highlights
 
-The Factory platform orchestrates multi-agent tasks, spec validation, and autonomous build pipelines. 
+The Factory platform orchestrates multi-agent tasks, spec validation, and autonomous build pipelines.
 
 ### Key ADRs:
 *   **ADR-001: Agentic Build Engine Upgrade & Tool-Calling Loop** (Status: Implemented / Approved)
-    *   Transitioned the legacy rigid linear pipeline into an interactive, multi-turn tool-calling LLM loop (Gemini, Ollama, OpenAI-compat) executing directly within project target folders.
+    *   Transitioned the legacy rigid linear pipeline into an interactive, multi-turn tool-calling LLM loop (Gemini, Ollama, OpenAI-compat) executing directly within project target folders. Eliminates blind execution and reduces remediation overhead by granting the generator real-time filesystem/compiler access.
 *   **ADR-002: Dynamic Multi-Project Bridge & Settings Architecture** (Status: Implemented / Approved)
-    *   Replaced hardcoded relative steps with global settings path resolution in the UI API layer. The active project's path is dynamically looked up via `~/.factory/projects.json`.
+    *   Replaced hardcoded relative steps with global settings path resolution in the UI API layer. The active project's path is dynamically looked up via `~/.factory/projects.json`, resolving Next.js `process.cwd()` desync issues.
 *   **ADR-003: High-Fidelity & Accessible UI Design System** (Status: Implemented / Approved)
     *   Redesigned the entire dashboard interface to support highly responsive layouts, sleek HSL-tailored dark modes, unified settings active integration models, and WCAG-compliant high-contrast colors (e.g. indigo visual action gates).
 *   **ADR-004: Spec Architecture & Naming Convention** (Status: Implemented / Approved)
@@ -39,7 +39,7 @@ The Factory platform orchestrates multi-agent tasks, spec validation, and autono
 
 ---
 
-## 3. Failure Post-Mortems & Anti-Patterns ("What Didn't Work")
+## 3. Failure Post-Mortems & Anti-Patterns ("What Didn't Work" and how it was resolved)
 
 ### 1. Hardcoded Working Directory Steps
 *   **Symptom**: `/api/knowledge` returned an empty response, failing to display ADRs or heartbeats on `http://localhost:4090/#knowledge`.

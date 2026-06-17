@@ -53,7 +53,7 @@ export class AcpAgentAdapter {
     private appendLog(text: string) {
         this.outputBuffer += text;
         if (this.logStream) {
-            this.logStream.write(text);
+            if (!this.logStream.writableEnded && !this.logStream.destroyed) this.logStream.write(text);
         }
     }
 

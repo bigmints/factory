@@ -1,67 +1,50 @@
 # REPOSITORY ARCHITECTURAL CHRONICLE
 
-This chronicle is a consolidated semantic history of the Factory build engine. It acts as a memory bridge for AI coding agents to preserve key context, stack choices, major milestones, and post-mortems of previous failures and learnings.
-
----
-
 ## 1. Architectural Context & Key ADR Highlights
 
-The Factory platform orchestrates multi-agent tasks, spec validation, and autonomous build pipelines.
+The Factory platform orchestrates multi-agent tasks, spec validation, and autonomous build pipelines. Core architectural decisions are codified below:
 
-### Key ADRs:
-*   **ADR-001: Agentic Build Engine Upgrade & Tool-Calling Loop** (Status: Implemented / Approved)
-    *   Transitioned the legacy rigid linear pipeline into an interactive, multi-turn tool-calling LLM loop (Gemini, Ollama, OpenAI-compat) executing directly within project target folders. Eliminates blind execution and reduces remediation overhead by granting the generator real-time filesystem/compiler access.
-*   **ADR-002: Dynamic Multi-Project Bridge & Settings Architecture** (Status: Implemented / Approved)
-    *   Replaced hardcoded relative steps with global settings path resolution in the UI API layer. The active project's path is dynamically looked up via `~/.factory/projects.json`, resolving Next.js `process.cwd()` desync issues.
-*   **ADR-003: High-Fidelity & Accessible UI Design System** (Status: Implemented / Approved)
-    *   Redesigned the entire dashboard interface to support highly responsive layouts, sleek HSL-tailored dark modes, unified settings active integration models, and WCAG-compliant high-contrast colors (e.g. indigo visual action gates).
-*   **ADR-004: Spec Architecture & Naming Convention** (Status: Implemented / Approved)
-    *   Renamed `app.yaml` → `scaffold.yaml` across engine, UI, and skills to accurately reflect its role as a planning/scaffolding specification rather than a build artifact.
-*   **ADR-005: CLI Agent Delegation Workflow** (Status: Validated)
-    *   Confirmed `delegate_to_cli → agy` pattern for autonomous TS project validation: directory inspection, `npm run build`, execution, ESLint, and state reporting.
-
----
+* **ADR-001: Agentic Build Engine & Tool-Calling Loop** | Transitioned from rigid linear pipelines to interactive, multi-turn LLM tool-calling (Gemini/Ollama/OpenAI) executing directly in target folders.
+* **ADR-002: Dynamic Multi-Project Bridge** | Replaced hardcoded `process.cwd()` lookups with global `~/.factory/projects.json` resolution for dynamic UI API path mapping.
+* **ADR-003: High-Fidelity & Accessible UI** | Implemented responsive HSL-tailored dark modes, unified settings integration, and WCAG-compliant high-contrast indigo action gates.
+* **ADR-004: Spec Architecture & Naming Convention** | Standardized `app.yaml` → `scaffold.yaml` across engine, UI, and skills to reflect planning/scaffolding semantics over build artifacts.
+* **ADR-005: CLI Agent Delegation Workflow** | Validated `delegate_to_cli → agy` pattern for autonomous TS project validation (dir inspection, `npm run build`, ESLint, state reporting).
+* **ADR-006: Multi-Agent CLI Routing (`agy` & `pi`)** | Extended delegation to support `pi` agent sessions with MCP extensions and skill loading, enabling parallel validation and context-aware execution.
 
 ## 2. Chronology of Major Milestones & What Worked
 
-*   **Milestone 1: Next.js 15 UI Redesign & Active Integration Views**
-    *   Replaced default Tailwind forms with modal-driven settings active integration views, unified preferences lists, and responsive grid layouts.
-*   **Milestone 2: Spec Viewer & YAML Editor Restore**
-    *   Restored the interactive specification YAML viewer and editor in the stories sliding details sheet. Solved empty detail drawer states by correctly deriving target types.
-*   **Milestone 3: Daemon Process Controller Integration**
-    *   Implemented background daemon starts, stops, restarts, and PID status monitoring directly in the Next.js UI using SSE streams for real-time validation logging.
-*   **Milestone 4: Board State & Layout Optimization**
-    *   Routed unsynced stories to Backlog, removed redundant Issues column, and synchronized mobile carousel dot indicators with dynamic column counts.
-*   **Milestone 5: Skill & Spec Refactor**
-    *   Flattened `spec-bootstrap` skill (removed epics/dependsOn), added `app-context` skill for project scanning, and executed global `app.yaml` → `scaffold.yaml` rename across engine, UI, and skills.
-*   **Milestone 6: CLI Delegation & Validation Pipeline**
-    *   Validated `delegate_to_cli → agy` workflow for TS projects: successfully handles directory state checks, `package.json`/`tsconfig` inspection, `npm run build`, execution, ESLint, and delivery reporting.
+* **M1: Next.js 15 UI Redesign** | Replaced default Tailwind forms with modal-driven settings, unified preferences, and responsive grid layouts.
+* **M2: Spec Viewer & YAML Editor Restore** | Restored interactive YAML viewer/editor in sliding details sheet; resolved empty drawer states via dynamic target type derivation.
+* **M3: Daemon Process Controller** | Implemented background daemon lifecycle management (start/stop/restart/PID monitoring) via Next.js SSE streams for real-time validation logging.
+* **M4: Board State & Layout Optimization** | Routed unsynced stories to Backlog, deprecated redundant Issues column, and synchronized mobile carousel indicators with dynamic column counts.
+* **M5: Skill & Spec Refactor** | Flattened `spec-bootstrap` (removed epics/dependsOn), introduced `app-context` for project scanning, and executed global `app.yaml` → `scaffold.yaml` migration.
+* **M6: CLI Delegation & Validation Pipeline** | Validated `delegate_to_cli → agy` workflow for TS projects: successfully handles directory state checks, `package.json`/`tsconfig` inspection, `npm run build`, execution, ESLint, and delivery reporting.
+* **M7: Multi-Agent CLI Routing** | Extended delegation to `pi` agent sessions, confirming successful initialization with MCP adapters (`pi-mcp-adapter`, `headroom`) and skill context loading.
+* **M8: Global Spec Standardization** | Completed cross-repo `scaffold.yaml` adoption across engine, UI, and skills, eliminating semantic ambiguity in planning artifacts.
 
----
+## 3. Failure Post-Mortems & Anti-Patterns
 
-## 3. Failure Post-Mortems & Anti-Patterns ("What Didn't Work" and how it was resolved)
+### 1. Hardcoded Working Directory Resolution
+* **Symptom**: `/api/knowledge` returned empty responses; ADRs/heartbeats failed to render on `localhost:4090`.
+* **Root Cause**: API routes used relative paths (`../../.factory`) from `process.cwd()`, resolving incorrectly in Next.js dev environments.
+* **Fix**: Migrated to dynamic path resolution via `~/.factory/projects.json`, mapping project IDs to absolute disk paths.
 
-### 1. Hardcoded Working Directory Steps
-*   **Symptom**: `/api/knowledge` returned an empty response, failing to display ADRs or heartbeats on `http://localhost:4090/#knowledge`.
-*   **Root Cause**: The API route resolved relative paths (`../../.factory`) from `process.cwd()`. In Next.js dev execution, this resolved to `/Users/pretheesh/Projects/`, which lacks any `.factory` configuration.
-*   **Remediation**: Transitioned all path lookups to read dynamically from the global `projects.json` file in the home directory (`~/.factory/projects.json`), mapping project ID keys directly to their actual paths.
+### 2. TypeScript Incremental Cache Desync
+* **Symptom**: `npx tsc --noEmit` passed locally but failed in UI subdirectory with phantom missing hook errors (`stats`, `setStats`).
+* **Root Cause**: Stale `tsconfig.tsbuildinfo` cache retained outdated type mappings after recent layout modifications.
+* **Fix**: Implemented cache purge (`rm tsconfig.tsbuildinfo`) as a standard debugging step for ghost type errors; enforced fresh compilation checks.
 
-### 2. TypeScript Incremental Build Cache (`tsconfig.tsbuildinfo`) Out-of-Sync
-*   **Symptom**: Running `npx tsc --noEmit` locally succeeded, but running it in the UI subdirectory produced false type errors claiming state hooks (`stats`, `setStats`) were missing, even though they were present and passed ESLint.
-*   **Root Cause**: TypeScript incremental compilation (`"incremental": true` in `tsconfig.json`) was using stale cached data inside `tsconfig.tsbuildinfo` that did not reflect recent layout modifications.
-*   **Remediation**: Cleared `tsconfig.tsbuildinfo` and re-ran the compilation check fresh. Stale incremental compiler caches should always be removed when debugging ghost type compilation errors.
-
-### 3. High-Contrast Accessibility (WCAG Compliance) Failures
-*   **Symptom**: Expert usability audits highlighted "white-on-white" text rendering on the main Build buttons, making the primary execution gates completely unreadable.
-*   **Root Cause**: Light-themed component backgrounds layered over white-bordered default text classes.
-*   **Remediation**: Upgraded button stylings to high-visibility indigo block colors to resolve readability contrast defects.
+### 3. WCAG High-Contrast Accessibility Defects
+* **Symptom**: "White-on-white" text rendering on primary Build buttons, causing critical readability failures.
+* **Root Cause**: Light-themed component backgrounds layered over default white text classes without explicit contrast overrides.
+* **Fix**: Enforced high-visibility indigo block colors for primary action gates; standardized WCAG AA contrast ratios across the design system.
 
 ### 4. LLM Tool-Calling & API Quota Failures (Ollama 403/400)
-*   **Symptom**: Queue jobs (`q_form_validation`) failed with `Ollama tool call error (403): subscription required` and `error (400): Value looks like object, but can't find closing '}' symbol`.
-*   **Root Cause**: LLM output contained malformed JSON objects missing closing braces, and the selected Ollama model tier hit rate-limit/subscription gates during high-frequency tool calls.
-*   **Remediation**: Implemented strict JSON schema validation pre-tool-call, added graceful 403 fallback routing to alternative models, and enforced brace-pairing checks in the LLM prompt template.
+* **Symptom**: Queue jobs failed with `403: subscription required` and `400: missing closing '}' symbol`.
+* **Root Cause**: Malformed JSON outputs from LLM tool calls; selected Ollama model tiers hit rate-limit/subscription gates during high-frequency polling.
+* **Fix**: Implemented strict JSON schema validation pre-tool-call, added graceful 403 fallback routing to alternative models, and enforced brace-pairing checks in prompt templates.
 
 ### 5. YAML Story Resolution & Path Mismatch
-*   **Symptom**: `YAML parse error (auto-fix exhausted): Feature story not found: /Users/pretheesh/Projects/factory/features/dynamic-greeting-display-component.yaml`.
-*   **Root Cause**: Queue engine attempted to resolve a feature story path that was referenced in the spec but not yet materialized on disk, causing the auto-fix loop to exhaust without a fallback.
-*   **Remediation**: Added pre-queue path existence validation, implemented lazy file creation for missing story slugs, and capped auto-fix retries to prevent infinite loop exhaustion.
+* **Symptom**: `YAML parse error (auto-fix exhausted): Feature story not found: [.../dynamic-greeting-display-component.yaml]`.
+* **Root Cause**: Queue engine referenced unmaterialized feature story paths without fallback logic, causing infinite auto-fix loop exhaustion.
+* **Fix**: Added pre-queue path existence validation, implemented lazy file creation for missing slugs, and capped auto-fix retries to prevent loop exhaustion.

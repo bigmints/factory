@@ -222,15 +222,34 @@ async function callGeminiWithTools(
         body.system_instruction = { parts: [{ text: systemInstruction }] };
     }
 
-    const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-    );
+    const MAX_RETRIES = 3;
+    let res: Response | undefined;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+            );
 
-    if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`Gemini error (${res.status}): ${txt.slice(0, 400)}`);
+            if (!res.ok) {
+                if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
+                    await new Promise(r => setTimeout(r, attempt * 2000));
+                    continue;
+                }
+                const txt = await res.text();
+                throw new Error(`Gemini error (${res.status}): ${txt.slice(0, 400)}`);
+            }
+            break;
+        } catch (e: any) {
+            if (attempt < MAX_RETRIES) {
+                await new Promise(r => setTimeout(r, attempt * 2000));
+                continue;
+            }
+            throw e;
+        }
     }
+
+    if (!res) throw new Error('Gemini fetch failed completely');
 
     const data = await res.json();
     const candidate = data.candidates?.[0];
@@ -322,7 +341,7 @@ async function callOpenAICompatWithTools(
 
         if (!res.ok) {
             const body = await res.text();
-            throw new Error(`Provider error (${res.status}): ${body.slice(0, 300)}`);
+            throw new Error(`Provider error (${res.status}) on ${baseUrl}/chat/completions: ${body.slice(0, 300)}`);
         }
 
         const data = await res.json();

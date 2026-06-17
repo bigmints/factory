@@ -19,6 +19,7 @@ import { log, logError } from './log.ts';
 import { writeHeartbeat } from './toon.ts';
 import { updateStoryStatus } from './story.ts';
 import { loadSettings } from './config.ts';
+import { AcpAgentAdapter } from './acp-client.ts';
 import {
     buildCliInvocation,
     buildSpawnEnv,
@@ -184,7 +185,7 @@ async function runOrchestratorLoop(
     let totalTokensOut = 0;
 
     // TPM loop guards
-    const recentTools: string[] = [];  // track last N tool calls to detect orchestrator-level loops
+    const recentTurnTools: string[][] = [];  // track tools called per turn
     let delegationCount = 0;           // how many times we've called delegate_to_cli or intervene
     let lastCliErrorSig = '';          // signature of last CLI error (to detect repeated failures)
 
@@ -218,6 +219,8 @@ async function runOrchestratorLoop(
         }
 
         messages.push({ role: 'assistant', content: response.text, tool_calls: toolCalls });
+
+        const currentTurnTools: string[] = [];
 
         for (const tc of toolCalls) {
             const toolName = tc.function?.name || tc.name || 'unknown';
@@ -267,15 +270,18 @@ async function runOrchestratorLoop(
                 ctx.logs.push({ level: 'info', message: result.content });
             }
 
-            recentTools.push(toolName);
+            currentTurnTools.push(toolName);
         }
 
+        recentTurnTools.push(currentTurnTools);
+
         // Orchestrator-level loop guard: same tool called 3 turns in a row
-        if (recentTools.length >= 3) {
-            const last3 = recentTools.slice(-3);
-            if (last3.every(t => t === last3[0]) && last3[0] !== 'mark_story_done' && last3[0] !== 'mark_story_failed') {
-                const loopMsg = `⚠️ MANAGER ALERT: You have called '${last3[0]}' three turns in a row. This is a loop. You must now call mark_story_done or mark_story_failed immediately.`;
-                log('⚠', `Orchestrator loop detected on tool: ${last3[0]}`);
+        if (recentTurnTools.length >= 3) {
+            const last3 = recentTurnTools.slice(-3);
+            const allTools = last3.flat();
+            if (allTools.length > 0 && allTools.every(t => t === allTools[0]) && allTools[0] !== 'mark_story_done' && allTools[0] !== 'mark_story_failed') {
+                const loopMsg = `⚠️ MANAGER ALERT: You have called '${allTools[0]}' across three turns in a row without making progress. This is a loop. You must now call mark_story_done or mark_story_failed immediately.`;
+                log('⚠', `Orchestrator loop detected on tool: ${allTools[0]}`);
                 messages.push({ role: 'user', content: loopMsg });
             }
         }
@@ -570,6 +576,25 @@ async function toolDelegateToCli(
     logStream.on('error', () => { /* ignore stream errors to prevent crash */ });
     logStream.write(`\n${'='.repeat(60)}\n[${new Date().toISOString()}] delegate_to_cli → ${ctx.cliName}\nCWD: ${resolvedCwd}\n${'='.repeat(60)}\n`);
     log('→', `CLI log: tail -f ${cliLogPath}`);
+
+    if (ctx.cliName === 'pi') {
+        const adapter = new AcpAgentAdapter(resolvedCwd, cliLogPath);
+        try {
+            const output = await adapter.executeTurn(prompt);
+            
+            const fileTree = scanDirTree(resolvedCwd);
+            ctx.files = fileTree;
+            const fileCount = fileTree.length;
+            const fileSummary = fileCount > 0
+                ? `\n\nFiles in target directory: ${fileCount}\n${fileTree.slice(0, 30).map(f => `  ${f.filename}`).join('\n')}${fileCount > 30 ? `\n  ... and ${fileCount - 30} more` : ''}`
+                : '';
+                
+            return { content: `DELIVERED\n\n${output.slice(-3000)}${fileSummary}`, isError: false };
+        } catch (e: any) {
+            logError('pi-acp execution failed', e);
+            return { content: `FAILED\n\n${e.message}`, isError: true };
+        }
+    }
 
     return new Promise<ToolResult>((resolve: (r: ToolResult) => void) => {
         const child = spawn(invocation.binary, invocation.args, {

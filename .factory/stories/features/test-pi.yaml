@@ -1,0 +1,14 @@
+appName: test
+name: Test PI ACP
+description: Test story
+status: done
+cli: pi
+stack:
+  framework: node
+  packageManager: npm
+  linter: eslint
+target:
+  app: test
+phase: 1
+acceptance_criteria:
+  - Output hello world

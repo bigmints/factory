@@ -1,0 +1,6 @@
+id: test-1
+title: Dummy Story
+type: feature
+status: queue
+threadId: null
+feature: Verify ACP orchestration with pi

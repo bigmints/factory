@@ -2,3 +2,18 @@
   status: pending
   threadId: null
   createdAt: 2026-06-17T00:00:00Z
+- id: q_1781721105307_oqe50s
+  storyFile: features/fix-test-pi.yaml
+  kind: FeatureStory
+  status: ready-to-build
+  priority: 0
+  phase: 0
+  dependsOn: []
+  engine: factory
+  addedAt: 2026-06-17T18:31:45.307Z
+  startedAt: null
+  completedAt: null
+  output: ""
+  error: null
+  errorCategory: null
+  durationMs: null

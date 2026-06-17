@@ -2,14 +2,12 @@
 
 ## 1. Architectural Context & Key ADR Highlights
 
-The Factory platform orchestrates multi-agent tasks, spec validation, and autonomous build pipelines. Core architectural decisions are codified below:
-
-* **ADR-001: Agentic Build Engine & Tool-Calling Loop** | Transitioned from rigid linear pipelines to interactive, multi-turn LLM tool-calling (Gemini/Ollama/OpenAI) executing directly in target folders.
-* **ADR-002: Dynamic Multi-Project Bridge** | Replaced hardcoded `process.cwd()` lookups with global `~/.factory/projects.json` resolution for dynamic UI API path mapping.
-* **ADR-003: High-Fidelity & Accessible UI** | Implemented responsive HSL-tailored dark modes, unified settings integration, and WCAG-compliant high-contrast indigo action gates.
+* **ADR-001: Agentic Build Engine & Tool-Calling Loop** | Transitioned from rigid linear pipelines to interactive, multi-turn LLM tool-calling (Gemini/Ollama/OpenAI) executing directly in target folders to eliminate blind execution.
+* **ADR-002: Dynamic Multi-Project Bridge** | Replaced hardcoded `process.cwd()` lookups with global `~/.factory/projects.json` resolution for dynamic UI API path mapping and cross-project context switching.
+* **ADR-003: High-Fidelity & Accessible UI** | Implemented responsive HSL-tailored dark modes, unified settings integration, and WCAG-compliant high-contrast indigo action gates to resolve readability defects.
 * **ADR-004: Spec Architecture & Naming Convention** | Standardized `app.yaml` → `scaffold.yaml` across engine, UI, and skills to reflect planning/scaffolding semantics over build artifacts.
 * **ADR-005: CLI Agent Delegation Workflow** | Validated `delegate_to_cli → agy` pattern for autonomous TS project validation (dir inspection, `npm run build`, ESLint, state reporting).
-* **ADR-006: Multi-Agent CLI Routing (`agy` & `pi`)** | Extended delegation to support `pi` agent sessions with MCP extensions and skill loading, enabling parallel validation and context-aware execution.
+* **ADR-006: Multi-Agent CLI Routing (`agy` & `pi`)** | Extended delegation to support `pi` agent sessions with MCP extensions (`pi-mcp-adapter`, `headroom`) and skill context loading (`toon-context`), enabling parallel validation and context-aware execution.
 
 ## 2. Chronology of Major Milestones & What Worked
 
@@ -19,10 +17,13 @@ The Factory platform orchestrates multi-agent tasks, spec validation, and autono
 * **M4: Board State & Layout Optimization** | Routed unsynced stories to Backlog, deprecated redundant Issues column, and synchronized mobile carousel indicators with dynamic column counts.
 * **M5: Skill & Spec Refactor** | Flattened `spec-bootstrap` (removed epics/dependsOn), introduced `app-context` for project scanning, and executed global `app.yaml` → `scaffold.yaml` migration.
 * **M6: CLI Delegation & Validation Pipeline** | Validated `delegate_to_cli → agy` workflow for TS projects: successfully handles directory state checks, `package.json`/`tsconfig` inspection, `npm run build`, execution, ESLint, and delivery reporting.
-* **M7: Multi-Agent CLI Routing** | Extended delegation to `pi` agent sessions, confirming successful initialization with MCP adapters (`pi-mcp-adapter`, `headroom`) and skill context loading.
+* **M7: Multi-Agent CLI Routing** | Extended delegation to `pi` agent sessions, confirming successful initialization with MCP adapters and skill context loading.
 * **M8: Global Spec Standardization** | Completed cross-repo `scaffold.yaml` adoption across engine, UI, and skills, eliminating semantic ambiguity in planning artifacts.
+* **M9: Board Layout & Mobile Sync** | Removed standalone 'Uncategorized' section, enforced 4-column grid when Issues present, auto-included new columns in mobile carousel dot indicators.
+* **M10: Spec & Skill Architecture Overhaul** | Simplified `spec-bootstrap` to flat story structure, deployed `app-context` skill for project scanning, standardized `scaffold.yaml` nomenclature across all engine/UI/skill layers.
+* **M11: Multi-Agent CLI Validation Pipeline** | Confirmed `agy` agent successfully builds/lints TS projects; `pi` agent reliably initializes sessions with MCP extensions (`pi-mcp-adapter`, `headroom`) and loads `toon-context` skills for parallel execution.
 
-## 3. Failure Post-Mortems & Anti-Patterns
+## 3. Failure Post-Mortems & Anti-Patterns ("What Didn't Work" and how it was resolved)
 
 ### 1. Hardcoded Working Directory Resolution
 * **Symptom**: `/api/knowledge` returned empty responses; ADRs/heartbeats failed to render on `localhost:4090`.

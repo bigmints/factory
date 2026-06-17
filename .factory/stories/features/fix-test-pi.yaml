@@ -1,0 +1,62 @@
+name: "Fix: test-pi"
+description: >-
+  Automated fix task created by Factory TPM.
+
+
+  Original story: .factory/stories/features/test-pi.yaml
+
+  Issue: CLI reported DELIVERED but did not create the required project files.
+  The target directory `/Users/pretheesh/Projects/factory/test` is missing
+  `package.json`, `tsconfig.json`, `eslint.config.js`, and `src/index.ts`. No
+  build script exists.
+status: ready-to-build
+feature:
+  name: Fix
+  slug: fix
+target: {}
+stack: {}
+acceptance_criteria: []
+fix_instructions: >-
+  Create a Node.js + TypeScript project in
+  `/Users/pretheesh/Projects/factory/test` that outputs "hello world".
+
+
+  Steps:
+
+  1. Create `package.json` with:
+     - name: "test"
+     - scripts: { "build": "tsc", "start": "node dist/index.js", "lint": "eslint ." }
+     - dependencies: {}
+     - devDependencies: { "typescript": "^5.0.0", "tsx": "^4.0.0", "eslint": "^9.0.0" }
+
+  2. Create `tsconfig.json` with strict TypeScript settings:
+     - rootDir: "src"
+     - outDir: "dist"
+     - target: "ES2020"
+     - module: "commonjs"
+     - strict: true
+
+  3. Create `eslint.config.js` with a basic TypeScript config.
+
+
+  4. Create `src/index.ts` with: `console.log("hello world");`
+
+
+  5. Run `npm install` to install dependencies.
+
+
+  6. Run `npm run build` to compile TypeScript.
+
+
+  7. Run `npm run lint` to verify linting passes.
+
+
+  8. Run `npm start` to verify output is "hello world".
+
+
+  9. Print DELIVERY COMPLETE when all checks pass.
+original_story: .factory/stories/features/test-pi.yaml
+phase: 0
+dependsOn: []
+createdBy: factory-tpm
+createdAt: 2026-06-17T18:31:45.299Z

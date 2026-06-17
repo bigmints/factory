@@ -79,6 +79,7 @@ export class AcpAgentAdapter {
             });
 
             this.appendLog(`\n--- Prompt Finished: ${promptResponse.stopReason} ---\n`);
+            if (promptResponse.stopReason === 'error') throw new Error('pi returned error during prompt execution');
             
             return this.outputBuffer;
         } finally {

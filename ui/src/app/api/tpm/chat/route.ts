@@ -1041,8 +1041,9 @@ You have access to the following tools. Use them proactively to fulfill user req
 - When user references @story-name in their message, call get_story to get its details first.
 - For "what's the status?" type questions, call get_project_status AND list_stories together.
 - After write operations, confirm the action with the returned result.
-- When writing stories, always use userStory + acceptanceCriteria (Given/When/Then) format.
-- Speak professionally and concisely. Be the intelligent conductor.${skillSection}`;
+- App story YAML MUST include: \`appName\` (string), \`description\`, \`phase\`, \`status\`, and \`stack\` (object with \`framework\` and \`packageManager\`).
+- Feature story YAML MUST include: \`name\` (string), \`description\`, \`status\`, \`phase\`, \`feature\` (object with name, slug), \`target\` (object with app), \`dependsOn\`, \`dependencies\`, and \`acceptance_criteria\`.
+- Speak professionally and concisely. Be the intelligent conductor.\${skillSection}\`;
 
           const localMessages: any[] = [
             { role: 'system', content: tpmSystemPrompt },

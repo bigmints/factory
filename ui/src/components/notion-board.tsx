@@ -1836,7 +1836,7 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
                           size="sm"
                           className="h-7 px-2.5 gap-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-all flex items-center shrink-0"
                           onClick={() => {
-                            handleEnqueue(selectedItem.data.file, selectedItem.data.kind);
+                            handleSingleBuild(selectedItem.data.file, selectedItem.data.kind);
                             setDrawerOpen(false);
                           }}
                         >

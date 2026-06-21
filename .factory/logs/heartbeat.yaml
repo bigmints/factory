@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: 2026-06-17T18:51:47.727Z
-  host: BigMac-2.local
-  task: orchestrating turn 1
+  last_seen: "2026-06-17T18:52:35Z"
+  host: "BigMac-2"
+  task: "post-commit: factory: test"
   status: alive

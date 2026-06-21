@@ -48,6 +48,14 @@ export class AcpAgentAdapter {
                     const tc = params.update.toolCall || {};
                     this.appendLog(`\n[Tool Call Complete] ${tc.name}\n`);
                 }
+            },
+            requestPermission: async (params: any) => {
+                return {
+                    outcome: {
+                        outcome: 'selected',
+                        optionId: params.options?.[0]?.id || 'allow'
+                    }
+                };
             }
         }), stream);
     }
@@ -81,7 +89,7 @@ export class AcpAgentAdapter {
             });
 
             this.appendLog(`\n--- Prompt Finished: ${promptResponse.stopReason} ---\n`);
-            if (promptResponse.stopReason === 'error') throw new Error('pi returned error during prompt execution');
+            if ((promptResponse.stopReason as string) === 'error') throw new Error('pi returned error during prompt execution');
             
             return this.outputBuffer;
         } finally {

@@ -342,6 +342,10 @@ factory hooks install                   Install git hooks
 3. Update `engine/orchestrate.ts` prompts to use the field in context
 4. Update story template with an example
 
+### Writing YAML Stories
+
+- **YAML Syntax Warning:** If any string value contains a colon followed by a space (e.g. `background: colorScheme.surface (light: #FFFFFF)`), it **MUST** be wrapped in quotes (`"..."`). Otherwise, the YAML parser will fail with a "Nested mappings are not allowed in compact mappings" error.
+
 ### Adding a new engine module
 
 1. Create `engine/<module>.ts`

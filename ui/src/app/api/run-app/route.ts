@@ -135,6 +135,20 @@ export async function GET() {
       return NextResponse.json({ status: 'stopped', error: 'No active project' });
     }
 
+    // Check if package.json exists in project or subdirectories
+    let hasPackageJson = false;
+    try {
+      const appDir = resolveAppDir(project.path);
+      hasPackageJson = existsSync(join(appDir, 'package.json'));
+    } catch {}
+
+    if (!hasPackageJson) {
+      return NextResponse.json({
+        status: 'unsupported',
+        error: 'Local run is currently supported only for Node / React apps'
+      });
+    }
+
     const factoryDir = join(project.path, '.factory');
     const pidFile = join(factoryDir, 'run-app.pid');
     const logFile = join(factoryDir, 'run-app.log');
@@ -152,9 +166,6 @@ export async function GET() {
       } catch {}
     }
 
-    const checkPort = port || 3000;
-    const isPortActive = await checkPortActive(checkPort);
-
     // Read stored PID if it exists
     if (existsSync(pidFile)) {
       try {
@@ -163,6 +174,12 @@ export async function GET() {
         pid = null;
       }
     }
+
+    const checkPort = port || 3000;
+    const hasGlobalRecord = !!globalProcesses.runAppProcesses[project.id];
+    
+    // We only check if the port is active if we actually have a running or starting process
+    const isPortActive = (pid || hasGlobalRecord) ? await checkPortActive(checkPort) : false;
 
     let status = 'stopped';
     if (isPortActive) {

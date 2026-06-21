@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StoryEditor } from '@/components/story-editor';
+import { useFactoryStore } from '@/stores/factory-store';
 
 // ─── Board sub-modules ───
 import type {
@@ -61,27 +62,30 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
   const handleDrop = async (_e: React.DragEvent, _targetStatus: string) => {};
 
-  // ─── Active Project Tracking ───
-  // We track the active project ID so we can detect project switches and
-  // immediately clear stale data from a different project before refetching.
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  // Core Data — from Zustand store (single source of truth)
+  const stories = useFactoryStore(s => s.stories) as any as PhysicalStory[];
+  const featureStories = useFactoryStore(s => s.featureStories) as any as PhysicalStory[];
+  const queueItems = useFactoryStore(s => s.queueItems) as any as QueueItem[];
+  const queueRunning = useFactoryStore(s => s.queueRunning);
+  const storeActiveProjectId = useFactoryStore(s => s.activeProjectId);
+  const fetchStories = useFactoryStore(s => s.fetchStories);
+  const fetchQueue = useFactoryStore(s => s.fetchQueue);
+
+  // Active project — use store value, keep local copy for project switch detection
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(storeActiveProjectId);
+
+  // Keep local activeProjectId in sync with store
+  useEffect(() => {
+    setActiveProjectId(storeActiveProjectId);
+  }, [storeActiveProjectId]);
 
   const fetchActiveProject = useCallback(async () => {
-    try {
-      const res = await fetch('/api/projects');
-      const data = await res.json();
-      setActiveProjectId(data.activeId || null);
-    } catch {
-      // Silently fail — not critical
-    }
+    // No longer needed — activeProjectId comes from the store.
+    // The store's fetchProjects() handles this.
   }, []);
 
-  // Core Data
-  const [stories, setStories] = useState<PhysicalStory[]>([]);
-  const [featureStories, setFeatureStories] = useState<PhysicalStory[]>([]);
+  // Local data (not yet in store)
   const [appRollup, setAppRollup] = useState<AppRollupData | null>(null);
-  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
-  const [queueRunning, setQueueRunning] = useState(false);
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string | null>(null);
   const [buildLogsOpen, setBuildLogsOpen] = useState(false);
 
@@ -180,28 +184,9 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
 
   // ─── Data Sync Hooks ───
 
-  const fetchQueue = useCallback(async () => {
-    try {
-      const res = await fetch('/api/queue');
-      const data = await res.json();
-      setQueueItems(data.items || []);
-      const running = (data.items || []).some((i: any) => i.status === 'running');
-      setQueueRunning(running || data.isRunning || false);
-    } catch {
-      console.error('Failed to fetch queue');
-    }
-  }, []);
+  // Stories and queue data come from the Zustand store.
+  // No local fetchStories or fetchQueue needed.
 
-  const fetchStories = useCallback(async () => {
-    try {
-      const res = await fetch('/api/stories');
-      const data = await res.json();
-      setStories(data.stories || []);
-      setFeatureStories(data.featureStories || []);
-    } catch {
-      console.error('Failed to fetch stories');
-    }
-  }, []);
 
   const fetchRunStatus = useCallback(async () => {
     try {
@@ -257,29 +242,20 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
     }
   }, []);
 
-  // Detect project changes and reset stale data immediately.
-  // projectRefreshKey bumps when the user switches project from the sidebar.
   useEffect(() => {
-    // Clear all project-scoped data so stale stories from the previous project
-    // don't appear while fresh data is loading.
-    setStories([]);
-    setFeatureStories([]);
+    // Clear local project-scoped data on project switch.
     setAppRollup(null);
-    setQueueItems([]);
-    setQueueRunning(false);
-    // Re-fetch the active project ID so activeProjectId stays in sync.
-    fetchActiveProject();
-  }, [projectRefreshKey, fetchActiveProject]);
+  }, [projectRefreshKey]);
 
-  // Combined Polling Orchestrator — restarts whenever the project changes.
+  // Combined Polling — only poll data NOT in the Zustand store.
+  // stories, featureStories, queueItems, queueRunning are from the store.
+  // We still poll: rollup, run status, bootstrap status.
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchRollup(true), fetchStories(), fetchQueue(), fetchRunStatus(), fetchBootstrapStatus()]).finally(() => setLoading(false));
+    Promise.all([fetchRollup(true), fetchRunStatus(), fetchBootstrapStatus()]).finally(() => setLoading(false));
 
     const dataInterval = setInterval(() => {
       fetchRollup(true);
-      fetchStories();
-      fetchQueue();
     }, 4000);
 
     const runInterval = setInterval(() => {
@@ -290,9 +266,8 @@ export function NotionBoard({ initialView = 'list', onNavigateToBuild, projectRe
       clearInterval(dataInterval);
       clearInterval(runInterval);
     };
-    // Re-run when projectRefreshKey changes so the board reflects the new project immediately.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchRollup, fetchStories, fetchQueue, fetchRunStatus, fetchBootstrapStatus, projectRefreshKey]);
+  }, [fetchRollup, fetchRunStatus, fetchBootstrapStatus, projectRefreshKey]);
 
   // Dedicated Queue Log Polling
   useEffect(() => {

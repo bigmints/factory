@@ -10,26 +10,14 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useFactoryStore, type QueueItem as StoreQueueItem } from '@/stores/factory-store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface QueueItem {
-  id: string;
-  specFile?: string;
-  storyFile?: string;
+// QueueItem now comes from the Zustand store.
+// Extend with fields that the build page needs locally.
+interface QueueItem extends StoreQueueItem {
   displayName?: string;
-  kind: string;
-  status: 'draft' | 'ready-to-build' | 'building' | 'failed' | 'done' | string;
-  priority: number;
-  phase?: number;
-  engine?: string;
-  addedAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  output: string;
-  error: string | null;
-  durationMs: number | null;
-  dependsOn?: string[];
 }
 
 interface QueueStats {
@@ -239,8 +227,16 @@ function CompletedSummaryBanner({ itemId, durationMs, completedAt }: { itemId: s
 // ─── Build Page ───────────────────────────────────────────────────────────────
 
 export function BuildPage() {
-  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
-  const [queueRunning, setQueueRunning] = useState(false);
+  // ── Zustand store (single source of truth for queue data) ──
+  const storeQueueItems = useFactoryStore(s => s.queueItems);
+  const storeQueueRunning = useFactoryStore(s => s.queueRunning);
+  const fetchQueue = useFactoryStore(s => s.fetchQueue);
+
+  // Cast store items to local QueueItem type (adds optional fields)
+  const queueItems = storeQueueItems as QueueItem[];
+  const queueRunning = storeQueueRunning;
+
+  // ── UI-local state (not shared with other components) ──
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [buildOutput, setBuildOutput] = useState('');
   const [aiSummary, setAiSummary] = useState<{ text: string; ts: string } | null>(null);
@@ -304,23 +300,8 @@ export function BuildPage() {
   }, []);
 
   // ── Data ──────────────────────────────────────────────────────────────────
-
-  const fetchQueue = useCallback(async () => {
-    try {
-      const res = await fetch('/api/queue');
-      if (!res.ok) return;
-      const data = await res.json();
-      const items: QueueItem[] = data.items ?? data ?? [];
-      setQueueItems(items);
-      setQueueRunning(items.some(i => i.status === 'building'));
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    fetchQueue();
-    const interval = setInterval(fetchQueue, 3000);
-    return () => clearInterval(interval);
-  }, [fetchQueue]);
+  // Queue data comes from the Zustand store (polled by dashboard.tsx).
+  // No local fetchQueue or setInterval needed here.
 
   // ── SSE: live log + AI summary ─────────────────────────────────────────
   useEffect(() => {

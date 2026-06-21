@@ -1,720 +1,356 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useSyncExternalStore, useRef } from 'react';
 import { toast } from 'sonner';
-import { useFactoryStore, type StoryItem, type FeatureStoryItem } from '@/stores/factory-store';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb';
-import { Separator } from '@/components/ui/separator';
-import { AddProject } from '@/components/add-project';
-import { BuildLog } from '@/components/build-log';
-import { ReportViewer } from '@/components/report-viewer';
-import { KnowledgeView } from '@/components/knowledge-view';
-import { TestPlaceholder } from '@/components/test-placeholder';
-import { DeployPlaceholder } from '@/components/deploy-placeholder';
-import { SettingsView } from '@/components/settings-view';
-import { SkillsView } from '@/components/skills-view';
-import { NotionBoard } from '@/components/notion-board';
-import { BuildPage } from '@/components/build-page';
-import { TpmChat } from '@/components/tpm-chat';
-import { IntegrationsView } from '@/components/integrations-view';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { useFactoryStore } from '@/stores/factory-store';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  CheckCircle2, Trash2, Settings, Moon, Sun, MessageSquare,
+  ArrowRight, ChevronDown, Settings2, Activity, Lightbulb,
+  Shield, Zap, MoreHorizontal, Terminal, X, StopCircle
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, AlertCircle, X, Terminal, PanelRight } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { useTpmChat } from '@/hooks/use-tpm-chat';
+import { tpmStore, type ChatMessage } from '@/lib/tpm-chat-store';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-
-// Story and FeatureStoryItem types imported from '@/stores/factory-store'
-
-interface ValidationCheck {
-  passed: boolean;
-  name: string;
-  message: string;
-}
-
-const VALID_TABS = ['plan', 'tpm', 'build', 'test', 'deploy', 'roadmap', 'queue', 'dashboard', 'skills', 'reports', 'knowledge', 'projects', 'integrations', 'settings'];
-
-const TAB_TITLES: Record<string, string> = {
-  plan: "Stories",
-  build: "Autonomous Build Queue",
-  test: "Validation Gates & Tests",
-  deploy: "Production Deployments",
-  dashboard: "Stories",
-  skills: "Custom Agentic Skills",
-  reports: "Build Performance Analytics",
-  knowledge: "Context & Architecture Decisions (ADR)",
-  integrations: "Connected Services & Integrations",
-  settings: "Workspace Settings",
-  projects: "Active Workspaces & Projects",
-};
+const EMPTY_MESSAGES: ChatMessage[] = [];
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('plan');
-  const [showAddProject, setShowAddProject] = useState(false);
-  const [tpmChatOpen, setTpmChatOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'stories' | 'queue' | 'completed'>('stories');
+  const [input, setInput] = useState('');
+  
+  const { theme, setTheme } = useTheme();
 
-  // ─── Store selectors (data-fetching state) ───────────────
-  const stories = useFactoryStore(s => s.stories);
-  const featureStories = useFactoryStore(s => s.featureStories);
-  const reportEntries = useFactoryStore(s => s.reportEntries);
-  const reportStats = useFactoryStore(s => s.reportStats);
-  const queueStatusMap = useFactoryStore(s => s.queueStatusMap);
-  const queueRunning = useFactoryStore(s => s.queueRunning);
-  const hasProjects = useFactoryStore(s => s.hasProjects);
-  const activeProject = useFactoryStore(s => s.activeProject);
-  const projectCount = useFactoryStore(s => s.projectCount);
-  const initialLoadDone = useFactoryStore(s => s.initialLoadDone);
-
-  // ─── Store actions ────────────────────────────────────────
-  const fetchStories = useFactoryStore(s => s.fetchStories);
-  const fetchQueue = useFactoryStore(s => s.fetchQueue);
-  const fetchProjects = useFactoryStore(s => s.fetchProjects);
-  const fetchReports = useFactoryStore(s => s.fetchReports);
   const fetchAll = useFactoryStore(s => s.fetchAll);
   const startPolling = useFactoryStore(s => s.startPolling);
   const stopPolling = useFactoryStore(s => s.stopPolling);
+  const activeProject = useFactoryStore(s => s.activeProject);
+  const projects = useFactoryStore(s => s.projects);
+  const setActiveProject = useFactoryStore(s => s.setActiveProject);
+  const stories = useFactoryStore(s => s.stories);
+  const featureStories = useFactoryStore(s => s.featureStories);
+  const queueStatusMap = useFactoryStore(s => s.queueStatusMap);
 
-  // ─── UI-local state ───────────────────────────────────────
-  const [loading, setLoading] = useState(true);
-  const [buildOutput, setBuildOutput] = useState('');
-  const [validationResult, setValidationResult] = useState<{
-    passed: boolean;
-    checks: ValidationCheck[];
-  } | null>(null);
-  const [activeAction, setActiveAction] = useState<{
-    type: 'validate' | 'build' | 'feature-validate' | 'feature-build';
-    file: string;
-  } | null>(null);
-  const [outputPanelOpen, setOutputPanelOpen] = useState(false);
-  const [projectRefreshKey, setProjectRefreshKey] = useState(0);
-  const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
-  const [isBuildingAll, setIsBuildingAll] = useState(false);
-  const [hasLoopWarning, setHasLoopWarning] = useState(false);
+  const { handleSend, streaming } = useTpmChat();
+  const messages = useSyncExternalStore(
+    (cb) => tpmStore.subscribe(cb),
+    () => tpmStore.messages,
+    () => EMPTY_MESSAGES
+  );
 
-  const logOffsetRef = useRef(0);
-  const isInitialLoad = useRef(true);
-
-
+  const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchAll().finally(() => {
-      setLoading(false);
-      setTimeout(() => {
-        isInitialLoad.current = false;
-      }, 200);
-    });
-    
-    const handleHashChange = () => {
-      if (typeof window !== 'undefined') {
-        const hash = window.location.hash.replace('#', '');
-        if (hash === 'roadmap' || hash === 'stories') {
-          setActiveTab('plan');
-          setShowAddProject(false);
-        } else if (hash === 'dashboard') {
-          setActiveTab('dashboard');
-          setShowAddProject(false);
-        } else if (hash === 'queue') {
-          setActiveTab('build');
-          setShowAddProject(false);
-        } else if (VALID_TABS.includes(hash)) {
-          if (hash === 'projects') {
-            setShowAddProject(true);
-          } else {
-            setActiveTab(hash);
-            setShowAddProject(false);
-          }
-        }
-      }
-    };
-
-    handleHashChange(); // Run once on mount
-    window.addEventListener('hashchange', handleHashChange);
-    
-    // Start coordinated polling
+    fetchAll();
     startPolling(5000);
-    
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-      stopPolling();
-    };
+    return () => stopPolling();
   }, [fetchAll, startPolling, stopPolling]);
 
-  const isHashMounted = useRef(false);
   useEffect(() => {
-    if (!isHashMounted.current) {
-      isHashMounted.current = true;
-      return;
+    if (endOfMessagesRef.current) {
+      endOfMessagesRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-    const tab = showAddProject ? 'projects' : activeTab;
-    if (window.location.hash.replace('#', '') !== tab) {
-      window.location.hash = tab;
-    }
-  }, [activeTab, showAddProject]);
+  }, [messages]);
 
-  useEffect(() => {
-    if (!queueRunning) {
-      logOffsetRef.current = 0;
-      return;
-    }
-    setBuildOutput('Waiting for build output...\n');
-    logOffsetRef.current = 0;
-    if (!isInitialLoad.current) {
-      setOutputPanelOpen(true);
-    }
-    const pollLog = async () => {
-      try {
-        const res = await fetch(`/api/queue/log?offset=${logOffsetRef.current}`);
-        const data = await res.json();
-        if (data.log) {
-          setBuildOutput(prev => prev + data.log);
-          logOffsetRef.current = data.offset;
-        }
-      } catch { /* ignore */ }
-    };
-    pollLog();
-    const interval = setInterval(pollLog, 1500);
-    return () => clearInterval(interval);
-  }, [queueRunning]);
-
-  useEffect(() => {
-    const isLoop = buildOutput.includes('⚠ CLI intervention: LOOP') || 
-                   buildOutput.includes('loop detected') || 
-                   buildOutput.includes('intervention: LOOP');
-    setHasLoopWarning(isLoop);
-  }, [buildOutput]);
-
-  const handleValidate = async (file: string) => {
-    setActiveAction({ type: 'validate', file });
-    setValidationResult(null);
-    setBuildOutput('');
-    setOutputPanelOpen(true);
-    try {
-      const res = await fetch('/api/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyFile: file, specFile: file }),
-      });
-      const data = await res.json();
-      setValidationResult({ passed: data.passed, checks: data.checks || [] });
-      if (data.raw) setBuildOutput(data.raw);
-      if (data.passed) {
-        toast.success('Validation passed', { description: file });
-      } else {
-        toast.error('Validation failed', { description: file });
-      }
-    } catch {
-      setValidationResult({ passed: false, checks: [{ passed: false, name: 'Error', message: 'Validation request failed' }] });
-      toast.error('Validation request failed');
-    } finally {
-      setActiveAction(null);
-    }
+  const onSend = () => {
+    if (!input.trim() || streaming) return;
+    handleSend(input, activeProject?.id);
+    setInput('');
   };
 
-  const handleBuild = async (file: string) => {
-    setActiveAction({ type: 'build', file });
-    setValidationResult(null);
-    setBuildOutput('Enqueuing story...\n');
-    setOutputPanelOpen(true);
-    try {
-      const enqueueRes = await fetch('/api/queue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyFile: file, specFile: file, kind: 'AppStory', engine: 'factory' }),
-      });
-      const enqueueData = await enqueueRes.json();
-      if (!enqueueRes.ok) {
-        setBuildOutput(`Enqueue failed: ${enqueueData.error || 'Unknown error'}`);
-        toast.error('Failed to enqueue', { description: enqueueData.error });
-        return;
+  // Combine and map stories
+  const items = [];
+  if (activeTab === 'stories') {
+    stories.forEach(s => items.push({ ...s, type: 'app', displayName: s.metadata?.name || s.file }));
+    featureStories.forEach(s => items.push({ ...s, type: 'feature', displayName: s.name || s.feature?.name || s.file }));
+  } else if (activeTab === 'queue') {
+    Object.values(queueStatusMap).forEach((q: any) => {
+      if (['ready-to-build', 'building', 'paused'].includes(q.status)) {
+        items.push({ type: 'queue', displayName: q.displayName || q.storyFile, status: q.status, addedAt: q.addedAt });
       }
-      setBuildOutput('Story queued. Starting build queue...\n');
-      toast.success('Story queued', { description: file });
-      const startRes = await fetch('/api/queue/start', { method: 'POST' });
-      const startData = await startRes.json();
-      if (!startRes.ok) {
-        setBuildOutput(`Queue start failed: ${startData.error || 'Unknown error'}`);
-        toast.error('Queue start failed', { description: startData.error });
-        return;
+    });
+  } else if (activeTab === 'completed') {
+    Object.values(queueStatusMap).forEach((q: any) => {
+      if (['done', 'failed'].includes(q.status)) {
+        items.push({ type: 'queue', displayName: q.displayName || q.storyFile, status: q.status, completedAt: q.completedAt });
       }
-      const output = startData.results
-        ?.map((r: any) => `[${r.status.toUpperCase()}] ${r.storyFile || r.specFile}\n${r.output || r.error || ''}`)
-        .join('\n\n') || 'Queue processed';
-      setBuildOutput(output);
-      await fetchStories();
-      if (startData.completed > 0) {
-        await fetchReports();
-        toast.success(`Build completed (${startData.completed} succeeded, ${startData.failed} failed)`);
-      } else if (startData.failed > 0) {
-        toast.error(`Build failed (${startData.failed} failed)`);
-      }
-    } catch {
-      setBuildOutput('Build request failed');
-      toast.error('Build request failed');
-    } finally {
-      setActiveAction(null);
-    }
-  };
+    });
+  }
 
-  const handleFeatureAction = async (file: string, action: 'validate' | 'build') => {
-    const actionType = action === 'validate' ? 'feature-validate' : 'feature-build';
-    setActiveAction({ type: actionType as any, file });
-    setValidationResult(null);
-    setBuildOutput(action === 'build' ? 'Enqueuing feature...\n' : '');
-    setOutputPanelOpen(true);
-    try {
-      if (action === 'build') {
-        const enqueueRes = await fetch('/api/queue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storyFile: file, specFile: file, kind: 'FeatureStory', engine: 'factory' }),
-        });
-        const enqueueData = await enqueueRes.json();
-        if (!enqueueRes.ok) {
-          setBuildOutput(`Enqueue failed: ${enqueueData.error || 'Unknown error'}`);
-          toast.error('Failed to enqueue', { description: enqueueData.error });
-          return;
-        }
-        setBuildOutput('Feature queued. Starting build queue...\n');
-        toast.success('Feature queued', { description: file });
-        const startRes = await fetch('/api/queue/start', { method: 'POST' });
-        const startData = await startRes.json();
-        if (!startRes.ok) {
-          setBuildOutput(`Queue start failed: ${startData.error || 'Unknown error'}`);
-          toast.error('Queue start failed', { description: startData.error });
-          return;
-        }
-        const output = startData.results
-          ?.map((r: any) => `[${r.status.toUpperCase()}] ${r.storyFile || r.specFile}\n${r.output || r.error || ''}`)
-          .join('\n\n') || 'Queue processed';
-        setBuildOutput(output);
-        await fetchStories();
-        if (startData.completed > 0) {
-          await fetchReports();
-          toast.success('Feature build completed');
-        } else if (startData.failed > 0) {
-          toast.error('Feature build failed');
-        }
-      } else {
-        const res = await fetch('/api/feature-build', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storyFile: file, specFile: file, action: 'validate' }),
-        });
-        const data = await res.json();
-        setBuildOutput(data.output || data.error || 'Unknown result');
-        if (data.success) {
-          toast.success('Feature validation passed', { description: file });
-        } else {
-          toast.error('Feature validation failed', { description: file });
-        }
-      }
-    } catch {
-      setBuildOutput(`Feature ${action} request failed`);
-      toast.error(`Feature ${action} failed`);
-    } finally {
-      setActiveAction(null);
-    }
-  };
+  const PROSE = "prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-1.5 prose-pre:rounded-md prose-pre:text-[10.5px] prose-code:text-[10.5px] prose-code:bg-white/10 prose-code:px-1 prose-code:py-px prose-code:rounded prose-code:font-mono prose-a:text-indigo-400";
 
-  const handleEnqueue = async (storyFile: string, kind: string, opts?: { phase?: number; dependsOn?: string[] }) => {
-    try {
-      const res = await fetch('/api/queue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyFile, specFile: storyFile, kind, phase: opts?.phase, dependsOn: opts?.dependsOn, engine: 'factory' }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setBuildOutput(`✓ Added "${storyFile}" to build queue`);
-        toast.success('Added to queue', { description: storyFile });
-        fetchQueue();
-        setActiveTab('build');
-      } else {
-        setBuildOutput(`✗ ${data.error}`);
-        toast.error('Failed to enqueue', { description: data.error });
-      }
-    } catch {
-      setBuildOutput('Failed to enqueue story');
-      toast.error('Failed to enqueue story');
-    }
-  };
-
-  const handleBuildAll = async () => {
-    setIsBuildingAll(true);
-    let enqueued = 0;
-    let skipped = 0;
-    let errors = 0;
-    try {
-      for (const story of stories) {
-        try {
-          const valRes = await fetch('/api/validate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storyFile: story.file, specFile: story.file, quick: true }),
-          });
-          const valData = await valRes.json();
-          if (!valRes.ok || !valData.passed) {
-            skipped++;
-            toast.warning(`Skipped: ${story.metadata?.name || story.file}`, {
-              description: `YAML issue: ${valData.errors?.[0] || valData.checks?.find((c: any) => !c.passed)?.message || 'Validation failed'}`,
-            });
-            continue;
-          }
-          const res = await fetch('/api/queue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storyFile: story.file, specFile: story.file, kind: 'AppStory', phase: 0, dependsOn: [], buildAll: true, engine: 'factory' }),
-          });
-          if (res.ok) enqueued++;
-          else {
-            const data = await res.json();
-            if (res.status !== 409) { errors++; toast.error(`Failed: ${story.file}`, { description: data.error }); }
-          }
-        } catch { errors++; }
-      }
-      const sortedFeatures = [...featureStories].sort((a, b) => (a.phase ?? 0) - (b.phase ?? 0));
-      for (const fs of sortedFeatures) {
-        try {
-          const valRes = await fetch('/api/validate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storyFile: fs.file, specFile: fs.file, quick: true }),
-          });
-          const valData = await valRes.json();
-          if (!valRes.ok || !valData.passed) {
-            skipped++;
-            toast.warning(`Skipped: ${String(fs.feature?.name || fs.file)}`, {
-              description: `YAML issue: ${valData.errors?.[0] || valData.checks?.find((c: any) => !c.passed)?.message || 'Validation failed'}`,
-            });
-            continue;
-          }
-          const res = await fetch('/api/queue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              storyFile: fs.file,
-              specFile: fs.file,
-              kind: 'FeatureStory',
-              phase: fs.phase ?? 0,
-              dependsOn: fs.dependsOn ?? [],
-              buildAll: true,
-              engine: 'factory',
-            }),
-          });
-          if (res.ok) enqueued++;
-          else {
-            const data = await res.json();
-            if (res.status !== 409) { errors++; toast.error(`Failed: ${String(fs.feature?.name || fs.file)}`, { description: data.error }); }
-          }
-        } catch { errors++; }
-      }
-      const parts: string[] = [];
-      if (errors > 0) parts.push(`${errors} errors`);
-      if (skipped > 0) parts.push(`${skipped} skipped`);
-      if (enqueued > 0) {
-        toast.success(`Queued ${enqueued} story${enqueued !== 1 ? 'ies' : ''}`, {
-          description: parts.length > 0 ? parts.join(', ') : 'Switch to Build tab to start processing',
-        });
-        setActiveTab('build');
-        fetchQueue();
-      } else if (errors > 0 || skipped > 0) {
-        toast.error(`No stories queued`, { description: parts.join(', ') });
-      } else {
-        toast.info('All stories are already in the queue');
-        setActiveTab('build');
-      }
-    } catch { toast.error('Build All failed'); }
-    finally { setIsBuildingAll(false); }
-  };
-
-  // Removed old render functions - fully replaced by NotionBoard
-
-  // ─── Render: Reports ────────────────────────────────────
-  const renderReports = () => (
-    <div className="space-y-4 md:space-y-6">
-      {loading ? (
-        <Skeleton className="h-[400px] md:h-[600px] rounded-lg" />
-      ) : (
-        <ReportViewer
-          entries={reportEntries}
-          stats={reportStats || { totalBuilds: 0, successfulBuilds: 0, failedBuilds: 0, uniqueSpecs: 0, totalTokensIn: 0, totalTokensOut: 0, avgDurationMs: 0, modelUsage: [], errorBreakdown: [] }}
-        />
-      )}
-    </div>
-  );
-
-  // ─── Render: Output Content (shared between desktop panel and mobile sheet) ──
-  const OutputContent = ({
-    validationResult: vr,
-    buildOutput: bo,
-    activeAction: aa,
-    queueRunning: qr,
-  }: {
-    validationResult: typeof validationResult;
-    buildOutput: string;
-    activeAction: typeof activeAction;
-    queueRunning: boolean;
-  }) => (
-    <>
-      {vr && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-            <div className="flex items-center gap-2">
-              {vr.passed ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
-              )}
-              <CardTitle className="text-sm font-bold text-foreground">
-                Validation {vr.passed ? 'Passed' : 'Failed'}
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead className="text-xs">Check</TableHead>
-                    <TableHead className="text-xs">Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {vr.checks.map((check, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        {check.passed ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                        ) : (
-                          <AlertCircle className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs font-medium">{check.name}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{check.message}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      {bo && (
-        <BuildLog
-          output={bo}
-          isRunning={!!aa || qr}
-        />
-      )}
-    </>
-  );
-
-  const handleNavChange = (tab: string) => {
-    setShowAddProject(false);
-    setActiveTab(tab);
-  };
-
-  // ─── Derived state ───────────────────────────────────────
-  const hasOutput = !!(buildOutput || validationResult);
-  const showOutputButton = hasOutput || queueRunning;
-
-  // ─── Main Layout ─────────────────────────────────────────
   return (
-    <SidebarProvider className="h-screen overflow-hidden">
-      <AppSidebar
-        activeTab={showAddProject ? 'projects' : activeTab}
-        onTabChange={(tab) => {
-          if (tab === 'projects') {
-            setShowAddProject(true);
-          } else {
-            setShowAddProject(false);
-            setActiveTab(tab);
-          }
-        }}
-        onAddProject={() => setShowAddProject(true)}
-        projectRefreshKey={projectRefreshKey}
-        queueRunning={queueRunning}
-        hasLoopWarning={hasLoopWarning}
-      />
-
-      <SidebarInset className="h-screen overflow-hidden flex flex-col">
-        {/* Page header — pure shadcn sidebar-08 pattern */}
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur-md">
-          <div className="flex items-center gap-2 px-4 flex-1">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="font-semibold text-foreground">
-                    {showAddProject ? 'Active Workspaces & Projects' : (TAB_TITLES[activeTab] || activeTab)}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans flex flex-col selection:bg-zinc-800">
+      
+      {/* Header */}
+      <header className="flex h-14 shrink-0 items-center justify-between px-6 border-b border-white/5 bg-[#0a0a0a]">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-indigo-500/20 text-indigo-400">
+            <Zap className="h-4 w-4" />
           </div>
-          {/* Right panel triggers — same ghost/size-7 style as SidebarTrigger */}
-          <div className="px-2 flex items-center gap-1.5">
-            {showOutputButton && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 relative"
-                onClick={() => setOutputPanelOpen((v) => !v)}
-                title="Toggle Output Panel"
-              >
-                <Terminal className="h-4 w-4" />
-                {queueRunning && (
-                  <span className="absolute top-0.5 right-0.5 flex h-1.5 w-1.5">
-                    <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", hasLoopWarning ? "bg-amber-400" : "bg-emerald-400")} />
-                    <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", hasLoopWarning ? "bg-amber-500" : "bg-emerald-500")} />
-                  </span>
-                )}
-                <span className="sr-only">Toggle Output Panel</span>
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={() => setTpmChatOpen((v) => !v)}
-              title="Toggle TPM Chat"
-            >
-              <PanelRight />
-              <span className="sr-only">Toggle TPM Chat</span>
+          <span className="text-sm font-semibold text-white">Factory</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 border border-white/5 text-xs font-medium text-zinc-400 mr-2">
+            Factory TPM <ChevronDown className="h-3 w-3 opacity-50 ml-1" />
+          </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full" onClick={() => tpmStore.clear()}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5" /> Feedback
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full">
+            <Settings className="h-4 w-4" />
+          </Button>
+          <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 ml-2 border border-white/10 shrink-0" />
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <main className="flex-1 flex flex-col items-center overflow-y-auto px-4 py-12 md:py-16 scrollbar-none">
+        <div className="w-full max-w-4xl flex flex-col gap-6">
+          
+          {/* Project Selector Header */}
+          <div className="flex items-center justify-between w-full">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-8 px-3 rounded-md bg-zinc-900/50 hover:bg-zinc-900 border border-white/5 text-sm font-medium text-zinc-300 gap-2">
+                  {activeProject ? activeProject.name : 'Select Project'} <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="bg-[#111] border-white/10 text-zinc-300">
+                {projects.map(p => (
+                  <DropdownMenuItem key={p.id} onClick={() => setActiveProject(p.id)} className="hover:bg-zinc-800 hover:text-white">
+                    {p.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button variant="ghost" size="sm" className="h-8 text-xs font-medium text-zinc-400 hover:text-white gap-1.5">
+              Configure project <Settings2 className="h-3 w-3" />
             </Button>
           </div>
-        </header>
 
-        <div className="flex flex-1 min-h-0 relative">
-          <div className="flex-1 min-w-0 overflow-y-auto">
-            {showAddProject ? (
-              <div className="p-4 md:p-8 w-full h-full">
-                <AddProject
-                  onProjectAdded={() => {
-                    setShowAddProject(false);
-                    setProjectRefreshKey((k) => k + 1);
-                    fetchProjects();
-                    fetchStories();
-                    fetchReports();
-                  }}
-                  onNavigateToPlan={() => {
-                    setShowAddProject(false);
-                    setActiveTab('plan');
+          {/* Central Card Area */}
+          <div className="flex flex-col rounded-2xl border border-white/10 bg-[#111] overflow-hidden shadow-2xl">
+            
+            {/* TPM Chat Messages Area (only visible if there are messages) */}
+            {messages.length > 0 && (
+              <div className="flex flex-col gap-4 p-6 bg-[#0d0d0d] border-b border-white/5 max-h-[500px] overflow-y-auto">
+                {messages.map((msg, i) => (
+                  <div key={i} className={cn("flex flex-col max-w-[85%]", msg.role === 'user' ? "self-end" : "self-start")}>
+                    {msg.role === 'user' ? (
+                      <div className="bg-zinc-800 text-zinc-100 px-4 py-2.5 rounded-2xl rounded-tr-sm text-[13px] leading-snug">
+                        {msg.content}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {msg.toolCalls && msg.toolCalls.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-1">
+                            {msg.toolCalls.map(tc => (
+                              <div key={tc.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900 border border-white/5 text-[10px] text-zinc-400 font-mono">
+                                {tc.status === 'running' ? <Terminal className="h-3 w-3 text-amber-500 animate-pulse" /> : <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                                {tc.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {msg.content && (
+                          <div className={cn(PROSE, "text-zinc-300 text-[13px]")}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {streaming && messages[messages.length - 1]?.role === 'assistant' && !messages[messages.length - 1]?.content && (
+                  <div className="self-start flex items-center gap-1.5 py-2">
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                    </span>
+                    <span className="text-xs text-zinc-500">Thinking...</span>
+                  </div>
+                )}
+                <div ref={endOfMessagesRef} />
+              </div>
+            )}
+
+            {/* Input Area */}
+            <div className="p-1">
+              <div className="relative bg-zinc-900/50 rounded-xl overflow-hidden focus-within:bg-zinc-900 transition-colors">
+                <Textarea
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  placeholder="Write..."
+                  className="min-h-[100px] w-full resize-none bg-transparent border-0 px-5 py-4 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:ring-0"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      onSend();
+                    }
                   }}
                 />
+                <div className="absolute right-3 bottom-3">
+                  {streaming ? (
+                    <Button 
+                      size="icon" 
+                      variant="ghost"
+                      className="h-8 w-8 rounded-lg text-zinc-400 hover:text-white"
+                      onClick={() => { tpmStore.abortController?.abort(); tpmStore.setStreaming(false); }}
+                    >
+                      <StopCircle className="h-5 w-5" />
+                    </Button>
+                  ) : (
+                    <Button 
+                      size="icon" 
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all",
+                        input.trim() ? "bg-indigo-500 text-white hover:bg-indigo-600" : "bg-white/5 text-white/20 hover:bg-white/10"
+                      )}
+                      onClick={onSend}
+                      disabled={!input.trim()}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+            </div>
 
+            {/* Tabs */}
+            <div className="flex items-center gap-6 px-6 pt-3 pb-0 border-b border-white/5">
+              {[
+                { id: 'stories', label: 'Stories' },
+                { id: 'queue', label: 'Active Queue' },
+                { id: 'completed', label: 'Completed' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={cn(
+                    "pb-3 text-xs font-medium transition-colors relative",
+                    activeTab === tab.id ? "text-white" : "text-zinc-500 hover:text-zinc-300"
+                  )}
+                >
+                  {tab.label}
+                  {activeTab === tab.id && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-t-full" />
+                  )}
+                </button>
+              ))}
+            </div>
 
-                {activeTab === 'plan' && <NotionBoard initialView="list" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setTpmChatOpen(true)} className="flex-1 min-h-0" />}
-                {activeTab === 'build' && <BuildPage />}
-                {activeTab === 'test' && <TestPlaceholder />}
-                {activeTab === 'deploy' && <DeployPlaceholder />}
-                {/* legacy hash compat */}
-                {activeTab === 'dashboard' && <NotionBoard initialView="board" onNavigateToBuild={() => setActiveTab('build')} projectRefreshKey={projectRefreshKey} onOpenStoryChat={() => setTpmChatOpen(true)} className="flex-1 min-h-0" />}
-                {activeTab === 'skills' && <SkillsView />}
-                {activeTab === 'reports' && renderReports()}
-                {activeTab === 'knowledge' && <KnowledgeView />}
-                {activeTab === 'integrations' && <IntegrationsView />}
-                {activeTab === 'settings' && <SettingsView />}
+            {/* Sessions Header */}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2 px-6 py-4">
+                <Activity className="h-4 w-4 text-zinc-500" />
+                <h3 className="text-sm font-medium text-zinc-300">Sessions</h3>
               </div>
-            )}
-          </div>
-        </div>
-      </SidebarInset>
-
-      {/* TPM Chat Backdrop on Mobile */}
-      {tpmChatOpen && (
-        <div
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 md:hidden animate-in fade-in duration-200"
-          onClick={() => setTpmChatOpen(false)}
-        />
-      )}
-
-      {/* TPM Chat — always mounted to keep SSE streams alive across tab switches */}
-      <TpmChat
-        isOpen={tpmChatOpen}
-        onClose={() => setTpmChatOpen(false)}
-      />
-
-      {/* TPM Chat is inside SidebarInset flex row above */}
-
-      {/* Output panel — desktop: slide-over overlay, mobile: bottom sheet */}
-      {/* Desktop panel */}
-      <aside
-        className={cn(
-          "fixed right-0 top-0 h-screen z-50 border-l border-border bg-background/85 backdrop-blur-md shadow-2xl transition-all duration-300 ease-in-out hidden md:block",
-          outputPanelOpen && hasOutput ? "w-[450px]" : "w-0 border-l-0 opacity-0 pointer-events-none"
-        )}
-      >
-        <div className="w-[450px] h-screen flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-            <div className="flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Output</span>
-              {(activeAction || queueRunning) && (
-                <span className="relative flex h-2 w-2">
-                  <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", hasLoopWarning ? "bg-amber-400" : "bg-emerald-400")} />
-                  <span className={cn("relative inline-flex rounded-full h-2 w-2", hasLoopWarning ? "bg-amber-500" : "bg-emerald-500")} />
-                </span>
-              )}
-            </div>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOutputPanelOpen(false)} aria-label="Close output panel">
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <OutputContent validationResult={validationResult} buildOutput={buildOutput} activeAction={activeAction} queueRunning={queueRunning} />
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobile bottom sheet output */}
-      {outputPanelOpen && hasOutput && (
-        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setOutputPanelOpen(false)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-background border-t border-border rounded-t-2xl max-h-[75vh] flex flex-col"
-            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="h-1 w-10 rounded-full bg-muted-foreground/20" />
-            </div>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
-              <div className="flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Output</span>
-                {(activeAction || queueRunning) && (
-                  <span className="relative flex h-2 w-2">
-                    <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", hasLoopWarning ? "bg-amber-400" : "bg-emerald-400")} />
-                    <span className={cn("relative inline-flex rounded-full h-2 w-2", hasLoopWarning ? "bg-amber-500" : "bg-emerald-500")} />
-                  </span>
+              
+              {/* List Area */}
+              <div className="flex flex-col px-4 pb-4">
+                {items.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-zinc-600">
+                    No items found in {activeTab}.
+                  </div>
+                ) : (
+                  items.map((item: any, idx) => (
+                    <div key={idx} className="group flex items-start gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer">
+                      <div className="mt-0.5 shrink-0">
+                        {item.status === 'done' || activeTab === 'stories' ? (
+                          <CheckCircle2 className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400" />
+                        ) : item.status === 'failed' ? (
+                          <div className="h-4 w-4 rounded-full border border-red-500/50 bg-red-500/10" />
+                        ) : (
+                          <div className="h-4 w-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                        )}
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <p className="text-sm text-zinc-300 truncate">
+                          <span className="text-zinc-500 font-mono text-xs mr-2">{item.type || 'story'}:</span>
+                          {item.displayName}
+                        </p>
+                        <p className="text-xs text-zinc-600 mt-1">
+                          {item.completedAt ? `Completed ${new Date(item.completedAt).toLocaleDateString()}` : 
+                           item.addedAt ? `Added ${new Date(item.addedAt).toLocaleDateString()}` : 
+                           item.status || 'Draft'}
+                        </p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+                
+                {items.length > 0 && (
+                  <button className="text-xs text-zinc-500 hover:text-zinc-300 mt-4 ml-3 text-left font-medium">
+                    View more
+                  </button>
                 )}
               </div>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOutputPanelOpen(false)} aria-label="Close output panel">
-                <X className="h-3.5 w-3.5" />
-              </Button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-              <OutputContent validationResult={validationResult} buildOutput={buildOutput} activeAction={activeAction} queueRunning={queueRunning} />
+
+            {/* Footer Strip */}
+            <div className="bg-zinc-900/40 border-t border-white/5 px-6 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                <ClockIcon className="h-3.5 w-3.5" />
+                Schedule skill-based agents
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1.5 text-zinc-400 hover:text-white bg-black/20 hover:bg-black/40 rounded-full border border-white/5">
+                  <Zap className="h-3 w-3" /> Performance
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1.5 text-zinc-400 hover:text-white bg-black/20 hover:bg-black/40 rounded-full border border-white/5">
+                  <Lightbulb className="h-3 w-3" /> Design
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1.5 text-zinc-400 hover:text-white bg-black/20 hover:bg-black/40 rounded-full border border-white/5">
+                  <Shield className="h-3 w-3" /> Security
+                </Button>
+              </div>
             </div>
           </div>
+
         </div>
-      )}
-    </SidebarProvider>
+      </main>
+    </div>
   );
+}
+
+function ClockIcon(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
 }

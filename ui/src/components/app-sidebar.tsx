@@ -36,12 +36,10 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 const navMain = [
   { title: "Stories", id: "plan",   icon: LayoutDashboard },
-  { title: "Build Pipeline",  id: "build",  icon: Rocket },
 ]
 
 const navSecondary = [
   { title: "Reports",          id: "reports",      icon: BarChart3 },
-  { title: "Active Projects",   id: "projects",     icon: FolderOpen },
   { title: "Settings",          id: "settings",     icon: Settings },
 ]
 
@@ -80,7 +78,6 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <ProjectSwitcher onAddProject={onAddProject} refreshKey={projectRefreshKey} />
       </SidebarHeader>
 
       <SidebarContent>

@@ -3,6 +3,10 @@
 import { useState, useEffect, useSyncExternalStore, useRef } from 'react';
 import { toast } from 'sonner';
 import { useFactoryStore } from '@/stores/factory-store';
+import { SettingsView } from './settings-view';
+import { AppSidebar } from './app-sidebar';
+import { ReportViewer } from './report-viewer';
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -14,7 +18,8 @@ import {
 import {
   CheckCircle2, Trash2, Settings, Moon, Sun, MessageSquare,
   ArrowRight, ChevronDown, Settings2, Activity, Lightbulb,
-  Shield, Zap, MoreHorizontal, Terminal, X, StopCircle
+  Shield, Zap, MoreHorizontal, Terminal, X, StopCircle,
+  LayoutGrid, List
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from 'next-themes';
@@ -26,20 +31,39 @@ import remarkGfm from 'remark-gfm';
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'stories' | 'queue' | 'completed'>('stories');
   const [input, setInput] = useState('');
   
   const { theme, setTheme } = useTheme();
+  const [view, setView] = useState<'board' | 'settings' | 'reports'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+  const [reportEntries, setReportEntries] = useState<any[]>([]);
+  const [reportStats, setReportStats] = useState<any>(null);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  const fetchReports = async () => {
+    setLoadingReports(true);
+    try {
+      const res = await fetch('/api/reports');
+      const data = await res.json();
+      setReportEntries(data.entries || []);
+      setReportStats(data.stats || null);
+    } catch {
+      toast.error('Failed to fetch reports');
+    } finally {
+      setLoadingReports(false);
+    }
+  };
 
   const fetchAll = useFactoryStore(s => s.fetchAll);
   const startPolling = useFactoryStore(s => s.startPolling);
   const stopPolling = useFactoryStore(s => s.stopPolling);
   const activeProject = useFactoryStore(s => s.activeProject);
   const projects = useFactoryStore(s => s.projects);
-  const setActiveProject = useFactoryStore(s => s.setActiveProject);
   const stories = useFactoryStore(s => s.stories);
   const featureStories = useFactoryStore(s => s.featureStories);
   const queueStatusMap = useFactoryStore(s => s.queueStatusMap);
+  const queueItems = useFactoryStore(s => s.queueItems);
+  const queueRunning = useFactoryStore(s => s.queueRunning);
 
   const { handleSend, streaming } = useTpmChat();
   const messages = useSyncExternalStore(
@@ -62,295 +86,412 @@ export default function Dashboard() {
     }
   }, [messages]);
 
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash === 'settings') {
+        setView('settings');
+      } else if (hash === 'reports') {
+        setView('reports');
+      } else {
+        setView('board');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    handleHashChange(); // Run initially
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (view === 'reports') {
+      fetchReports();
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (activeProject?.id) {
+      tpmStore.setProject(activeProject.id);
+    }
+  }, [activeProject?.id]);
+
   const onSend = () => {
     if (!input.trim() || streaming) return;
     handleSend(input, activeProject?.id);
     setInput('');
   };
 
-  // Combine and map stories
-  const items = [];
-  if (activeTab === 'stories') {
-    stories.forEach(s => items.push({ ...s, type: 'app', displayName: s.metadata?.name || s.file }));
-    featureStories.forEach(s => items.push({ ...s, type: 'feature', displayName: s.name || s.feature?.name || s.file }));
-  } else if (activeTab === 'queue') {
-    Object.values(queueStatusMap).forEach((q: any) => {
-      if (['ready-to-build', 'building', 'paused'].includes(q.status)) {
-        items.push({ type: 'queue', displayName: q.displayName || q.storyFile, status: q.status, addedAt: q.addedAt });
+  // Group stories into 3 states: Todo, In Progress, Done
+  const todoItems: any[] = [];
+  const inProgressItems: any[] = [];
+  const doneItems: any[] = [];
+
+  const queueFiles = new Set<string>();
+  queueItems.forEach((q) => {
+    const file = q.storyFile || q.specFile;
+    if (file) {
+      queueFiles.add(file);
+      const displayName = file.split('/').pop() || file;
+      const itemData = {
+        type: q.kind === 'FeatureStory' ? 'feature' : 'app',
+        displayName: displayName,
+        status: q.status,
+        file: file,
+        addedAt: q.addedAt,
+        completedAt: q.completedAt
+      };
+      if (['done', 'failed', 'completed'].includes(q.status)) {
+        doneItems.push(itemData);
+      } else {
+        inProgressItems.push(itemData);
       }
-    });
-  } else if (activeTab === 'completed') {
-    Object.values(queueStatusMap).forEach((q: any) => {
-      if (['done', 'failed'].includes(q.status)) {
-        items.push({ type: 'queue', displayName: q.displayName || q.storyFile, status: q.status, completedAt: q.completedAt });
-      }
-    });
-  }
+    }
+  });
+
+  stories.forEach(s => {
+    if (!queueFiles.has(s.file)) {
+      todoItems.push({ ...s, type: 'app', displayName: s.metadata?.name || s.file });
+    }
+  });
+  featureStories.forEach(s => {
+    if (!queueFiles.has(s.file)) {
+      todoItems.push({ ...s, type: 'feature', displayName: (s as any).name || s.feature?.name || s.file });
+    }
+  });
+
+  const renderItem = (item: any, idx: number, state: 'todo' | 'inprogress' | 'done') => {
+    const isApp = item.type === 'app';
+    return (
+      <div 
+        key={idx} 
+        className="group relative bg-background border border-border/40 p-3 rounded-lg hover:border-border/80 transition-all duration-150 cursor-pointer flex flex-col gap-1.5 shadow-xs"
+      >
+        <div className="flex items-start justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Minimal Color Dot Indicator */}
+            <span className={cn(
+              "h-1.5 w-1.5 rounded-full shrink-0",
+              isApp ? "bg-sky-500" : "bg-indigo-500"
+            )} />
+            <span className="text-[12.5px] font-medium text-foreground truncate group-hover:text-primary transition-colors">
+              {item.displayName}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0 -mt-0.5">
+            {state === 'done' ? (
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            ) : state === 'inprogress' ? (
+              <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin" />
+            ) : null}
+          </div>
+        </div>
+
+        {item.file && item.file !== item.displayName && (
+          <p className="text-[10px] font-mono text-muted-foreground/50 truncate pl-3.5">
+            {item.file.split('/').pop()}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-border/20 pl-3.5 text-[9px] text-muted-foreground">
+          <span className="font-mono uppercase tracking-wider text-[8.5px]">
+            {item.type || 'story'}
+          </span>
+          <span>
+            {item.completedAt ? `Done ${new Date(item.completedAt).toLocaleDateString()}` : 
+             item.addedAt ? `Added ${new Date(item.addedAt).toLocaleDateString()}` : 
+             item.status || 'Draft'}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   const PROSE = "prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-1.5 prose-pre:rounded-md prose-pre:text-[10.5px] prose-code:text-[10.5px] prose-code:bg-white/10 prose-code:px-1 prose-code:py-px prose-code:rounded prose-code:font-mono prose-a:text-indigo-400";
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-300 font-sans flex flex-col selection:bg-zinc-800">
-      
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between px-6 border-b border-white/5 bg-[#0a0a0a]">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-indigo-500/20 text-indigo-400">
-            <Zap className="h-4 w-4" />
-          </div>
-          <span className="text-sm font-semibold text-white">Factory</span>
-        </div>
+    <SidebarProvider className="h-screen overflow-hidden">
+      <AppSidebar
+        activeTab={view === 'board' ? 'plan' : view}
+        onTabChange={(tab) => {
+          if (tab === 'plan') {
+            setView('board');
+            window.location.hash = 'plan';
+          } else {
+            setView(tab as any);
+            window.location.hash = tab;
+          }
+        }}
+        queueRunning={queueRunning}
+      />
+      <SidebarInset className="h-screen overflow-hidden flex flex-col bg-background text-foreground">
         
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 border border-white/5 text-xs font-medium text-zinc-400 mr-2">
-            Factory TPM <ChevronDown className="h-3 w-3 opacity-50 ml-1" />
+        {/* Header */}
+        <header className="flex h-14 shrink-0 items-center justify-between px-6 border-b border-border bg-card">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="-ml-1" />
+            <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+              Factory {activeProject ? <span className="text-muted-foreground font-normal">/ {activeProject.name}</span> : ''}
+            </span>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full" onClick={() => tpmStore.clear()}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" /> Feedback
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-full">
-            <Settings className="h-4 w-4" />
-          </Button>
-          <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 ml-2 border border-white/10 shrink-0" />
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="flex-1 flex flex-col items-center overflow-y-auto px-4 py-12 md:py-16 scrollbar-none">
-        <div className="w-full max-w-4xl flex flex-col gap-6">
           
-          {/* Project Selector Header */}
-          <div className="flex items-center justify-between w-full">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 px-3 rounded-md bg-zinc-900/50 hover:bg-zinc-900 border border-white/5 text-sm font-medium text-zinc-300 gap-2">
-                  {activeProject ? activeProject.name : 'Select Project'} <ChevronDown className="h-3.5 w-3.5 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="bg-[#111] border-white/10 text-zinc-300">
-                {projects.map(p => (
-                  <DropdownMenuItem key={p.id} onClick={() => setActiveProject(p.id)} className="hover:bg-zinc-800 hover:text-white">
-                    {p.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button variant="ghost" size="sm" className="h-8 text-xs font-medium text-zinc-400 hover:text-white gap-1.5">
-              Configure project <Settings2 className="h-3 w-3" />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted border border-border text-xs font-medium text-muted-foreground mr-2">
+              Factory TPM <ChevronDown className="h-3 w-3 opacity-50 ml-1" />
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
+            <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-full gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5" /> Feedback
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={cn("h-8 w-8 rounded-full", view === 'settings' ? "text-indigo-500 bg-accent" : "text-muted-foreground hover:text-foreground hover:bg-accent")}
+              onClick={() => {
+                setView(view === 'settings' ? 'board' : 'settings');
+                window.location.hash = view === 'settings' ? 'board' : 'settings';
+              }}
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+            <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 ml-2 border border-white/10 shrink-0" />
           </div>
+        </header>
 
-          {/* Central Card Area */}
-          <div className="flex flex-col rounded-2xl border border-white/10 bg-[#111] overflow-hidden shadow-2xl">
-            
-            {/* TPM Chat Messages Area (only visible if there are messages) */}
-            {messages.length > 0 && (
-              <div className="flex flex-col gap-4 p-6 bg-[#0d0d0d] border-b border-white/5 max-h-[500px] overflow-y-auto">
-                {messages.map((msg, i) => (
-                  <div key={i} className={cn("flex flex-col max-w-[85%]", msg.role === 'user' ? "self-end" : "self-start")}>
-                    {msg.role === 'user' ? (
-                      <div className="bg-zinc-800 text-zinc-100 px-4 py-2.5 rounded-2xl rounded-tr-sm text-[13px] leading-snug">
-                        {msg.content}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {msg.toolCalls && msg.toolCalls.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mb-1">
-                            {msg.toolCalls.map(tc => (
-                              <div key={tc.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900 border border-white/5 text-[10px] text-zinc-400 font-mono">
-                                {tc.status === 'running' ? <Terminal className="h-3 w-3 text-amber-500 animate-pulse" /> : <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
-                                {tc.name}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {msg.content && (
-                          <div className={cn(PROSE, "text-zinc-300 text-[13px]")}>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {streaming && messages[messages.length - 1]?.role === 'assistant' && !messages[messages.length - 1]?.content && (
-                  <div className="self-start flex items-center gap-1.5 py-2">
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                    </span>
-                    <span className="text-xs text-zinc-500">Thinking...</span>
-                  </div>
-                )}
-                <div ref={endOfMessagesRef} />
+        {/* Main Container */}
+        <main className="flex-1 flex overflow-hidden">
+          
+          {/* Left: Main Content */}
+          <div className="flex-1 flex flex-col overflow-y-auto px-4 py-8 md:py-12 scrollbar-none">
+            {view === 'settings' ? (
+              <div className="w-full max-w-2xl mx-auto">
+                <SettingsView />
               </div>
-            )}
-
-            {/* Input Area */}
-            <div className="p-1">
-              <div className="relative bg-zinc-900/50 rounded-xl overflow-hidden focus-within:bg-zinc-900 transition-colors">
-                <Textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  placeholder="Write..."
-                  className="min-h-[100px] w-full resize-none bg-transparent border-0 px-5 py-4 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:ring-0"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      onSend();
-                    }
-                  }}
-                />
-                <div className="absolute right-3 bottom-3">
-                  {streaming ? (
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      className="h-8 w-8 rounded-lg text-zinc-400 hover:text-white"
-                      onClick={() => { tpmStore.abortController?.abort(); tpmStore.setStreaming(false); }}
-                    >
-                      <StopCircle className="h-5 w-5" />
-                    </Button>
-                  ) : (
-                    <Button 
-                      size="icon" 
-                      className={cn(
-                        "h-8 w-8 rounded-lg transition-all",
-                        input.trim() ? "bg-indigo-500 text-white hover:bg-indigo-600" : "bg-white/5 text-white/20 hover:bg-white/10"
-                      )}
-                      onClick={onSend}
-                      disabled={!input.trim()}
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex items-center gap-6 px-6 pt-3 pb-0 border-b border-white/5">
-              {[
-                { id: 'stories', label: 'Stories' },
-                { id: 'queue', label: 'Active Queue' },
-                { id: 'completed', label: 'Completed' },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={cn(
-                    "pb-3 text-xs font-medium transition-colors relative",
-                    activeTab === tab.id ? "text-white" : "text-zinc-500 hover:text-zinc-300"
-                  )}
-                >
-                  {tab.label}
-                  {activeTab === tab.id && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-t-full" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Sessions Header */}
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2 px-6 py-4">
-                <Activity className="h-4 w-4 text-zinc-500" />
-                <h3 className="text-sm font-medium text-zinc-300">Sessions</h3>
-              </div>
-              
-              {/* List Area */}
-              <div className="flex flex-col px-4 pb-4">
-                {items.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-zinc-600">
-                    No items found in {activeTab}.
+            ) : view === 'reports' ? (
+              <div className="w-full max-w-4xl mx-auto">
+                {loadingReports ? (
+                  <div className="flex items-center justify-center py-20">
+                    <div className="h-6 w-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
                   </div>
                 ) : (
-                  items.map((item: any, idx) => (
-                    <div key={idx} className="group flex items-start gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer">
-                      <div className="mt-0.5 shrink-0">
-                        {item.status === 'done' || activeTab === 'stories' ? (
-                          <CheckCircle2 className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400" />
-                        ) : item.status === 'failed' ? (
-                          <div className="h-4 w-4 rounded-full border border-red-500/50 bg-red-500/10" />
-                        ) : (
-                          <div className="h-4 w-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-                        )}
-                      </div>
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <p className="text-sm text-zinc-300 truncate">
-                          <span className="text-zinc-500 font-mono text-xs mr-2">{item.type || 'story'}:</span>
-                          {item.displayName}
-                        </p>
-                        <p className="text-xs text-zinc-600 mt-1">
-                          {item.completedAt ? `Completed ${new Date(item.completedAt).toLocaleDateString()}` : 
-                           item.addedAt ? `Added ${new Date(item.addedAt).toLocaleDateString()}` : 
-                           item.status || 'Draft'}
-                        </p>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
+                  <ReportViewer entries={reportEntries} stats={reportStats} />
                 )}
+              </div>
+            ) : (
+              <div className="w-full max-w-7xl mx-auto flex flex-col gap-4">
                 
-                {items.length > 0 && (
-                  <button className="text-xs text-zinc-500 hover:text-zinc-300 mt-4 ml-3 text-left font-medium">
-                    View more
-                  </button>
-                )}
-              </div>
-            </div>
+                {/* Control Bar: View Switcher */}
+                <div className="flex items-center justify-between pb-1 shrink-0">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Workflow Stories</span>
+                  <div className="flex items-center gap-0.5 bg-muted border border-border p-0.5 rounded-lg">
+                    <Button
+                      variant={viewMode === 'board' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('board')}
+                      className="h-6 px-2 text-[11px] gap-1 font-medium rounded-md"
+                    >
+                      <LayoutGrid className="h-3 w-3" /> Board
+                    </Button>
+                    <Button
+                      variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('list')}
+                      className="h-6 px-2 text-[11px] gap-1 font-medium rounded-md"
+                    >
+                      <List className="h-3 w-3" /> List
+                    </Button>
+                  </div>
+                </div>
 
-            {/* Footer Strip */}
-            <div className="bg-zinc-900/40 border-t border-white/5 px-6 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <ClockIcon className="h-3.5 w-3.5" />
-                Schedule skill-based agents
+                {/* 3-Column Kanban Board / Stacked List */}
+                <div className={cn(
+                  "w-full pb-8",
+                  viewMode === 'board' ? "grid grid-cols-1 lg:grid-cols-3 gap-4" : "flex flex-col gap-4"
+                )}>
+                  
+                  {/* Column: Todo */}
+                  <div className={cn(
+                    "flex flex-col rounded-xl border border-border bg-card/20 overflow-hidden",
+                    viewMode === 'board' ? "min-h-[500px]" : "min-h-0"
+                  )}>
+                    <div className="px-4 py-2.5 border-b border-border bg-muted/10 flex items-center justify-between shrink-0">
+                      <h3 className="text-[12.5px] font-semibold text-foreground flex items-center gap-1.5">
+                        <div className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50 bg-muted/40" />
+                        Todo
+                      </h3>
+                      <span className="text-[10px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                        {todoItems.length}
+                      </span>
+                    </div>
+                    <div className={cn(
+                      "p-2.5 flex flex-col gap-2 flex-1",
+                      viewMode === 'board' ? "overflow-y-auto max-h-[700px] scrollbar-none" : "overflow-visible"
+                    )}>
+                      {todoItems.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-muted-foreground/60">No pending stories</div>
+                      ) : todoItems.map((item, idx) => renderItem(item, idx, 'todo'))}
+                    </div>
+                  </div>
+
+                  {/* Column: In Progress */}
+                  <div className={cn(
+                    "flex flex-col rounded-xl border border-border bg-card/20 overflow-hidden",
+                    viewMode === 'board' ? "min-h-[500px]" : "min-h-0"
+                  )}>
+                    <div className="px-4 py-2.5 border-b border-border bg-muted/10 flex items-center justify-between shrink-0">
+                      <h3 className="text-[12.5px] font-semibold text-foreground flex items-center gap-1.5">
+                        <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                        In Progress
+                      </h3>
+                      <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                        {inProgressItems.length}
+                      </span>
+                    </div>
+                    <div className={cn(
+                      "p-2.5 flex flex-col gap-2 flex-1",
+                      viewMode === 'board' ? "overflow-y-auto max-h-[700px] scrollbar-none" : "overflow-visible"
+                    )}>
+                      {inProgressItems.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-muted-foreground/60">No active tasks</div>
+                      ) : inProgressItems.map((item, idx) => renderItem(item, idx, 'inprogress'))}
+                    </div>
+                  </div>
+
+                  {/* Column: Done */}
+                  <div className={cn(
+                    "flex flex-col rounded-xl border border-border bg-card/20 overflow-hidden",
+                    viewMode === 'board' ? "min-h-[500px]" : "min-h-0"
+                  )}>
+                    <div className="px-4 py-2.5 border-b border-border bg-muted/10 flex items-center justify-between shrink-0">
+                      <h3 className="text-[12.5px] font-semibold text-foreground flex items-center gap-1.5">
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Done
+                      </h3>
+                      <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                        {doneItems.length}
+                      </span>
+                    </div>
+                    <div className={cn(
+                      "p-2.5 flex flex-col gap-2 flex-1",
+                      viewMode === 'board' ? "overflow-y-auto max-h-[700px] scrollbar-none" : "overflow-visible"
+                    )}>
+                      {doneItems.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-muted-foreground/60">No completed items</div>
+                      ) : doneItems.map((item, idx) => renderItem(item, idx, 'done'))}
+                    </div>
+                  </div>
+
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1.5 text-zinc-400 hover:text-white bg-black/20 hover:bg-black/40 rounded-full border border-white/5">
-                  <Zap className="h-3 w-3" /> Performance
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1.5 text-zinc-400 hover:text-white bg-black/20 hover:bg-black/40 rounded-full border border-white/5">
-                  <Lightbulb className="h-3 w-3" /> Design
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1.5 text-zinc-400 hover:text-white bg-black/20 hover:bg-black/40 rounded-full border border-white/5">
-                  <Shield className="h-3 w-3" /> Security
-                </Button>
+            )}
+       </div>
+
+        {/* Right: Sidebar Chat */}
+        <div className="w-[380px] border-l border-border bg-card flex flex-col shrink-0 h-full hidden md:flex">
+          <div className="p-4 border-b border-border shrink-0 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">TPM Chat</h3>
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2 opacity-50">
+                <MessageSquare className="h-8 w-8 mb-2" />
+                <p className="text-sm">No messages yet.</p>
+                <p className="text-xs">Ask the TPM to add a story!</p>
+              </div>
+            ) : (
+              messages.map((msg, i) => (
+                <div key={i} className={cn("flex flex-col max-w-[90%]", msg.role === 'user' ? "self-end" : "self-start")}>
+                  {msg.role === 'user' ? (
+                    <div className="bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 px-4 py-2.5 rounded-2xl rounded-tr-sm text-[13px] leading-snug border border-zinc-200/50 dark:border-transparent">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-1">
+                          {msg.toolCalls.map(tc => (
+                            <div key={tc.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted border border-border text-[10px] text-muted-foreground font-mono">
+                              {tc.status === 'running' ? <Terminal className="h-3 w-3 text-amber-500 animate-pulse" /> : <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                              {tc.name}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {msg.content && (
+                        <div className={cn(PROSE, "text-foreground text-[13px]")}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+            
+            {streaming && messages[messages.length - 1]?.role === 'assistant' && !messages[messages.length - 1]?.content && (
+              <div className="self-start flex items-center gap-1.5 py-2">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                </span>
+                <span className="text-xs text-muted-foreground font-medium">Thinking...</span>
+              </div>
+            )}
+            <div ref={endOfMessagesRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 border-t border-border shrink-0 bg-card">
+            <div className="relative bg-muted/50 rounded-xl overflow-hidden focus-within:bg-muted transition-colors border border-border">
+              <Textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder="Message TPM..."
+                className="min-h-[80px] w-full resize-none bg-transparent border-0 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    onSend();
+                  }
+                }}
+              />
+              <div className="absolute right-2 bottom-2">
+                {streaming ? (
+                  <Button 
+                    size="icon" 
+                    variant="ghost"
+                    className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
+                    onClick={() => { tpmStore.abortController?.abort(); tpmStore.setStreaming(false); }}
+                  >
+                    <StopCircle className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button 
+                    size="icon" 
+                    className={cn(
+                      "h-7 w-7 rounded-lg transition-all",
+                      input.trim() ? "bg-indigo-500 text-white hover:bg-indigo-600" : "bg-muted text-muted-foreground/30 hover:bg-muted/80"
+                    )}
+                    onClick={onSend}
+                    disabled={!input.trim()}
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
           </div>
-
         </div>
-      </main>
-    </div>
-  );
-}
 
-function ClockIcon(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  )
+      </main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
 }

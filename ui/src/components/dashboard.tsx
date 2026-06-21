@@ -6,6 +6,7 @@ import { useFactoryStore } from '@/stores/factory-store';
 import { SettingsView } from './settings-view';
 import { AppSidebar } from './app-sidebar';
 import { ReportViewer } from './report-viewer';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -242,9 +243,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted border border-border text-xs font-medium text-muted-foreground mr-2">
               Factory TPM <ChevronDown className="h-3 w-3 opacity-50 ml-1" />
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
+            <ThemeToggle className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full [&_svg]:h-4 [&_svg]:w-4" />
             <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-full gap-1.5">
               <MessageSquare className="h-3.5 w-3.5" /> Feedback
             </Button>

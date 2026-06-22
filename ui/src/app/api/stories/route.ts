@@ -160,8 +160,8 @@ export async function GET() {
     const projectPath = getActiveProjectPath();
     const scaffoldMeta = projectPath ? loadScaffoldStoryMeta(projectPath) : new Map<string, ScaffoldStoryMeta>();
 
-    let stories: any[] = [];
-    let featureStories: any[] = [];
+    const stories: any[] = [];
+    const featureStories: any[] = [];
 
     // Active stories
     if (STORIES_DIR && existsSync(STORIES_DIR)) {

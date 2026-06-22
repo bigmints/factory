@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Plug, RefreshCw, AlertCircle, Plus, Trash2, Check, X } from 'lucide-react';
+import { Plug, RefreshCw, Trash2 } from 'lucide-react';
 
 interface McpServer {
   id: string;

@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   Sparkles, Bot, Server, Eye, EyeOff, CheckCircle2, XCircle, Loader2,
-  FolderOpen, Terminal, Save, Network, RefreshCw
+  Terminal, Save, Network, RefreshCw
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -264,18 +264,6 @@ export function SettingsView() {
             </div>
           )}
         </div>
-      </Card>
-
-      {/* ─── Section 2: Active Project ─── */}
-      <Card className="p-5 border border-border/40">
-        <div className="flex items-center gap-2">
-          <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-xs font-semibold text-foreground">Active Project</h3>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2 font-mono bg-muted/30 rounded-md px-3 py-2 border border-border/30">
-          {/* Read from the settings or show a placeholder */}
-          {settings.updatedAt ? 'Loaded from workspace' : 'No project loaded'}
-        </p>
       </Card>
 
       {/* ─── Section 3: LLM Provider Cards ─── */}

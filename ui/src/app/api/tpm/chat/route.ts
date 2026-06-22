@@ -10,6 +10,7 @@ import {
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
+import matter from 'gray-matter';
 
 import { getActiveProject } from '@engine/config';
 
@@ -19,16 +20,16 @@ const FACTORY_ROOT = resolve(homedir(), '.factory');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Recursively collect all .yaml/.yml files under a directory */
-function collectYamlFiles(dir: string): string[] {
+/** Recursively collect all story (.md, .yaml, .yml) files under a directory */
+function collectStoryFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
   const results: string[] = [];
   for (const entry of readdirSync(dir)) {
     const abs = join(dir, entry);
     const stat = statSync(abs);
     if (stat.isDirectory()) {
-      results.push(...collectYamlFiles(abs));
-    } else if (entry.endsWith('.yaml') || entry.endsWith('.yml')) {
+      results.push(...collectStoryFiles(abs));
+    } else if (entry.endsWith('.md') || entry.endsWith('.yaml') || entry.endsWith('.yml')) {
       results.push(abs);
     }
   }
@@ -377,17 +378,17 @@ function findStoryPath(projectPath: string, slug: string): string | null {
     const dir = join(projectPath, '.factory', 'stories', folder);
     if (!existsSync(dir)) continue;
 
-    const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
+    const files = readdirSync(dir).filter((f) => f.endsWith('.md') || f.endsWith('.yaml') || f.endsWith('.yml'));
 
     // Exact match first
     const exact = files.find(
-      (f) => f.replace(/\.ya?ml$/, '') === normalizedSlug || f.replace(/\.ya?ml$/, '') === slug
+      (f) => f.replace(/\.(ya?ml|md)$/, '') === normalizedSlug || f.replace(/\.(ya?ml|md)$/, '') === slug
     );
     if (exact) return join(dir, exact);
 
     // Partial / fuzzy match
     const partial = files.find((f) => {
-      const name = f.replace(/\.ya?ml$/, '').toLowerCase();
+      const name = f.replace(/\.(ya?ml|md)$/, '').toLowerCase();
       return name.includes(normalizedSlug) || normalizedSlug.includes(name);
     });
     if (partial) return join(dir, partial);
@@ -467,7 +468,7 @@ async function handleListStories(projectPath: string, kind?: string, status?: st
   for (const { key, label } of folders) {
     const dir = join(projectPath, '.factory', 'stories', key);
     // Recursively collect so subdirectories (e.g. features/antigravity/) are included
-    const allFiles = collectYamlFiles(dir);
+    const allFiles = collectStoryFiles(dir);
     if (allFiles.length === 0) continue;
 
     results.push(`\n## ${label} (${allFiles.length})`);
@@ -475,8 +476,13 @@ async function handleListStories(projectPath: string, kind?: string, status?: st
     for (const filePath of allFiles) {
       try {
         const raw = readFileSync(filePath, 'utf-8');
-        const parsed = parseYaml(raw) as any;
-        const storyStatus = parsed.status || parsed.metadata?.status || 'draft';
+        let parsed: any = {};
+        if (filePath.endsWith('.md')) {
+          parsed = matter(raw).data;
+        } else {
+          parsed = parseYaml(raw);
+        }
+        const storyStatus = parsed?.status || parsed?.metadata?.status || 'draft';
 
         // Filter by status if provided
         if (status && storyStatus !== status) continue;
@@ -486,9 +492,9 @@ async function handleListStories(projectPath: string, kind?: string, status?: st
           parsed.metadata?.name ||
           parsed.feature?.name ||
           parsed.appName ||
-          filePath.split('/').pop()?.replace(/\.ya?ml$/, '') || 'unknown';
+          filePath.split('/').pop()?.replace(/\.(ya?ml|md)$/, '') || 'unknown';
         // Show subdir-relative slug so it's meaningful
-        const slug = filePath.replace(dir + '/', '').replace(/\.ya?ml$/, '');
+        const slug = filePath.replace(dir + '/', '').replace(/\.(ya?ml|md)$/, '');
         const phase = parsed.phase ?? parsed.metadata?.phase ?? '—';
         const description =
           (parsed.description || parsed.metadata?.description || '').slice(0, 100);
@@ -518,7 +524,8 @@ async function handleGetStory(projectPath: string, slug: string) {
   try {
     const content = readFileSync(storyPath, 'utf-8');
     const relativePath = storyPath.replace(projectPath, '').replace(/^\//, '');
-    return `## Story: ${slug}\nPath: ${relativePath}\n\n\`\`\`yaml\n${content}\n\`\`\``;
+    const format = storyPath.endsWith('.md') ? 'markdown' : 'yaml';
+    return `## Story: ${slug}\nPath: ${relativePath}\n\n\`\`\`${format}\n${content}\n\`\`\``;
   } catch (err: any) {
     return `Failed to read story: ${err.message}`;
   }
@@ -532,11 +539,18 @@ async function handleUpdateStoryStatus(projectPath: string, slug: string, status
 
   try {
     const raw = readFileSync(storyPath, 'utf-8');
-    const parsed = parseYaml(raw) as any;
-    parsed.status = status;
-    writeFileSync(storyPath, toYaml(parsed), 'utf-8');
-
     const relativePath = storyPath.replace(projectPath, '').replace(/^\//, '');
+
+    if (storyPath.endsWith('.md')) {
+      const parsed = matter(raw);
+      parsed.data.status = status;
+      writeFileSync(storyPath, matter.stringify(parsed.content, parsed.data), 'utf-8');
+    } else {
+      const parsed = parseYaml(raw) as any;
+      parsed.status = status;
+      writeFileSync(storyPath, toYaml(parsed), 'utf-8');
+    }
+
     return `✅ Updated status of "${slug}" to "${status}" in ${relativePath}`;
   } catch (err: any) {
     return `Failed to update story status: ${err.message}`;
@@ -556,11 +570,18 @@ async function handleUpdateStoryField(
 
   try {
     const raw = readFileSync(storyPath, 'utf-8');
-    const parsed = parseYaml(raw) as any;
-    parsed[field] = value;
-    writeFileSync(storyPath, toYaml(parsed), 'utf-8');
-
     const relativePath = storyPath.replace(projectPath, '').replace(/^\//, '');
+
+    if (storyPath.endsWith('.md')) {
+      const parsed = matter(raw);
+      parsed.data[field] = value;
+      writeFileSync(storyPath, matter.stringify(parsed.content, parsed.data), 'utf-8');
+    } else {
+      const parsed = parseYaml(raw) as any;
+      parsed[field] = value;
+      writeFileSync(storyPath, toYaml(parsed), 'utf-8');
+    }
+
     return `✅ Updated field "${field}" in story "${slug}" at ${relativePath}`;
   } catch (err: any) {
     return `Failed to update story field: ${err.message}`;

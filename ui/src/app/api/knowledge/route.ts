@@ -21,7 +21,7 @@ interface WorklogEntry {
   message: string;
 }
 
-interface FailureEntry {
+export interface FailureEntry {
   id: string;
   title: string;
   date: string;
@@ -33,7 +33,7 @@ interface FailureEntry {
   file: string;
 }
 
-interface WorkflowEntry {
+export interface WorkflowEntry {
   id: string;
   title: string;
   content: string;
@@ -76,39 +76,54 @@ function getProjectRoot(): string {
   return path.resolve(process.cwd(), '../..');
 }
 
+function getMdFilesRecursive(dir: string, baseDir: string = dir): { relativePath: string; absolutePath: string }[] {
+  let results: { relativePath: string; absolutePath: string }[] = [];
+  if (!fs.existsSync(dir)) return results;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results = results.concat(getMdFilesRecursive(fullPath, baseDir));
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        results.push({
+          relativePath: path.relative(baseDir, fullPath),
+          absolutePath: fullPath
+        });
+      }
+    }
+  } catch { /* ignore */ }
+  return results.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+}
+
 function readAdrs(projectRoot: string): ADR[] {
   const adrs: ADR[] = [];
   const adrDirs = [
     { path: path.join(projectRoot, 'docs', 'adr'), type: 'docs' },
-    { path: path.join(projectRoot, '.factory', 'knowledge'), type: 'factory' },
-    { path: path.join(projectRoot, '.factory', 'knowledge', 'ADRs'), type: 'factory' },
-    { path: path.join(projectRoot, '.factory', 'knowledge', 'design-system'), type: 'factory' }
+    { path: path.join(projectRoot, '.factory', 'knowledge'), type: 'factory' }
   ];
 
   for (const dirInfo of adrDirs) {
     const dir = dirInfo.path;
     if (!fs.existsSync(dir)) continue;
     try {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      const mdFiles = entries
-        .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
-        .map(entry => entry.name)
-        .sort();
+      const mdFiles = getMdFilesRecursive(dir);
 
-      for (const file of mdFiles) {
-        const fullPath = path.join(dir, file);
+      for (const fileInfo of mdFiles) {
+        const fullPath = fileInfo.absolutePath;
+        const relativePath = fileInfo.relativePath;
         const content = fs.readFileSync(fullPath, 'utf8');
         // Extract title from first H1
         const titleMatch = content.match(/^# (.+)$/m);
-        const title = titleMatch?.[1] || file.replace('.md', '');
+        const title = titleMatch?.[1] || path.basename(relativePath, '.md');
         // Extract status
         const statusMatch = content.match(/^(?:\*\*)?Status(?:\*\*)?:\s*(.+)$/im);
         const status = statusMatch?.[1]?.trim() || 'Unknown';
         // Extract date
         const dateMatch = content.match(/^(?:\*\*)?Date(?:\*\*)?:\s*(.+)$/im);
         const date = dateMatch?.[1]?.trim() || '';
-        const id = file.replace('.md', '');
-        adrs.push({ id, title, status, date, content, file: path.join(dirInfo.type, file) });
+        const id = relativePath.replace('.md', '');
+        adrs.push({ id, title, status, date, content, file: path.join(dirInfo.type, relativePath) });
       }
     } catch { /* ignore */ }
   }
@@ -178,55 +193,7 @@ function readHeartbeat(projectRoot: string): Record<string, unknown> {
   return {};
 }
 
-function readFailures(projectRoot: string): FailureEntry[] {
-  const failDirs = [
-    path.join(projectRoot, '.factory', 'logs', 'failures'),
-    path.join(projectRoot, '.factory', 'knowledge', 'failures')
-  ];
 
-  for (const failDir of failDirs) {
-    if (!fs.existsSync(failDir)) continue;
-    try {
-      const files = fs.readdirSync(failDir).filter(f => f.endsWith('.md')).sort().reverse();
-      if (files.length === 0) continue;
-      return files.map(file => {
-        const content = fs.readFileSync(path.join(failDir, file), 'utf8');
-        const titleMatch = content.match(/^# (.+)$/m);
-        const title = titleMatch?.[1] || file.replace('.md', '');
-        const dateMatch = content.match(/\*\*Date:\*\*\s*(.+)/i);
-        const date = dateMatch?.[1]?.trim() || '';
-        const catMatch = content.match(/\*\*Category:\*\*\s*(.+)/i);
-        const category = catMatch?.[1]?.trim() || '';
-        const durMatch = content.match(/\*\*Duration:\*\*\s*(.+)/i);
-        const duration = durMatch?.[1]?.trim() || '';
-        const errorMatch = content.match(/## Error\s*```[\w]*\n([\s\S]+?)```/i);
-        const error = errorMatch?.[1]?.trim() || '';
-        const actionMatch = content.match(/## Action\n([\s\S]+?)(?:\n##|$)/i);
-        const action = actionMatch?.[1]?.trim() || '';
-        const id = file.replace('.md', '');
-        return { id, title, date, category, duration, error, action, content, file };
-      });
-    } catch { /* ignore */ }
-  }
-  return [];
-}
-
-function readWorkflows(projectRoot: string): WorkflowEntry[] {
-  const wfDir = path.join(projectRoot, '.factory', 'workflows');
-  if (!fs.existsSync(wfDir)) return [];
-  try {
-    const files = fs.readdirSync(wfDir).filter(f => f.endsWith('.md')).sort();
-    return files.map(file => {
-      const content = fs.readFileSync(path.join(wfDir, file), 'utf8');
-      const titleMatch = content.match(/^#+ (.+)$/m);
-      const title = titleMatch?.[1] || file.replace('.md', '');
-      const id = file.replace('.md', '');
-      return { id, title, content, file };
-    });
-  } catch {
-    return [];
-  }
-}
 
 export async function GET(request: Request) {
   try {
@@ -239,8 +206,6 @@ export async function GET(request: Request) {
     const context = readContext(projectRoot);
     const worklog = readWorklog(projectRoot);
     const heartbeat = readHeartbeat(projectRoot);
-    const failures = readFailures(projectRoot);
-    const workflows = readWorkflows(projectRoot);
 
     // Apply search filter
     const qLower = query.toLowerCase();
@@ -248,8 +213,6 @@ export async function GET(request: Request) {
 
     const filtered = {
       adrs: adrs.filter(a => filterText(a.title + ' ' + a.content)),
-      failures: failures.filter(f => filterText(f.title + ' ' + f.error + ' ' + f.action)),
-      workflows: workflows.filter(w => filterText(w.title + ' ' + w.content)),
       worklog: worklog.filter(e => filterText(e.message + ' ' + e.date)),
     };
 
@@ -258,13 +221,9 @@ export async function GET(request: Request) {
       context,
       heartbeat,
       worklog: filtered.worklog,
-      failures: filtered.failures,
-      workflows: filtered.workflows,
       projectRoot,
       stats: {
         adrs: adrs.length,
-        failures: failures.length,
-        workflows: workflows.length,
         worklogEntries: worklog.length,
       }
     });

@@ -10,6 +10,9 @@ import { ReportViewer } from "./report-viewer";
 import { KnowledgeViewer } from "./knowledge-viewer";
 import { HeaderSelectors } from "./header-selectors";
 import { StoryEditor } from "./story-editor";
+import { SkillsView } from "./skills-view";
+import { ProjectsView } from "./projects-view";
+import { IntegrationsView } from "./integrations-view";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
   SidebarProvider,
@@ -108,7 +111,7 @@ function extractAllStories(content: string): ParsedStory[] {
 export default function Dashboard() {
   const [input, setInput] = useState("");
 
-  const [view, setView] = useState<"board" | "settings" | "reports" | "add-project" | "knowledge">("board");
+  const [view, setView] = useState<"board" | "settings" | "reports" | "add-project" | "knowledge" | "skills" | "projects" | "integrations">("board");
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
@@ -218,6 +221,12 @@ export default function Dashboard() {
         setView("reports");
       } else if (hash === "knowledge") {
         setView("knowledge");
+      } else if (hash === "skills") {
+        setView("skills");
+      } else if (hash === "projects") {
+        setView("projects");
+      } else if (hash === "integrations") {
+        setView("integrations");
       } else {
         setView("board");
       }
@@ -666,6 +675,18 @@ export default function Dashboard() {
                   ) : (
                     <KnowledgeViewer data={knowledgeData} />
                   )}
+                </div>
+              ) : view === "skills" ? (
+                <div className="w-full max-w-4xl mx-auto">
+                  <SkillsView />
+                </div>
+              ) : view === "projects" ? (
+                <div className="w-full max-w-4xl mx-auto">
+                  <ProjectsView />
+                </div>
+              ) : view === "integrations" ? (
+                <div className="w-full max-w-4xl mx-auto">
+                  <IntegrationsView />
                 </div>
               ) : (
                 <div className="w-full max-w-7xl mx-auto flex flex-col gap-4">

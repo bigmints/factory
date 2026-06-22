@@ -29,7 +29,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlink
 import { join, basename } from 'node:path';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log } from './log.ts';
-import type { Skill, ScoredSkill, SkillMatchBlueprint, SkillCategory, AppStory, ProjectBlueprint } from './types.ts';
+import type { Skill, ScoredSkill, SkillMatchBlueprint, SkillCategory, Story, ProjectBlueprint } from './types.ts';
 
 // ─── Paths ───────────────────────────────────────────────
 
@@ -351,11 +351,11 @@ export function matchSkills(ctx: SkillMatchBlueprint): ScoredSkill[] {
  * Resolve relevant skills for a build and return scored matches.
  */
 export function resolveSkillsForBuild(
-    story: AppStory,
+    story: Story,
     blueprint: ProjectBlueprint,
 ): ScoredSkill[] {
     const matchBlueprint: SkillMatchBlueprint = {
-        storyName: story.appName,
+        storyName: story.name,
         storyDescription: story.description || '',
         stack: blueprint.stack?.framework || story.stack?.framework || '',
         tags: [

@@ -231,7 +231,11 @@ export async function distillChronicle(repoPath: string): Promise<void> {
 
     // 4. Read ADRs
     const adrs: AdrRecord[] = [];
-    const adrDirs = [join(repoPath, 'docs', 'adr'), knowledgeDir];
+    const adrDirs = [
+        join(repoPath, 'docs', 'adr'), 
+        join(knowledgeDir, 'ADRs'), 
+        join(knowledgeDir, 'design-system')
+    ];
     for (const dir of adrDirs) {
         if (existsSync(dir)) {
             try {

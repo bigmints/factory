@@ -14,7 +14,7 @@
 import { loadSettings, getActiveProvider } from './config.ts';
 import { orchestrateStory, orchestrateFeatureStory } from './orchestrate.ts';
 import type {
-    AppStory, FeatureStory, ProjectBlueprint,
+    Story, ProjectBlueprint,
     BuildResult, LLMProvider, AppIntegrationBlueprint,
 } from './types.ts';
 
@@ -48,7 +48,7 @@ export type ToolMessages = Array<{
  * and delegates code generation to the user-configured CLI.
  */
 export async function runPipeline(
-    story: AppStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
@@ -60,7 +60,7 @@ export async function runPipeline(
  * Run the orchestrator for a feature story.
  */
 export async function runFeaturePipeline(
-    story: FeatureStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
@@ -94,15 +94,13 @@ export function requireActiveProvider(): { provider: LLMProvider; model: string 
  * The REPL uses its own tool set (build-tools.ts), not the orchestrator tools.
  */
 export function buildToolSystemPrompt(
-    story: AppStory | FeatureStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
     _appBlueprint?: AppIntegrationBlueprint,
     _storyFile?: string,
 ): string {
-    const storyName = 'appName' in story
-        ? (story as AppStory).appName
-        : (story as FeatureStory).feature.name;
+    const storyName = story.name;
 
     const conventions = blueprint.conventions.length > 0
         ? `\n## Conventions\n${blueprint.conventions.join('\n\n')}`

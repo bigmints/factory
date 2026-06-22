@@ -25,7 +25,7 @@ import { detectAvailableCli, verifyCli } from './cli-adapter.ts';
 import { runCliSession } from './cli-session.ts';
 import { resolveSkillsForBuild, formatSkillsForPrompt } from './skills.ts';
 import type {
-    AppStory, FeatureStory, ProjectBlueprint,
+    Story, ProjectBlueprint,
     BuildResult, GeneratedFile, FactorySettings,
 } from './types.ts';
 
@@ -50,14 +50,14 @@ export interface OrchestratorContext {
  * Deterministic: brief → CLI session → done/failed.
  */
 export async function orchestrateStory(
-    story: AppStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
 ): Promise<BuildResult> {
     const settings = loadSettings();
     const cliName = resolveCliName(settings);
-    log('●', `Orchestrating story: ${story.appName} via CLI: ${cliName}`);
+    log('●', `Orchestrating story: ${story.name} via CLI: ${cliName}`);
     return runDeterministicPipeline(story, blueprint, targetDir, storyFile, cliName);
 }
 
@@ -65,14 +65,14 @@ export async function orchestrateStory(
  * Orchestrate a FeatureStory build.
  */
 export async function orchestrateFeatureStory(
-    story: FeatureStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
 ): Promise<BuildResult> {
     const settings = loadSettings();
     const cliName = resolveCliName(settings);
-    log('●', `Orchestrating feature: ${story.feature.name} via CLI: ${cliName}`);
+    log('●', `Orchestrating feature: ${story.name} via CLI: ${cliName}`);
     return runDeterministicPipeline(story, blueprint, targetDir, storyFile, cliName);
 }
 
@@ -100,7 +100,7 @@ function resolveCliName(settings: FactorySettings): string {
 // ─── Deterministic Pipeline ──────────────────────────────
 
 async function runDeterministicPipeline(
-    story: AppStory | FeatureStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
     storyFile: string,
@@ -203,7 +203,7 @@ async function runDeterministicPipeline(
         files: ctx.files,
         plan: {
             files: ctx.files.map(f => f.filename),
-            architecture: isAppStory(story) ? story.appName : (story as FeatureStory).feature.name,
+            architecture: story.name,
             decisions: ['engine:deterministic-tpm', `cli:${cliName}`],
         },
         iterations: 1,
@@ -223,7 +223,7 @@ async function runDeterministicPipeline(
  * All context (story, stack, conventions, knowledge) is injected directly.
  */
 function buildBrief(
-    story: AppStory | FeatureStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
     _cliName: string,
@@ -237,7 +237,7 @@ function buildBrief(
     sections.push(`# Target Directory\n\n\`${targetDir}\`\n\nAll work happens in this directory. Create it if it doesn't exist.`);
 
     // ── Stack ──
-    if (isAppStory(story)) {
+    if (story.stack) {
         sections.push(`# Stack\n\n\`\`\`json\n${JSON.stringify(story.stack, null, 2)}\n\`\`\``);
     }
 
@@ -271,7 +271,7 @@ function buildBrief(
     }
 
     // ── Skills ──
-    const scoredSkills = resolveSkillsForBuild(story as AppStory, blueprint);
+    const scoredSkills = resolveSkillsForBuild(story, blueprint);
     if (scoredSkills.length > 0) {
         sections.push(formatSkillsForPrompt(scoredSkills));
     }
@@ -334,9 +334,9 @@ function createFixStoryFile(ctx: OrchestratorContext, issue: string, fixInstruct
     try {
         const slug = ctx.storyFile.split('/').pop()?.replace(/\.ya?ml$/, '') || 'story';
         const fixSlug = `fix-${slug}`;
-        const storiesDir = join(ctx.repoPath, '.factory', 'stories', 'features');
+        const storiesDir = join(ctx.repoPath, '.factory', 'stories');
         mkdirSync(storiesDir, { recursive: true });
-        const fixPath = join(storiesDir, `${fixSlug}.yaml`);
+        const fixPath = join(storiesDir, `${fixSlug}.md`);
 
         let originalStory: any = {};
         try {
@@ -362,9 +362,10 @@ function createFixStoryFile(ctx: OrchestratorContext, issue: string, fixInstruct
             createdAt: new Date().toISOString(),
         };
 
-        writeFileSync(fixPath, toYaml(fixStory));
+        const frontmatter = `---\n${toYaml(fixStory)}---\n`;
+        writeFileSync(fixPath, frontmatter);
         log('✓', `Fix story written: ${fixPath}`);
-        return `features/${fixSlug}.yaml`;
+        return `${fixSlug}.md`;
     } catch (e) {
         logError(`createFixStoryFile failed: ${e}`);
         return null;
@@ -388,6 +389,3 @@ function loadKnowledgeFiles(repoPath: string): Array<{ name: string; content: st
     }
 }
 
-function isAppStory(story: AppStory | FeatureStory): story is AppStory {
-    return 'appName' in story;
-}

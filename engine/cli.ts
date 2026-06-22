@@ -131,7 +131,6 @@ async function main(): Promise<void> {
     // Lazy-loaded handlers for less frequently used commands
     const lazyProject = () => import('./cli/project-handlers.ts');
     const lazyFeature = () => import('./cli/feature-handlers.ts');
-    const lazyQueue = () => import('./cli/queue-handlers.ts');
 
     switch (command) {
         case 'build':
@@ -156,10 +155,7 @@ async function main(): Promise<void> {
             const { handleFeature } = await lazyFeature();
             return handleFeature(target, args[2]);
         }
-        case 'queue': {
-            const { handleQueue } = await lazyQueue();
-            return handleQueue(target, args[2]);
-        }
+
         case 'start':
             return handleStart();
         case 'stop':
@@ -191,6 +187,10 @@ async function main(): Promise<void> {
             return handleBtw(target, args.slice(2).join(' '));
         case 'chronicle':
             return handleChronicle(target, args[2]);
+        case 'build-knowledge': {
+            const { handleBuildKnowledge } = await import('./cli/facade-handlers.ts');
+            return handleBuildKnowledge();
+        }
 
         default:
             printUsage();

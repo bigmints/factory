@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parse as parseYaml } from 'yaml';
-import type { AppStory, FeatureStory, ProjectBlueprint, BuildResult, GeneratedFile } from './types.ts';
+import type { Story, ProjectBlueprint, BuildResult, GeneratedFile } from './types.ts';
 import { storySlug } from './types.ts';
 import { log, logError } from './log.ts';
 import {
@@ -43,63 +43,61 @@ export interface WorkerQueueOptions {
 // ─── Queue Generator ─────────────────────────────────────
 
 /**
- * Convert an AppStory to a list of worker tasks.
+ * Convert a Story to a list of worker tasks.
  */
-function storyToTasks(story: AppStory): WorkerTask[] {
-    return [
-        {
-            name: 'Setup project',
-            prompt: `Create package.json and tsconfig.json for ${story.appName}. Framework: ${story.stack.framework}. Package manager: ${story.stack.packageManager || 'npm'}.`,
-        },
-        {
-            name: 'Scaffold structure',
-            prompt: `Create the directory structure and base files for ${story.appName}. Framework: ${story.stack.framework}. Include layout, routing, and configuration files.`,
-        },
-        {
-            name: 'Generate core code',
-            prompt: `Generate the core application code for ${story.appName}. Description: ${story.description}. Stack: ${story.stack.framework}, ${story.stack.database || 'no database'}.`,
-        },
-        {
-            name: 'Test and validate',
-            prompt: `Run tests and validate the build for ${story.appName}. Run tsc --noEmit, lint, and any configured tests. Fix any errors found.`,
-        },
-        {
-            name: 'Finalize',
-            prompt: `Finalize the build for ${story.appName}. Ensure all files are complete, run a final validation, and mark the build as complete.`,
-        },
-    ];
-}
-
-/**
- * Convert a FeatureStory to a list of worker tasks.
- */
-function featureStoryToTasks(story: FeatureStory): WorkerTask[] {
-    return [
-        {
-            name: 'Analyze target app',
-            prompt: `Analyze the target app ${story.target.app}. Read its structure, dependencies, and conventions. Understand where this feature fits.`,
-        },
-        {
-            name: 'Plan feature',
-            prompt: `Plan the feature ${story.feature.name} for app ${story.target.app}. Determine which files need to be created or modified.`,
-        },
-        {
-            name: 'Generate feature code',
-            prompt: `Generate the feature code for ${story.feature.name}. Target app: ${story.target.app}. Phase: ${story.phase || 'unspecified'}.`,
-        },
-        {
-            name: 'Integrate with app',
-            prompt: `Integrate the feature ${story.feature.name} with the existing app ${story.target.app}. Update routes, imports, and configuration as needed.`,
-        },
-        {
-            name: 'Test feature',
-            prompt: `Test the feature ${story.feature.name}. Run tsc, lint, and any tests. Fix errors.`,
-        },
-        {
-            name: 'Finalize feature',
-            prompt: `Finalize the feature ${story.feature.name}. Ensure everything is complete and mark as done.`,
-        },
-    ];
+function storyToTasks(story: Story): WorkerTask[] {
+    const isApp = story.kind === 'app';
+    if (isApp) {
+        return [
+            {
+                name: 'Setup project',
+                prompt: `Create package.json and tsconfig.json for ${story.name}. Framework: ${story.stack?.framework || 'unknown'}. Package manager: ${story.stack?.packageManager || 'npm'}.`,
+            },
+            {
+                name: 'Scaffold structure',
+                prompt: `Create the directory structure and base files for ${story.name}. Framework: ${story.stack?.framework || 'unknown'}. Include layout, routing, and configuration files.`,
+            },
+            {
+                name: 'Generate core code',
+                prompt: `Generate the core application code for ${story.name}. Description: ${story.description || ''}. Stack: ${story.stack?.framework || 'unknown'}, ${story.stack?.database || 'no database'}.`,
+            },
+            {
+                name: 'Test and validate',
+                prompt: `Run tests and validate the build for ${story.name}. Run tsc --noEmit, lint, and any configured tests. Fix any errors found.`,
+            },
+            {
+                name: 'Finalize',
+                prompt: `Finalize the build for ${story.name}. Ensure all files are complete, run a final validation, and mark the build as complete.`,
+            },
+        ];
+    } else {
+        return [
+            {
+                name: 'Analyze target app',
+                prompt: `Analyze the target app ${story.target || 'root'}. Read its structure, dependencies, and conventions. Understand where this feature fits.`,
+            },
+            {
+                name: 'Plan feature',
+                prompt: `Plan the feature ${story.name} for app ${story.target || 'root'}. Determine which files need to be created or modified.`,
+            },
+            {
+                name: 'Generate feature code',
+                prompt: `Generate the feature code for ${story.name}. Target app: ${story.target || 'root'}. Phase: ${story.phase || 'unspecified'}.`,
+            },
+            {
+                name: 'Integrate with app',
+                prompt: `Integrate the feature ${story.name} with the existing app ${story.target || 'root'}. Update routes, imports, and configuration as needed.`,
+            },
+            {
+                name: 'Test feature',
+                prompt: `Test the feature ${story.name}. Run tsc, lint, and any tests. Fix errors.`,
+            },
+            {
+                name: 'Finalize feature',
+                prompt: `Finalize the feature ${story.name}. Ensure everything is complete and mark as done.`,
+            },
+        ];
+    }
 }
 
 // CLI invocation is handled by cli-adapter.ts — see buildCliInvocation().
@@ -291,17 +289,17 @@ export async function runQueue(
  * Run the worker engine natively against a story in memory.
  */
 async function runWorkerEngine(
-    story: AppStory | FeatureStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
 ): Promise<BuildResult> {
-    const isApp = 'appName' in story;
-    const tasks = isApp ? storyToTasks(story as AppStory) : featureStoryToTasks(story as FeatureStory);
+    const isApp = story.kind === 'app';
+    const tasks = storyToTasks(story);
 
     // Create the target directory
     mkdirSync(targetDir, { recursive: true });
 
-    log('→', `Running worker engine natively for: ${isApp ? (story as AppStory).appName : (story as FeatureStory).feature.name}`);
+    log('→', `Running worker engine natively for: ${story.name}`);
 
     const result = await runQueueTasks(tasks, {
         workdir: targetDir,
@@ -309,7 +307,7 @@ async function runWorkerEngine(
     });
 
     const files = scanGeneratedFiles(targetDir);
-    const name = isApp ? (story as AppStory).appName : (story as FeatureStory).feature.name;
+    const name = story.name;
 
     if (result.success) {
         return {
@@ -373,7 +371,7 @@ function scanDir(dir: string, prefix: string, files: GeneratedFile[]): void {
 
 /** Build using worker engine */
 export async function runWorkerBuild(
-    story: AppStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir?: string,
 ): Promise<BuildResult> {
@@ -384,7 +382,7 @@ export async function runWorkerBuild(
 
 /** Feature build using worker engine */
 export async function runWorkerFeatureBuild(
-    story: FeatureStory,
+    story: Story,
     blueprint: ProjectBlueprint,
     targetDir: string,
 ): Promise<BuildResult> {

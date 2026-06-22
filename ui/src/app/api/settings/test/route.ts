@@ -5,7 +5,7 @@ export async function POST(request: Request) {
         const { provider, apiKey, baseUrl, kind } = await request.json();
 
         // Custom openai-compat providers: call their /v1/models endpoint
-        if (kind === 'openai-compat') {
+        if (kind === 'openai-compat' || provider === 'openai-compatible') {
             if (!baseUrl) return NextResponse.json({ ok: false, message: 'Base URL is required' });
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 8000);

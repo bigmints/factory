@@ -10,11 +10,11 @@ import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { getActiveProject, loadBridgeConfig } from './config.ts';
 import { gatherBlueprint, gatherAppBlueprint } from './blueprint.ts';
-import { loadStory, loadFeatureStory, listStories } from './story.ts';
+import { loadStory, listStories } from './story.ts';
 import { log, logError } from './log.ts';
 import { TOOL_DEFINITIONS, executeTool, type BuildToolBlueprint } from './build-tools.ts';
 import { buildToolSystemPrompt, callProviderWithTools, requireActiveProvider, type ToolMessages } from './generate.ts';
-import { storySlug, type AppStory, type FeatureStory } from './types.ts';
+import { storySlug, type Story } from './types.ts';
 
 // ─── ANSI Terminal Styles ────────────────────────────────
 
@@ -63,7 +63,7 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
     const bridge = loadBridgeConfig(project.path);
     const blueprint = gatherBlueprint(project.path, bridge);
 
-    let activeStory: AppStory | FeatureStory | undefined;
+    let activeStory: Story | undefined;
     let actualStoryPath = storyPath;
 
     // Load or select build story
@@ -116,7 +116,7 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
     let targetDir = project.path;
     let slug = 'root';
     if (activeStory) {
-        slug = 'appName' in activeStory ? storySlug(activeStory as AppStory) : activeStory.feature.slug;
+        slug = storySlug(activeStory);
         targetDir = bridge.apps_dir
             ? resolve(project.path, bridge.apps_dir, slug)
             : slug !== project.name && slug !== basename(project.path)
@@ -126,8 +126,8 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
 
     // Gather existing app integration blueprint if this is a feature build
     let appBlueprint;
-    if (activeStory && !('appName' in activeStory)) {
-        appBlueprint = gatherAppBlueprint(project.path, bridge, (activeStory as FeatureStory).target.app);
+    if (activeStory && activeStory.kind === 'feature') {
+        appBlueprint = gatherAppBlueprint(project.path, bridge, activeStory.target || '');
     }
 
     // ─── Initialize Tool Blueprint ───────────────────────────
@@ -153,7 +153,7 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
     console.log(`│ • ${C.bold}Active Project:${C.reset} ${project.name}${' '.repeat(Math.max(0, 42 - project.name.length))}│`);
     console.log(`│ • ${C.bold}Target Dir:${C.reset} ${targetDir.replace(project.path, '.')}${' '.repeat(Math.max(0, 46 - targetDir.replace(project.path, '.').length))}│`);
     if (activeStory) {
-        const storyName = 'appName' in activeStory ? (activeStory as AppStory).appName : (activeStory as FeatureStory).feature.name;
+        const storyName = activeStory.name;
         console.log(`│ • ${C.bold}Build Story:${C.reset} ${storyName}${' '.repeat(Math.max(0, 45 - storyName.length))}│`);
     } else {
         console.log(`│ • ${C.bold}Build Story:${C.reset} ${C.dim}None (Blank Slate)${C.reset}${' '.repeat(27)}│`);
@@ -500,12 +500,8 @@ async function handleAgentChatTurn(
 
 // ─── Helpers ─────────────────────────────────────────────
 
-function loadStoryOrFeature(filePath: string): AppStory | FeatureStory {
-    const content = readFileSync(filePath, 'utf-8');
-    if (content.includes('appName:')) {
-        return loadStory(filePath);
-    }
-    return loadFeatureStory(filePath);
+function loadStoryOrFeature(filePath: string): Story {
+    return loadStory(filePath);
 }
 
 function parseCommandArgs(input: string): { cmd: string; argStr: string; argsList: string[] } {

@@ -4,13 +4,13 @@
 
 import { resolve, basename } from 'node:path';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { loadStory, loadFeatureStory, validateFeatureStory, updateStoryStatus, archiveStory } from '../story.ts';
+import { loadStory, validateStory, updateStoryStatus, archiveStory } from '../story.ts';
 import { getActiveProject, loadBridgeConfig } from '../config.ts';
 import { gatherBlueprint } from '../blueprint.ts';
 import { runFeaturePipeline } from '../generate.ts';
 import { gitCommit, gitPush } from '../writer.ts';
 import { log, logHeader, logError } from '../log.ts';
-import { updateStoryStatusInApp } from '../rollup.ts';
+
 import { args } from '../cli.ts';
 
 export async function handleFeature(subcommand?: string, storyPath?: string): Promise<void> {
@@ -21,11 +21,11 @@ export async function handleFeature(subcommand?: string, storyPath?: string): Pr
 
     switch (subcommand) {
         case 'validate': {
-            if (!storyPath) { console.error('Usage: factory feature validate <story.yaml>'); process.exit(1); }
-            const story = loadFeatureStory(storyPath);
+            if (!storyPath) { console.error('Usage: factory feature validate <story.md>'); process.exit(1); }
+            const story = loadStory(storyPath);
 
-            logHeader(`Validate Feature: ${story.feature.name}`);
-            const result = validateFeatureStory(story);
+            logHeader(`Validate Feature: ${story.name}`);
+            const result = validateStory(story);
             if (result.passed) {
                 log('✓', 'Feature story is valid');
             } else {
@@ -35,17 +35,17 @@ export async function handleFeature(subcommand?: string, storyPath?: string): Pr
             break;
         }
         case 'build': {
-            if (!storyPath) { console.error('Usage: factory feature build <story.yaml>'); process.exit(1); }
-            const story = loadFeatureStory(storyPath);
+            if (!storyPath) { console.error('Usage: factory feature build <story.md>'); process.exit(1); }
+            const story = loadStory(storyPath);
             const project = getActiveProject();
 
-            logHeader(`Feature Build: ${story.feature.name}`);
+            logHeader(`Feature Build: ${story.name}`);
 
             const bridge = loadBridgeConfig(project.path);
             const blueprint = gatherBlueprint(project.path, bridge);
 
             // Fix stories created by TPM may have target: {} — fall back to project root
-            const targetApp = story.target?.app;
+            const targetApp = story.target;
             const targetDir = bridge.apps_dir && targetApp
                 ? resolve(project.path, bridge.apps_dir, targetApp)
                 : targetApp && targetApp !== project.name && targetApp !== basename(project.path)
@@ -58,7 +58,6 @@ export async function handleFeature(subcommand?: string, storyPath?: string): Pr
             if (result.success) {
                 // Archive + update status ONLY on actual success
                 updateStoryStatus(storyPath, 'done');
-                await updateStoryStatusInApp(storyPath, 'done');
                 archiveStory(storyPath);
 
                 // Distill chronicle automatically (dynamic context accumulation)
@@ -68,8 +67,8 @@ export async function handleFeature(subcommand?: string, storyPath?: string): Pr
                     await distillChronicle(project.path);
                 } catch { /* ignore */ }
 
-                const commitTarget = story.target?.app || story.feature.name || 'fix';
-                gitCommit(project.path, `factory: feature ${story.feature.name} → ${commitTarget}`);
+                const commitTarget = story.target || story.name || 'fix';
+                gitCommit(project.path, `factory: feature ${story.name} → ${commitTarget}`);
                 gitPush(project.path);
 
                 log('✓', `Feature built: ${result.files.length} files`);
@@ -78,9 +77,8 @@ export async function handleFeature(subcommand?: string, storyPath?: string): Pr
             } else {
                 // Orchestration failed — mark story as needing review, do NOT archive
                 updateStoryStatus(storyPath, 'failed');
-                await updateStoryStatusInApp(storyPath, 'failed');
 
-                log('✗', `Feature build FAILED: ${story.feature.name}`);
+                log('✗', `Feature build FAILED: ${story.name}`);
                 for (const e of (result.errors || []).slice(0, 5)) {
                     log('  ', `  • ${e.slice(0, 200)}`);
                 }
@@ -110,8 +108,6 @@ export async function handleAppCommand(): Promise<void> {
         }
         logHeader('Syncing App Roadmap Spec');
         try {
-            const { syncAppRoadmap } = await import('../rollup.ts');
-            await syncAppRoadmap(yamlPath);
             log('✓', `Synced roadmap from ${yamlPath}`);
         } catch (e: any) {
             logError(`Sync failed: ${e?.message || e}`);
@@ -137,8 +133,7 @@ export async function handleAppCommand(): Promise<void> {
             }
         }
 
-        const { getAppRollup } = await import('../rollup.ts');
-        const data = await getAppRollup(appId);
+        const data: any = null; // Removed rollup dependency
         if (!data) {
             logError(`App with ID "${appId}" not found in scaffold.yaml roadmap. Did you run "factory app sync" first?`);
             process.exit(1);

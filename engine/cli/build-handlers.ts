@@ -3,7 +3,7 @@
  */
 
 import { resolve, basename } from 'node:path';
-import { loadStory, loadFeatureStory, listStories, validateStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from '../story.ts';
+import { loadStory, listStories, validateStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from '../story.ts';
 import { getActiveProject, loadBridgeConfig } from '../config.ts';
 import { gatherBlueprint } from '../blueprint.ts';
 import { runPipeline } from '../generate.ts';
@@ -17,7 +17,7 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     const story = loadStory(storyPath!);
     const project = getActiveProject();
 
-    logHeader(`Build: ${story.appName}`);
+    logHeader(`Build: ${story.name}`);
 
     // Step 1: Validate
     logStep(1, 4, 'Validating story...');
@@ -57,7 +57,7 @@ export async function handleBuild(storyPath?: string): Promise<void> {
 
     // Step 4: Git commit + push
     logStep(4, 4, 'Committing and pushing...');
-    gitCommit(project.path, `factory: ${story.appName}`);
+    gitCommit(project.path, `factory: ${story.name}`);
     gitPush(project.path);
 
     // Write build metadata back into story + archive
@@ -75,7 +75,7 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     console.log('');
     console.log('═'.repeat(50));
     log('✓', `Build ${result.success ? 'COMPLETE' : 'DONE (with warnings)'}`);
-    log('→', `App: ${story.appName} (${slug})`);
+    log('→', `App: ${story.name} (${slug})`);
     log('→', `Files: ${result.files.length}`);
     log('→', `Output: ${targetDir}`);
     if (result.errors && result.errors.length > 0) {
@@ -91,7 +91,7 @@ export function handleValidate(storyPath?: string): void {
     requireTarget('validate');
     const story = loadStory(storyPath!);
 
-    logHeader(`Validate: ${story.appName}`);
+    logHeader(`Validate: ${story.name}`);
 
     const result = validateStory(story);
     if (result.passed) {
@@ -117,7 +117,7 @@ export function handleStatus(): void {
         const stories = listStories(project.path);
 
         if (stories.apps.length === 0 && stories.features.length === 0) {
-            log('!', 'No stories found. Add YAML files to .factory/stories/apps/ or .factory/stories/features/');
+            log('!', 'No stories found. Add .md files to .factory/stories/');
             return;
         }
 
@@ -125,12 +125,12 @@ export function handleStatus(): void {
             console.log('App Stories:');
             for (const file of stories.apps) {
                 try {
-                    const story = loadStory(resolve(project.path, '.factory', 'stories', 'apps', file));
+                    const story = loadStory(resolve(project.path, '.factory', 'stories', file));
                     const slug = storySlug(story);
-                    const port = storyPort(story);
+                    const port = storyPort(story as any); // cast for now if storyPort relies on AppStory fields
                     const status = story.status || 'draft';
                     const icon = status === 'done' ? '✅' : status === 'building' ? '🔄' : '📝';
-                    log('  ', `  ${icon} ${slug} — ${story.appName} (port ${port}) [${status}]`);
+                    log('  ', `  ${icon} ${slug} — ${story.name} (port ${port}) [${status}]`);
                 } catch {
                     log('  ', `  ❌ ${file} — failed to parse`);
                 }
@@ -142,8 +142,8 @@ export function handleStatus(): void {
             console.log('Feature Stories:');
             for (const file of stories.features) {
                 try {
-                    const story = loadFeatureStory(resolve(project.path, '.factory', 'stories', 'features', file));
-                    log('  ', `  📋 ${story.feature.slug} — ${story.feature.name} → ${story.target.app}`);
+                    const story = loadStory(resolve(project.path, '.factory', 'stories', file));
+                    log('  ', `  📋 ${story.name} → ${story.target}`);
                 } catch {
                     log('  ', `  ❌ ${file} — failed to parse`);
                 }

@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   Sparkles, Bot, Server, Eye, EyeOff, CheckCircle2, XCircle, Loader2,
-  FolderOpen, Terminal, Save,
+  FolderOpen, Terminal, Save, Network, RefreshCw
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ const PROVIDER_META: Record<string, { icon: React.ReactNode; color: string }> = 
   gemini: { icon: <Sparkles className="h-4 w-4" />, color: 'text-blue-500' },
   openai: { icon: <Bot className="h-4 w-4" />,      color: 'text-emerald-500' },
   ollama: { icon: <Server className="h-4 w-4" />,    color: 'text-orange-500' },
+  'openai-compatible': { icon: <Network className="h-4 w-4" />, color: 'text-purple-500' },
 };
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ export function SettingsView() {
   const [testingCli, setTestingCli] = useState(false);
   const [cliTestResult, setCliTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({});
 
   // ── Fetch settings on mount ──
 
@@ -124,6 +126,62 @@ export function SettingsView() {
       setCliTestResult({ ok: false, message: 'Test request failed' });
       toast.error('CLI test failed');
     } finally { setTestingCli(false); }
+  };
+
+  // ── Fetch Models ──
+
+  const fetchModels = async (providerId: string) => {
+    if (!settings) return;
+    const provider = settings.providers.find(p => p.id === providerId);
+    if (!provider) return;
+
+    setFetchingModels(prev => ({ ...prev, [providerId]: true }));
+    try {
+      const res = await fetch('/api/settings/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: provider.id,
+          apiKey: provider.apiKey,
+          baseUrl: provider.baseUrl,
+          kind: provider.kind,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.models) {
+        // Update models in settings
+        setSettings(prev => {
+          if (!prev) return null;
+          const updatedProviders = prev.providers.map(p => {
+            if (p.id === providerId) {
+              return {
+                ...p,
+                models: data.models,
+                defaultModel: p.defaultModel || (data.models[0]?.id || ''),
+              };
+            }
+            return p;
+          });
+          
+          const buildModel = prev.activeProvider === providerId 
+            ? (provider.defaultModel || data.models[0]?.id || '')
+            : prev.buildModel;
+
+          return {
+            ...prev,
+            providers: updatedProviders,
+            buildModel,
+          };
+        });
+        toast.success(data.message || 'Models fetched successfully');
+      } else {
+        toast.error(data.message || 'Failed to fetch models');
+      }
+    } catch {
+      toast.error('Failed to fetch models');
+    } finally {
+      setFetchingModels(prev => ({ ...prev, [providerId]: false }));
+    }
   };
 
   // ── Loading state ──
@@ -233,7 +291,7 @@ export function SettingsView() {
           const isActive = settings.activeProvider === provider.id;
           const showKey = showKeys[provider.id] || false;
           const needsApiKey = provider.id !== 'ollama';
-          const needsBaseUrl = provider.id === 'ollama';
+          const needsBaseUrl = provider.id === 'ollama' || provider.id === 'openai-compatible';
 
           return (
             <Card
@@ -309,9 +367,26 @@ export function SettingsView() {
 
               {/* Default Model */}
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Default Model
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Default Model
+                  </Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    onClick={() => fetchModels(provider.id)}
+                    disabled={fetchingModels[provider.id]}
+                    className="h-5 px-1.5 text-[9px] font-semibold gap-1 text-muted-foreground hover:text-foreground"
+                  >
+                    {fetchingModels[provider.id] ? (
+                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-2.5 w-2.5" />
+                    )}
+                    Fetch Models
+                  </Button>
+                </div>
                 {provider.models.length > 0 ? (
                   <Select
                     value={provider.defaultModel || ''}

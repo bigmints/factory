@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { calculateRollups } from '@engine/rollup';
+
 import { slugify } from '@engine/types';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
@@ -201,8 +201,7 @@ export async function DELETE(
             }
 
             if (scaffoldChanged) {
-              const appSlug = slugify(app.name);
-              const updatedApp = calculateRollups(app, appSlug);
+              const updatedApp = app;
               writeFileSync(scaffoldYamlPath, stringifyYaml(updatedApp, { lineWidth: 120 }), 'utf-8');
               deletedFromScaffold = true;
             }

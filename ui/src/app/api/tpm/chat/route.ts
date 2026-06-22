@@ -12,7 +12,7 @@ import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 
 import { getActiveProject } from '@engine/config';
-import { listQueue, getQueueStats, enqueue } from '@engine/queue';
+
 import { getBuildLogs } from '@engine/db';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
@@ -220,21 +220,6 @@ export const TPM_TOOLS = [
     parameters: { type: 'object', properties: {} },
   },
   {
-    name: 'list_queue',
-    description:
-      'List all build queue items with their statuses, phases, and dependencies. Use when user asks about the build queue.',
-    parameters: {
-      type: 'object',
-      properties: {
-        status: {
-          type: 'string',
-          enum: ['all', 'pending', 'running', 'completed', 'failed'],
-          description: 'Filter by queue item status. Default: all.',
-        },
-      },
-    },
-  },
-  {
     name: 'get_build_logs',
     description:
       'Retrieve recent build logs and build receipts for the project. Use when the user asks about what was recently built or build history.',
@@ -281,7 +266,7 @@ export const TPM_TOOLS = [
   {
     name: 'apply_story',
     description:
-      'Write a proposed YAML story to disk (.factory/stories/features/) and automatically enqueue it in the SQLite build queue.',
+      'Write a proposed YAML story to disk (.factory/stories/features/).',
     parameters: {
       type: 'object',
       properties: {
@@ -454,14 +439,6 @@ Progress: ${parsed.progressPercent || 0}%`;
     }
   }
 
-  const queueStats = getQueueStats();
-  const queueInfo = `Build Queue Status:
-- Total Queue Items: ${queueStats.total}
-- Pending: ${queueStats.pending}
-- Running: ${queueStats.running}
-- Completed: ${queueStats.completed}
-- Failed: ${queueStats.failed}`;
-
   let heartbeatMsg = 'No heartbeat registered yet.';
   const heartbeatPath = join(projectPath, '.factory', 'logs', 'heartbeat.yaml');
   if (existsSync(heartbeatPath)) {
@@ -476,7 +453,7 @@ Progress: ${parsed.progressPercent || 0}%`;
   const worklogSnippet = 'Recent Session Logs:\n' + readBlueprintWorklog(projectPath, 5);
 
   return JSON.stringify(
-    { scaffold: scaffoldInfo, queue: queueInfo, heartbeat: heartbeatMsg, worklog: worklogSnippet },
+    { scaffold: scaffoldInfo, heartbeat: heartbeatMsg, worklog: worklogSnippet },
     null,
     2
   );
@@ -608,31 +585,6 @@ async function handleGetScaffold(projectPath: string) {
     return `## Scaffold Plan\n\n\`\`\`yaml\n${content}\n\`\`\``;
   } catch (err: any) {
     return `Failed to read scaffold.yaml: ${err.message}`;
-  }
-}
-
-async function handleListQueue(statusFilter?: string) {
-  try {
-    const items = listQueue();
-    const stats = getQueueStats();
-
-    const filtered =
-      statusFilter && statusFilter !== 'all'
-        ? items.filter((item: any) => item.status === statusFilter)
-        : items;
-
-    if (filtered.length === 0) {
-      return `Build queue is empty (filter: ${statusFilter || 'all'}).\n\nStats: ${JSON.stringify(stats, null, 2)}`;
-    }
-
-    const lines = filtered.map(
-      (item: any) =>
-        `- [${item.status.toUpperCase()}] ${item.storyFile} | Phase: ${item.phase || '?'} | Priority: ${item.priority || 0}${item.dependsOn?.length ? ` | Depends: ${item.dependsOn.join(', ')}` : ''}`
-    );
-
-    return `Queue Items (${filtered.length}):\n${lines.join('\n')}\n\nStats:\n${JSON.stringify(stats, null, 2)}`;
-  } catch (err: any) {
-    return `Failed to list queue: ${err.message}`;
   }
 }
 
@@ -859,20 +811,7 @@ async function handleApplyStory(
     mkdirSync(join(projectPath, '.factory', 'stories', folder), { recursive: true });
     writeFileSync(fullPath, finalContent, 'utf-8');
 
-    if (kind === 'feature') {
-      try {
-        await enqueue(relativePath, 'FeatureStory', {
-          phase: phase || 1,
-          dependsOn: dependsOn || [],
-          engine: 'factory',
-          threadId: threadId,
-        });
-      } catch (e: any) {
-        return `Story saved to ${relativePath} but failed to auto-enqueue: ${e.message}`;
-      }
-    }
-
-    return `✅ Successfully saved story to .factory/${relativePath} and enqueued in build queue.`;
+    return `✅ Successfully saved story to .factory/${relativePath}.`;
   } catch (err: any) {
     return `Error saving story: ${err.message}`;
   }
@@ -1020,11 +959,10 @@ export async function POST(request: Request) {
 You have access to the following tools. Use them proactively to fulfill user requests:
 
 **Query tools:**
-- get_project_status() — project progress, queue stats, heartbeat, worklog
+- get_project_status() — project progress, heartbeat, worklog
 - list_stories(kind?, status?) — all stories with statuses
 - get_story(slug) — full YAML of a specific story
 - get_scaffold() — full planning scaffold
-- list_queue(status?) — build queue items
 - get_build_logs(limit?) — build history and receipts
 - search_knowledge(query) — search ADRs and engineering decisions
 - read_heartbeat() — latest agent liveness signal and worklog
@@ -1032,18 +970,18 @@ You have access to the following tools. Use them proactively to fulfill user req
 **Write tools:**
 - update_story_status(slug, status) — update story status (draft/in-progress/done/review)
 - update_story_field(slug, field, value) — update any story field
-- apply_story(name, content, kind, phase?, dependsOn?) — save and enqueue a new story
+- apply_story(name, content, kind, phase?, dependsOn?) — save a new story
 - add_adr_decision(slug, content) — record an architectural decision
 - decompose_requirements(prompt) — decompose requirements into feature story YAMLs
 
 **Orchestration rules:**
-- Always call tools when user asks about status, stories, queue, or logs — never guess from memory.
+- Always call tools when user asks about status, stories, or logs — never guess from memory.
 - When user references @story-name in their message, call get_story to get its details first.
 - For "what's the status?" type questions, call get_project_status AND list_stories together.
 - After write operations, confirm the action with the returned result.
 - App story YAML MUST include: \`appName\` (string), \`description\`, \`phase\`, \`status\`, and \`stack\` (object with \`framework\` and \`packageManager\`).
 - Feature story YAML MUST include: \`name\` (string), \`description\`, \`status\`, \`phase\`, \`feature\` (object with name, slug), \`target\` (object with app), \`dependsOn\`, \`dependencies\`, and \`acceptance_criteria\`.
-- Speak professionally and concisely. Be the intelligent conductor.\${skillSection}\`;
+- Speak professionally and concisely. Be the intelligent conductor.${skillSection}`;
 
           const localMessages: any[] = [
             { role: 'system', content: tpmSystemPrompt },
@@ -1231,9 +1169,6 @@ You have access to the following tools. Use them proactively to fulfill user req
                       break;
                     case 'get_scaffold':
                       result = await handleGetScaffold(activeProject.path);
-                      break;
-                    case 'list_queue':
-                      result = await handleListQueue(tc.arguments.status);
                       break;
                     case 'get_build_logs':
                       result = await handleGetBuildLogs(

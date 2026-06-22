@@ -786,65 +786,72 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
         logError(`agents.md patch failed: ${e}`);
     }
 
-    // 10. scaffold.yaml — generate completed spec if not exists
-    const scaffoldYamlPath = join(factoryDir, 'scaffold.yaml');
-    if (!existsSync(scaffoldYamlPath)) {
+    // 10. blueprint/scaffold.md — generate completed spec if not exists
+    const blueprintDir = join(factoryDir, 'blueprint');
+    if (!existsSync(blueprintDir)) {
+        mkdirSync(blueprintDir, { recursive: true });
+    }
+    const scaffoldMdPath = join(blueprintDir, 'scaffold.md');
+    if (!existsSync(scaffoldMdPath)) {
         try {
             const appSpec = generateAppYamlFromExistingCodebase(repoPath);
-            writeFileSync(scaffoldYamlPath, toYaml(appSpec));
-            files.push({ path: '.factory/scaffold.yaml', action: 'created' });
+            // Write it as markdown with yaml frontmatter
+            const mdContent = `---\n${toYaml(appSpec)}---\n\n# System Scaffold\n\nThis is an auto-generated architectural scaffold.`;
+            writeFileSync(scaffoldMdPath, mdContent);
+            files.push({ path: '.factory/blueprint/scaffold.md', action: 'created' });
 
-            // Generate physical story files so the UI does not render confusing placeholders
+            // Generate physical story files
             if (appSpec.features && Array.isArray(appSpec.features)) {
                 for (const feature of appSpec.features) {
                     if (feature.stories && Array.isArray(feature.stories)) {
                         for (const story of feature.stories) {
                             if (!story.file) continue;
-                            const storyFilePath = join(factoryDir, story.file);
+                            const storyFilePath = join(factoryDir, story.file.replace(/\.ya?ml$/, '.md'));
                             if (!existsSync(storyFilePath)) {
                                 const storyDir = dirname(storyFilePath);
-                                if (!existsSync(storyDir)) mkdirSync(storyDir, { recursive: true });
-
+                                if (!existsSync(storyDir)) {
+                                    mkdirSync(storyDir, { recursive: true });
+                                }
                                 const storyYaml = {
-                                    apiVersion: 'factory.com/v1alpha1',
-                                    kind: story.file.startsWith('stories/features/') ? 'FeatureStory' : 'AppStory',
                                     name: story.name,
                                     description: 'Auto-generated baseline story for existing codebase.',
-                                    status: story.status || 'done',
-                                    phase: 1,
+                                    status: story.status || 'draft',
+                                    feature: { name: feature.name },
+                                    stack: appSpec.stack,
                                     tasks: story.tasks || []
                                 };
-                                writeFileSync(storyFilePath, toYaml(storyYaml));
-                                files.push({ path: `.factory/${story.file}`, action: 'created' });
+                                const mdStoryContent = `---\n${toYaml(storyYaml)}---\n\n# ${story.name}\n\nAuto-generated baseline story for existing codebase.`;
+                                writeFileSync(storyFilePath, mdStoryContent);
+                                files.push({ path: `.factory/${story.file.replace(/\.ya?ml$/, '.md')}`, action: 'created' });
                             }
                         }
                     }
                 }
             }
         } catch (e) {
-            logError(`scaffold.yaml generation failed: ${e}`);
+            logError(`scaffold.md generation failed: ${e}`);
         }
     } else {
-        files.push({ path: '.factory/scaffold.yaml', action: 'skipped' });
+        files.push({ path: '.factory/blueprint/scaffold.md', action: 'skipped' });
     }
 
     log('✓', `Initialized .factory/ bridge in ${repoPath} (${files.filter(f => f.action === 'created').length} created, ${files.filter(f => f.action === 'skipped').length} skipped)`);
 
     // ── Background TPM context generation ────────────────────────────────────
-    // Fire-and-forget: run 'factory blueprint update' in the project dir
+    // Fire-and-forget: run 'factory build-knowledge' in the project dir
     // so the TPM agent generates deep codebase context asynchronously.
     // This never blocks the caller — init returns immediately after this.
     try {
         const factoryBin = resolve(getFactoryRoot(), '..', 'factory', 'bin', 'factory');
         const binToUse = existsSync(factoryBin) ? factoryBin : 'factory';
-        const bgProc = spawn(binToUse, ['blueprint', 'update', 'factory init complete'], {
+        const bgProc = spawn(binToUse, ['build-knowledge', repoPath], {
             cwd: repoPath,
             detached: true,
             stdio: 'ignore',
             env: { ...process.env, FACTORY_PROJECT_ROOT: repoPath },
         });
         bgProc.unref(); // Let it run independently after parent exits
-        log('→', 'TPM context generation started in background (factory blueprint update)');
+        log('→', 'TPM context generation started in background (factory build-knowledge)');
     } catch (e) {
         // Non-fatal: context generation is best-effort
         logError(`Background TPM context generation could not start: ${e}`);

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { homedir } from 'node:os';
 /**
  * GET  /api/projects — List all connected projects + active project

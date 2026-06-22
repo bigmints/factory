@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
-import type { GeneratedFile, AppStory, FeatureStory, BuildResult, StackConfig } from './types.ts';
+import type { GeneratedFile, BuildResult, StackConfig } from './types.ts';
 import { log, logError } from './log.ts';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 

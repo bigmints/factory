@@ -5,25 +5,25 @@ project:
     align="center">     <strong>Autonomous app scaffolding from YAML specs —
     plan, build, test, fix, push.</strong>   </p>   <p align="center">     <a
     href="quick-start">Quick Start</a> •     <a href="cli-reference">CLI</a> •
-  analyzed: 2026-05-30
+  analyzed: 2026-06-22
 package:
   name: factory
   description: Autonomous app scaffolding factory — generate production-ready apps
     from YAML specs
   version: 1.0.0
   key_deps:
+    - "@agentclientprotocol/sdk"
     - "@toon-format/toon"
     - ajv
     - chalk
     - commander
     - glob
+    - gray-matter
+    - proper-lockfile
     - yaml
+    - zod
+    - zustand
     - "@types/node"
-    - "@typescript-eslint/eslint-plugin"
-    - "@typescript-eslint/parser"
-    - eslint
-    - tsx
-    - typescript
 stack:
   framework: node
   packageManager: npm
@@ -41,11 +41,15 @@ structure:
   - "  📄 factory.mjs"
   - 📁 docs
   - "  📁 adr"
-  - 📄 empty-mcp.json
   - 📁 engine
-  - "  📄 autofix.ts"
+  - "  📄 acp-client.ts"
+  - "  📄 analyze.ts"
   - "  📄 blueprint.ts"
   - "  📄 build-tools.ts"
+  - "  📄 chronicle.ts"
+  - "  📁 cli"
+  - "  📄 cli-adapter.ts"
+  - "  📄 cli-session.ts"
   - "  📄 cli.ts"
   - "  📄 config.ts"
   - "  📄 daemon.ts"
@@ -58,8 +62,11 @@ structure:
   - "  📄 queue.ts"
   - "  📄 repl.ts"
   - "  📄 rollup.ts"
+  - "  📄 schemas.ts"
+  - "  📁 skills"
   - "  📄 skills.ts"
   - "  📄 story.ts"
+  - "  📁 tools"
   - "  📄 toon.ts"
   - "  📄 types.ts"
   - "  📄 worker-engine.ts"
@@ -67,13 +74,13 @@ structure:
   - 📄 eslint.config.js
   - 📁 factory
   - "  📁 scripts"
-  - 📄 factory-build.log
-  - 📄 factory.db
+  - "  📁 skills"
   - 📄 install.sh
   - 📄 package-lock.json
   - 📄 package.json
   - 📄 projects.example.json
   - 📄 projects.json
+  - 📄 queue.yaml
   - 📁 reference
   - "  📁 conventions"
   - "  📁 registry"
@@ -82,13 +89,6 @@ structure:
   - 📁 reports
   - 📁 runs
   - "  📄 run-2026-05-19T22-12-32.log"
-  - "  📄 run-2026-05-19T22-12-41.log"
-  - "  📄 run-2026-05-19T22-14-34.log"
-  - "  📄 run-2026-05-20T15-22-22.log"
-  - "  📄 run-2026-05-22T07-16-20.log"
-  - "  📄 run-2026-05-22T07-17-01.log"
-  - "  📄 run-2026-05-22T07-18-58.log"
-  - 📁 scripts
 conventions:
   - TypeScript
   - ESLint

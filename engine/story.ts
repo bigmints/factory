@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve, join, basename, dirname, relative } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { AppStory, FeatureStory, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec } from './types.ts';
+import type { Story, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec } from './types.ts';
 import { storySlug, storyPort } from './types.ts';
 import { log } from './log.ts';
-import { AppStorySchema, FeatureStorySchema } from './schemas.ts';
+import { StorySchema } from './schemas.ts';
+import matter from 'gray-matter';
 import { execSync } from 'node:child_process';
 
 import { getActiveProject } from './config.ts';
@@ -53,50 +54,75 @@ export function resolveStoryPath(storyPath: string): string {
 // ─── Load ────────────────────────────────────────────────
 
 
-/** Load an app story from a YAML file */
-export function loadStory(storyPath: string): AppStory {
+/** Load a story from a Markdown file with YAML frontmatter */
+export function loadStory(storyPath: string): Story {
     const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) {
         throw new Error(`Story file not found: ${absPath}`);
     }
     const raw = readFileSync(absPath, 'utf-8');
-    return parseYaml(raw) as AppStory;
-}
+    
+    // Parse using gray-matter
+    const parsed = matter(raw);
+    const story = {
+        ...parsed.data,
+        content: parsed.content.trim()
+    } as Story;
 
-/** Load a feature story from a YAML file */
-export function loadFeatureStory(storyPath: string): FeatureStory {
-    const absPath = resolveStoryPath(storyPath);
-    if (!existsSync(absPath)) {
-        throw new Error(`Feature story not found: ${absPath}`);
+    // Fallback if parsing didn't find kind (e.g., pure yaml files temporarily during migration)
+    if (!story.kind) {
+        if ((story as any).feature) story.kind = 'feature';
+        else story.kind = 'app';
     }
-    const raw = readFileSync(absPath, 'utf-8');
-    return parseYaml(raw) as FeatureStory;
+
+    // Name fallback for legacy yaml
+    if (!story.name) {
+        if ((story as any).appName) story.name = (story as any).appName;
+        else if ((story as any).feature?.name) story.name = (story as any).feature.name;
+    }
+
+    return story;
 }
 
-/** List all story files in a repo's .factory/stories/ directory */
+/** List all markdown story files in a repo's .factory/stories/ directory */
 export function listStories(repoPath: string): { apps: string[]; features: string[] } {
-    const appsDir = join(repoPath, '.factory', 'stories', 'apps');
-    const featuresDir = join(repoPath, '.factory', 'stories', 'features');
+    const storiesDir = join(repoPath, '.factory', 'stories');
+    
+    if (!existsSync(storiesDir)) {
+        return { apps: [], features: [] };
+    }
 
-    const apps = existsSync(appsDir)
-        ? readdirSync(appsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))
-        : [];
+    const allFiles = readdirSync(storiesDir).filter(f => f.endsWith('.md') || f.endsWith('.yaml') || f.endsWith('.yml'));
+    
+    const apps: string[] = [];
+    const features: string[] = [];
 
-    const features = existsSync(featuresDir)
-        ? readdirSync(featuresDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))
-        : [];
+    for (const file of allFiles) {
+        // Skip scaffold.md if we want to treat it specially, but usually it's an app story.
+        try {
+            const story = loadStory(join(storiesDir, file));
+            if (story.kind === 'app') {
+                apps.push(file);
+            } else if (story.kind === 'feature') {
+                features.push(file);
+            }
+        } catch (e) {
+            // If it fails to parse, just ignore or put it in apps by default to show an error later
+            apps.push(file);
+        }
+    }
 
     return { apps, features };
 }
 
 // ─── Validate ────────────────────────────────────────────
 
-/** Validate an app story */
-export function validateStory(story: AppStory): ValidationResult {
+/** Validate a story */
+export function validateStory(story: Story): ValidationResult {
     const errors: string[] = [];
 
     // Structural validation via Zod
-    const result = AppStorySchema.safeParse(story);
+    const result = StorySchema.safeParse(story);
     if (!result.success) {
         for (const issue of result.error.issues) {
             const path = issue.path.length > 0 ? issue.path.join('.') + ': ' : '';
@@ -105,7 +131,7 @@ export function validateStory(story: AppStory): ValidationResult {
     }
 
     // Slug must be valid (domain rule not encoded in schema)
-    if (story.appName) {
+    if (story.name) {
         const slug = storySlug(story);
         if (slug && !/^[a-z][a-z0-9-]*$/.test(slug)) {
             errors.push(`Invalid slug "${slug}" — must be lowercase alphanumeric with hyphens`);
@@ -120,27 +146,11 @@ export function validateStory(story: AppStory): ValidationResult {
         }
     }
 
-    return { passed: errors.length === 0, errors };
-}
-
-/** Validate a feature story */
-export function validateFeatureStory(story: FeatureStory): ValidationResult {
-    const errors: string[] = [];
-
-    // Structural validation via Zod
-    const result = FeatureStorySchema.safeParse(story);
-    if (!result.success) {
-        for (const issue of result.error.issues) {
-            const path = issue.path.length > 0 ? issue.path.join('.') + ': ' : '';
-            errors.push(`${path}${issue.message}`);
-        }
-    }
-
-    // Self-dependency check (domain rule not encoded in schema)
+    // Self-dependency check (for features)
     if (story.dependsOn && Array.isArray(story.dependsOn)) {
         for (const dep of story.dependsOn) {
-            if (dep === story.feature?.slug) {
-                errors.push(`Story cannot depend on itself ("${dep}")`);
+            if (dep === storySlug(story)) {
+                errors.push(`Feature cannot depend on itself ("${dep}")`);
             }
         }
     }
@@ -318,23 +328,24 @@ export function restoreStory(storyPath: string): string | null {
 
 
 /** Generate a draft scaffold.yaml spec from a new AppStory */
-export function generateAppYamlFromStory(story: AppStory, storyFile?: string): AppSpec {
+export function generateAppYamlFromStory(story: Story, storyFile?: string): AppSpec {
     const slug = storySlug(story);
     const storyFilename = storyFile ? basename(storyFile) : `${slug}.yaml`;
 
     // Build BRD content from story
-    const dbSection = story.stack.database ? `- **Database**: ${story.stack.database}` : '';
+    const stack = story.stack || {} as any;
+    const dbSection = stack.database ? `- **Database**: ${stack.database}` : '';
     const authSection = story.auth?.provider ? `- **Authentication**: ${story.auth.provider} (${Object.keys(story.auth.methods || {}).filter(m => (story.auth?.methods as any)[m]).join(', ') || 'credentials'})` : '';
     const pagesSection = story.pages ? `- **Pages/Routes**: Dashboard, CRUD tables` : '';
 
     const brd = `
-# ${story.appName} (BRD)
+# ${story.name} (BRD)
 
 ${story.description || 'No description provided.'}
 
 ## Architecture & Requirements
-- **Framework**: ${story.stack.framework}
-- **Language**: ${story.stack.language || 'TypeScript'}
+- **Framework**: ${stack.framework || 'unknown'}
+- **Language**: ${stack.language || 'TypeScript'}
 ${dbSection ? dbSection + '\n' : ''}${authSection ? authSection + '\n' : ''}${pagesSection ? pagesSection + '\n' : ''}
 `.trim();
 
@@ -348,26 +359,26 @@ ${dbSection ? dbSection + '\n' : ''}${authSection ? authSection + '\n' : ''}${pa
         coreTasks.push({ id: 'task-auth', title: `Integrate and configure ${story.auth.provider} authentication`, status: 'ready-to-build' });
     }
 
-    if (story.stack.database) {
-        coreTasks.push({ id: 'task-database', title: `Setup ${story.stack.database} schema, connection, and seed data`, status: 'ready-to-build' });
+    if (stack.database) {
+        coreTasks.push({ id: 'task-database', title: `Setup ${stack.database} schema, connection, and seed data`, status: 'ready-to-build' });
     }
 
     const appSpec: AppSpec = {
-        name: story.appName,
-        description: story.description,
+        name: story.name,
+        description: story.description || '',
         brd,
         version: '1.0.0',
-        stack: story.stack,
+        stack: story.stack || { framework: 'unknown' } as any,
         status: 'draft',
         features: [
             {
                 name: 'Core Foundation',
-                description: `Foundational scaffolding and layout styling for ${story.appName}.`,
+                description: `Foundational scaffolding and layout styling for ${story.name}.`,
                 status: 'ready-to-build',
                 stories: [
                     {
-                        name: story.appName,
-                        file: `stories/apps/${storyFilename}`,
+                        name: story.name,
+                        file: `stories/${storyFilename}`,
                         status: 'draft',
                         tasks: coreTasks,
                     }

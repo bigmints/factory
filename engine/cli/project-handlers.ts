@@ -8,7 +8,6 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { addProject, removeProject, switchProject, loadProjects, getActiveProject, loadBridgeConfig } from '../config.ts';
 import { syncBlueprint } from '../blueprint.ts';
 import { log, logHeader, logError } from '../log.ts';
-import { loadQueue, saveQueue, withQueueLock } from '../queue.ts';
 import { type ProjectStack } from '../types.ts';
 import { args, requireTarget, parseFlags } from '../cli.ts';
 import { installGitHooks } from './facade-handlers.ts';
@@ -137,31 +136,6 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
     const resolvedPath = resolve(targetRepoPath);
     log('→', `Target repository: ${resolvedPath}`);
     
-    // 1. Clear queue items for this repository (under lock for atomicity)
-    const clearedCount = await withQueueLock(() => {
-        const queue = loadQueue();
-        const filteredQueue = queue.filter(item => {
-            let belongsToProject = false;
-            if (isAbsolute(item.storyFile)) {
-                belongsToProject = item.storyFile.startsWith(resolvedPath);
-            } else {
-                const candidates = [
-                    join(resolvedPath, item.storyFile),
-                    join(resolvedPath, '.factory', 'stories', item.storyFile),
-                    join(resolvedPath, '.factory', 'stories', 'apps', item.storyFile.replace(/^(apps|features|done)\//, '')),
-                    join(resolvedPath, '.factory', 'stories', 'features', item.storyFile.replace(/^(apps|features|done)\//, '')),
-                    join(resolvedPath, '.factory', 'stories', 'done', item.storyFile.replace(/^(apps|features|done)\//, ''))
-                ];
-                belongsToProject = candidates.some(p => existsSync(p));
-            }
-            return !belongsToProject;
-        });
-        const cleared = queue.length - filteredQueue.length;
-        saveQueue(filteredQueue);
-        return cleared;
-    });
-    log('✓', `Cleared ${clearedCount} queue item(s) associated with this project.`);
-    
     // 2. Scan stories directory
     const storiesDir = join(resolvedPath, '.factory', 'stories');
     if (!existsSync(storiesDir)) {
@@ -274,9 +248,6 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
                 
                 wr(scaffoldYamlPath, stringifyYaml(app, { lineWidth: 120 }), 'utf-8');
                 log('✓', `Reset scaffold.yaml roadmap progress and tasks to draft/pending.`);
-                
-                const { syncAppRoadmap } = await import('../rollup.ts');
-                await syncAppRoadmap(scaffoldYamlPath);
             }
         } catch (err: any) {
             logError(`Failed to reset scaffold.yaml roadmap: ${err?.message || err}`);

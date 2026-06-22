@@ -128,42 +128,35 @@ export const LifecycleStatusSchema = z.preprocess(
     z.enum(['draft', 'ready-to-build', 'building', 'failed', 'done'])
 );
 
-// ─── AppStory ────────────────────────────────────────────
+// ─── Story ────────────────────────────────────────────
 
-export const AppStorySchema = z.object({
-    appName: z.string().min(1, 'appName is required'),
-    description: z.string().min(1, 'description is required'),
-    stack: StackConfigSchema,
-    frontend: FrontendConfigSchema.optional(),
-    layout: LayoutConfigSchema.optional(),
-    auth: AuthConfigSchema.optional(),
-    data: DataConfigSchema.optional(),
-    pages: PagesConfigSchema.optional(),
-    deployment: DeploymentConfigSchema.optional(),
-    dependencies: z.array(z.string()).optional(),
-    status: LifecycleStatusSchema.optional(),
-    engine: z.enum(['factory', 'worker']).optional(),
-    build: BuildMetaSchema.optional(),
-    threadId: z.string().optional(),
-    btw: z.array(z.string()).optional(),
-});
-
-export type AppStoryZ = z.infer<typeof AppStorySchema>;
-
-// ─── FeatureStory ────────────────────────────────────────
-
-export const FeatureStorySchema = z.object({
-    feature: z.object({
-        name: z.string().min(1, 'feature.name is required'),
-        slug: z.string().min(1, 'feature.slug is required'),
-    }),
-    target: z.object({
-        app: z.string().min(1, 'target.app is required'),
-    }),
+export const StorySchema = z.object({
+    name: z.string().min(1, 'name is required'),
+    kind: z.enum(['app', 'feature']),
+    description: z.string().optional(),
+    
+    // Feature fields
+    target: z.string().optional(),
     phase: z.number().int().min(1).max(10).optional(),
     dependsOn: z.array(
         z.string().regex(/^[a-z][a-z0-9-]*$/, 'Dependency slug must be lowercase alphanumeric with hyphens'),
     ).optional(),
+    
+    // Config fields
+    stack: StackConfigSchema.optional(),
+    frontend: FrontendConfigSchema.optional(),
+    layout: LayoutConfigSchema.optional(),
+    auth: AuthConfigSchema.optional(),
+    data: DataConfigSchema.optional(),
+    pages: z.union([
+        PagesConfigSchema,
+        z.array(z.object({
+            slug: z.string(),
+            type: z.string(),
+            title: z.string(),
+        }))
+    ]).optional(),
+    deployment: DeploymentConfigSchema.optional(),
     dependencies: z.array(z.string()).optional(),
     model: z.object({
         collection: z.string(),
@@ -174,17 +167,15 @@ export const FeatureStorySchema = z.object({
             default: z.union([z.string(), z.number(), z.boolean()]).optional(),
         })),
     }).optional(),
-    pages: z.array(z.object({
-        slug: z.string(),
-        type: z.string(),
-        title: z.string(),
-    })).optional(),
+
+    status: LifecycleStatusSchema.optional(),
     engine: z.enum(['factory', 'worker']).optional(),
+    build: BuildMetaSchema.optional(),
     threadId: z.string().optional(),
     btw: z.array(z.string()).optional(),
 });
 
-export type FeatureStoryZ = z.infer<typeof FeatureStorySchema>;
+export type StoryZ = z.infer<typeof StorySchema>;
 
 // ─── BridgeConfig (.factory/factory.yaml) ────────────────
 
@@ -236,7 +227,7 @@ export type BridgeConfigZ = z.infer<typeof BridgeConfigSchema>;
 export const QueueItemSchema = z.object({
     id: z.string().min(1, 'id is required'),
     storyFile: z.string().min(1, 'storyFile is required'),
-    kind: z.enum(['AppStory', 'FeatureStory']),
+    kind: z.enum(['app', 'feature']),
     status: LifecycleStatusSchema,
     priority: z.number(),
     phase: z.number(),

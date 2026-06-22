@@ -10,10 +10,9 @@ import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { getActiveProject, loadBridgeConfig } from '../config.ts';
-import { loadStory, loadFeatureStory } from '../story.ts';
+import { loadStory } from '../story.ts';
 import { syncBlueprint } from '../blueprint.ts';
 import { log, logHeader, logError } from '../log.ts';
-import { enqueue, loadQueue, saveQueue, updateItem } from '../queue.ts';
 import { args, resolveScript, spawnScript } from '../cli.ts';
 
 /** factory pulse "<msg>" — write heartbeat */
@@ -26,118 +25,44 @@ export function handlePulse(): void {
 /** factory btw <target> "<message>" — prioritize btw additional details without interrupting running tasks */
 export async function handleBtw(target: string, message: string): Promise<void> {
     if (!target || !message) {
-        console.error('Usage: factory btw <story-slug|queue-id> "<message>"');
+        console.error('Usage: factory btw <story-slug> "<message>"');
         process.exit(1);
     }
 
     const project = getActiveProject();
     const projectPath = project.path;
-    const queue = loadQueue();
     const targetSlug = target.toLowerCase().replace(/\.ya?ml$/, '').replace(/^stories\/(features|apps|done)\//, '');
 
-    const queueItem = queue.find(item =>
-        item.id === target ||
-        item.storyFile === target ||
-        basename(item.storyFile).replace(/\.ya?ml$/, '') === targetSlug
-    );
+    const folders = ['features', 'apps', 'done'];
+    let foundPath: string | null = null;
+    let foundRelative: string | null = null;
+    for (const folder of folders) {
+        const dir = resolve(projectPath, '.factory', 'stories', folder);
+        if (!existsSync(dir)) continue;
+        const file = readdirSync(dir).find(f =>
+            f === target ||
+            f.replace(/\.ya?ml$/, '') === targetSlug
+        );
+        if (file) {
+            foundPath = resolve(dir, file);
+            foundRelative = `stories/${folder}/${file}`;
+            break;
+        }
+    }
 
-    if (queueItem) {
-        if (queueItem.status === 'building') {
-            const originalStoryFile = queueItem.storyFile;
-            const originalPath = resolve(projectPath, '.factory', 'stories', originalStoryFile);
-            let originalStory: any = {};
-            try {
-                if (existsSync(originalPath)) {
-                    originalStory = parseYaml(readFileSync(originalPath, 'utf-8')) || {};
-                }
-            } catch { /* expected: story might not exist on disk */ }
-
-            const originalSlug = basename(originalStoryFile).replace(/\.ya?ml$/, '');
-            const btwSlug = `btw-${originalSlug}-${Date.now()}`;
-            const relativePath = `features/${btwSlug}.yaml`;
-            const fullPath = resolve(projectPath, '.factory', 'stories', relativePath);
-
-            const btwStory = {
-                name: `BTW Follow-up: ${originalStory.name || originalSlug}`,
-                description: `Automated BTW follow-up task.\n\nOriginal: ${originalStoryFile}\nInstruction: ${message}`,
-                status: 'ready-to-build',
-                feature: originalStory.feature || { name: 'BTW Follow-up', slug: 'btw-followup' },
-                target: originalStory.target || {},
-                stack: originalStory.stack || {},
-                acceptance_criteria: originalStory.acceptance_criteria || [],
-                btw: [message],
-                original_story: originalStoryFile,
-                phase: 0,
-                dependsOn: [],
-                threadId: queueItem.threadId || originalStory.threadId,
-                createdBy: 'factory-btw-cli',
-                createdAt: new Date().toISOString(),
-            };
-
-            writeFileSync(fullPath, toYaml(btwStory), 'utf-8');
-
-            // Enqueue as high-priority
-            const newItem = await enqueue(relativePath, 'FeatureStory', {
-                phase: 0,
-                dependsOn: [],
-                engine: 'factory',
-                threadId: queueItem.threadId || originalStory.threadId
-            });
-            await updateItem(newItem.id, { priority: 999 });
-
-            log('✓', `Running task cannot be interrupted. Created and enqueued prioritized follow-up task on same thread:`);
-            log('→', `Follow-up Story: .factory/stories/${relativePath}`);
-            log('→', `Thread ID: ${queueItem.threadId || 'auto-resolved'}`);
-        } else {
-            // Pending / other status
-            const originalStoryFile = queueItem.storyFile;
-            const originalPath = resolve(projectPath, '.factory', 'stories', originalStoryFile);
-            if (existsSync(originalPath)) {
-                const raw = readFileSync(originalPath, 'utf-8');
-                const parsed = parseYaml(raw) as any;
-                if (parsed) {
-                    if (!parsed.btw) parsed.btw = [];
-                    if (!Array.isArray(parsed.btw)) parsed.btw = [parsed.btw];
-                    parsed.btw.push(message);
-                    writeFileSync(originalPath, toYaml(parsed), 'utf-8');
-                    log('✓', `Appended prioritised additional details to pending task: ${originalStoryFile}`);
-                }
-            } else {
-                log('!', `Could not find story file on disk: ${originalStoryFile}`);
-            }
+    if (foundPath) {
+        const raw = readFileSync(foundPath, 'utf-8');
+        const parsed = parseYaml(raw) as any;
+        if (parsed) {
+            if (!parsed.btw) parsed.btw = [];
+            if (!Array.isArray(parsed.btw)) parsed.btw = [parsed.btw];
+            parsed.btw.push(message);
+            writeFileSync(foundPath, toYaml(parsed), 'utf-8');
+            log('✓', `Appended prioritised additional details to story: ${foundRelative}`);
         }
     } else {
-        const folders = ['features', 'apps', 'done'];
-        let foundPath: string | null = null;
-        let foundRelative: string | null = null;
-        for (const folder of folders) {
-            const dir = resolve(projectPath, '.factory', 'stories', folder);
-            if (!existsSync(dir)) continue;
-            const file = readdirSync(dir).find(f =>
-                f === target ||
-                f.replace(/\.ya?ml$/, '') === targetSlug
-            );
-            if (file) {
-                foundPath = resolve(dir, file);
-                foundRelative = `stories/${folder}/${file}`;
-                break;
-            }
-        }
-
-        if (foundPath) {
-            const raw = readFileSync(foundPath, 'utf-8');
-            const parsed = parseYaml(raw) as any;
-            if (parsed) {
-                if (!parsed.btw) parsed.btw = [];
-                if (!Array.isArray(parsed.btw)) parsed.btw = [parsed.btw];
-                parsed.btw.push(message);
-                writeFileSync(foundPath, toYaml(parsed), 'utf-8');
-                log('✓', `Appended prioritised additional details to story: ${foundRelative}`);
-            }
-        } else {
-            logError(`Could not find story or queue item matching: "${target}"`);
-            process.exit(1);
-        }
+        logError(`Could not find story matching: "${target}"`);
+        process.exit(1);
     }
 }
 
@@ -150,8 +75,7 @@ export async function handleTask(): Promise<void> {
         if (taskId) {
             const newStatus = subcommand === 'start' ? 'running' : subcommand === 'complete' ? 'completed' : 'failed';
             try {
-                const { updateTaskStatus } = await import('../rollup.ts');
-                await updateTaskStatus(taskId, newStatus);
+                // updateTaskStatus removed since rollup.ts is removed
                 log('✓', `Updated task ${taskId} to ${newStatus}`);
             } catch (err: any) {
                 log('!', `Could not update task status: ${err?.message || err}`);
@@ -408,4 +332,11 @@ export async function handleChronicle(subcommand?: string, arg?: string): Promis
             console.error(`Unknown chronicle command: ${subcommand}`);
             process.exit(1);
     }
+}
+
+/** factory build-knowledge <repoPath> — build TPM context */
+export async function handleBuildKnowledge(): Promise<void> {
+    const repoPath = args[1] || process.cwd();
+    const { buildTpmKnowledge } = await import('../analyze.ts');
+    await buildTpmKnowledge(repoPath);
 }

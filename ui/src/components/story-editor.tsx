@@ -24,6 +24,7 @@ import {
   Layers,
   Sparkles,
   Code2,
+  Play
 } from 'lucide-react';
 
 interface StoryEditorProps {
@@ -46,6 +47,7 @@ const parseYamlFields = (yaml: string) => {
   const targetAppMatch = yaml.match(/^\s*app:\s*["']?([^"'\n]+)["']?/m);
   const phaseMatch = yaml.match(/^phase:\s*(\d+)/m);
   const dependsOnMatch = yaml.match(/^dependsOn:\s*\[([^\]]*)\]/m);
+  const statusMatch = yaml.match(/^status:\s*["']?([^"'\n]+)["']?/m) || yaml.match(/^\s*status:\s*["']?([^"'\n]+)["']?/m);
   
   // Stack Config
   const frameworkMatch = yaml.match(/^\s*framework:\s*["']?([^"'\n]+)["']?/m);
@@ -58,6 +60,7 @@ const parseYamlFields = (yaml: string) => {
     featureName: featNameMatch ? featNameMatch[1] : '',
     description: descMatch ? descMatch[1] : '',
     targetApp: targetAppMatch ? targetAppMatch[1] : '',
+    status: statusMatch ? statusMatch[1] : 'todo',
     phase: phaseMatch ? parseInt(phaseMatch[1]) : 1,
     dependsOn: dependsOnMatch ? dependsOnMatch[1].trim() : '',
     framework: frameworkMatch ? frameworkMatch[1] : 'Next.js',
@@ -110,6 +113,18 @@ const updateYamlField = (yaml: string, field: string, value: any): string => {
     if (yaml.match(/^\s*database:\s*.*$/m)) {
       updated = yaml.replace(/^\s*database:\s*.*$/m, `    database: "${value}"`);
     }
+  } else if (field === 'status') {
+    if (yaml.match(/^status:/m)) {
+      updated = yaml.replace(/^status:\s*.*$/m, `status: ${value}`);
+    } else if (yaml.match(/^\s*status:/m)) {
+      updated = yaml.replace(/^\s*status:\s*.*$/m, `  status: ${value}`);
+    } else {
+      if (yaml.match(/^metadata:/m)) {
+        updated = yaml.replace(/^(metadata:[^\n]*\n)/m, `$1  status: ${value}\n`);
+      } else {
+        updated = `status: ${value}\n` + yaml;
+      }
+    }
   }
   
   return updated;
@@ -122,7 +137,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [editorTab, setEditorTab] = useState<'form' | 'code'>('form');
+  const [queuing, setQueuing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { loadStory(); }, [storyFile]);
@@ -162,6 +177,28 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
       toast.error('Save failed', { description: err.message });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBuild = async () => {
+    setQueuing(true);
+    try {
+      const parsedFields = parseYamlFields(content);
+      const res = await fetch('/api/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyFile: storyFile,
+          kind: parsedFields.isFeature ? 'FeatureStory' : 'AppStory'
+        })
+      });
+      if (!res.ok) throw new Error('Failed to queue');
+      toast.success('Queued for build');
+      onClose();
+    } catch (err: any) {
+      toast.error('Build queue failed', { description: err.message });
+    } finally {
+      setQueuing(false);
     }
   };
 
@@ -213,7 +250,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
   const lineCount = content.split('\n').length;
 
   return (
-    <div className="space-y-4 pb-20 sm:pb-8">
+    <div className="flex flex-col h-full bg-card">
       {/* Header Controls */}
       <div className="relative overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -240,34 +277,32 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
           </div>
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            {/* Sliding segment tabs */}
-            <div className="rounded-lg bg-muted p-1 flex items-center border border-border">
-              <button
-                onClick={() => setEditorTab('form')}
-                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-[10px] sm:text-xs font-bold transition-all min-h-[34px] tap-shrink ${
-                  editorTab === 'form' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                Form
-              </button>
-              <button
-                onClick={() => {
-                  setEditorTab('code');
-                  setTimeout(() => textareaRef.current?.focus(), 80);
-                }}
-                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-[10px] sm:text-xs font-bold transition-all min-h-[34px] tap-shrink ${
-                  editorTab === 'code' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                Code
-              </button>
+            <div className="flex items-center gap-1.5 rounded-md border border-border p-1 bg-muted shrink-0">
+              {['todo', 'in-progress', 'done'].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => updateField('status', s)}
+                  className={`px-3 py-1.5 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors ${
+                    parsedFields.status === s || (s === 'todo' && parsedFields.status === 'draft') ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
 
             <Separator orientation="vertical" className="h-6 hidden sm:block bg-border" />
 
             <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                onClick={handleBuild}
+                disabled={queuing}
+                className="h-9 rounded-md px-3 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold"
+              >
+                {queuing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 fill-current mr-1 text-white" />}
+                Build
+              </Button>
               <Button variant="outline" size="icon" onClick={handleCopy} className="h-9 w-9 rounded-md shrink-0 bg-background">
                 <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
               </Button>
@@ -300,232 +335,67 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
       )}
 
       {loading ? (
-        <Card className="rounded-lg border border-border bg-card">
-          <CardContent className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </CardContent>
-        </Card>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       ) : (
-        <Card className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-          {/* Status Header */}
-          <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2.5">
-            <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              {editorTab === 'form' ? <Wrench className="h-3.5 w-3.5 text-muted-foreground" /> : <Code2 className="h-3.5 w-3.5 text-muted-foreground" />}
-              {editorTab === 'form' ? 'Interactive Form Builder' : 'Raw Story YAML'}
-            </div>
-            <span className="text-[10px] sm:text-[11px] font-mono text-muted-foreground/60">{lineCount} lines</span>
+        <div className="flex-1 flex flex-col min-h-0 relative border-t border-border bg-card shadow-inner">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            spellCheck={false}
+            className="w-full flex-1 resize-none border-0 bg-transparent p-4 sm:p-5 text-[12px] sm:text-[13px] leading-relaxed font-mono text-foreground focus:outline-none min-h-0"
+            style={{ tabSize: 2 }}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+                e.preventDefault();
+                if (isDirty) handleSave();
+              }
+              if (e.key === 'Tab') {
+                e.preventDefault();
+                handleInsertTab();
+              }
+            }}
+          />
+
+          {/* Mobile keyboard helper accessory bar */}
+          <div className="shrink-0 h-10 border-t border-border bg-muted flex items-center px-3 gap-1 overflow-x-auto scrollbar-none select-none">
+            <span className="text-[8px] font-bold font-mono text-muted-foreground/60 mr-2 uppercase tracking-wide">Accessories:</span>
+            <button
+              onClick={handleInsertTab}
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
+            >
+              TAB (2s)
+            </button>
+            <button
+              onClick={handleInsertComment}
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
+            >
+              # Comment
+            </button>
+            <button
+              onClick={() => {
+                if (textareaRef.current) {
+                  const start = textareaRef.current.selectionStart;
+                  const end = textareaRef.current.selectionEnd;
+                  textareaRef.current.focus();
+                  textareaRef.current.setSelectionRange(start, end);
+                  toast.info('Toolbar selection active');
+                }
+              }}
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold hover:bg-muted shrink-0 select-none text-foreground transition-colors"
+            >
+              Select Text
+            </button>
+            <button
+              onClick={handleReset}
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/5 dark:hover:bg-rose-950/20 shrink-0 ml-auto select-none transition-colors"
+            >
+              Restore
+            </button>
           </div>
-
-          <CardContent className="p-0">
-            {editorTab === 'form' ? (
-              <div className="p-4 sm:p-6 md:p-8 space-y-6">
-                
-                {/* Categorized Forms */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  {/* Category 1: General Metadata */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 border-b border-border/20 pb-2">
-                      <Sparkles className="h-4 w-4 text-muted-foreground" />
-                      <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-foreground/90">General Metadata</h4>
-                    </div>
-
-                    {!parsedFields.isFeature ? (
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Application Name</label>
-                        <input
-                          type="text"
-                          value={parsedFields.appName}
-                          onChange={(e) => updateField('appName', e.target.value)}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
-                          placeholder="e.g. feedback-app"
-                        />
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Feature Name</label>
-                        <input
-                          type="text"
-                          value={parsedFields.featureName}
-                          onChange={(e) => updateField('featureName', e.target.value)}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
-                          placeholder="e.g. Admin Authentication"
-                        />
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Goal & Description</label>
-                      <textarea
-                        value={parsedFields.description}
-                        onChange={(e) => updateField('description', e.target.value)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all min-h-[80px] resize-none"
-                        placeholder="Detail what this story builds..."
-                      />
-                    </div>
-                  </div>
-
-                  {/* Category 2: Stack & Target Configurations */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 border-b border-border/20 pb-2">
-                      <Database className="h-4 w-4 text-muted-foreground" />
-                      <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-foreground/90">Stack Configuration</h4>
-                    </div>
-
-                    {!parsedFields.isFeature ? (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Framework</label>
-                          <input
-                            type="text"
-                            value={parsedFields.framework}
-                            onChange={(e) => updateField('framework', e.target.value)}
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Database Model</label>
-                          <input
-                            type="text"
-                            value={parsedFields.database}
-                            onChange={(e) => updateField('database', e.target.value)}
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
-                            placeholder="e.g. SQLite"
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Target Connected App Slug</label>
-                        <div className="w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-xs sm:text-sm text-muted-foreground">
-                          {parsedFields.targetApp || 'Default Active Story'}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Local Server Port</label>
-                      <input
-                        type="number"
-                        min={1024}
-                        max={65535}
-                        value={parsedFields.port}
-                        onChange={(e) => updateField('port', parseInt(e.target.value) || 3000)}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
-                        placeholder="3000"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Category 3: Feature Ordering & Constraints */}
-                {parsedFields.isFeature && (
-                  <div className="border-t border-border/20 pt-5 space-y-4">
-                    <div className="flex items-center gap-2 border-b border-border/20 pb-2">
-                      <Network className="h-4 w-4 text-muted-foreground" />
-                      <h4 className="text-xs sm:text-sm font-semibold tracking-wide text-foreground/90">Feature Ordering & Pipeline Priority</h4>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 block">Build Execution Phase</label>
-                        <div className="flex gap-2">
-                          {[1, 2, 3].map((p) => (
-                            <button
-                              key={p}
-                              type="button"
-                              onClick={() => updateField('phase', p)}
-                              className={`flex-1 py-2 rounded-md border text-xs font-bold transition-all tap-shrink ${
-                                parsedFields.phase === p
-                                  ? 'bg-primary border-primary text-primary-foreground shadow-sm'
-                                  : 'border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-                              }`}
-                            >
-                              Phase {p}
-                              <span className="block text-[8px] font-semibold opacity-70 mt-0.5">
-                                {p === 1 ? 'Foundation Layer' : p === 2 ? 'Core Mechanics' : 'Polishing/CSS'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Depends On (Feature Slugs)</label>
-                        <input
-                          type="text"
-                          value={parsedFields.dependsOn}
-                          onChange={(e) => updateField('dependsOn', e.target.value)}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-ring focus:border-ring text-foreground transition-all"
-                          placeholder="e.g. database-schemas, auth-system"
-                        />
-                        <span className="text-[9px] text-muted-foreground/70 block mt-1">Provide comma-separated slugs. Dequeues only when dependencies are fully completed.</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="relative">
-                <textarea
-                  ref={textareaRef}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  spellCheck={false}
-                  className="w-full resize-none border-0 bg-transparent p-4 sm:p-5 text-[11px] sm:text-sm leading-relaxed font-mono text-foreground focus:outline-none max-h-[calc(100vh-280px)] sm:max-h-[calc(100vh-320px)] min-h-[350px] sm:min-h-[450px]"
-                  style={{ tabSize: 2 }}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-                      e.preventDefault();
-                      if (isDirty) handleSave();
-                    }
-                    if (e.key === 'Tab') {
-                      e.preventDefault();
-                      handleInsertTab();
-                    }
-                  }}
-                />
-
-                {/* Mobile keyboard helper accessory bar */}
-                <div className="sticky bottom-0 left-0 right-0 h-10 border-t border-border bg-muted flex items-center px-3 gap-1 overflow-x-auto scrollbar-none z-30 select-none">
-                  <span className="text-[8px] font-bold font-mono text-muted-foreground/60 mr-2 uppercase tracking-wide">Accessories:</span>
-                  <button
-                    onClick={handleInsertTab}
-                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
-                  >
-                    TAB (2s)
-                  </button>
-                  <button
-                    onClick={handleInsertComment}
-                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
-                  >
-                    # Comment
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (textareaRef.current) {
-                        const start = textareaRef.current.selectionStart;
-                        const end = textareaRef.current.selectionEnd;
-                        textareaRef.current.focus();
-                        textareaRef.current.setSelectionRange(start, end);
-                        toast.info('Toolbar selection active');
-                      }
-                    }}
-                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold hover:bg-muted shrink-0 select-none text-foreground transition-colors"
-                  >
-                    Select Text
-                  </button>
-                  <button
-                    onClick={handleReset}
-                    className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/5 dark:hover:bg-rose-950/20 shrink-0 ml-auto select-none transition-colors"
-                  >
-                    Restore
-                  </button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        </div>
       )}
     </div>
   );

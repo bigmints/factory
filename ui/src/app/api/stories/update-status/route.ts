@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateStoryStatus, archiveStory, restoreStory } from '@engine/story';
-import { updateStoryStatusInApp } from '@engine/rollup';
+
 
 export async function POST(request: Request) {
   try {
@@ -44,8 +44,7 @@ export async function POST(request: Request) {
     // 2. Update physical story YAML file status
     updateStoryStatus(currentFile, status);
 
-    // 3. Update status inside scaffold.yaml & calculate rollups
-    await updateStoryStatusInApp(currentFile, status);
+    // 3. Update status inside scaffold.yaml & calculate rollups (Removed: rollup.ts is gone)
 
     return NextResponse.json({
       success: true,

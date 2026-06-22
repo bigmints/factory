@@ -4,9 +4,14 @@ import * as React from "react"
 import {
   Factory,
   LayoutDashboard,
+  Plug,
   Settings,
+  Wand2,
   FolderOpen,
   Rocket,
+  FlaskConical,
+  Globe,
+  Brain,
   BarChart3,
 } from "lucide-react"
 
@@ -36,11 +41,21 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 const navMain = [
   { title: "Stories", id: "plan",   icon: LayoutDashboard },
+  { title: "Build Pipeline",  id: "build",  icon: Rocket },
+  { title: "Validation Gates",id: "test",   icon: FlaskConical },
+  { title: "Deploy Workspace",id: "deploy", icon: Globe },
+]
+
+const navAnalytics = [
+  { title: "Analytics Reports", id: "reports",   icon: BarChart3 },
+  { title: "ADRs & Knowledge",  id: "knowledge", icon: Brain },
 ]
 
 const navSecondary = [
-  { title: "Reports",          id: "reports",      icon: BarChart3 },
-  { title: "Settings",          id: "settings",     icon: Settings },
+  { title: "Custom Skills",     id: "skills",       icon: Wand2 },
+  { title: "Active Projects",   id: "projects",     icon: FolderOpen },
+  { title: "Integrations",      id: "integrations", icon: Plug },
+  { title: "System Settings",   id: "settings",     icon: Settings },
 ]
 
 export function AppSidebar({
@@ -78,6 +93,7 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <ProjectSwitcher onAddProject={onAddProject} refreshKey={projectRefreshKey} />
       </SidebarHeader>
 
       <SidebarContent>
@@ -88,6 +104,12 @@ export function AppSidebar({
           onSelect={handleTabChange}
           queueRunning={queueRunning}
           hasLoopWarning={hasLoopWarning}
+        />
+        <NavMain
+          label="Analytics"
+          items={navAnalytics}
+          activeId={activeTab}
+          onSelect={handleTabChange}
         />
         <NavSecondary
           label="Configure"

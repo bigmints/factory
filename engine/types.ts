@@ -6,23 +6,45 @@
 
 // ─── Story Types ──────────────────────────────────────────
 
-/** Top-level app story (parsed from YAML in .factory/stories/apps/) */
-export interface AppStory {
-    appName: string;
-    description: string;
-    stack: StackConfig;
+/** Unified Story representing either an app scaffold or a feature addition */
+export interface Story {
+    name: string;
+    kind: 'app' | 'feature';
+    description?: string;
+    
+    // Feature fields
+    target?: string;
+    phase?: number;
+    dependsOn?: string[];
+
+    // Configuration fields (often empty when using Markdown bodies)
+    stack?: StackConfig;
     frontend?: FrontendConfig;
     layout?: LayoutConfig;
     auth?: AuthConfig;
     data?: DataConfig;
-    pages?: PagesConfig;
+    pages?: PagesConfig | Array<{ slug: string; type: string; title: string }>;
     deployment?: DeploymentConfig;
-    dependencies?: string[];       // npm packages this app requires (e.g. ['express', 'dotenv'])
+    dependencies?: string[];
+    model?: {
+        collection: string;
+        fields: Array<{
+            name: string;
+            type: string;
+            required?: boolean;
+            default?: string | number | boolean;
+        }>;
+    };
+
+    // Metadata
     status?: StoryStatus;
     engine?: 'factory' | 'worker';
     build?: BuildMeta;
     threadId?: string;
     btw?: string[];
+
+    // Original raw markdown body content
+    content?: string;
 }
 
 /** Build metadata written back into the story after a successful build */
@@ -109,50 +131,14 @@ export type StoryStatus = LifecycleStatus;
 
 /** Blueprint about an existing app that feature builds need for integration */
 export interface AppIntegrationBlueprint {
-    /** Parsed package.json — deps already installed */
     packageJson?: {
         dependencies?: Record<string, string>;
         devDependencies?: Record<string, string>;
         scripts?: Record<string, string>;
     };
-    /** Raw tsconfig.json content */
     tsconfigRaw?: string;
-    /** Flat list of existing file paths in the app */
     fileTree: string[];
-    /** Stack derived from the actual app */
     stack?: StackConfig;
-}
-
-// ─── Feature Story ────────────────────────────────────────
-
-export interface FeatureStory {
-    feature: {
-        name: string;
-        slug: string;
-    };
-    target: {
-        app: string;
-    };
-    phase?: number;              // 1 = foundation, 2 = core, 3 = polish
-    dependsOn?: string[];        // slugs of other feature stories that must complete first
-    dependencies?: string[];     // npm packages this feature requires (e.g. ['puppeteer', 'nodemailer'])
-    model?: {
-        collection: string;
-        fields: Array<{
-            name: string;
-            type: string;
-            required?: boolean;
-            default?: string | number | boolean;
-        }>;
-    };
-    pages?: Array<{
-        slug: string;
-        type: string;
-        title: string;
-    }>;
-    engine?: 'factory' | 'worker';
-    threadId?: string;
-    btw?: string[];
 }
 
 // ─── Bridge Config (.factory/factory.yaml) ───────────────
@@ -363,18 +349,18 @@ export function slugify(name: string): string {
         .replace(/^-|-$/g, '');
 }
 
-/** Get the slug from an AppStory */
-export function storySlug(story: AppStory): string {
-    return slugify(story.appName);
+/** Get the slug from a Story */
+export function storySlug(story: Story): string {
+    return slugify(story.name);
 }
 
-/** Get the port from an AppStory (defaults to 3000) */
-export function storyPort(story: AppStory): number {
+/** Get the port from a Story (defaults to 3000) */
+export function storyPort(story: Story): number {
     return story.deployment?.port || 3000;
 }
 
-/** Get the region from an AppStory (defaults to us-central1) */
-export function storyRegion(story: AppStory): string {
+/** Get the region from a Story (defaults to us-central1) */
+export function storyRegion(story: Story): string {
     return story.deployment?.region || 'us-central1';
 }
 

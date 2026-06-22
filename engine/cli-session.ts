@@ -30,7 +30,6 @@ import { spawn } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log, logError } from './log.ts';
 import { buildCliInvocation, buildSpawnEnv } from './cli-adapter.ts';
-import { loadQueue, saveQueue, withQueueLock } from './queue.ts';
 import type { GeneratedFile } from './types.ts';
 
 // ─── Types ───────────────────────────────────────────────
@@ -367,9 +366,8 @@ export function runCliSession(options: CliSessionOptions): Promise<CliSessionRes
 // ─── Helpers ─────────────────────────────────────────────
 
 /**
- * Persist a captured threadId to both the story YAML file and the
- * active queue item so that subsequent sessions can resume the
- * conversation.
+ * Persist a captured threadId to the story YAML file so that subsequent
+ * sessions can resume the conversation.
  */
 function persistThreadId(repoPath: string, storyFile: string, threadId: string): void {
     // Update story YAML
@@ -386,20 +384,6 @@ function persistThreadId(repoPath: string, storyFile: string, threadId: string):
     } catch {
         // Ignore write errors — non-critical
     }
-
-    // Update the queue item in-place
-    withQueueLock(() => {
-        const queue = loadQueue();
-        const item = queue.find(
-            (q: any) => q.storyFile === storyFile && ['pending', 'running'].includes(q.status),
-        );
-        if (item && (item as any).threadId !== threadId) {
-            (item as any).threadId = threadId;
-            saveQueue(queue);
-        }
-    }).catch(() => {
-        // Ignore queue update errors — non-critical
-    });
 }
 
 /**

@@ -2,8 +2,9 @@
  * Build, validate, and status handlers for the Factory CLI.
  */
 
-import { resolve, basename } from 'node:path';
-import { loadStory, listStories, validateStory, updateStoryBuildMeta, archiveStory } from '../story.ts';
+import { resolve, basename, join } from 'node:path';
+import { readdirSync, existsSync } from 'node:fs';
+import { loadStory, listStories, validateStory, updateStoryBuildMeta, archiveStory, resolveStoryPath, updateStoryStatus } from '../story.ts';
 import { getActiveProject, loadBridgeConfig } from '../config.ts';
 import { gatherBlueprint } from '../blueprint.ts';
 import { runPipeline } from '../generate.ts';
@@ -69,6 +70,45 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     }, project.path);
     if (result.success) {
         archiveStory(storyPath!);
+
+        // Resolve associated stories symmetrically:
+        try {
+            const absStoryPath = resolveStoryPath(storyPath!);
+
+            // Case A: The story built was a fix story. Resolve and archive the original story.
+            if ((story as any).original_story) {
+                const absOriginalPath = resolveStoryPath((story as any).original_story);
+                if (existsSync(absOriginalPath)) {
+                    log('→', `Auto-resolving original story: ${basename(absOriginalPath)}`);
+                    updateStoryStatus(absOriginalPath, 'done', `Resolved because fix story ${basename(absStoryPath)} was successfully built.`);
+                    archiveStory(absOriginalPath);
+                }
+            }
+
+            // Case B: The story built was an original story. Resolve and archive any active fix stories pointing to it.
+            const storiesDir = join(project.path, '.factory', 'stories');
+            if (existsSync(storiesDir)) {
+                const files = readdirSync(storiesDir).filter(f => f.endsWith('.md') || f.endsWith('.yaml') || f.endsWith('.yml'));
+                for (const file of files) {
+                    const filePath = join(storiesDir, file);
+                    try {
+                        const activeStory = loadStory(filePath);
+                        if ((activeStory as any).original_story) {
+                            const absOriginalPath = resolveStoryPath((activeStory as any).original_story);
+                            if (absOriginalPath === absStoryPath) {
+                                log('→', `Auto-resolving associated fix story: ${file}`);
+                                updateStoryStatus(filePath, 'done', `Resolved because original story ${basename(absStoryPath)} was successfully built.`);
+                                archiveStory(filePath);
+                            }
+                        }
+                    } catch {
+                        // ignore malformed stories
+                    }
+                }
+            }
+        } catch (err) {
+            log('!', `Failed to clean up associated stories: ${err instanceof Error ? err.message : String(err)}`);
+        }
     }
 
     // Summary

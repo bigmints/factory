@@ -36,8 +36,7 @@ export async function POST(request: Request) {
       const restoredPath = restoreStory(file);
       if (restoredPath) {
         const filename = restoredPath.split('/').pop();
-        const isFeature = restoredPath.includes('/stories/features/');
-        currentFile = isFeature ? `features/${filename}` : filename;
+        currentFile = filename;
       }
     }
 

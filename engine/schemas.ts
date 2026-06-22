@@ -85,7 +85,7 @@ const DeploymentConfigSchema = z.object({
 });
 
 const BuildMetaSchema = z.object({
-    lastBuiltAt: z.string(),
+    lastBuiltAt: z.union([z.string(), z.date()]).transform(d => typeof d === 'string' ? d : d.toISOString()),
     buildCount: z.number(),
     outputDir: z.string(),
     commitHash: z.string().optional(),

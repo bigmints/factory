@@ -45,20 +45,35 @@ function resolveStoryPath(file: string): string | null {
   const directPath = join(base, cleaned);
   if (existsSync(directPath)) return directPath;
 
-  // If it contains a subfolder like apps/, features/, done/
-  const stem = cleaned.replace(/^(apps|features|done)\//, '');
+  // If it has .yaml/.yml extension, try .md fallback
+  if (cleaned.endsWith('.yaml') || cleaned.endsWith('.yml')) {
+    const stem = cleaned.replace(/\.ya?ml$/, '');
+    const mdPath = join(base, `${stem}.md`);
+    if (existsSync(mdPath)) return mdPath;
+    
+    const doneMdPath = join(base, 'done', `${stem}.md`);
+    if (existsSync(doneMdPath)) return doneMdPath;
+  }
 
+  // Support flat 'done/' subdirectory
+  const stem = cleaned.replace(/^(apps|features|done)\//, '');
   const candidates = [
-    join(base, 'apps', stem),
-    join(base, 'features', stem),
     join(base, 'done', stem),
-    join(base, 'apps', cleaned),
-    join(base, 'features', cleaned),
     join(base, 'done', cleaned),
+    join(base, stem),
   ];
 
   for (const cand of candidates) {
     if (existsSync(cand)) return cand;
+  }
+
+  // Try candidates with .md extension if requested with .yaml/.yml
+  if (cleaned.endsWith('.yaml') || cleaned.endsWith('.yml')) {
+    const stem = cleaned.replace(/\.ya?ml$/, '');
+    for (const prefix of ['done', '']) {
+      const cand = join(base, prefix, `${stem}.md`);
+      if (existsSync(cand)) return cand;
+    }
   }
 
   return null;
@@ -116,10 +131,18 @@ export async function PUT(
       );
     }
 
-    // Validate YAML before saving
+    // Validate YAML / Frontmatter before saving
     try {
       const { parse: parseYaml } = require('yaml');
-      parseYaml(content);
+      if (content.trim().startsWith('---')) {
+        const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+        if (!match) {
+          throw new Error('Frontmatter block must start and end with --- separators on their own lines');
+        }
+        parseYaml(match[1]);
+      } else {
+        parseYaml(content);
+      }
     } catch (yamlErr: any) {
       return NextResponse.json(
         { error: `Invalid YAML: ${yamlErr.message}` },
@@ -170,10 +193,11 @@ export async function DELETE(
                 feature.stories = feature.stories.filter((story: any) => {
                   if (!story) return true;
 
-                  // Match by file stem
+                  // Match by file stem (ignoring extension)
                   if (stem && story.file) {
-                    const sStem = story.file.split('/').pop() || '';
-                    if (sStem === stem) return false;
+                    const cleanStem = stem.replace(/\.[^/.]+$/, '');
+                    const sStem = (story.file.split('/').pop() || '').replace(/\.[^/.]+$/, '');
+                    if (cleanStem === sStem) return false;
                   }
 
                   // Match by exact name
@@ -191,7 +215,6 @@ export async function DELETE(
             // Clean up empty features/epics if all their stories were deleted
             const originalFeaturesCount = app.features.length;
             app.features = app.features.filter((feature: any) => {
-              // Keep epics that still have stories, or keep the required Scaffold epic
               return (feature.stories && feature.stories.length > 0) || feature.scaffold;
             });
             if (app.features.length < originalFeaturesCount) {

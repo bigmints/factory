@@ -164,14 +164,22 @@ export function validateStory(story: Story): ValidationResult {
  * Update a story YAML file's status field in-place.
  * Preserves all other content — only changes the `status:` line.
  */
-export function updateStoryStatus(storyPath: string, status: StoryStatus): void {
+export function updateStoryStatus(storyPath: string, status: StoryStatus, summary?: string): void {
     const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) return;
 
     const raw = readFileSync(absPath, 'utf-8');
-    const story = parseYaml(raw);
+    const parsed = matter(raw);
+    const story = parsed.data;
     story.status = status;
-    writeFileSync(absPath, stringifyYaml(story, { lineWidth: 120 }));
+    
+    let updatedContent = parsed.content.trim();
+    if (summary) {
+        updatedContent += `\n\n## Build Summary\n\n${summary}`;
+    }
+
+    const updated = `---\n${stringifyYaml(story, { lineWidth: 120 }).trim()}\n---\n\n${updatedContent}\n`;
+    writeFileSync(absPath, updated);
 }
 
 // ─── Build Metadata Writeback ────────────────────────────
@@ -189,7 +197,8 @@ export function updateStoryBuildMeta(
     if (!existsSync(absPath)) return;
 
     const raw = readFileSync(absPath, 'utf-8');
-    const story = parseYaml(raw);
+    const parsed = matter(raw);
+    const story = parsed.data;
 
     // Increment build count
     const prevCount = story.build?.buildCount ?? 0;
@@ -217,7 +226,8 @@ export function updateStoryBuildMeta(
         taskType: meta.taskType,
     };
 
-    writeFileSync(absPath, stringifyYaml(story, { lineWidth: 120 }));
+    const updated = `---\n${stringifyYaml(story, { lineWidth: 120 }).trim()}\n---\n\n${parsed.content.trim()}\n`;
+    writeFileSync(absPath, updated);
     log('✓', `Build metadata written to story (build #${story.build.buildCount})`);
 }
 
@@ -242,9 +252,9 @@ export function archiveStory(storyPath: string): string | null {
     const rel = relative(storiesRoot, absPath);
     const firstPart = rel.split(/[\\/]/)[0];
 
-    // Only archive if the story is in an apps/ or features/ folder
-    if (firstPart !== 'apps' && firstPart !== 'features') {
-        log('!', `Story not in apps/ or features/ — skipping archive (path relative segment: ${firstPart})`);
+    // Archive if the story is directly in stories/
+    if (firstPart === 'done') {
+        log('!', `Story already in done/ — skipping archive`);
         return null;
     }
 
@@ -305,8 +315,7 @@ export function restoreStory(storyPath: string): string | null {
         log('!', `Could not parse story to determine type: ${(err as Error).message?.slice(0, 100) || err}`);
     }
 
-    const targetSubdir = isFeature ? 'features' : 'apps';
-    const destDir = join(parentDir, targetSubdir);
+    const destDir = parentDir;
 
     if (!existsSync(destDir)) {
         mkdirSync(destDir, { recursive: true });
@@ -317,7 +326,7 @@ export function restoreStory(storyPath: string): string | null {
 
     try {
         renameSync(absPath, destPath);
-        log('✓', `Restored story from done/ to ${targetSubdir}/: ${filename}`);
+        log('✓', `Restored story from done/ to stories/: ${filename}`);
         return destPath;
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

@@ -24,20 +24,21 @@ async function execSplitStory(args: Record<string, unknown>, ctx: OrchestratorCo
     }
 
     // Usually we would read the original story and mark it as split, but for now we just create the new stories
-    const featuresDir = join(ctx.repoPath, '.factory', 'stories', 'features');
+    const storiesDir = join(ctx.repoPath, '.factory', 'stories');
     const created: string[] = [];
 
     for (const story of newStories) {
-        const filePath = join(featuresDir, `${story.slug}.yaml`);
-        const content = {
-            feature: { name: story.name, slug: story.slug },
-            description: story.description,
-            target: { app: 'main' }, // Fallback, could be improved
+        const filePath = join(storiesDir, `${story.slug}.md`);
+        const frontmatter = {
+            name: story.name,
+            kind: 'feature',
+            target: 'root',
             phase: story.phase || 1,
             dependsOn: story.dependsOn || [],
             status: 'draft'
         };
-        writeFileSync(filePath, toYaml(content), 'utf-8');
+        const content = `---\n${toYaml(frontmatter).trim()}\n---\n\n# ${story.name}\n\n${story.description || 'Decomposed feature story.'}\n`;
+        writeFileSync(filePath, content, 'utf-8');
         created.push(story.slug);
     }
 
@@ -51,12 +52,12 @@ function execUpdateStoryYaml(args: Record<string, unknown>, ctx: OrchestratorCon
         return { content: 'slug and yaml_content are required', isError: true };
     }
 
-    const appsDir = join(ctx.repoPath, '.factory', 'stories', 'apps');
-    const featuresDir = join(ctx.repoPath, '.factory', 'stories', 'features');
+    const storiesDir = join(ctx.repoPath, '.factory', 'stories');
     
-    let targetPath = join(appsDir, `${slug}.yaml`);
+    let targetPath = join(storiesDir, `${slug}.md`);
     if (!existsSync(targetPath)) {
-        targetPath = join(featuresDir, `${slug}.yaml`);
+        // Check done/ folder
+        targetPath = join(storiesDir, 'done', `${slug}.md`);
         if (!existsSync(targetPath)) {
             // Also check current story file
             if (ctx.storyFile && ctx.storyFile.includes(slug)) {
@@ -68,8 +69,18 @@ function execUpdateStoryYaml(args: Record<string, unknown>, ctx: OrchestratorCon
     }
 
     try {
-        parseYaml(yamlContent); // validate it's valid yaml
-        writeFileSync(targetPath, yamlContent, 'utf-8');
+        let formattedContent = yamlContent;
+        if (!yamlContent.trim().startsWith('---')) {
+            parseYaml(yamlContent); // validate it's valid yaml
+            formattedContent = `---\n${yamlContent.trim()}\n---\n\n# ${slug}\n\nAutomated requirements update.\n`;
+        } else {
+            // Extract and validate the frontmatter portion
+            const match = yamlContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+            if (match) {
+                parseYaml(match[1]);
+            }
+        }
+        writeFileSync(targetPath, formattedContent, 'utf-8');
         return { content: `Story ${slug} updated successfully.`, isError: false };
     } catch (e) {
         return { content: `Failed to update story: ${e instanceof Error ? e.message : String(e)}`, isError: true };

@@ -144,78 +144,43 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
     }
     
     const doneDir = join(storiesDir, 'done');
-    const appsDir = join(storiesDir, 'apps');
-    const featuresDir = join(storiesDir, 'features');
     
-    const { existsSync: ex, mkdirSync: mk, readdirSync: rd, unlinkSync: rm, writeFileSync: wr } = await import('node:fs');
+    const { existsSync: ex, readdirSync: rd, renameSync: rn, writeFileSync: wr } = await import('node:fs');
     const { parse: parseYaml, stringify: stringifyYaml } = await import('yaml');
-    
-    if (!ex(appsDir)) mk(appsDir, { recursive: true });
-    if (!ex(featuresDir)) mk(featuresDir, { recursive: true });
+    const { loadStory, updateStoryStatus } = await import('../story.ts');
     
     let storiesReset = 0;
     
     // Move and reset 'done' stories
     if (ex(doneDir)) {
-        const doneFiles = rd(doneDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+        const doneFiles = rd(doneDir).filter(f => f.endsWith('.md'));
         for (const file of doneFiles) {
             const filePath = join(doneDir, file);
+            const destPath = join(storiesDir, file);
             try {
-                const raw = readFileSync(filePath, 'utf-8');
-                const doc = parseYaml(raw) as any;
-                if (doc) {
-                    doc.status = 'draft';
-                    const isFeature = !!(doc.feature || doc.target || 'phase' in doc);
-                    const targetDir = isFeature ? featuresDir : appsDir;
-                    const destPath = join(targetDir, file);
-                    wr(destPath, stringifyYaml(doc, { lineWidth: 120 }), 'utf-8');
-                    rm(filePath);
-                    storiesReset++;
-                    log('✓', `Restored archived story to draft: ${file} → ${isFeature ? 'features' : 'apps'}`);
-                }
+                updateStoryStatus(filePath, 'draft');
+                rn(filePath, destPath);
+                storiesReset++;
+                log('✓', `Restored archived story to draft: ${file}`);
             } catch (err: any) {
                 logError(`Failed to restore archived story ${file}: ${err?.message || err}`);
             }
         }
     }
     
-    // Reset stories in 'apps'
-    if (ex(appsDir)) {
-        const appFiles = rd(appsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-        for (const file of appFiles) {
-            const filePath = join(appsDir, file);
-            try {
-                const raw = readFileSync(filePath, 'utf-8');
-                const doc = parseYaml(raw) as any;
-                if (doc && doc.status !== 'draft') {
-                    doc.status = 'draft';
-                    wr(filePath, stringifyYaml(doc, { lineWidth: 120 }), 'utf-8');
-                    storiesReset++;
-                    log('✓', `Reset app story status to draft: ${file}`);
-                }
-            } catch (err: any) {
-                logError(`Failed to reset app story ${file}: ${err?.message || err}`);
+    // Reset active stories directly in storiesDir
+    const activeFiles = rd(storiesDir).filter(f => f.endsWith('.md'));
+    for (const file of activeFiles) {
+        const filePath = join(storiesDir, file);
+        try {
+            const doc = loadStory(filePath);
+            if (doc && doc.status !== 'draft') {
+                updateStoryStatus(filePath, 'draft');
+                storiesReset++;
+                log('✓', `Reset story status to draft: ${file}`);
             }
-        }
-    }
-    
-    // Reset stories in 'features'
-    if (ex(featuresDir)) {
-        const featureFiles = rd(featuresDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-        for (const file of featureFiles) {
-            const filePath = join(featuresDir, file);
-            try {
-                const raw = readFileSync(filePath, 'utf-8');
-                const doc = parseYaml(raw) as any;
-                if (doc && doc.status !== 'draft') {
-                    doc.status = 'draft';
-                    wr(filePath, stringifyYaml(doc, { lineWidth: 120 }), 'utf-8');
-                    storiesReset++;
-                    log('✓', `Reset feature story status to draft: ${file}`);
-                }
-            } catch (err: any) {
-                logError(`Failed to reset feature story ${file}: ${err?.message || err}`);
-            }
+        } catch (err: any) {
+            logError(`Failed to reset story ${file}: ${err?.message || err}`);
         }
     }
     

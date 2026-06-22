@@ -290,7 +290,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-1 shrink-0 -mt-0.5">
               {state === "done" ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              ) : state === "inprogress" && item.status === "running" ? (
+              ) : state === "inprogress" && ["running", "building"].includes(item.status) ? (
                 <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin" />
               ) : null}
             </div>
@@ -320,7 +320,7 @@ export default function Dashboard() {
             )}
             {state === "inprogress" &&
               mode === "list" &&
-              item.status === "running" && (
+              ["running", "building"].includes(item.status) && (
                 <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin" />
               )}
             {item.completedAt

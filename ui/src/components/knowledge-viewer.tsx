@@ -18,7 +18,7 @@ export function KnowledgeViewer({ data }: KnowledgeViewerProps) {
   
   // Try to find tpm-context.md in adrs or workflows
   const adrs = data?.adrs || [];
-  const tpmContext = adrs.find((a: any) => a.id === 'tpm-context' || a.filename.includes('tpm-context')) || data?.workflows?.find((w: any) => w.id === 'tpm-context');
+  const tpmContext = adrs.find((a: any) => a.id === 'tpm-context' || a.filename?.includes('tpm-context')) || data?.workflows?.find((w: any) => w.id === 'tpm-context');
   
   const handleBuildKnowledge = async () => {
     setIsBuilding(true);

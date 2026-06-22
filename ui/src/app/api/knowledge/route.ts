@@ -80,7 +80,9 @@ function readAdrs(projectRoot: string): ADR[] {
   const adrs: ADR[] = [];
   const adrDirs = [
     { path: path.join(projectRoot, 'docs', 'adr'), type: 'docs' },
-    { path: path.join(projectRoot, '.factory', 'knowledge'), type: 'factory' }
+    { path: path.join(projectRoot, '.factory', 'knowledge'), type: 'factory' },
+    { path: path.join(projectRoot, '.factory', 'knowledge', 'ADRs'), type: 'factory' },
+    { path: path.join(projectRoot, '.factory', 'knowledge', 'design-system'), type: 'factory' }
   ];
 
   for (const dirInfo of adrDirs) {

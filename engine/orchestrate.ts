@@ -150,7 +150,15 @@ async function runDeterministicPipeline(
             ctx.logs.push({ level: 'info', message: 'CLI delivered successfully' });
 
             try {
-                updateStoryStatus(storyFile, 'done');
+                const summaryLines = [
+                    `**Date**: ${new Date().toISOString()}`,
+                    `**CLI**: ${cliName}`,
+                    `**Files Generated**: ${ctx.files.length}`,
+                    '',
+                    ...ctx.files.slice(0, 20).map(f => `- \`${f.filename}\``),
+                    ctx.files.length > 20 ? `...and ${ctx.files.length - 20} more` : '',
+                ].filter(Boolean).join('\n');
+                updateStoryStatus(storyFile, 'done', summaryLines);
                 log('✓', `Story status → done: ${storyFile}`);
             } catch (e) {
                 log('!', `Could not update story status: ${e}`);

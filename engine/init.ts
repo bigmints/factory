@@ -222,8 +222,7 @@ factory hooks install            # Install git hooks
 
 ### Architecture & File Structure Protocols
 You MUST adhere to the following file paths:
-- **Feature Stories**: \`.factory/stories/features/<slug>.yaml\`
-- **App Stories**: \`.factory/stories/apps/<slug>.yaml\`
+- **Stories**: \`.factory/stories/<slug>.md\`
 - **Skills**: Global skills live in \`~/.factory/skills/\`. Project-specific overrides go in \`.factory/skills/\`
 - **Knowledge / ADRs**: \`.factory/knowledge/\`
 - **Agent Logs**: \`.factory/logs/\`
@@ -256,8 +255,7 @@ export function patchEncapsulatedAgentsMd(repoPath: string, factoryDir: string):
 
 ## Architecture & File Structure Protocols
 To ensure the Factory engine functions correctly, you MUST adhere to the following file paths:
-- **Feature Stories**: Must be written to \`.factory/stories/features/<slug>.yaml\`
-- **App Stories**: Must be written to \`.factory/stories/apps/<slug>.yaml\`
+- **Stories**: Must be written to \`.factory/stories/<slug>.md\`
 - **Skills**: Global skills live in \`~/.factory/skills/\`. Project-specific overrides go in \`.factory/skills/\`
 - **Knowledge / ADRs**: Must be written to \`.factory/knowledge/\`
 - **Agent Logs**: Must be written to \`.factory/logs/\`
@@ -478,7 +476,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
             stories: [
                 {
                     name: 'Scaffold Environment',
-                    file: `stories/apps/${name}.yaml`,
+                    file: `stories/${name}.md`,
                     status: storyStatus,
                     tasks: [
                         { id: 'task-init-setup', title: 'Initialize project, configurations, and environment dependencies', status: taskStatus }
@@ -501,7 +499,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
                 stories: [
                     {
                         name: `${dbTech} Configuration`,
-                        file: `stories/features/${dbSlug}.yaml`,
+                        file: `stories/${dbSlug}.md`,
                         status: storyStatus,
                         tasks: [
                             { id: 'task-db-setup', title: `Setup ${dbTech} ORM, configure database credentials, and seed initial schemas`, status: taskStatus }
@@ -518,7 +516,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
                 const routeSlug = toSlug(`${routeName}-page`);
                 return {
                     name: `${routeName} Page`,
-                    file: `stories/features/${routeSlug}.yaml`,
+                    file: `stories/${routeSlug}.md`,
                     status: storyStatus,
                     tasks: [
                         { id: `task-route-${route}`, title: `Implement ${route} page layout and visual route components`, status: taskStatus }
@@ -541,7 +539,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
                 stories: [
                     {
                         name: 'Root Application Page',
-                        file: `stories/features/${toSlug('root-application-page')}.yaml`,
+                        file: `stories/${toSlug('root-application-page')}.md`,
                         status: storyStatus,
                         tasks: [
                             { id: 'task-root-page', title: 'Scaffold application root homepage view and components', status: taskStatus }
@@ -560,7 +558,7 @@ export function generateAppYamlFromExistingCodebase(repoPath: string): AppSpec {
                 stories: [
                     {
                         name: 'Common Design System',
-                        file: `stories/features/${toSlug('common-design-system')}.yaml`,
+                        file: `stories/${toSlug('common-design-system')}.md`,
                         status: storyStatus,
                         tasks: [
                             { id: 'task-common-ui', title: 'Scaffold responsive common layout component wrappers and UI elements', status: taskStatus }
@@ -613,8 +611,7 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
         join(factoryDir, 'logs'),
         join(factoryDir, 'logs', 'builds'),
         join(factoryDir, 'logs', 'failures'),
-        join(factoryDir, 'stories', 'apps'),
-        join(factoryDir, 'stories', 'features'),
+        join(factoryDir, 'stories'),
         join(factoryDir, 'knowledge'),
         join(factoryDir, 'task-manager'),
         join(factoryDir, 'workflows'),

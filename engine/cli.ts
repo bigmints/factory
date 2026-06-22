@@ -167,6 +167,16 @@ async function main(): Promise<void> {
             const { handleAppCommand } = await lazyFeature();
             return handleAppCommand();
         }
+        case 'queue': {
+            const { handleQueueList, handleQueueAdd, handleQueueStart, handleQueueClear } = await import('./cli/queue-handlers.ts');
+            const subCmd = args[1];
+            if (subCmd === 'list') return handleQueueList();
+            if (subCmd === 'add') return handleQueueAdd(args[2]);
+            if (subCmd === 'start') return handleQueueStart();
+            if (subCmd === 'clear') return handleQueueClear();
+            console.error('Unknown queue command. Available: list, add, start, clear');
+            process.exit(1);
+        }
         // ─── CLI Facade ─────────────────────────────
         case 'pulse':
             return handlePulse();

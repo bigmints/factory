@@ -93,9 +93,11 @@ export function StoryCard({
         <div className="flex items-center gap-3.5 min-w-0 flex-1">
           <span className={cn(
             "h-2 w-2 rounded-full shrink-0 transition-all",
-            story.status === 'ready' || story.status === 'done' ? "bg-emerald-500" :
-            story.status === 'in-progress' || story.status === 'running' ? "bg-blue-500 animate-pulse" :
-            story.status === 'failed' ? "bg-red-500" : "bg-muted-foreground/30"
+            story.status === 'done' || story.status === 'completed' || story.status === 'ready' ? "bg-emerald-500" :
+            story.status === 'failed' ? "bg-rose-500" :
+            story.status === 'in-progress' || story.status === 'running' || story.status === 'building' ? "bg-blue-500 animate-pulse" :
+            story.status === 'ready-to-build' ? "bg-amber-500" :
+            "bg-muted-foreground/30"
           )} />
           <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-muted/40">{icon}</div>
           <div className="min-w-0 flex-1">

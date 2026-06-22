@@ -82,16 +82,16 @@ const CLI_PROFILES: Record<CliName, CliProfile> = {
 
     /**
      * pi (Pi Coding Agent by earendil-works)
-     * Non-interactive: pi "<prompt>" (positional — NO -p flag!)
+     * Non-interactive: pi -p "<prompt>"
      * --no-session     : skip loading/saving session (avoids corrupted settings stall)
      * --no-extensions  : skip MCP adapter init which blocks stdout for 30-60s
      * --no-skills      : skip toon-context skill which reads ALL project files before responding
      *                    (183 files = 300s stall on local models)
      */
     pi: {
-        promptMode: 'positional',
+        promptMode: 'flag',
         yoloFlags: [],
-        extraFlags: ['--no-session', '--no-extensions', '--no-skills'],
+        extraFlags: ['--no-session', '--no-extensions', '--no-skills', '--verbose'],
     },
 
     /**

@@ -807,19 +807,38 @@ async function handleApplyStory(
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
     const folder = kind === 'app' ? 'apps' : 'features';
-    const relativePath = `stories/${folder}/${slug}.yaml`;
+    const relativePath = `stories/${folder}/${slug}.md`;
     const fullPath = join(projectPath, '.factory', relativePath);
 
-    // Inject threadId into the content YAML if provided
     let finalContent = content;
-    if (threadId) {
-      try {
-        const parsed = parseYaml(content) as any;
-        if (parsed) {
-          parsed.threadId = threadId;
-          finalContent = toYaml(parsed);
+    let parsedYaml: any = null;
+    try {
+      let yamlStr = content.trim();
+      if (yamlStr.startsWith('---')) {
+        const match = yamlStr.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+        if (match) {
+          yamlStr = match[1];
         }
-      } catch {}
+      }
+      parsedYaml = parseYaml(yamlStr);
+    } catch {}
+
+    if (parsedYaml) {
+      if (threadId) {
+        parsedYaml.threadId = threadId;
+      }
+      parsedYaml.phase = phase;
+      parsedYaml.kind = kind;
+      parsedYaml.name = name;
+      if (dependsOn && dependsOn.length > 0) {
+        parsedYaml.dependsOn = dependsOn;
+      }
+      
+      const yamlStr = toYaml(parsedYaml);
+      finalContent = `---\n${yamlStr.trim()}\n---\n\n# ${name}\n`;
+    } else {
+      const yamlStr = content.trim();
+      finalContent = `---\n${yamlStr}\n---\n\n# ${name}\n`;
     }
 
     mkdirSync(join(projectPath, '.factory', 'stories', folder), { recursive: true });
@@ -851,6 +870,56 @@ ${content}
   } catch (err: any) {
     return `Failed to save ADR: ${err.message}`;
   }
+}
+
+function parseXmlToolCall(text: string): any[] {
+  const toolCalls: any[] = [];
+  const toolNameMatch = text.match(/<tool_name>([\s\S]*?)<\/tool_name>/);
+  if (!toolNameMatch) {
+    return [];
+  }
+  
+  const name = toolNameMatch[1].trim();
+  const args: Record<string, any> = {};
+  
+  const paramRegex = /<parameter(?:=([^>]+))?>([\s\S]*?)<\/parameter>/g;
+  let match;
+  
+  while ((match = paramRegex.exec(text)) !== null) {
+    let paramName = match[1] ? match[1].trim() : '';
+    let paramVal = match[2];
+    
+    if (!paramName) {
+      const inlineKeyMatch = paramVal.match(/^([^>\n]+)>([\s\S]*)$/);
+      if (inlineKeyMatch) {
+        paramName = inlineKeyMatch[1].trim();
+        paramVal = inlineKeyMatch[2];
+      }
+    }
+    
+    if (paramName) {
+      let cleanedVal = paramVal.trim();
+      if ((cleanedVal.startsWith('[') && cleanedVal.endsWith(']')) ||
+          (cleanedVal.startsWith('{') && cleanedVal.endsWith('}')) ||
+          cleanedVal === 'true' || cleanedVal === 'false' ||
+          !isNaN(Number(cleanedVal))) {
+        try {
+          cleanedVal = JSON.parse(cleanedVal);
+        } catch {}
+      }
+      args[paramName] = cleanedVal;
+    }
+  }
+  
+  if (name) {
+    toolCalls.push({
+      id: `xml_call_${Date.now()}`,
+      name,
+      arguments: args
+    });
+  }
+  
+  return toolCalls;
 }
 
 // ─── Skill Tools ─────────────────────────────────────────────────────────────
@@ -975,7 +1044,7 @@ You have access to the following tools. Use them proactively to fulfill user req
 **Query tools:**
 - get_project_status() — project progress, heartbeat, worklog
 - list_stories(kind?, status?) — all stories with statuses
-- get_story(slug) — full YAML of a specific story
+- get_story(slug) — full content (Markdown + frontmatter) of a specific story
 - get_scaffold() — full planning scaffold
 - get_build_logs(limit?) — build history and receipts
 - search_knowledge(query) — search ADRs and engineering decisions
@@ -984,17 +1053,17 @@ You have access to the following tools. Use them proactively to fulfill user req
 **Write tools:**
 - update_story_status(slug, status) — update story status (draft/in-progress/done/review)
 - update_story_field(slug, field, value) — update any story field
-- apply_story(name, content, kind, phase?, dependsOn?) — save a new story
+- apply_story(name, content, kind, phase?, dependsOn?) — save a new Markdown story with YAML frontmatter
 - add_adr_decision(slug, content) — record an architectural decision
-- decompose_requirements(prompt) — decompose requirements into feature story YAMLs
+- decompose_requirements(prompt) — decompose requirements into feature story Markdown contents with YAML frontmatter
 
 **Orchestration rules:**
 - Always call tools when user asks about status, stories, or logs — never guess from memory.
 - When user references @story-name in their message, call get_story to get its details first.
 - For "what's the status?" type questions, call get_project_status AND list_stories together.
 - After write operations, confirm the action with the returned result.
-- App story YAML MUST include: \`appName\` (string), \`description\`, \`phase\`, \`status\`, and \`stack\` (object with \`framework\` and \`packageManager\`).
-- Feature story YAML MUST include: \`name\` (string), \`description\`, \`status\`, \`phase\`, \`feature\` (object with name, slug), \`target\` (object with app), \`dependsOn\`, \`dependencies\`, and \`acceptance_criteria\`.
+- App story YAML frontmatter MUST include: \`appName\` (string), \`description\`, \`phase\`, \`status\`, and \`stack\` (object with \`framework\` and \`packageManager\`).
+- Feature story YAML frontmatter MUST include: \`name\` (string), \`description\`, \`status\`, \`phase\`, \`feature\` (object with name, slug), \`target\` (object with app), \`dependsOn\`, \`dependencies\`, and \`acceptance_criteria\`.
 - Speak professionally and concisely. Be the intelligent conductor.${skillSection}`;
 
           const localMessages: any[] = [
@@ -1127,6 +1196,19 @@ You have access to the following tools. Use them proactively to fulfill user req
                   } catch {}
                   return { id: tc.id, name: tc.function.name, arguments: args };
                 });
+              }
+            }
+
+            if (toolCalls.length === 0 && responseText) {
+              const xmlCalls = parseXmlToolCall(responseText);
+              if (xmlCalls.length > 0) {
+                toolCalls = xmlCalls;
+                responseText = responseText
+                  .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+                  .replace(/<tool_name>[\s\S]*?<\/tool_name>/g, '')
+                  .replace(/<parameter(?:=[^>]+)?>[\s\S]*?<\/parameter>/g, '')
+                  .replace(/<\/function>/g, '')
+                  .trim();
               }
             }
 

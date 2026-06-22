@@ -4,8 +4,10 @@ export async function POST(request: Request) {
     try {
         const { provider, apiKey, baseUrl, kind } = await request.json();
 
+        const apiType = (kind === 'builtin' || !kind) ? provider : kind;
+
         // Custom openai-compat providers: call their /v1/models endpoint
-        if (kind === 'openai-compat' || provider === 'openai-compatible') {
+        if (apiType === 'openai-compat' || provider === 'openai-compatible') {
             if (!baseUrl) return NextResponse.json({ ok: false, message: 'Base URL is required' });
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 8000);
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
             }
         }
 
-        switch (provider) {
+        switch (apiType) {
             case 'gemini': {
                 if (!apiKey) return NextResponse.json({ ok: false, message: 'API key is required' });
                 const res = await fetch(

@@ -50,7 +50,9 @@ export function PWARegister() {
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setShowInstall(true);
+      if (typeof window !== 'undefined' && !sessionStorage.getItem('factory-pwa-dismissed')) {
+        setShowInstall(true);
+      }
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
@@ -60,8 +62,11 @@ export function PWARegister() {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
+    setShowInstall(false);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('factory-pwa-dismissed', 'true');
+    }
     if (outcome === 'accepted') {
-      setShowInstall(false);
       setDeferredPrompt(null);
     }
   };
@@ -89,7 +94,12 @@ export function PWARegister() {
           Install
         </button>
         <button
-          onClick={() => setShowInstall(false)}
+          onClick={() => {
+            setShowInstall(false);
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('factory-pwa-dismissed', 'true');
+            }
+          }}
           className="rounded p-1 text-muted-foreground hover:text-foreground"
         >
           x

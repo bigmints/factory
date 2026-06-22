@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useSyncExternalStore, useRef, useMemo } from "react";
+import { useState, useEffect, useSyncExternalStore, useRef, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { useFactoryStore } from "@/stores/factory-store";
 import { SettingsView } from "./settings-view";
@@ -254,6 +254,60 @@ export default function Dashboard() {
     }
   }, [activeProject?.id]);
 
+   const [viewingLogsStory, setViewingLogsStory] = useState<{ file: string; name: string } | null>(null);
+  const [logsText, setLogsText] = useState<string>('');
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/queue/logs");
+      const data = await res.json();
+      if (data.logs) {
+        setLogsText(data.logs);
+      } else if (data.error) {
+        setLogsText(`Error: ${data.error}`);
+      }
+    } catch (err: any) {
+      setLogsText(`Failed to fetch logs: ${err.message || String(err)}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!viewingLogsStory) {
+      setLogsText('');
+      return;
+    }
+
+    fetchLogs();
+
+    const interval = setInterval(() => {
+      fetchLogs();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [viewingLogsStory, fetchLogs]);
+
+  useEffect(() => {
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
+  }, [logsText]);
+
+  const handleStopBuild = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      const res = await fetch("/api/queue/stop", { method: "POST" });
+      if (res.ok) {
+        toast.success("Build stopped");
+        fetchAll();
+      } else {
+        toast.error("Failed to stop build");
+      }
+    } catch {
+      toast.error("Failed to stop build");
+    }
+  };
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ match: string; index: number } | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
@@ -446,11 +500,11 @@ export default function Dashboard() {
                 isApp ? "bg-sky-500" : "bg-indigo-500",
               )}
             />
-            <span className="text-[12.5px] font-medium text-foreground truncate group-hover:text-primary transition-colors">
+            <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
               {item.displayName}
             </span>
             {mode === "list" && item.file && item.file !== item.displayName && (
-              <span className="text-[10px] font-mono text-muted-foreground/50 truncate ml-2">
+              <span className="text-xs font-mono text-muted-foreground/50 truncate ml-2">
                 {item.file.split("/").pop()}
               </span>
             )}
@@ -461,21 +515,47 @@ export default function Dashboard() {
               {state === "done" ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
               ) : state === "inprogress" && ["running", "building"].includes(item.status) ? (
-                <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin" />
+                <div className="flex items-center gap-1">
+                  <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin mr-1 shrink-0" />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 rounded-md hover:bg-muted/80 text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingLogsStory({ file: item.file, name: item.displayName });
+                    }}
+                    title="View Logs"
+                  >
+                    <Terminal className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 rounded-md hover:bg-red-500/10 text-red-500 hover:text-red-600 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStopBuild(e);
+                    }}
+                    title="Stop Build"
+                  >
+                    <StopCircle className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               ) : null}
             </div>
           )}
         </div>
 
         {mode === "board" && item.file && item.file !== item.displayName && (
-          <p className="text-[10px] font-mono text-muted-foreground/50 truncate pl-3.5">
+          <p className="text-xs font-mono text-muted-foreground/50 truncate pl-3.5">
             {item.file.split("/").pop()}
           </p>
         )}
 
         <div
           className={cn(
-            "flex items-center text-[9px] text-muted-foreground",
+            "flex items-center text-xs text-muted-foreground",
             mode === "board"
               ? "justify-between mt-0.5 pt-1 border-t border-border/10 pl-3.5"
               : "gap-4 shrink-0",
@@ -491,13 +571,54 @@ export default function Dashboard() {
             {state === "inprogress" &&
               mode === "list" &&
               ["running", "building"].includes(item.status) && (
-                <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin" />
+                <div className="flex items-center gap-1 mr-1">
+                  <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin mr-1 shrink-0" />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 rounded-md hover:bg-muted/80 text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingLogsStory({ file: item.file, name: item.displayName });
+                    }}
+                    title="View Logs"
+                  >
+                    <Terminal className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 rounded-md hover:bg-red-500/10 text-red-500 hover:text-red-600 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStopBuild(e);
+                    }}
+                    title="Stop Build"
+                  >
+                    <StopCircle className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               )}
-            {item.completedAt
-              ? `Done ${new Date(item.completedAt).toLocaleDateString()}`
-              : item.addedAt
-                ? `Added ${new Date(item.addedAt).toLocaleDateString()}`
-                : item.status || "Draft"}
+            <span className={cn(
+              "px-1.5 py-0.5 rounded-xs text-[9px] font-bold uppercase tracking-wider shrink-0",
+              item.status === "done" && "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
+              item.status === "failed" && "bg-rose-500/10 text-rose-500 border border-rose-500/20",
+              ["building", "running"].includes(item.status) && "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20",
+              ["ready-to-build", "pending"].includes(item.status) && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
+              (!item.status || ["draft", "todo"].includes(item.status)) && "bg-muted text-muted-foreground border border-border"
+            )}>
+              {item.status || "Draft"}
+            </span>
+            {item.completedAt && (
+              <span className="text-[10px] text-muted-foreground/60 font-medium">
+                Done {new Date(item.completedAt).toLocaleDateString()}
+              </span>
+            )}
+            {!item.completedAt && item.addedAt && (
+              <span className="text-[10px] text-muted-foreground/60 font-medium">
+                Added {new Date(item.addedAt).toLocaleDateString()}
+              </span>
+            )}
           </span>
         </div>
       </div>
@@ -628,14 +749,74 @@ export default function Dashboard() {
             {/* Left: Main Content */}
             <div className="flex-1 flex flex-col overflow-y-auto px-4 py-4 md:py-4 scrollbar-none relative">
               {editingStory && (
-                <div className="fixed inset-0 z-[100] bg-background">
+                <div className="fixed inset-0 z-50 bg-background">
                   <div className="w-full h-full flex flex-col">
                     <StoryEditor
                       storyFile={editingStory.file}
                       storyName={editingStory.name}
                       onClose={() => setEditingStory(null)}
                       onSaved={() => fetchAll()}
+                      onViewLogs={(file, name) => setViewingLogsStory({ file, name })}
+                      onStopBuild={handleStopBuild}
                     />
+                  </div>
+                </div>
+              )}
+              {viewingLogsStory && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                  <div className="flex flex-col w-full max-w-3xl h-[80vh] rounded-xl border border-border bg-card shadow-2xl overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between p-4 border-b border-border bg-muted/40">
+                      <div className="flex items-center gap-2">
+                        <Terminal className="h-4 w-4 text-indigo-500 animate-pulse" />
+                        <div>
+                          <h3 className="text-sm font-bold text-foreground">
+                            Execution Logs
+                          </h3>
+                          <p className="text-xs text-muted-foreground font-mono truncate max-w-[400px]">
+                            {viewingLogsStory.name} ({viewingLogsStory.file})
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg"
+                        onClick={() => setViewingLogsStory(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Content (Logs text area) */}
+                    <div 
+                      ref={logsContainerRef}
+                      className="flex-1 p-4 bg-zinc-950 font-mono text-xs leading-relaxed text-zinc-300 overflow-y-auto whitespace-pre-wrap select-text scrollbar-thin"
+                    >
+                      {logsText ? (
+                        logsText
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-500">
+                          <div className="h-4 w-4 rounded-full border border-zinc-700 border-t-zinc-400 animate-spin" />
+                          <span>Waiting for logs...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between p-3 border-t border-border bg-muted/30">
+                      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                        Real-time tailing enabled
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs font-semibold h-8 rounded-lg"
+                        onClick={() => setViewingLogsStory(null)}
+                      >
+                        Close
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -692,7 +873,7 @@ export default function Dashboard() {
                 <div className="w-full max-w-7xl mx-auto flex flex-col gap-4">
                   {/* Control Bar: View Switcher & Actions */}
                   <div className="flex items-center justify-between pb-1 shrink-0">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       Workflow Stories
                     </span>
                     <div className="flex items-center gap-3">
@@ -701,7 +882,7 @@ export default function Dashboard() {
                           variant={viewMode === "board" ? "secondary" : "ghost"}
                           size="sm"
                           onClick={() => setViewMode("board")}
-                          className="h-6 px-2 text-[11px] gap-1 font-medium rounded-md"
+                          className="h-6 px-2 text-xs gap-1 font-medium rounded-md"
                         >
                           <LayoutGrid className="h-3 w-3" /> Board
                         </Button>
@@ -709,7 +890,7 @@ export default function Dashboard() {
                           variant={viewMode === "list" ? "secondary" : "ghost"}
                           size="sm"
                           onClick={() => setViewMode("list")}
-                          className="h-6 px-2 text-[11px] gap-1 font-medium rounded-md"
+                          className="h-6 px-2 text-xs gap-1 font-medium rounded-md"
                         >
                           <List className="h-3 w-3" /> List
                         </Button>
@@ -736,7 +917,7 @@ export default function Dashboard() {
                             className={cn(
                               "flex flex-col",
                               viewMode === "board"
-                                ? "min-h-[500px] bg-transparent"
+                                ? "min-h-96 bg-transparent"
                                 : "min-h-0 bg-transparent",
                             )}
                           >
@@ -746,11 +927,11 @@ export default function Dashboard() {
                                 viewMode === "board" ? "px-1" : "px-2 pb-2",
                               )}
                             >
-                              <h3 className="text-[12.5px] font-semibold text-foreground flex items-center gap-1.5">
+                              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                                 <div className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50 bg-muted/40" />
                                 Todo
                               </h3>
-                              <span className="text-[10px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                              <span className="text-xs font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
                                 {todoItems.length}
                               </span>
                             </div>
@@ -758,7 +939,7 @@ export default function Dashboard() {
                               className={cn(
                                 "flex flex-col flex-1",
                                 viewMode === "board"
-                                  ? "overflow-y-auto max-h-[700px] scrollbar-none px-1"
+                                  ? "overflow-y-auto max-h-full scrollbar-none px-1"
                                   : "px-0 overflow-visible",
                               )}
                             >
@@ -784,7 +965,7 @@ export default function Dashboard() {
                             className={cn(
                               "flex flex-col",
                               viewMode === "board"
-                                ? "min-h-[500px] bg-transparent"
+                                ? "min-h-96 bg-transparent"
                                 : "min-h-0 bg-transparent mt-4",
                             )}
                           >
@@ -794,11 +975,11 @@ export default function Dashboard() {
                                 viewMode === "board" ? "px-1" : "px-2 pb-2",
                               )}
                             >
-                              <h3 className="text-[12.5px] font-semibold text-foreground flex items-center gap-1.5">
+                              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                                 <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                                 Ready to Build
                               </h3>
-                              <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                              <span className="text-xs font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
                                 {inProgressItems.length}
                               </span>
                             </div>
@@ -806,7 +987,7 @@ export default function Dashboard() {
                               className={cn(
                                 "flex flex-col flex-1",
                                 viewMode === "board"
-                                  ? "overflow-y-auto max-h-[700px] scrollbar-none px-1"
+                                  ? "overflow-y-auto max-h-full scrollbar-none px-1"
                                   : "px-0 overflow-visible",
                               )}
                             >
@@ -832,7 +1013,7 @@ export default function Dashboard() {
                             className={cn(
                               "flex flex-col",
                               viewMode === "board"
-                                ? "min-h-[500px] bg-transparent"
+                                ? "min-h-96 bg-transparent"
                                 : "min-h-0 bg-transparent mt-4",
                             )}
                           >
@@ -842,11 +1023,11 @@ export default function Dashboard() {
                                 viewMode === "board" ? "px-1" : "px-2 pb-2",
                               )}
                             >
-                              <h3 className="text-[12.5px] font-semibold text-foreground flex items-center gap-1.5">
+                              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                 Done
                               </h3>
-                              <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
                                 {doneItems.length}
                               </span>
                             </div>
@@ -854,7 +1035,7 @@ export default function Dashboard() {
                               className={cn(
                                 "flex flex-col flex-1",
                                 viewMode === "board"
-                                  ? "overflow-y-auto max-h-[700px] scrollbar-none px-1"
+                                  ? "overflow-y-auto max-h-full scrollbar-none px-1"
                                   : "px-0 overflow-visible",
                               )}
                             >
@@ -906,12 +1087,12 @@ export default function Dashboard() {
                     <div
                       key={i}
                       className={cn(
-                        "flex flex-col max-w-[90%]",
+                        "flex flex-col max-w-11/12",
                         msg.role === "user" ? "self-end" : "self-start",
                       )}
                     >
                       {msg.role === "user" ? (
-                        <div className="bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 px-4 py-2.5 rounded-2xl rounded-tr-sm text-[13px] leading-snug border border-zinc-200/50 dark:border-transparent">
+                        <div className="bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-snug border border-zinc-200/50 dark:border-transparent">
                           {msg.content}
                         </div>
                       ) : (
@@ -921,7 +1102,7 @@ export default function Dashboard() {
                               {msg.toolCalls.map((tc) => (
                                 <div
                                   key={tc.id}
-                                  className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted border border-border text-[10px] text-muted-foreground font-mono"
+                                  className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted border border-border text-xs text-muted-foreground font-mono"
                                 >
                                   {tc.status === "running" ? (
                                     <Terminal className="h-3 w-3 text-amber-500 animate-pulse" />
@@ -935,7 +1116,7 @@ export default function Dashboard() {
                           )}
                           {msg.content && (
                             <div
-                              className={cn(PROSE, "text-foreground text-[13px]")}
+                              className={cn(PROSE, "text-foreground text-sm")}
                             >
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                 {msg.content}
@@ -943,7 +1124,7 @@ export default function Dashboard() {
                             </div>
                           )}
                           {msg.tokensPerSec !== undefined && msg.tokensPerSec > 0 && (
-                            <div className="flex items-center gap-2 mt-1 text-[9px] text-muted-foreground/60 font-mono">
+                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground/60 font-mono">
                               <span>{msg.tokenCount} tokens</span>
                               <span>·</span>
                               <span>{(msg.durationMs! / 1000).toFixed(1)}s</span>
@@ -964,23 +1145,23 @@ export default function Dashboard() {
                             if (uniqueExtracted.length === 0) return null;
                             return (
                               <div className="mt-2 space-y-2 border-t border-border/40 pt-2 shrink-0">
-                                <span className="text-[9px] font-semibold text-muted-foreground/75 uppercase tracking-wider block mb-1">Extracted Stories</span>
+                                <span className="text-xs font-semibold text-muted-foreground/75 uppercase tracking-wider block mb-1">Extracted Stories</span>
                                 {uniqueExtracted.map((story, sIdx) => {
                                   const isSaved = savedStories.has(story.filename);
                                   const isSaving = savingStory === story.filename;
                                   return (
-                                    <div key={sIdx} className="p-2 rounded-lg border border-border/60 bg-muted/20 flex flex-col gap-1 text-[11px]">
+                                    <div key={sIdx} className="p-2 rounded-lg border border-border/60 bg-muted/20 flex flex-col gap-1 text-xs">
                                       <div className="flex items-center justify-between gap-2">
                                         <div className="min-w-0 flex-1">
                                           <p className="font-semibold text-foreground truncate">{story.name}</p>
-                                          <p className="text-[9px] font-mono text-muted-foreground truncate">{story.filename}</p>
+                                          <p className="text-xs font-mono text-muted-foreground truncate">{story.filename}</p>
                                         </div>
                                         <Button
                                           size="sm"
                                           variant={isSaved ? "ghost" : "outline"}
                                           disabled={isSaved || isSaving}
                                           onClick={() => handleSaveStory(story)}
-                                          className="h-6 px-2 text-[10px] rounded shrink-0"
+                                          className="h-6 px-2 text-xs rounded shrink-0"
                                         >
                                           {isSaving ? (
                                             <div className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin mr-1" />
@@ -1037,7 +1218,7 @@ export default function Dashboard() {
                           setInput("");
                         }, 0);
                       }}
-                      className="text-[10px] font-medium border border-border/80 px-2 py-0.5 rounded-full bg-muted/65 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                      className="text-xs font-medium border border-border/80 px-2 py-0.5 rounded-full bg-muted/65 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
                     >
                       {btn.label}
                     </button>
@@ -1058,7 +1239,7 @@ export default function Dashboard() {
                       )}
                     >
                       <span className="truncate">{item.label}</span>
-                      <span className="text-[9px] font-mono text-muted-foreground/60">{item.file.split('/').pop()}</span>
+                      <span className="text-xs font-mono text-muted-foreground/60">{item.file.split('/').pop()}</span>
                     </button>
                   ))}
                 </div>

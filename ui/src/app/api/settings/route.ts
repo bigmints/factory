@@ -10,53 +10,7 @@ const SETTINGS_FILE = resolve(FACTORY_ROOT, 'settings.json');
 
 function defaultSettings() {
     return {
-        providers: [
-            {
-                id: 'gemini',
-                name: 'Google Gemini',
-                kind: 'builtin',
-                enabled: false,
-                apiKey: '',
-                models: [
-                    { id: 'gemini-2.5-pro-preview-05-06', name: 'Gemini 2.5 Pro' },
-                    { id: 'gemini-2.5-flash-preview-04-17', name: 'Gemini 2.5 Flash' },
-                    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-                ],
-                defaultModel: 'gemini-2.5-flash-preview-04-17',
-            },
-            {
-                id: 'openai',
-                name: 'OpenAI',
-                kind: 'builtin',
-                enabled: false,
-                apiKey: '',
-                models: [
-                    { id: 'gpt-4o', name: 'GPT-4o' },
-                    { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-                    { id: 'o3-mini', name: 'o3-mini' },
-                ],
-                defaultModel: 'gpt-4o-mini',
-            },
-            {
-                id: 'ollama',
-                name: 'Ollama (Local)',
-                kind: 'builtin',
-                enabled: false,
-                baseUrl: 'http://localhost:11434',
-                models: [],
-                defaultModel: '',
-            },
-            {
-                id: 'openai-compatible',
-                name: 'OpenAI Compatible',
-                kind: 'builtin',
-                enabled: false,
-                apiKey: '',
-                baseUrl: 'https://api.example.com/v1',
-                models: [],
-                defaultModel: '',
-            },
-        ],
+        providers: [],
         activeProvider: '',
         buildModel: '',
     };
@@ -69,29 +23,22 @@ export async function GET() {
         }
         const raw = readFileSync(SETTINGS_FILE, 'utf-8');
         const saved = JSON.parse(raw);
-        const defaults = defaultSettings();
-        // Merge defaults with saved values for built-in providers
-        const merged = defaults.providers.map((def: any) => {
-            // Match by id — saved providers might have kind unset (legacy) or 'builtin'
-            const s = saved.providers?.find((p: any) => p.id === def.id && (!p.kind || p.kind === 'builtin'));
-            if (!s) return def;
-            // Carry forward the saved enabled/apiKey/baseUrl/defaultModel, but keep the default kind
-            return {
-                ...def,
-                ...s,
-                kind: 'builtin' as const,
-                models: s.models?.length ? s.models : def.models,
-            };
-        });
-        // Append any custom openai-compat providers from saved file
-        const savedCustom = (saved.providers || []).filter((p: any) => p.kind !== 'builtin');
-        for (const cp of savedCustom) {
-            if (!merged.find((m: any) => m.id === cp.id)) {
-                merged.push(cp);
+        
+        // Ensure legacy providers have a valid kind and default values
+        const mappedProviders = (saved.providers || []).map((p: any) => {
+            if (!p.kind || p.kind === 'builtin') {
+                if (p.id === 'gemini') p.kind = 'gemini';
+                else if (p.id === 'openai') p.kind = 'openai';
+                else if (p.id === 'ollama') p.kind = 'ollama';
+                else p.kind = 'openai-compat';
             }
-        }
+            p.models = p.models || [];
+            if (p.enabled === undefined) p.enabled = true;
+            return p;
+        });
+
         return NextResponse.json({
-            providers: merged,
+            providers: mappedProviders,
             activeProvider: saved.activeProvider || '',
             buildModel: saved.buildModel || '',
             defaultCli: saved.defaultCli || '',

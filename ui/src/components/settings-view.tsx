@@ -5,19 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   Sparkles, Bot, Server, Eye, EyeOff, CheckCircle2, XCircle, Loader2,
-  Terminal, Save, Network, RefreshCw
+  Terminal, Save, Network, RefreshCw, Plus, Trash2
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface ModelConfig { id: string; name: string; }
 interface LLMProvider {
-  id: string; name: string; kind: 'builtin' | 'openai-compat' | 'cli'; enabled: boolean;
+  id: string; name: string; kind: 'builtin' | 'openai-compat' | 'cli' | 'openai' | 'gemini' | 'ollama'; enabled: boolean;
   apiKey?: string; baseUrl?: string; models: ModelConfig[]; defaultModel?: string;
 }
 interface FactorySettings {
@@ -41,6 +43,7 @@ const PROVIDER_META: Record<string, { icon: React.ReactNode; color: string }> = 
   gemini: { icon: <Sparkles className="h-4 w-4" />, color: 'text-blue-500' },
   openai: { icon: <Bot className="h-4 w-4" />,      color: 'text-emerald-500' },
   ollama: { icon: <Server className="h-4 w-4" />,    color: 'text-orange-500' },
+  'openai-compat': { icon: <Network className="h-4 w-4" />, color: 'text-purple-500' },
   'openai-compatible': { icon: <Network className="h-4 w-4" />, color: 'text-purple-500' },
 };
 
@@ -54,6 +57,11 @@ export function SettingsView() {
   const [cliTestResult, setCliTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({});
+
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [addType, setAddType] = useState('openai');
+  const [addName, setAddName] = useState('OpenAI');
+  const [addBaseUrl, setAddBaseUrl] = useState('https://api.openai.com/v1');
 
   // ── Fetch settings on mount ──
 
@@ -78,14 +86,48 @@ export function SettingsView() {
     });
   };
 
-  const setActiveProvider = (providerId: string) => {
+  const deleteProvider = (id: string) => {
     if (!settings) return;
-    const provider = settings.providers.find(p => p.id === providerId);
     setSettings({
       ...settings,
-      activeProvider: providerId,
-      buildModel: provider?.defaultModel || '',
+      providers: settings.providers.filter(p => p.id !== id),
+      activeProvider: settings.activeProvider === id ? '' : settings.activeProvider
     });
+  };
+
+  const handleTypeChange = (val: string) => {
+    setAddType(val);
+    if (val === 'openai') { setAddName('OpenAI'); setAddBaseUrl('https://api.openai.com/v1'); }
+    else if (val === 'gemini') { setAddName('Google Gemini'); setAddBaseUrl(''); }
+    else if (val === 'ollama') { setAddName('Ollama'); setAddBaseUrl('http://localhost:11434'); }
+    else if (val === 'lmstudio') { setAddName('LM Studio'); setAddBaseUrl('http://localhost:1234/v1'); }
+    else if (val === 'openrouter') { setAddName('OpenRouter'); setAddBaseUrl('https://openrouter.ai/api/v1'); }
+    else if (val === 'custom') { setAddName('Custom Provider'); setAddBaseUrl('https://api.example.com/v1'); }
+  };
+
+  const handleAddProvider = () => {
+    if (!settings) return;
+    
+    let kind: LLMProvider['kind'] = 'openai-compat';
+    if (addType === 'openai') kind = 'openai';
+    if (addType === 'gemini') kind = 'gemini';
+    if (addType === 'ollama') kind = 'ollama';
+
+    const newProvider: LLMProvider = {
+      id: `${addType}-${Date.now()}`,
+      name: addName,
+      kind,
+      enabled: true,
+      models: [],
+      baseUrl: addType !== 'gemini' ? addBaseUrl : undefined,
+      apiKey: '',
+    };
+    
+    setSettings({
+      ...settings,
+      providers: [...settings.providers, newProvider]
+    });
+    setIsAddOpen(false);
   };
 
   // ── Save ──
@@ -268,18 +310,69 @@ export function SettingsView() {
 
       {/* ─── Section 3: LLM Provider Cards ─── */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-xs font-semibold text-foreground">LLM Providers</h3>
-          <span className="text-[10px] text-muted-foreground">(for direct API routing)</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-xs font-semibold text-foreground">LLM Providers</h3>
+            <span className="text-[10px] text-muted-foreground">(for direct API routing)</span>
+          </div>
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
+                <Plus className="h-3.5 w-3.5" />
+                Add Provider
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add LLM Provider</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Provider Preset</Label>
+                  <Select value={addType} onValueChange={handleTypeChange}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="gemini">Google Gemini</SelectItem>
+                      <SelectItem value="ollama">Ollama</SelectItem>
+                      <SelectItem value="lmstudio">LM Studio</SelectItem>
+                      <SelectItem value="openrouter">OpenRouter</SelectItem>
+                      <SelectItem value="custom">Custom (OpenAI Compatible)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Name</Label>
+                  <Input value={addName} onChange={e => setAddName(e.target.value)} className="h-9 text-xs" />
+                </div>
+                {addType !== 'gemini' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Base URL</Label>
+                    <Input value={addBaseUrl} onChange={e => setAddBaseUrl(e.target.value)} className="h-9 text-xs" />
+                  </div>
+                )}
+                <Button onClick={handleAddProvider} className="w-full h-9 text-xs">Add Provider</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        {settings.providers.filter(p => p.kind === 'builtin').map(provider => {
-          const meta = PROVIDER_META[provider.id] || { icon: <Bot className="h-4 w-4" />, color: 'text-muted-foreground' };
+        {settings.providers.length === 0 && (
+          <div className="text-center py-8 border border-dashed border-border/40 rounded-lg text-muted-foreground text-sm">
+            No providers added yet. Click &ldquo;Add Provider&rdquo; to get started.
+          </div>
+        )}
+
+        {settings.providers.map(provider => {
+          const resolvedKind = (provider.kind === 'builtin' || !provider.kind) ? provider.id : provider.kind;
+          const meta = PROVIDER_META[resolvedKind] || PROVIDER_META['openai-compatible'] || { icon: <Bot className="h-4 w-4" />, color: 'text-muted-foreground' };
           const isActive = settings.activeProvider === provider.id;
           const showKey = showKeys[provider.id] || false;
-          const needsApiKey = provider.id !== 'ollama';
-          const needsBaseUrl = provider.id === 'ollama' || provider.id === 'openai-compatible';
+          const needsApiKey = resolvedKind !== 'ollama';
+          const needsBaseUrl = resolvedKind === 'ollama' || resolvedKind === 'openai-compat' || resolvedKind === 'openai';
 
           return (
             <Card
@@ -300,16 +393,36 @@ export function SettingsView() {
                     </Badge>
                   )}
                 </div>
-                {!isActive && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Enabled
+                    </span>
+                    <Switch
+                      checked={provider.enabled}
+                      onCheckedChange={(val) => {
+                        updateProvider(provider.id, { enabled: val });
+                        if (!val && isActive) {
+                          setSettings(prev => prev ? {
+                            ...prev,
+                            activeProvider: '',
+                            buildModel: '',
+                          } : null);
+                        }
+                      }}
+                      size="sm"
+                    />
+                  </div>
                   <Button
                     variant="ghost"
-                    size="sm"
-                    onClick={() => setActiveProvider(provider.id)}
-                    className="text-[11px] text-muted-foreground hover:text-primary h-7"
+                    size="icon"
+                    onClick={() => deleteProvider(provider.id)}
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    title="Delete Provider"
                   >
-                    Set Active
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
-                )}
+                </div>
               </div>
 
               {/* API Key */}
@@ -375,7 +488,7 @@ export function SettingsView() {
                     Fetch Models
                   </Button>
                 </div>
-                {provider.models.length > 0 ? (
+                {(provider.models || []).length > 0 ? (
                   <Select
                     value={provider.defaultModel || ''}
                     onValueChange={(val) => {
@@ -387,7 +500,7 @@ export function SettingsView() {
                       <SelectValue placeholder="Select model…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provider.models.map(m => (
+                      {(provider.models || []).map(m => (
                         <SelectItem key={m.id} value={m.id} className="font-mono text-xs">
                           {m.name}
                         </SelectItem>

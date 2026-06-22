@@ -15,7 +15,9 @@ import {
   RotateCcw,
   Cpu,
   Layers,
-  Play
+  Play,
+  Terminal,
+  StopCircle
 } from 'lucide-react';
 
 interface StoryEditorProps {
@@ -23,6 +25,8 @@ interface StoryEditorProps {
   storyName: string;
   onClose: () => void;
   onSaved: () => void;
+  onViewLogs?: (file: string, name: string) => void;
+  onStopBuild?: () => void;
 }
 
 // Simple robust regex-based parser/updater to preserve YAML comments/formatting
@@ -121,7 +125,7 @@ const updateYamlField = (yaml: string, field: string, value: any): string => {
   return updated;
 };
 
-export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEditorProps) {
+export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs, onStopBuild }: StoryEditorProps) {
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -133,6 +137,34 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadStory(); }, [storyFile]);
+
+  const parsedFields = useMemo(() => parseYamlFields(content), [content]);
+  const isDirty = content !== originalContent;
+
+  useEffect(() => {
+    if (parsedFields.status !== 'building' && parsedFields.status !== 'running') return;
+    if (isDirty) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/stories/${encodeURIComponent(storyFile)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const parsed = parseYamlFields(data.content);
+          if (parsed.status !== 'building' && parsed.status !== 'running') {
+            setContent(data.content);
+            setOriginalContent(data.content);
+            onSaved();
+          }
+        }
+      } catch (err) {
+        console.error('Failed to poll story status:', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [storyFile, parsedFields.status, isDirty, onSaved]);
+
 
   const loadStory = async () => {
     setLoading(true);
@@ -194,6 +226,13 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
     }
   };
 
+  const handleStop = async () => {
+    if (onStopBuild) {
+      await onStopBuild();
+      loadStory();
+    }
+  };
+
   const handleReset = () => {
     setContent(originalContent);
     setError('');
@@ -205,7 +244,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
     toast.success('Story copied to clipboard');
   };
 
-  const parsedFields = useMemo(() => parseYamlFields(content), [content]);
+
 
   const updateField = (field: string, val: any) => {
     const updatedYaml = updateYamlField(content, field, val);
@@ -238,7 +277,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
     }, 0);
   };
 
-  const isDirty = content !== originalContent;
+
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -258,10 +297,10 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
                 )}
                 <h2 className="text-sm sm:text-base font-bold truncate text-foreground">{storyName}</h2>
               </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground font-mono truncate mt-0.5">{storyFile}</p>
+              <p className="text-xs sm:text-xs text-muted-foreground font-mono truncate mt-0.5">{storyFile}</p>
             </div>
             {isDirty && (
-              <Badge variant="outline" className="text-[9px] font-semibold px-2 h-5 rounded-full shrink-0">
+              <Badge variant="outline" className="text-xs font-semibold px-2 h-5 rounded-full shrink-0">
                 Unsaved
               </Badge>
             )}
@@ -279,7 +318,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
                   <button
                     key={s}
                     onClick={() => updateField('status', s === 'in-progress' ? 'ready-to-build' : s === 'todo' ? 'draft' : s)}
-                    className={`px-3 py-1.5 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors ${
+                    className={`px-3 py-1.5 text-xs font-bold rounded-sm uppercase tracking-wider transition-colors ${
                       isActive ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
@@ -292,15 +331,46 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
             <Separator orientation="vertical" className="h-6 hidden sm:block bg-border" />
 
             <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                onClick={handleBuild}
-                disabled={queuing}
-                className="h-9 rounded-md px-3 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold"
-              >
-                {queuing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 fill-current mr-1 text-white" />}
-                Build
-              </Button>
+              {['building', 'running'].includes(parsedFields.status) ? (
+                <>
+                  <div className="flex items-center gap-1.5 px-3 h-9 rounded-md border border-indigo-500/20 bg-indigo-500/5 text-indigo-500 text-xs font-semibold shrink-0">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Building...</span>
+                  </div>
+                  {onViewLogs && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onViewLogs(storyFile, storyName)}
+                      className="h-9 rounded-md px-3 bg-background border-border text-xs font-semibold shrink-0"
+                    >
+                      <Terminal className="h-3.5 w-3.5 mr-1" />
+                      Logs
+                    </Button>
+                  )}
+                  {onStopBuild && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleStop}
+                      className="h-9 rounded-md px-3 border-red-500/20 hover:border-red-500/30 text-red-500 hover:text-red-600 bg-background hover:bg-red-500/5 text-xs font-semibold shrink-0"
+                    >
+                      <StopCircle className="h-3.5 w-3.5 mr-1" />
+                      Stop
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handleBuild}
+                  disabled={queuing}
+                  className="h-9 rounded-md px-3 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold"
+                >
+                  {queuing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 fill-current mr-1 text-white" />}
+                  Build
+                </Button>
+              )}
               <Button variant="outline" size="icon" onClick={handleCopy} className="h-9 w-9 rounded-md shrink-0 bg-background">
                 <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
               </Button>
@@ -343,7 +413,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
             value={content}
             onChange={(e) => setContent(e.target.value)}
             spellCheck={false}
-            className="w-full flex-1 resize-none border-0 bg-transparent p-4 sm:p-5 text-[12px] sm:text-[13px] leading-relaxed font-mono text-foreground focus:outline-none min-h-0"
+            className="w-full flex-1 resize-none border-0 bg-transparent p-4 sm:p-5 text-sm sm:text-sm leading-relaxed font-mono text-foreground focus:outline-none min-h-0"
             style={{ tabSize: 2 }}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -359,16 +429,16 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
 
           {/* Mobile keyboard helper accessory bar */}
           <div className="shrink-0 h-10 border-t border-border bg-muted flex items-center px-3 gap-1 overflow-x-auto scrollbar-none select-none">
-            <span className="text-[8px] font-bold font-mono text-muted-foreground/60 mr-2 uppercase tracking-wide">Accessories:</span>
+            <span className="text-xs font-bold font-mono text-muted-foreground/60 mr-2 uppercase tracking-wide">Accessories:</span>
             <button
               onClick={handleInsertTab}
-              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-xs font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
             >
               TAB (2s)
             </button>
             <button
               onClick={handleInsertComment}
-              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-xs font-semibold font-mono hover:bg-muted shrink-0 select-none text-foreground transition-colors"
             >
               # Comment
             </button>
@@ -382,13 +452,13 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
                   toast.info('Toolbar selection active');
                 }
               }}
-              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold hover:bg-muted shrink-0 select-none text-foreground transition-colors"
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-xs font-semibold hover:bg-muted shrink-0 select-none text-foreground transition-colors"
             >
               Select Text
             </button>
             <button
               onClick={handleReset}
-              className="h-7 px-2.5 rounded-md bg-background border border-border text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/5 dark:hover:bg-rose-950/20 shrink-0 ml-auto select-none transition-colors"
+              className="h-7 px-2.5 rounded-md bg-background border border-border text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/5 dark:hover:bg-rose-950/20 shrink-0 ml-auto select-none transition-colors"
             >
               Restore
             </button>

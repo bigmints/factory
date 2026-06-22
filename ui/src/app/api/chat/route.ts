@@ -389,11 +389,13 @@ export async function POST(request: Request) {
     ];
 
     // Route to the right provider
-    if (provider.id === 'ollama') {
+    const apiType = (provider.kind === 'builtin' || !provider.kind) ? provider.id : provider.kind;
+
+    if (apiType === 'ollama') {
       return streamOllama(provider, model, fullMessages);
-    } else if (provider.id === 'openai' || provider.kind === 'openai-compat') {
+    } else if (apiType === 'openai' || apiType === 'openai-compat' || provider.id === 'openai-compatible') {
       return streamOpenAI(provider, model, fullMessages);
-    } else if (provider.id === 'gemini') {
+    } else if (apiType === 'gemini') {
       return streamGemini(provider, model, fullMessages);
     }
 

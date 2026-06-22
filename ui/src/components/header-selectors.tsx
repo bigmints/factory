@@ -37,25 +37,56 @@ export function HeaderSelectors() {
     }
   };
 
-  const handleProviderChange = (providerId: string) => {
-    const provider = settings?.providers?.find((p: any) => p.id === providerId);
-    if (provider) {
-      updateSettings({ activeProvider: providerId, buildModel: provider.defaultModel || '' });
-    }
+  const handleModelChange = (compoundValue: string) => {
+    const [providerId, modelId] = compoundValue.split(':::');
+    updateSettings({ activeProvider: providerId, buildModel: modelId });
   };
 
   if (!settings) return null;
 
+  const enabledProviders = settings.providers?.filter((p: any) => p.enabled) || [];
+  const availableModels = enabledProviders.flatMap((p: any) => {
+    const modelsList = p.models || [];
+    if (modelsList.length > 0) {
+      return modelsList.map((m: any) => ({
+        providerId: p.id,
+        providerName: p.name,
+        modelId: m.id,
+        modelName: m.name || m.id,
+      }));
+    } else if (p.defaultModel) {
+      return [{
+        providerId: p.id,
+        providerName: p.name,
+        modelId: p.defaultModel,
+        modelName: p.defaultModel,
+      }];
+    }
+    return [];
+  });
+
+  const currentCompoundValue = settings.activeProvider && settings.buildModel
+    ? `${settings.activeProvider}:::${settings.buildModel}`
+    : '';
+
   return (
     <div className="flex items-center gap-2 mr-2">
-      <Select value={settings.activeProvider} onValueChange={handleProviderChange}>
-        <SelectTrigger className="h-7 w-[120px] text-[11px] bg-muted border-border font-medium">
-          <SelectValue placeholder="Model" />
+      <Select value={currentCompoundValue} onValueChange={handleModelChange}>
+        <SelectTrigger className="h-7 w-[160px] text-[11px] bg-muted border-border font-medium text-left truncate">
+          <SelectValue placeholder="Select model..." />
         </SelectTrigger>
         <SelectContent>
-          {settings.providers?.filter((p: any) => p.enabled).map((p: any) => (
-            <SelectItem key={p.id} value={p.id} className="text-[11px]">{p.name}</SelectItem>
-          ))}
+          {availableModels.length === 0 ? (
+            <SelectItem value="none" disabled className="text-[11px]">
+              No models available
+            </SelectItem>
+          ) : (
+            availableModels.map((m: any) => (
+              <SelectItem key={`${m.providerId}:::${m.modelId}`} value={`${m.providerId}:::${m.modelId}`} className="text-[11px]">
+                {m.modelName} ({m.providerName})
+              </SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
       <Select value={settings.defaultCli || 'pi'} onValueChange={(val) => updateSettings({ defaultCli: val })}>

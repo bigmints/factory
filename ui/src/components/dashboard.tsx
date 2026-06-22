@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useSyncExternalStore, useRef } from "react";
+import { useState, useEffect, useSyncExternalStore, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { useFactoryStore } from "@/stores/factory-store";
 import { SettingsView } from "./settings-view";
@@ -41,6 +41,69 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
+
+interface ParsedStory {
+  kind: 'app' | 'feature';
+  filename: string;
+  yaml: string;
+  name: string;
+  phase?: number;
+  dependsOn?: string[];
+}
+
+function extractAllStories(content: string): ParsedStory[] {
+  const stories: ParsedStory[] = [];
+  if (!content) return stories;
+
+  const appPat = /=== APP_STORY:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_STORY ===/g;
+  const featPat = /=== FEATURE_STORY:\s*(\S+)\s*===\s*```yaml\n([\s\S]*?)```\s*=== END_STORY ===/g;
+  let m;
+  while ((m = appPat.exec(content)) !== null) {
+    const yaml = m[2].trim();
+    const appName = yaml.match(/appName:\s*"([^"]+)"/)?.[1] || yaml.match(/appName:\s*'([^']+)'/)?.[1];
+    stories.push({
+      kind: 'app',
+      filename: m[1].replace(/\.ya?ml$/i, '.md'),
+      yaml,
+      name: appName || m[1].replace(/\.ya?ml$/i, '').replace(/\.md$/i, '')
+    });
+  }
+  while ((m = featPat.exec(content)) !== null) {
+    const yaml = m[2].trim();
+    const featName = yaml.match(/^\s*name:\s*"([^"]+)"/m)?.[1] || yaml.match(/^\s*name:\s*'([^']+)'/m)?.[1];
+    const phase = yaml.match(/^phase:\s*(\d+)/m)?.[1];
+    const deps = yaml.match(/^dependsOn:\s*\[([^\]]*)\]$/m)?.[1];
+    stories.push({
+      kind: 'feature',
+      filename: m[1].replace(/\.ya?ml$/i, '.md'),
+      yaml,
+      name: featName || m[1].replace(/\.ya?ml$/i, '').replace(/\.md$/i, ''),
+      phase: phase ? parseInt(phase) : undefined,
+      dependsOn: deps ? deps.split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean) : undefined,
+    });
+  }
+  if (!stories.length) {
+    const yaml = content.match(/```yaml\n([\s\S]*?)```/)?.[1]?.trim();
+    if (yaml && (yaml.includes('appName:') || yaml.includes('name:') || yaml.includes('feature:'))) {
+      const appName = yaml.match(/appName:\s*"([^"]+)"/)?.[1] || yaml.match(/appName:\s*'([^']+)'/)?.[1];
+      const featName = yaml.match(/^\s*name:\s*"([^"]+)"/m)?.[1] || yaml.match(/^\s*name:\s*'([^']+)'/m)?.[1];
+      const name = appName || featName || 'Spec';
+      const kind = (yaml.includes('feature:') || yaml.includes('target:') || yaml.includes('FeatureStory') || yaml.includes('FeatureSpec')) ? 'feature' : 'app';
+      const filename = name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.md';
+      const phase = yaml.match(/^phase:\s*(\d+)/m)?.[1];
+      const deps = yaml.match(/^dependsOn:\s*\[([^\]]*)\]$/m)?.[1];
+      stories.push({
+        kind,
+        filename,
+        yaml,
+        name,
+        phase: phase ? parseInt(phase) : undefined,
+        dependsOn: deps ? deps.split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean) : undefined,
+      });
+    }
+  }
+  return stories;
+}
 
 export default function Dashboard() {
   const [input, setInput] = useState("");
@@ -182,10 +245,108 @@ export default function Dashboard() {
     }
   }, [activeProject?.id]);
 
-  const onSend = () => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [mentionQuery, setMentionQuery] = useState<{ match: string; index: number } | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const [savedStories, setSavedStories] = useState<Set<string>>(new Set());
+  const [savingStory, setSavingStory] = useState<string | null>(null);
+
+  const mentionItems = useMemo(() => {
+    const items: any[] = [];
+    (stories || []).forEach(s => {
+      const slug = s.file.split('/').pop()?.replace(/\.ya?ml$/, '').replace(/\.md$/, '') || s.file;
+      items.push({ id: `app-${slug}`, label: s.metadata?.name || slug, slug, file: s.file });
+    });
+    (featureStories || []).forEach(s => {
+      const slug = s.file.split('/').pop()?.replace(/\.ya?ml$/, '').replace(/\.md$/, '') || s.file;
+      items.push({ id: `feat-${slug}`, label: (s as any).name || s.feature?.name || slug, slug, file: s.file });
+    });
+    return items;
+  }, [stories, featureStories]);
+
+  const filteredMentions = useMemo(() => {
+    if (!mentionQuery) return [];
+    const q = mentionQuery.match.toLowerCase();
+    return mentionItems.filter(m => m.label.toLowerCase().includes(q)).slice(0, 8);
+  }, [mentionQuery, mentionItems]);
+
+  const insertMention = (item: any) => {
+    if (!mentionQuery) return;
+    const before = input.slice(0, mentionQuery.index);
+    const cursor = textareaRef.current?.selectionStart || 0;
+    const aft = input.slice(cursor);
+    setInput(`${before}@${item.label} ${aft}`);
+    setMentionQuery(null);
+    setTimeout(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        const pos = before.length + item.label.length + 2;
+        textarea.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    const cursor = e.target.selectionStart || 0;
+    const m = val.slice(0, cursor).match(/(?:^|\s)@([^@\s]*)$/);
+    if (m) {
+      setMentionQuery({ match: m[1], index: cursor - m[1].length - 1 });
+      setMentionIdx(0);
+    } else {
+      setMentionQuery(null);
+    }
+  };
+
+  const buildWithContext = async (text: string): Promise<string> => {
+    const refs = Array.from(text.matchAll(/@([\w-]+)/g));
+    if (!refs.length) return text;
+    const blocks: string[] = [];
+    for (const [, slug] of refs) {
+      const item = mentionItems.find(m => m.slug === slug || m.label.toLowerCase() === slug.toLowerCase());
+      if (item?.file) {
+        try {
+          const r = await fetch(`/api/stories/${encodeURIComponent(item.file)}`);
+          if (r.ok) {
+            const d = await r.json() as { content?: string };
+            if (d.content) blocks.push(`[Context for @${item.label}]\n\`\`\`yaml\n${d.content}\n\`\`\``);
+          }
+        } catch {}
+      }
+    }
+    return blocks.length ? `${text}\n\n---\n${blocks.join('\n\n')}` : text;
+  };
+
+  const onSend = async () => {
     if (!input.trim() || streaming) return;
-    handleSend(input);
+    const textWithContext = await buildWithContext(input);
+    handleSend(input, textWithContext);
     setInput("");
+  };
+
+  const handleSaveStory = async (story: any) => {
+    setSavingStory(story.filename);
+    try {
+      const res = await fetch('/api/stories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: story.name, content: story.yaml, kind: story.kind })
+      });
+      const d = await res.json();
+      if (res.ok) {
+        toast.success(`Saved ${story.kind} Story`, { description: d.file });
+        setSavedStories(p => new Set(p).add(story.filename));
+        fetchAll();
+      } else {
+        toast.error('Save failed', { description: d.error });
+      }
+    } catch (err: any) {
+      toast.error('Save failed', { description: err.message });
+    } finally {
+      setSavingStory(null);
+    }
   };
 
   // Group stories into 3 states: Todo, In Progress, Done
@@ -760,6 +921,60 @@ export default function Dashboard() {
                               </ReactMarkdown>
                             </div>
                           )}
+                          {msg.tokensPerSec !== undefined && msg.tokensPerSec > 0 && (
+                            <div className="flex items-center gap-2 mt-1 text-[9px] text-muted-foreground/60 font-mono">
+                              <span>{msg.tokenCount} tokens</span>
+                              <span>·</span>
+                              <span>{(msg.durationMs! / 1000).toFixed(1)}s</span>
+                              <span>·</span>
+                              <span>{msg.tokensPerSec} t/s</span>
+                            </div>
+                          )}
+                          {(() => {
+                            let extracted = extractAllStories(msg.content || "");
+                            if (msg.toolCalls) {
+                              msg.toolCalls.forEach(tc => {
+                                if (tc.result) {
+                                  extracted = [...extracted, ...extractAllStories(tc.result)];
+                                }
+                              });
+                            }
+                            const uniqueExtracted = extracted.filter((v, idx, self) => self.findIndex(t => t.filename === v.filename) === idx);
+                            if (uniqueExtracted.length === 0) return null;
+                            return (
+                              <div className="mt-2 space-y-2 border-t border-border/40 pt-2 shrink-0">
+                                <span className="text-[9px] font-semibold text-muted-foreground/75 uppercase tracking-wider block mb-1">Extracted Stories</span>
+                                {uniqueExtracted.map((story, sIdx) => {
+                                  const isSaved = savedStories.has(story.filename);
+                                  const isSaving = savingStory === story.filename;
+                                  return (
+                                    <div key={sIdx} className="p-2 rounded-lg border border-border/60 bg-muted/20 flex flex-col gap-1 text-[11px]">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="font-semibold text-foreground truncate">{story.name}</p>
+                                          <p className="text-[9px] font-mono text-muted-foreground truncate">{story.filename}</p>
+                                        </div>
+                                        <Button
+                                          size="sm"
+                                          variant={isSaved ? "ghost" : "outline"}
+                                          disabled={isSaved || isSaving}
+                                          onClick={() => handleSaveStory(story)}
+                                          className="h-6 px-2 text-[10px] rounded shrink-0"
+                                        >
+                                          {isSaving ? (
+                                            <div className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin mr-1" />
+                                          ) : isSaved ? (
+                                            <CheckCircle2 className="h-3 w-3 text-emerald-500 mr-1" />
+                                          ) : null}
+                                          {isSaved ? "Saved" : "Save"}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -783,14 +998,81 @@ export default function Dashboard() {
             </SidebarContent>
 
             {/* Input Area */}
-            <SidebarFooter className="p-4 border-t border-border shrink-0 bg-card">
+            <SidebarFooter className="p-4 border-t border-border shrink-0 bg-card relative">
+              {/* Quick Actions */}
+              {messages.length === 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2 px-1">
+                  {[
+                    { label: "Status", msg: "What's the project status?" },
+                    { label: "Stories", msg: "List all stories." },
+                    { label: "Queue", msg: "Show the build queue." }
+                  ].map((btn) => (
+                    <button
+                      key={btn.label}
+                      onClick={() => {
+                        setInput(btn.msg);
+                        setTimeout(() => {
+                          handleSend(btn.msg);
+                          setInput("");
+                        }, 0);
+                      }}
+                      className="text-[10px] font-medium border border-border/80 px-2 py-0.5 rounded-full bg-muted/65 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Mentions Dropdown */}
+              {mentionQuery && filteredMentions.length > 0 && (
+                <div className="absolute bottom-full left-4 right-4 mb-2 z-50 rounded-lg border border-border bg-popover p-1 shadow-lg max-h-48 overflow-y-auto">
+                  {filteredMentions.map((item, idx) => (
+                    <button
+                      key={item.id}
+                      onClick={() => insertMention(item)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition-colors",
+                        idx === mentionIdx ? "bg-accent text-accent-foreground font-medium" : "hover:bg-accent hover:text-accent-foreground"
+                      )}
+                    >
+                      <span className="truncate">{item.label}</span>
+                      <span className="text-[9px] font-mono text-muted-foreground/60">{item.file.split('/').pop()}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="relative bg-muted/50 rounded-xl overflow-hidden focus-within:bg-muted transition-colors border border-border">
                 <Textarea
+                  ref={textareaRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   placeholder="Message TPM..."
                   className="min-h-[80px] w-full resize-none bg-transparent border-0 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
                   onKeyDown={(e) => {
+                    if (mentionQuery && filteredMentions.length > 0) {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setMentionIdx((prev) => (prev + 1) % filteredMentions.length);
+                        return;
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setMentionIdx((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length);
+                        return;
+                      }
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        insertMention(filteredMentions[mentionIdx]);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setMentionQuery(null);
+                        return;
+                      }
+                    }
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       onSend();

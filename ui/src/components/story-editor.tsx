@@ -269,17 +269,24 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <div className="flex items-center gap-1.5 rounded-md border border-border p-1 bg-muted shrink-0">
-              {['todo', 'in-progress', 'done'].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => updateField('status', s)}
-                  className={`px-3 py-1.5 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors ${
-                    parsedFields.status === s || (s === 'todo' && parsedFields.status === 'draft') ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+              {['todo', 'in-progress', 'done'].map((s) => {
+                const isActive = 
+                  (s === 'todo' && (parsedFields.status === 'todo' || parsedFields.status === 'draft')) ||
+                  (s === 'in-progress' && (parsedFields.status === 'in-progress' || parsedFields.status === 'ready-to-build' || parsedFields.status === 'building' || parsedFields.status === 'running')) ||
+                  (s === 'done' && (parsedFields.status === 'done' || parsedFields.status === 'completed' || parsedFields.status === 'failed'));
+                
+                return (
+                  <button
+                    key={s}
+                    onClick={() => updateField('status', s === 'in-progress' ? 'ready-to-build' : s === 'todo' ? 'draft' : s)}
+                    className={`px-3 py-1.5 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors ${
+                      isActive ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
             </div>
 
             <Separator orientation="vertical" className="h-6 hidden sm:block bg-border" />

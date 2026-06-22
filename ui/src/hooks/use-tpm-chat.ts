@@ -5,7 +5,7 @@ import { tpmStore, type ChatMessage } from '@/lib/tpm-chat-store';
 export function useTpmChat() {
   const [streaming, setStreaming] = useState(false);
 
-  const handleSend = async (text: string) => {
+  const handleSend = async (text: string, apiContent?: string) => {
     if (!text.trim() || streaming) return;
 
     const userMsg: ChatMessage = { role: 'user', content: text };
@@ -19,6 +19,7 @@ export function useTpmChat() {
 
     const abort = new AbortController();
     tpmStore.abortController = abort;
+    const now = Date.now();
 
     try {
       const res = await fetch('/api/tpm/chat', {
@@ -28,7 +29,7 @@ export function useTpmChat() {
         body: JSON.stringify({
           messages: [
             ...newMsgs.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: text },
+            { role: 'user', content: apiContent || text },
           ],
         }),
       });
@@ -64,6 +65,21 @@ export function useTpmChat() {
             } else if (p.type === 'error') toast.error(p.error || 'Server error');
           } catch {}
         }
+      }
+
+      // Telemetry
+      const durationMs = Date.now() - now;
+      const last = tpmStore.messages[tpmStore.messages.length - 1];
+      if (last?.role === 'assistant') {
+        const tokenCount = Math.round(last.content.length / 4);
+        const msgs = [...tpmStore.messages];
+        msgs[msgs.length - 1] = {
+          ...last,
+          tokenCount,
+          durationMs,
+          tokensPerSec: Math.round(tokenCount / durationMs * 1000) || 0
+        };
+        tpmStore.setMessages(msgs);
       }
     } catch (err: any) {
       if (err.name === 'AbortError') return;

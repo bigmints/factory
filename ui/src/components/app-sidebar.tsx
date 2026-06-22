@@ -23,6 +23,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
 
@@ -94,12 +95,12 @@ export function AppSidebar({
           queueRunning={queueRunning}
           hasLoopWarning={hasLoopWarning}
         />
+        <SidebarSeparator />
         <NavSecondary
           label="Configure"
           items={navSecondary}
           activeId={activeTab}
           onSelect={handleTabChange}
-          className="mt-auto"
         />
       </SidebarContent>
 

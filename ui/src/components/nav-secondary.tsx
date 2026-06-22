@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { type LucideIcon } from "lucide-react"
 import {
@@ -34,7 +36,9 @@ export function NavSecondary({
                 tooltip={item.title}
                 isActive={activeId === item.id}
               >
-                <a href={`#${item.id}`} onClick={() => onSelect(item.id)}>
+                <a href={`#${item.id}`} onClick={() => {
+                  onSelect(item.id);
+                }}>
                   <item.icon />
                   <span>{item.title}</span>
                 </a>
@@ -46,3 +50,4 @@ export function NavSecondary({
     </SidebarGroup>
   )
 }
+

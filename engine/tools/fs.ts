@@ -1,5 +1,4 @@
 import { workerToolRegistry } from './registry.ts';
-import type { AgentTool } from './types.ts';
 
 /**
  * Build Tools — OpenAI-format tool definitions and executor for the LLM build engine.
@@ -653,7 +652,7 @@ export function getDynamicMcpTools(): any[] {
 async function execMcpTool(
     name: string,
     args: Record<string, unknown>,
-    ctx: BuildToolBlueprint,
+    _ctx: BuildToolBlueprint,
 ): Promise<ToolResult> {
     const parts = name.split('__');
     if (parts.length < 3) {
@@ -798,7 +797,7 @@ async function execMcpTool(
                                     });
                                 }
                             }
-                        } catch (e) {
+                        } catch {
                             // Ignore JSON parsing issues for partial chunks
                         }
                     }

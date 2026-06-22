@@ -35,7 +35,7 @@ export function NavMain({
               tooltip={item.title}
               isActive={activeId === item.id}
             >
-              <a href={`#${item.id}`} onClick={(e) => {
+              <a href={`#${item.id}`} onClick={() => {
                 // Let the native hashchange handle routing if possible, but also call onSelect for immediate state updates
                 onSelect(item.id);
               }}>

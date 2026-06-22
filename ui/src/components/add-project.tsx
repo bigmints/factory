@@ -41,7 +41,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 
 interface BridgeSummary {
   name: string | null;
@@ -162,7 +162,7 @@ export function AddProject({ onProjectAdded, onNavigateToPlan }: AddProjectProps
   const [browseMode, setBrowseMode] = useState<'new' | 'existing' | 'clone' | null>(null);
 
   const [pendingPath, setPendingPath] = useState<string | null>(null);
-  const [config, setConfig] = useState({
+  const [config] = useState({
     framework: 'next.js',
     packageManager: 'npm',
     linter: 'EsLint + Prettier',

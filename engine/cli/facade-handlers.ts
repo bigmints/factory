@@ -3,14 +3,12 @@
  * Covers: pulse, btw, task, blueprint, compress, worker, hooks, repl, chronicle.
  */
 
-import { resolve, dirname, join, basename } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { homedir } from 'node:os';
 import { spawn, execSync } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
-import { getActiveProject, loadBridgeConfig } from '../config.ts';
-import { loadStory } from '../story.ts';
+import { getActiveProject } from '../config.ts';
 import { syncBlueprint } from '../blueprint.ts';
 import { log, logHeader, logError } from '../log.ts';
 import { args, resolveScript, spawnScript } from '../cli.ts';
@@ -120,7 +118,7 @@ export function handleBlueprint(): void {
             try {
                 const project = getActiveProject();
                 repoPath = project.path;
-            } catch (err: any) {
+            } catch {
                 console.error('Error: No active project and no path provided.');
                 process.exit(1);
             }
@@ -148,7 +146,7 @@ export async function handleWorker(): Promise<void> {
             try {
                 const settings = loadSettings();
                 console.log(`Current default CLI: ${settings.defaultCli || 'not set (auto-detect)'}`);
-            } catch (err: any) {
+            } catch {
                 console.log('Current default CLI: not set (auto-detect)');
             }
             process.exit(0);

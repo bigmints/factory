@@ -1,6 +1,6 @@
 // Self-destructing Service Worker to force clear stale cache-first policies and unregister.
 // This ensures that browser caching locks are immediately broken on page refresh.
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 

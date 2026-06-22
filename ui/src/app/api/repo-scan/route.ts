@@ -5,13 +5,13 @@ import { homedir } from 'node:os';
  * Returns: stack info, dependencies, file tree, existing specs, tsconfig highlights.
  * Used by the Spec Generator to produce specs that align with the actual codebase.
  */
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
-interface RepoScanResult {
+export interface RepoScanResult {
   projectName: string;
   projectPath: string;
   stack: {

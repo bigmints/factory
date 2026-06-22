@@ -3,7 +3,7 @@ import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import { tpmToolRegistry } from '../registry.ts';
 import type { OrchestratorContext } from '../../orchestrate.ts';
-import type { AgentTool, ToolResult } from '../types.ts';
+import type { ToolResult } from '../types.ts';
 import { stringify as toYaml } from 'yaml';
 
 function execReadQueue(_args: Record<string, unknown>, ctx: OrchestratorContext): ToolResult {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { resolve, join, basename } from 'node:path';
 import { homedir } from 'node:os';
-import { existsSync, readFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 
 // ─── Skills directory ────────────────────────────────────

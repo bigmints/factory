@@ -34,7 +34,7 @@ export class AcpAgentAdapter {
 
         const stream = ndJsonStream(output, input);
         
-        this.client = new ClientSideConnection((agent) => ({
+        this.client = new ClientSideConnection((_agent) => ({
             sessionUpdate: async (params: any) => {
                 if (params.update.sessionUpdate === 'agent_message_chunk') {
                     const text = params.update.content?.text || '';

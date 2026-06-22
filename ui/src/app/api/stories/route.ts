@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 import { homedir } from 'node:os';
 import { NextResponse } from 'next/server';
-import { readdirSync, readFileSync, existsSync, writeFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 

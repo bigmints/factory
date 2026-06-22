@@ -3,7 +3,7 @@
  */
 
 import { resolve, basename } from 'node:path';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { loadStory, validateStory, updateStoryStatus, archiveStory } from '../story.ts';
 import { getActiveProject, loadBridgeConfig } from '../config.ts';
 import { gatherBlueprint } from '../blueprint.ts';
@@ -101,7 +101,7 @@ export async function handleAppCommand(): Promise<void> {
             try {
                 const project = getActiveProject();
                 yamlPath = resolve(project.path, '.factory', 'scaffold.yaml');
-            } catch (err: any) {
+            } catch {
                 logError('Error: No active project and no scaffold.yaml path provided.');
                 process.exit(1);
             }
@@ -127,7 +127,7 @@ export async function handleAppCommand(): Promise<void> {
                 } else {
                     appId = project.id;
                 }
-            } catch (err: any) {
+            } catch {
                 logError('Error: No active project or app ID provided.');
                 process.exit(1);
             }

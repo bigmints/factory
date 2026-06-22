@@ -25,10 +25,10 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, createWriteStream } from 'node:fs';
-import { join, resolve, relative, dirname } from 'node:path';
+import { join, resolve, relative } from 'node:path';
 import { spawn } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
-import { log, logError } from './log.ts';
+import { log } from './log.ts';
 import { buildCliInvocation, buildSpawnEnv } from './cli-adapter.ts';
 import type { GeneratedFile } from './types.ts';
 

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import cp from 'child_process';
 import { getActiveProject } from '../../../../../../engine/config';
-import { resolve } from 'path';
 
 export async function POST() {
     try {
@@ -13,7 +12,7 @@ export async function POST() {
         const factoryBin = [process.cwd(), ...parts].join('/');
         
         // Run in background detached
-        const child = cp.spawn('node', [factoryBin, 'build-knowledge', project.path], {
+        const child = cp.spawn(factoryBin, ['build-knowledge', project.path], {
             detached: true,
             stdio: 'ignore'
         });

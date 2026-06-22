@@ -54,6 +54,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
     if (open) {
       browse('~/Projects');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const browse = async (path: string) => {

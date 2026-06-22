@@ -5,7 +5,7 @@ import { tpmStore, type ChatMessage } from '@/lib/tpm-chat-store';
 export function useTpmChat() {
   const [streaming, setStreaming] = useState(false);
 
-  const handleSend = async (text: string, projectId: string | undefined) => {
+  const handleSend = async (text: string) => {
     if (!text.trim() || streaming) return;
 
     const userMsg: ChatMessage = { role: 'user', content: text };

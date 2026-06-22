@@ -150,7 +150,7 @@ async function testMcpServer(config: any): Promise<{
                 resources,
               });
             }
-          } catch (e) {
+          } catch {
             // Ignore JSON parsing issues for partial chunks or debugging logs written to stdout
           }
         }

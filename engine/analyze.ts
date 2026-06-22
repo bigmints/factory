@@ -1,6 +1,5 @@
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { getActiveProvider } from './config.ts';
 import { callProviderTextOnly, requireActiveProvider } from './generate.ts';
 import { detectStack, buildFileTree } from './init.ts';
 

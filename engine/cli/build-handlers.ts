@@ -3,14 +3,14 @@
  */
 
 import { resolve, basename } from 'node:path';
-import { loadStory, listStories, validateStory, updateStoryStatus, updateStoryBuildMeta, archiveStory } from '../story.ts';
+import { loadStory, listStories, validateStory, updateStoryBuildMeta, archiveStory } from '../story.ts';
 import { getActiveProject, loadBridgeConfig } from '../config.ts';
 import { gatherBlueprint } from '../blueprint.ts';
 import { runPipeline } from '../generate.ts';
 import { gitCommit, gitPush } from '../writer.ts';
 import { log, logStep, logHeader, logError } from '../log.ts';
 import { storySlug, storyPort } from '../types.ts';
-import { args, target, requireTarget } from '../cli.ts';
+import { requireTarget } from '../cli.ts';
 
 export async function handleBuild(storyPath?: string): Promise<void> {
     requireTarget('build');

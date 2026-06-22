@@ -10,7 +10,6 @@ import { ReportViewer } from "./report-viewer";
 import { KnowledgeViewer } from "./knowledge-viewer";
 import { HeaderSelectors } from "./header-selectors";
 import { StoryEditor } from "./story-editor";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
   SidebarProvider,
@@ -21,28 +20,11 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   CheckCircle2,
-  Trash2,
-  Settings,
-  Moon,
-  Sun,
   MessageSquare,
   ArrowRight,
-  ChevronDown,
-  Settings2,
-  Activity,
-  Lightbulb,
-  Shield,
   Zap,
-  MoreHorizontal,
   Terminal,
   X,
   StopCircle,
@@ -51,8 +33,8 @@ import {
   PanelRight,
   PanelLeft,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useTheme } from "next-themes";
 import { useTpmChat } from "@/hooks/use-tpm-chat";
 import { tpmStore, type ChatMessage } from "@/lib/tpm-chat-store";
 import ReactMarkdown from "react-markdown";
@@ -63,16 +45,10 @@ const EMPTY_MESSAGES: ChatMessage[] = [];
 export default function Dashboard() {
   const [input, setInput] = useState("");
 
-  const { theme, setTheme } = useTheme();
   const [view, setView] = useState<"board" | "settings" | "reports" | "add-project" | "knowledge">("board");
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
-  const [isMounted, setIsMounted] = useState(false);
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const onDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -143,10 +119,8 @@ export default function Dashboard() {
   const startPolling = useFactoryStore((s) => s.startPolling);
   const stopPolling = useFactoryStore((s) => s.stopPolling);
   const activeProject = useFactoryStore((s) => s.activeProject);
-  const projects = useFactoryStore((s) => s.projects);
   const stories = useFactoryStore((s) => s.stories);
   const featureStories = useFactoryStore((s) => s.featureStories);
-  const queueStatusMap = useFactoryStore((s) => s.queueStatusMap);
   const queueItems = useFactoryStore((s) => s.queueItems);
   const queueRunning = useFactoryStore((s) => s.queueRunning);
 
@@ -210,7 +184,7 @@ export default function Dashboard() {
 
   const onSend = () => {
     if (!input.trim() || streaming) return;
-    handleSend(input, activeProject?.id);
+    handleSend(input);
     setInput("");
   };
 
@@ -444,7 +418,7 @@ export default function Dashboard() {
                       await fetch("/api/queue/start", { method: "POST" });
                       toast("Build started");
                     }
-                  } catch (e) {
+                  } catch {
                     toast.error("Failed to toggle build");
                   }
                 }}

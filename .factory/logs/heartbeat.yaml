@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-06-21T19:30:55Z"
-  host: "Mac"
-  task: "post-commit: Integrate ThemeToggle in dashboard"
+  last_seen: "2026-06-22T06:42:11Z"
+  host: "BigMac-2"
+  task: "post-commit: Remove queue.ts and rollup.ts dependencies, fix build"
   status: alive

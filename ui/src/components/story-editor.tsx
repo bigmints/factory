@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -12,18 +11,10 @@ import {
   Loader2,
   Check,
   AlertCircle,
-  Eye,
-  Pencil,
-  FileText,
   Copy,
   RotateCcw,
   Cpu,
-  Database,
-  Network,
-  Wrench,
   Layers,
-  Sparkles,
-  Code2,
   Play
 } from 'lucide-react';
 
@@ -140,6 +131,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
   const [queuing, setQueuing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadStory(); }, [storyFile]);
 
   const loadStory = async () => {
@@ -247,7 +239,6 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEdi
   };
 
   const isDirty = content !== originalContent;
-  const lineCount = content.split('\n').length;
 
   return (
     <div className="flex flex-col h-full bg-card">

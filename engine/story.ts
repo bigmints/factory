@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, rename
 import { resolve, join, basename, dirname, relative } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { Story, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec } from './types.ts';
-import { storySlug, storyPort } from './types.ts';
+import { storySlug } from './types.ts';
 import { log } from './log.ts';
 import { StorySchema } from './schemas.ts';
 import matter from 'gray-matter';
@@ -106,7 +106,7 @@ export function listStories(repoPath: string): { apps: string[]; features: strin
             } else if (story.kind === 'feature') {
                 features.push(file);
             }
-        } catch (e) {
+        } catch {
             // If it fails to parse, just ignore or put it in apps by default to show an error later
             apps.push(file);
         }

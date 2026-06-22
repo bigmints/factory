@@ -9,8 +9,6 @@ import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
-import { slugify } from '@engine/types';
-
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
 /**

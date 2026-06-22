@@ -3,9 +3,9 @@
  * Also handles sync and init-bridge.
  */
 
-import { resolve, join, isAbsolute, basename } from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
-import { addProject, removeProject, switchProject, loadProjects, getActiveProject, loadBridgeConfig } from '../config.ts';
+import { resolve, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { addProject, removeProject, switchProject, loadProjects, getActiveProject } from '../config.ts';
 import { syncBlueprint } from '../blueprint.ts';
 import { log, logHeader, logError } from '../log.ts';
 import { type ProjectStack } from '../types.ts';

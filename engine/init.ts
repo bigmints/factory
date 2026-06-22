@@ -24,7 +24,7 @@ import { spawn } from 'node:child_process';
 import { resolve, join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify as toYaml } from 'yaml';
-import type { BridgeConfig, ProjectStack, AppSpec, FeatureEpicSpec, StoryReferenceSpec, TaskItemSpec } from './types.ts';
+import type { BridgeConfig, ProjectStack, AppSpec, FeatureEpicSpec, StoryReferenceSpec } from './types.ts';
 import { log, logError } from './log.ts';
 
 // ─── Resolve factory root ──────────────────────────────────
@@ -191,7 +191,7 @@ export function buildFileTree(dir: string, depth: number, _current = 0): string[
 
 const FACTORY_SECTION_MARKER = '## Factory Agentic Scaffold';
 
-const FACTORY_AGENTS_SECTION = (name: string) => `
+const FACTORY_AGENTS_SECTION = (_name: string) => `
 ${FACTORY_SECTION_MARKER}
 
 This project is connected to [Factory](https://github.com/Bigmints-com/factory) — an autonomous build engine.
@@ -725,7 +725,7 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
 
     const localSkillIndex = join(factoryDir, 'skill-index.yaml');
     if (!existsSync(localSkillIndex)) {
-        try { symlinkSync(globalSkillIndex, localSkillIndex); } catch (e) { /* fallback or ignore */ }
+        try { symlinkSync(globalSkillIndex, localSkillIndex); } catch { /* fallback or ignore */ }
         files.push({ path: '.factory/skill-index.yaml', action: 'created' });
     } else {
         files.push({ path: '.factory/skill-index.yaml', action: 'skipped' });
@@ -733,7 +733,7 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
 
     const localSkillsDir = join(factoryDir, 'skills');
     if (!existsSync(localSkillsDir)) {
-        try { symlinkSync(globalSkillsDir, localSkillsDir); } catch (e) { /* fallback or ignore */ }
+        try { symlinkSync(globalSkillsDir, localSkillsDir); } catch { /* fallback or ignore */ }
         files.push({ path: '.factory/skills', action: 'created' });
     } else {
         files.push({ path: '.factory/skills', action: 'skipped' });

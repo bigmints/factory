@@ -4,7 +4,7 @@
  * and manually running/grouping any of the 12 build tools.
  */
 
-import { readFileSync } from 'node:fs';
+
 import { resolve, basename } from 'node:path';
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';

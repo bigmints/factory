@@ -4,15 +4,11 @@ import * as React from "react"
 import {
   Factory,
   LayoutDashboard,
-  Plug,
-  Settings,
+  Brain,
   Wand2,
   FolderOpen,
-  Rocket,
-  FlaskConical,
-  Globe,
-  Brain,
-  BarChart3,
+  Plug,
+  Settings,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -41,14 +37,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 const navMain = [
   { title: "Stories", id: "plan",   icon: LayoutDashboard },
-  { title: "Build Pipeline",  id: "build",  icon: Rocket },
-  { title: "Validation Gates",id: "test",   icon: FlaskConical },
-  { title: "Deploy Workspace",id: "deploy", icon: Globe },
-]
-
-const navAnalytics = [
-  { title: "Analytics Reports", id: "reports",   icon: BarChart3 },
-  { title: "ADRs & Knowledge",  id: "knowledge", icon: Brain },
+  { title: "Knowledge",  id: "knowledge", icon: Brain },
 ]
 
 const navSecondary = [
@@ -104,12 +93,6 @@ export function AppSidebar({
           onSelect={handleTabChange}
           queueRunning={queueRunning}
           hasLoopWarning={hasLoopWarning}
-        />
-        <NavMain
-          label="Analytics"
-          items={navAnalytics}
-          activeId={activeTab}
-          onSelect={handleTabChange}
         />
         <NavSecondary
           label="Configure"

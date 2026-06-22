@@ -293,7 +293,6 @@ async function runWorkerEngine(
     blueprint: ProjectBlueprint,
     targetDir: string,
 ): Promise<BuildResult> {
-    const isApp = story.kind === 'app';
     const tasks = storyToTasks(story);
 
     // Create the target directory

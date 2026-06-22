@@ -86,13 +86,6 @@ function loadSkillIndex(projectPath: string): string {
   } catch { return ''; }
 }
 
-/** Load the story-generator SKILL.md for injection into decompose_requirements */
-function loadStoryGeneratorSkill(): string {
-  const p = join(homedir(), '.factory', 'skills', 'story-generator', 'SKILL.md');
-  if (existsSync(p)) { try { return readFileSync(p, 'utf-8'); } catch {} }
-  return '';
-}
-
 /**
  * Load a skill's full content by name from the global skill-index.yaml.
  * Handles both SKILL.md paths and ~/ expansions.

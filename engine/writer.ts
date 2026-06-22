@@ -147,9 +147,9 @@ export function gitPush(repoPath: string, branch?: string): boolean {
 export function buildDebrief(
     appName: string,
     result: BuildResult,
-    stack: StackConfig,
-    storyFile: string,
-    durationMs?: number,
+    _stack: StackConfig,
+    _storyFile: string,
+    _durationMs?: number,
 ): string {
     const lines: string[] = [];
     lines.push(appName);
@@ -431,7 +431,7 @@ export function writeTasksToon(repoPath: string, storySlug: string): void {
         } else {
             writeFileSync(todoPath, JSON.stringify(data, null, 2));
         }
-    } catch (e) {
+    } catch {
         // Silently fail — don't break the build
     }
 }

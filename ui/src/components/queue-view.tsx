@@ -289,7 +289,7 @@ function ActivityTimeline({ output, error, itemStatus, itemId }: { output: strin
 
         <ScrollArea className="max-h-[450px] pr-1">
           <div className="space-y-2.5 relative before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
-            {activities.map((step, index) => {
+            {activities.map((step) => {
               const isOpen = openStepId === step.id;
               const StepIcon = step.icon;
 

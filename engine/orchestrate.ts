@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { stringify as toYaml, parse as parseYaml } from 'yaml';
 import { log, logError } from './log.ts';
 import { writeHeartbeat } from './toon.ts';
-import { updateStoryStatus } from './story.ts';
+import { updateStoryStatus, loadStory } from './story.ts';
 import { loadSettings } from './config.ts';
 import { detectAvailableCli, verifyCli } from './cli-adapter.ts';
 import { runCliSession } from './cli-session.ts';
@@ -350,25 +350,32 @@ function createFixStoryFile(ctx: OrchestratorContext, issue: string, fixInstruct
         try {
             const originalPath = join(ctx.repoPath, '.factory', 'stories', ctx.storyFile);
             if (existsSync(originalPath)) {
-                originalStory = parseYaml(readFileSync(originalPath, 'utf-8')) || {};
+                originalStory = loadStory(originalPath) || {};
             }
         } catch { /* use empty */ }
 
-        const fixStory = {
+        const fixStory: any = {
             name: `Fix: ${originalStory.name || slug}`,
             description: `Automated fix task.\n\nOriginal story: ${ctx.storyFile}\nIssue: ${issue}`,
             status: 'ready-to-build',
             feature: originalStory.feature || { name: 'Fix', slug: 'fix' },
-            target: originalStory.target || {},
-            stack: originalStory.stack || {},
             acceptance_criteria: originalStory.acceptance_criteria || [],
             fix_instructions: fixInstructions || issue,
             original_story: ctx.storyFile,
-            phase: 0,
             dependsOn: [],
             createdBy: 'factory-tpm',
             createdAt: new Date().toISOString(),
         };
+
+        if (originalStory.target) {
+            fixStory.target = originalStory.target;
+        }
+        if (originalStory.stack && Object.keys(originalStory.stack).length > 0) {
+            fixStory.stack = originalStory.stack;
+        }
+        if (typeof originalStory.phase === 'number' && originalStory.phase >= 1) {
+            fixStory.phase = originalStory.phase;
+        }
 
         const frontmatter = `---\n${toYaml(fixStory)}---\n`;
         writeFileSync(fixPath, frontmatter);

@@ -17,7 +17,7 @@ export function NavMain({
   queueRunning,
   hasLoopWarning,
 }: {
-  label: string
+  label?: string
   items: { title: string; id: string; icon: LucideIcon }[]
   activeId: string
   onSelect: (id: string) => void
@@ -26,7 +26,7 @@ export function NavMain({
 }) {
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.id}>

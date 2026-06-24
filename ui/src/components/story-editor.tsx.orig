@@ -15,9 +15,7 @@ import {
   RotateCcw,
   Cpu,
   Layers,
-  Play,
-  Terminal,
-  StopCircle
+  Play
 } from 'lucide-react';
 
 interface StoryEditorProps {
@@ -25,8 +23,6 @@ interface StoryEditorProps {
   storyName: string;
   onClose: () => void;
   onSaved: () => void;
-  onViewLogs?: (file: string, name: string) => void;
-  onStopBuild?: () => void;
 }
 
 // Simple robust regex-based parser/updater to preserve YAML comments/formatting
@@ -48,7 +44,6 @@ const parseYamlFields = (yaml: string) => {
   const frameworkMatch = yaml.match(/^\s*framework:\s*["']?([^"'\n]+)["']?/m);
   const dbMatch = yaml.match(/^\s*database:\s*["']?([^"'\n]+)["']?/m);
   const portMatch = yaml.match(/^\s*port:\s*(\d+)/m);
-  const agentModelMatch = yaml.match(/^agentModel:\s*["']?([^"'\n]+)["']?/m);
 
   return {
     isFeature,
@@ -62,7 +57,6 @@ const parseYamlFields = (yaml: string) => {
     framework: frameworkMatch ? frameworkMatch[1] : 'Next.js',
     database: dbMatch ? dbMatch[1] : '',
     port: portMatch ? parseInt(portMatch[1]) : 3000,
-    agentModel: agentModelMatch ? agentModelMatch[1] : '',
   };
 };
 
@@ -122,23 +116,12 @@ const updateYamlField = (yaml: string, field: string, value: any): string => {
         updated = `status: ${value}\n` + yaml;
       }
     }
-  } else if (field === 'agentModel') {
-    if (yaml.match(/^agentModel:/m)) {
-      if (!value) {
-        // remove it if empty
-        updated = yaml.replace(/^agentModel:\s*.*$\n?/m, '');
-      } else {
-        updated = yaml.replace(/^agentModel:\s*.*$/m, `agentModel: ${value}`);
-      }
-    } else if (value) {
-      updated = yaml + `\nagentModel: ${value}`;
-    }
   }
   
   return updated;
 };
 
-export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs, onStopBuild }: StoryEditorProps) {
+export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEditorProps) {
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -146,61 +129,10 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
   const [error, setError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [queuing, setQueuing] = useState(false);
-  const [availableModels, setAvailableModels] = useState<{id: string, displayName: string, provider: string}[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadStory(); }, [storyFile]);
-
-  useEffect(() => {
-    fetch('/api/settings')
-      .then(res => res.json())
-      .then(data => {
-        if (data.providers) {
-          const enabledProviders = data.providers.filter((p: any) => p.enabled);
-          const mappedModels = enabledProviders.map((p: any) => {
-            const modelId = p.defaultModel || p.kind;
-            const modelObj = (p.models || []).find((m: any) => m.id === modelId);
-            const modelName = modelObj ? (modelObj.name || modelObj.id) : modelId;
-            return {
-              id: `${p.id}:::${modelId}`,
-              displayName: modelName,
-              provider: p.name
-            };
-          }).filter((m: any) => m.id && !m.id.endsWith(':::'));
-          setAvailableModels(mappedModels);
-        }
-      })
-      .catch(err => console.error('Failed to fetch settings for models', err));
-  }, []);
-
-  const parsedFields = useMemo(() => parseYamlFields(content), [content]);
-  const isDirty = content !== originalContent;
-
-  useEffect(() => {
-    if (parsedFields.status !== 'building' && parsedFields.status !== 'running') return;
-    if (isDirty) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/stories/${encodeURIComponent(storyFile)}`);
-        if (res.ok) {
-          const data = await res.json();
-          const parsed = parseYamlFields(data.content);
-          if (parsed.status !== 'building' && parsed.status !== 'running') {
-            setContent(data.content);
-            setOriginalContent(data.content);
-            onSaved();
-          }
-        }
-      } catch (err) {
-        console.error('Failed to poll story status:', err);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [storyFile, parsedFields.status, isDirty, onSaved]);
-
 
   const loadStory = async () => {
     setLoading(true);
@@ -262,13 +194,6 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
     }
   };
 
-  const handleStop = async () => {
-    if (onStopBuild) {
-      await onStopBuild();
-      loadStory();
-    }
-  };
-
   const handleReset = () => {
     setContent(originalContent);
     setError('');
@@ -280,7 +205,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
     toast.success('Story copied to clipboard');
   };
 
-
+  const parsedFields = useMemo(() => parseYamlFields(content), [content]);
 
   const updateField = (field: string, val: any) => {
     const updatedYaml = updateYamlField(content, field, val);
@@ -313,7 +238,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
     }, 0);
   };
 
-
+  const isDirty = content !== originalContent;
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -366,67 +291,22 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
 
             <Separator orientation="vertical" className="h-6 hidden sm:block bg-border" />
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <select
-                value={parsedFields.agentModel || ''}
-                onChange={(e) => updateField('agentModel', e.target.value)}
-                className="h-9 w-[140px] px-2 py-1 text-xs font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted focus:ring-1 focus:ring-ring focus:outline-none truncate"
-                title="Execution Model"
-              >
-                <option value="">Default Model</option>
-                {availableModels.map(m => (
-                  <option key={m.id} value={m.id}>{m.displayName}</option>
-                ))}
-              </select>
-            </div>
-
             <div className="flex items-center gap-1.5">
-              {['building', 'running'].includes(parsedFields.status) ? (
-                <>
-                  <div className="flex items-center gap-1.5 px-3 h-9 rounded-lg border border-primary/20 bg-primary/5 text-primary text-xs font-semibold shrink-0">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Building...</span>
-                  </div>
-                  {onViewLogs && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onViewLogs(storyFile, storyName)}
-                      className="h-9 rounded-md px-3 bg-background border-border text-xs font-semibold shrink-0"
-                    >
-                      <Terminal className="h-3.5 w-3.5 mr-1" />
-                      Logs
-                    </Button>
-                  )}
-                  {onStopBuild && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleStop}
-                      className="h-9 rounded-md px-3 border-red-500/20 hover:border-red-500/30 text-red-500 hover:text-red-600 bg-background hover:bg-red-500/5 text-xs font-semibold shrink-0"
-                    >
-                      <StopCircle className="h-3.5 w-3.5 mr-1" />
-                      Stop
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={handleBuild}
-                  disabled={queuing}
-                  className="font-semibold"
-                >
-                  {queuing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 fill-current mr-1 text-white" />}
-                  Build
-                </Button>
-              )}
-              <Button variant="outline" size="icon" onClick={handleCopy} className="shrink-0 bg-background">
+              <Button
+                size="sm"
+                onClick={handleBuild}
+                disabled={queuing}
+                className="h-9 rounded-md px-3 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold"
+              >
+                {queuing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Play className="h-3.5 w-3.5 fill-current mr-1 text-white" />}
+                Build
+              </Button>
+              <Button variant="outline" size="icon" onClick={handleCopy} className="h-9 w-9 rounded-md shrink-0 bg-background">
                 <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
               </Button>
 
               {isDirty && (
-                <Button variant="outline" size="icon" onClick={handleReset} className="shrink-0 text-rose-600 dark:text-rose-400 bg-background hover:bg-rose-500/5 hover:text-rose-500 border-border">
+                <Button variant="outline" size="icon" onClick={handleReset} className="h-9 w-9 rounded-md shrink-0 text-rose-600 dark:text-rose-400 bg-background hover:bg-rose-500/5 hover:text-rose-500 border-border">
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
               )}
@@ -435,7 +315,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
                 size="sm"
                 onClick={handleSave}
                 disabled={saving || !isDirty}
-                className="px-4 text-xs gap-1.5 font-semibold shrink-0"
+                className="h-9 rounded-md px-4 text-xs gap-1.5 font-semibold shrink-0"
               >
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saveSuccess ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
                 {saving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Story'}

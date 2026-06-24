@@ -121,7 +121,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[640px] p-0 gap-0 w-[95vw] max-h-[85vh]">
+      <DialogContent className="sm:max-w-screen-sm p-0 gap-0 w-11/12 max-h-full">
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
           <DialogTitle className="text-sm sm:text-base">
             {title || (mode === 'new' ? 'Choose Location for New Project' : 'Select Project Folder')}
@@ -135,7 +135,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handlePathSubmit()}
-              className="font-mono text-[10px] sm:text-xs h-8 sm:h-9"
+              className="font-mono text-xs sm:text-xs h-8 sm:h-9"
               placeholder="/path/to/directory"
             />
             <Button variant="outline" size="sm" className="h-8 sm:h-9 shrink-0 text-xs" onClick={handlePathSubmit}>
@@ -164,7 +164,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
           <div className="h-4 w-px bg-border mx-1 shrink-0" />
 
           {/* Breadcrumbs */}
-          <div className="flex items-center gap-0.5 overflow-x-auto text-[10px] sm:text-xs min-w-0 flex-1 scrollbar-hide">
+          <div className="flex items-center gap-0.5 overflow-x-auto text-xs sm:text-xs min-w-0 flex-1 scrollbar-hide">
             <button
               className="text-muted-foreground hover:text-foreground shrink-0"
               onClick={() => browse('/')}
@@ -177,7 +177,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
                   <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
                   <button
                     className={cn(
-                      'hover:text-foreground transition-colors truncate max-w-[80px] sm:max-w-[120px]',
+                      'hover:text-foreground transition-colors truncate max-w-20 sm:max-w-32',
                       isLast ? 'text-foreground font-medium' : 'text-muted-foreground'
                     )}
                     onClick={() => !isLast && browse(fullPath)}
@@ -191,7 +191,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
 
           <div className="h-4 w-px bg-border mx-1 shrink-0" />
           <button
-            className="text-[10px] text-muted-foreground hover:text-foreground shrink-0 hidden sm:block"
+            className="text-xs text-muted-foreground hover:text-foreground shrink-0 hidden sm:block"
             onClick={() => setShowHidden(!showHidden)}
           >
             {showHidden ? 'Hide .' : 'Show .'}
@@ -199,7 +199,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
         </div>
 
         {/* File list */}
-        <ScrollArea className="h-[280px] sm:h-[320px] border-y">
+        <ScrollArea className="h-72 sm:h-80 border-y">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -218,7 +218,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
               {visibleEntries.map((entry) => (
                 <button
                   key={entry.path}
-                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 hover:bg-accent hover:text-accent-foreground transition-colors text-left group min-h-[44px]"
+                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 hover:bg-accent hover:text-accent-foreground transition-colors text-left group min-h-11"
                   onClick={() => browse(entry.path)}
                   onDoubleClick={() => {
                     if (mode === 'existing') {
@@ -240,7 +240,7 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {entry.hasFactory && (
-                      <Badge variant="secondary" className="gap-1 rounded-full text-[9px] sm:text-[10px]">
+                      <Badge variant="secondary" className="gap-1 rounded-full text-xs sm:text-xs">
                         <Factory className="h-2.5 w-2.5" />
                         <span className="hidden sm:inline">factory</span>
                       </Badge>
@@ -258,17 +258,17 @@ export function FolderBrowser({ open, onClose, onSelect, mode, title }: FolderBr
 
         {/* Current selection info */}
         {data && (
-          <div className="px-3 sm:px-4 py-2 flex items-center gap-2 text-[10px] sm:text-xs flex-wrap">
+          <div className="px-3 sm:px-4 py-2 flex items-center gap-2 text-xs sm:text-xs flex-wrap">
             <span className="text-muted-foreground">Selected:</span>
             <span className="font-mono text-foreground truncate">{currentPath}</span>
             {data.hasFactory && (
-              <Badge variant="secondary" className="gap-1 rounded-full text-[9px] sm:text-[10px] shrink-0">
+              <Badge variant="secondary" className="gap-1 rounded-full text-xs sm:text-xs shrink-0">
                 <Factory className="h-2.5 w-2.5" />
                 .factory exists
               </Badge>
             )}
             {data.hasGit && !data.hasFactory && (
-              <Badge variant="outline" className="gap-1 rounded-full text-[9px] sm:text-[10px] shrink-0">
+              <Badge variant="outline" className="gap-1 rounded-full text-xs sm:text-xs shrink-0">
                 <GitBranch className="h-2.5 w-2.5" />
                 git repo
               </Badge>

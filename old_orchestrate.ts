@@ -16,12 +16,12 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { stringify as toYaml } from 'yaml';
+import { stringify as toYaml, parse as parseYaml } from 'yaml';
 import { log, logError } from './log.ts';
 import { writeHeartbeat } from './toon.ts';
 import { updateStoryStatus, loadStory } from './story.ts';
-import { loadSettings, getActiveProject } from './config.ts';
-import { detectAvailableCli } from './cli-adapter.ts';
+import { loadSettings } from './config.ts';
+import { detectAvailableCli, verifyCli } from './cli-adapter.ts';
 import { runCliSession } from './cli-session.ts';
 import { resolveSkillsForBuild, formatSkillsForPrompt } from './skills.ts';
 import type {
@@ -83,7 +83,15 @@ export async function orchestrateFeatureStory(
  * Order: settings.defaultCli → auto-detect.
  * The user chooses the CLI — no LLM involvement.
  */
-function resolveCliName(_settings: FactorySettings): string {
+function resolveCliName(settings: FactorySettings): string {
+    if (settings.defaultCli) {
+        log('→', `Using configured CLI: ${settings.defaultCli}`);
+        try { verifyCli(settings.defaultCli); } catch (e) {
+            logError(`Configured CLI "${settings.defaultCli}" not found: ${(e as Error).message}`);
+            throw e;
+        }
+        return settings.defaultCli;
+    }
     const detected = detectAvailableCli();
     log('→', `Auto-detected CLI: ${detected}`);
     return detected;
@@ -120,13 +128,6 @@ async function runDeterministicPipeline(
     // Write heartbeat so UI knows we're alive
     try { writeHeartbeat(blueprint.repoPath, `delegating to ${cliName}`); } catch { /* non-fatal */ }
 
-    let activeProject;
-    try {
-        activeProject = getActiveProject();
-    } catch {
-        activeProject = null;
-    }
-
     // ── Step 2: Delegate to CLI ──────────────────────────
     log('●', `Delegating to ${cliName}...`);
     const result = await runCliSession({
@@ -136,8 +137,6 @@ async function runDeterministicPipeline(
         repoPath: blueprint.repoPath,
         storyFile,
         threadId: ctx.threadId,
-        model: story.agentModel || activeProject?.piConfig?.model,
-        piConfig: activeProject?.piConfig,
     });
 
     ctx.files = result.files;
@@ -152,7 +151,6 @@ async function runDeterministicPipeline(
 
             try {
                 const summaryLines = [
-                    ...(result.textOutput ? [result.textOutput, '', '---', ''] : []),
                     `**Date**: ${new Date().toISOString()}`,
                     `**CLI**: ${cliName}`,
                     `**Files Generated**: ${ctx.files.length}`,
@@ -240,59 +238,67 @@ function buildBrief(
 ): string {
     const sections: string[] = [];
 
-    sections.push(`# Execution Brief\n\nYou are an autonomous CLI engineer. Your task is to execute the following story autonomously. Do not ask questions. Print \`DELIVERY COMPLETE\` when finished.`);
+    // ── Story ──
+    sections.push(`# Story to Implement\n\n\`\`\`yaml\n${toYaml(story)}\`\`\``);
 
-    // ── Phase 1: Context Gathering ──
-    const contextSteps: string[] = [];
-    if (blueprint.conventions.length > 0) {
-        contextSteps.push(`- **Conventions:** Read \`.factory/AGENTS.md\` and other convention files in the codebase.`);
-    }
-    if (blueprint.toonSnapshot) {
-        contextSteps.push(`- **State:** Read \`.factory/logs/state.yaml\` (or \`.toon\`) to understand the current architecture and stack.`);
-    }
-    
-    const kfList = blueprint.knowledgeFiles.map(k => k.path);
-    const kbList = loadKnowledgeFiles(blueprint.repoPath).map(k => `.factory/knowledge/${k.name}.md`);
-    const allKb = [...kfList, ...kbList];
-    if (allKb.length > 0) {
-        contextSteps.push(`- **Knowledge Base:** Review relevant files from the following list to ensure you follow past architectural decisions:\n  ${allKb.join('\n  ')}`);
-    }
+    // ── Target Directory ──
+    sections.push(`# Target Directory\n\n\`${targetDir}\`\n\nAll work happens in this directory. Create it if it doesn't exist.`);
 
-    if (contextSteps.length > 0) {
-        sections.push(`## Phase 1: Context Gathering\n\nBefore writing code, use your read tools to gather necessary context:\n${contextSteps.join('\n')}`);
-    }
-
-    // ── Phase 2: Implementation ──
-    sections.push(`## Phase 2: Implementation\n\nImplement the story exactly as requested.\n\n### Target Directory\n\`${targetDir}\`\n\n### Story\n\`\`\`yaml\n${toYaml(story)}\`\`\``);
-
+    // ── Stack ──
     if (story.stack) {
-        sections.push(`### Stack\n\`\`\`json\n${JSON.stringify(story.stack, null, 2)}\n\`\`\``);
+        sections.push(`# Stack\n\n\`\`\`json\n${JSON.stringify(story.stack, null, 2)}\n\`\`\``);
     }
 
+    // ── Acceptance Criteria ──
     const criteria = (story as any).acceptance_criteria;
     if (Array.isArray(criteria) && criteria.length > 0) {
-        sections.push(`### Acceptance Criteria\nYou MUST satisfy ALL of these:\n${criteria.map((c: string, i: number) => `${i + 1}. ${c}`).join('\n')}`);
+        sections.push(`# Acceptance Criteria\n\nYou MUST satisfy ALL of these:\n\n${criteria.map((c: string, i: number) => `${i + 1}. ${c}`).join('\n')}`);
+    }
+
+    // ── Conventions ──
+    if (blueprint.conventions.length > 0) {
+        sections.push(`# Project Conventions\n\n${blueprint.conventions.join('\n\n---\n\n')}`);
+    }
+
+    // ── Knowledge Files ──
+    if (blueprint.knowledgeFiles.length > 0) {
+        const kf = blueprint.knowledgeFiles.map(k => `## ${k.app} / ${k.filename}\n${k.content}`).join('\n\n');
+        sections.push(`# Project Knowledge\n\n${kf}`);
+    }
+
+    // ── .factory/knowledge/ ──
+    const knowledgeFiles = loadKnowledgeFiles(blueprint.repoPath);
+    if (knowledgeFiles.length > 0) {
+        const kb = knowledgeFiles.map(k => `## ${k.name}\n${k.content}`).join('\n\n');
+        sections.push(`# Architecture Decisions & Past Builds\n\n${kb}`);
+    }
+
+    // ── TOON state ──
+    if (blueprint.toonSnapshot) {
+        sections.push(`# Current Project State\n\n${blueprint.toonSnapshot}`);
     }
 
     // ── Skills ──
     const scoredSkills = resolveSkillsForBuild(story, blueprint);
     if (scoredSkills.length > 0) {
-        sections.push(`### Required Skills\n\n${formatSkillsForPrompt(scoredSkills)}`);
+        sections.push(formatSkillsForPrompt(scoredSkills));
     }
 
     // ── BTW (urgent user overrides) ──
     if ((story as any).btw && Array.isArray((story as any).btw) && (story as any).btw.length > 0) {
-        sections.push(`### URGENT OVERRIDES\n\nThese take highest priority:\n${(story as any).btw.map((b: string) => `- ${b}`).join('\n')}`);
+        sections.push(`# URGENT ADDITIONAL INSTRUCTIONS\n\nThese take highest priority:\n\n${(story as any).btw.map((b: string) => `- ${b}`).join('\n')}`);
     }
 
-    // ── Phase 3: Validation ──
-    sections.push(`## Phase 3: Validation & Delivery\n
-- Install any necessary dependencies using the package manager appropriate for the stack (e.g. \`flutter pub get\`, \`npm install\`).
-- Fix any compilation, type, or lint errors (e.g. \`flutter analyze\`, \`tsc\`).
-- Verify the build passes locally.
-- When done, print \`DELIVERY COMPLETE\` and a summary of what was built.
+    // ── Self-sufficiency instruction ──
+    sections.push(`# Instructions
 
-Do NOT ask for help. Complete everything autonomously.`);
+Complete the full implementation without asking questions.
+- Run \`npm install\` if needed
+- Fix any TypeScript or lint errors
+- Verify the build passes
+- When done, print \`DELIVERY COMPLETE\` and a summary of what was built
+
+Do NOT ask for help. Do NOT ask questions. Complete everything autonomously.`);
 
     return sections.join('\n\n');
 }

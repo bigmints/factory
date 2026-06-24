@@ -1,0 +1,16 @@
+name: Change Primary Color to Red
+description: Update the primary color of the Flutter app theme to red.
+status: draft
+phase: 2
+feature:
+  name: Change Primary Color to Red
+  slug: change-primary-color-to-red
+target:
+  app: bbr
+dependsOn:
+  - scaffold-flutter-app
+dependencies: []
+acceptance_criteria:
+  - Given the app is launched, when the user views the home screen, then the primary color (e.g., AppBar, FAB, primary buttons) is red.
+  - Given the theme configuration, when the primary color is updated, then all components using the primary color reflect the change.
+  - Given dark mode is active, when the primary color is applied, then it contrasts well with the dark background.

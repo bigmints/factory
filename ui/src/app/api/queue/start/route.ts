@@ -30,6 +30,10 @@ export async function POST() {
             stdio: ['ignore', out, err],
         });
         
+        // Save the PID so we can stop the queue later
+        const pidFile = path.join(project.path, '.factory', 'queue.pid');
+        fs.writeFileSync(pidFile, String(child.pid));
+        
         child.unref(); // Let it run in background
 
         return NextResponse.json({ success: true, message: 'Queue started. Logs at .factory/logs/queue.log' });

@@ -51,7 +51,7 @@ export function SkillsView() {
     <div className="space-y-6 md:space-y-8 flex flex-col">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm text-muted-foreground border-b border-border/40 pb-4">
         <span className="flex items-center gap-2">
-          <Wand2 className="h-4 w-4 text-indigo-500" />
+          <Wand2 className="h-4 w-4 text-primary" />
           <span className="font-semibold text-foreground">Custom & MCP Skills</span>
         </span>
         <div className="flex items-center gap-3">
@@ -62,7 +62,7 @@ export function SkillsView() {
               placeholder="Search skills..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 w-[180px] sm:w-[240px] text-xs"
+              className="h-8 pl-8 w-44 sm:w-60 text-xs"
             />
           </div>
           <Button
@@ -79,7 +79,7 @@ export function SkillsView() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="h-6 w-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
         </div>
       ) : filteredSkills.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground/60 border border-dashed border-border rounded-xl bg-card/5">
@@ -93,7 +93,7 @@ export function SkillsView() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <h3 className="text-xs sm:text-sm font-semibold text-foreground truncate">{skill.name}</h3>
-                  <Badge variant={skill.category === 'mcp' ? 'default' : 'outline'} className="text-[9px] px-1.5 py-0 rounded font-semibold uppercase tracking-wider">
+                  <Badge variant={skill.category === 'mcp' ? 'default' : 'outline'} className="text-xs px-1.5 py-0 rounded font-semibold uppercase tracking-wider">
                     {skill.category}
                   </Badge>
                 </div>
@@ -103,9 +103,9 @@ export function SkillsView() {
               </div>
 
               {skill.trigger && (
-                <div className="pt-2 border-t border-border/10 flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
-                  <span className="font-semibold text-[9px] uppercase tracking-wide">Trigger:</span>
-                  <span className="bg-muted px-1.5 py-0.5 rounded text-foreground truncate max-w-[200px]">{skill.trigger}</span>
+                <div className="pt-2 border-t border-border/10 flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                  <span className="font-semibold text-xs uppercase tracking-wide">Trigger:</span>
+                  <span className="bg-muted px-1.5 py-0.5 rounded text-foreground truncate max-w-48">{skill.trigger}</span>
                 </div>
               )}
             </Card>

@@ -16,8 +16,8 @@ export function BuildLog({ output, isRunning }: BuildLogProps) {
           {isRunning ? 'Building...' : output ? 'Build Output' : 'No output'}
         </span>
       </div>
-      <ScrollArea className="h-[240px] sm:h-[320px] lg:h-[400px]">
-        <pre className="p-3 sm:p-4 text-[11px] sm:text-xs leading-relaxed font-mono text-foreground/80 whitespace-pre-wrap">
+      <ScrollArea className="h-60 sm:h-80 lg:h-96">
+        <pre className="p-3 sm:p-4 text-xs sm:text-xs leading-relaxed font-mono text-foreground/80 whitespace-pre-wrap">
           {output || 'Run a build to see output here...'}
         </pre>
       </ScrollArea>

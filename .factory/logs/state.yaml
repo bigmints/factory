@@ -5,7 +5,7 @@ project:
     align="center">     <strong>Autonomous app scaffolding from YAML specs —
     plan, build, test, fix, push.</strong>   </p>   <p align="center">     <a
     href="quick-start">Quick Start</a> •     <a href="cli-reference">CLI</a> •
-  analyzed: 2026-06-22
+  analyzed: 2026-06-24
 package:
   name: factory
   description: Autonomous app scaffolding factory — generate production-ready apps
@@ -13,6 +13,7 @@ package:
   version: 1.0.0
   key_deps:
     - "@agentclientprotocol/sdk"
+    - "@earendil-works/pi-coding-agent"
     - "@toon-format/toon"
     - ajv
     - chalk
@@ -23,7 +24,6 @@ package:
     - yaml
     - zod
     - zustand
-    - "@types/node"
 stack:
   framework: node
   packageManager: npm
@@ -52,16 +52,12 @@ structure:
   - "  📄 cli-session.ts"
   - "  📄 cli.ts"
   - "  📄 config.ts"
-  - "  📄 daemon.ts"
   - "  📄 db.ts"
   - "  📄 generate.ts"
-  - "  📄 health.ts"
   - "  📄 init.ts"
   - "  📄 log.ts"
   - "  📄 orchestrate.ts"
-  - "  📄 queue.ts"
   - "  📄 repl.ts"
-  - "  📄 rollup.ts"
   - "  📄 schemas.ts"
   - "  📁 skills"
   - "  📄 skills.ts"
@@ -75,7 +71,14 @@ structure:
   - 📁 factory
   - "  📁 scripts"
   - "  📁 skills"
+  - 📄 find_arbitrary.cjs
+  - 📄 fix_arbitrary.cjs
+  - 📄 fix_arbitrary_2.cjs
+  - 📄 fix_arbitrary_3.cjs
+  - 📄 fix_arbitrary_new.cjs
+  - 📄 fix_fonts.cjs
   - 📄 install.sh
+  - 📄 old_orchestrate.ts
   - 📄 package-lock.json
   - 📄 package.json
   - 📄 projects.example.json
@@ -86,9 +89,6 @@ structure:
   - "  📁 registry"
   - "  📁 skills"
   - "  📁 templates"
-  - 📁 reports
-  - 📁 runs
-  - "  📄 run-2026-05-19T22-12-32.log"
 conventions:
   - TypeScript
   - ESLint

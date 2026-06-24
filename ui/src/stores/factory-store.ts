@@ -63,6 +63,7 @@ export interface ProjectItem {
   path: string;
   addedAt: string;
   stack?: Record<string, string>;
+  piConfig?: any;
 }
 
 export interface ReportStats {

@@ -120,15 +120,7 @@ export async function runQueueTasks(
 
     let cli = options.cli;
     if (!cli) {
-        try {
-            const { loadSettings } = await import('./config.ts');
-            const settings = loadSettings();
-            if (settings.defaultCli) {
-                cli = settings.defaultCli;
-            }
-        } catch {
-            // Ignore settings if not configured
-        }
+        // Handled by detectAvailableCli later
     }
 
     if (!cli && !dryRun) {

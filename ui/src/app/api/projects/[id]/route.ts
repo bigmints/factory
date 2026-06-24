@@ -69,6 +69,31 @@ export async function PATCH(
   }
 }
 
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    
+    const config = loadProjectsConfig();
+    const projectIndex = config.projects.findIndex((p: any) => p.id === id);
+    if (projectIndex === -1) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    config.projects[projectIndex] = { ...config.projects[projectIndex], ...body };
+    
+    const { writeFileSync } = require('node:fs');
+    writeFileSync(PROJECTS_FILE, JSON.stringify(config, null, 2) + '\n');
+    
+    return NextResponse.json({ success: true, project: config.projects[projectIndex] });
+  } catch (err: any) {
+    return NextResponse.json({ error: 'Failed to update project', details: err.message }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }

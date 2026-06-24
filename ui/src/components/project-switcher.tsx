@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Check, Plus, FolderOpen } from 'lucide-react';
+import { ChevronDown, Check, Plus } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -70,12 +70,12 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
     return (
       <button
         onClick={onAddProject}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        className="flex items-center gap-1.5 text-sm font-semibold text-foreground hover:text-primary transition-colors"
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-muted-foreground/30">
-          <Plus className="h-3.5 w-3.5" />
-        </div>
-        <span className="text-xs font-medium">Start a project</span>
+        <span>Factory</span>
+        <span className="text-muted-foreground font-normal flex items-center gap-1.5">
+          <span className="text-muted-foreground/60">/</span> <Plus className="h-3.5 w-3.5" /> Start a project
+        </span>
       </button>
     );
   }
@@ -84,30 +84,22 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-          'hover:bg-accent hover:text-accent-foreground',
-          open && 'bg-accent text-accent-foreground'
-        )}
+        className="flex items-center gap-1.5 text-sm font-semibold text-foreground hover:text-primary transition-colors"
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-secondary border">
-          <FolderOpen className="h-3.5 w-3.5 text-foreground" />
-        </div>
-        <div className="flex-1 text-left min-w-0">
-          <p className="truncate text-xs font-medium">
-            {activeProject?.name || 'No project'}
-          </p>
-        </div>
-        <ChevronDown
-          className={cn(
-            'h-3.5 w-3.5 text-muted-foreground transition-transform',
-            open && 'rotate-180'
-          )}
-        />
+        <span>Factory</span>
+        <span className="text-muted-foreground font-normal flex items-center gap-1.5">
+          <span className="text-muted-foreground/60">/</span> {activeProject?.name || 'No project'}
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 transition-transform',
+              open && 'rotate-180'
+            )}
+          />
+        </span>
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-border bg-popover p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-2 w-64 rounded-lg border border-border bg-popover p-1 shadow-lg">
           {projects.map((project) => (
             <button
               key={project.id}
@@ -122,7 +114,7 @@ export function ProjectSwitcher({ onAddProject, refreshKey }: ProjectSwitcherPro
             >
               <div className="flex-1 min-w-0">
                 <p className="truncate text-xs font-medium">{project.name}</p>
-                <p className="truncate text-[10px] text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {project.path}
                 </p>
               </div>

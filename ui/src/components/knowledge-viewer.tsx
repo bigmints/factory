@@ -30,12 +30,12 @@ const PROSE = [
   'prose-h3:text-base prose-h3:mt-4 prose-h3:mb-1.5',
   'prose-ul:my-2 prose-ul:pl-4 prose-ol:my-2 prose-ol:pl-4',
   'prose-li:my-0.5 prose-li:leading-normal',
-  'prose-pre:my-3 prose-pre:rounded-xl prose-pre:text-[11.5px] prose-pre:leading-relaxed prose-pre:bg-muted/50 prose-pre:border prose-pre:border-border/40 prose-pre:p-4',
-  'prose-code:text-[11.5px] prose-code:bg-muted/30 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-mono prose-code:before:content-none prose-code:after:content-none',
-  'prose-blockquote:border-l-2 prose-blockquote:border-indigo-500/50 prose-blockquote:bg-indigo-500/5 prose-blockquote:text-muted-foreground prose-blockquote:pl-3 prose-blockquote:py-0.5 prose-blockquote:my-3 prose-blockquote:rounded-r-md',
+  'prose-pre:my-3 prose-pre:rounded-xl prose-pre:text-xs prose-pre:leading-relaxed prose-pre:bg-muted/50 prose-pre:border prose-pre:border-border/40 prose-pre:p-4',
+  'prose-code:text-xs prose-code:bg-muted/30 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-mono prose-code:before:content-none prose-code:after:content-none',
+  'prose-blockquote:border-l-2 prose-blockquote:border-primary/50 prose-blockquote:bg-primary/5 prose-blockquote:text-muted-foreground prose-blockquote:pl-3 prose-blockquote:py-0.5 prose-blockquote:my-3 prose-blockquote:rounded-r-md',
   'prose-table:text-xs prose-table:my-4 prose-th:font-medium prose-th:py-2 prose-th:px-3 prose-th:bg-muted/40 prose-td:py-2 prose-td:px-3 prose-td:border-b prose-td:border-border/30',
   'prose-hr:border-border/30 prose-hr:my-4',
-  'prose-a:text-indigo-400 hover:text-indigo-300 prose-a:underline-offset-2 transition-colors',
+  'prose-a:text-primary hover:text-primary/80 prose-a:underline-offset-2 transition-colors',
   'prose-strong:font-semibold prose-strong:text-foreground',
 ].join(' ');
 
@@ -102,17 +102,17 @@ export function KnowledgeViewer({ data }: KnowledgeViewerProps) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] min-h-[450px] space-y-4">
+    <div className="flex flex-col h-[calc(100vh-8rem)] min-h-96 space-y-4">
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm text-muted-foreground border-b border-border/40 pb-4 shrink-0">
         <span className="flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-indigo-500" />
+          <BookOpen className="h-4 w-4 text-primary" />
           <span className="font-semibold text-foreground">TPM Knowledge Base</span>
         </span>
         <button 
           onClick={handleBuildKnowledge}
           disabled={isBuilding}
-          className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-md transition-colors text-xs font-medium disabled:opacity-50 cursor-pointer"
+          className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors text-xs font-medium disabled:opacity-50 cursor-pointer"
         >
           <RefreshCcw className={cn("h-3 w-3", isBuilding && "animate-spin")} />
           {isBuilding ? 'Building...' : 'Build Knowledge'}
@@ -131,7 +131,7 @@ export function KnowledgeViewer({ data }: KnowledgeViewerProps) {
               placeholder="Search knowledge..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-9 pr-4 rounded-lg border border-border bg-card/40 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full h-9 pl-9 pr-4 rounded-lg border border-border bg-card/40 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
 
@@ -150,16 +150,16 @@ export function KnowledgeViewer({ data }: KnowledgeViewerProps) {
                     className={cn(
                       "w-full text-left p-3 rounded-lg border transition-all flex items-start gap-2.5 cursor-pointer",
                       isSelected 
-                        ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 shadow-sm"
+                        ? "bg-primary/10 border-primary/30 text-primary shadow-sm"
                         : "border-transparent hover:bg-muted/40 text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    <FileText className={cn("h-4 w-4 shrink-0 mt-0.5", isSelected ? "text-indigo-400" : "text-muted-foreground")} />
+                    <FileText className={cn("h-4 w-4 shrink-0 mt-0.5", isSelected ? "text-primary" : "text-muted-foreground")} />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold truncate">{doc.title}</p>
-                      <p className="text-[9px] text-muted-foreground/60 truncate mt-0.5 font-mono">{doc.file}</p>
+                      <p className="text-xs text-muted-foreground/60 truncate mt-0.5 font-mono">{doc.file}</p>
                     </div>
-                    {isSelected && <ChevronRight className="h-3 w-3 shrink-0 text-indigo-400 mt-1" />}
+                    {isSelected && <ChevronRight className="h-3 w-3 shrink-0 text-primary mt-1" />}
                   </button>
                 );
               })
@@ -174,22 +174,22 @@ export function KnowledgeViewer({ data }: KnowledgeViewerProps) {
               {/* Document Header */}
               <div className="border-b border-border/40 pb-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="text-[9px] font-mono capitalize px-2 py-0">
+                  <Badge variant="outline" className="text-xs font-mono capitalize px-2 py-0">
                     {selectedDoc.type}
                   </Badge>
                   {selectedDoc.status && (
-                    <Badge className="text-[9px] bg-indigo-500/10 text-indigo-400 border-indigo-500/20 px-2 py-0">
+                    <Badge className="text-xs bg-primary/10 text-primary border-primary/20 px-2 py-0">
                       {selectedDoc.status}
                     </Badge>
                   )}
                   {selectedDoc.date && (
-                    <span className="text-[10px] text-muted-foreground/60 ml-auto font-medium">
+                    <span className="text-xs text-muted-foreground/60 ml-auto font-medium">
                       {selectedDoc.date}
                     </span>
                   )}
                 </div>
                 <h1 className="text-lg md:text-xl font-bold text-foreground mt-3 tracking-tight">{selectedDoc.title}</h1>
-                <p className="text-[9px] text-muted-foreground/50 mt-1 font-mono break-all">{selectedDoc.file}</p>
+                <p className="text-xs text-muted-foreground/50 mt-1 font-mono break-all">{selectedDoc.file}</p>
               </div>
 
               {/* Document Content */}

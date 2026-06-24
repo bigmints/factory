@@ -21,6 +21,7 @@ import { existsSync } from 'node:fs';
 import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getActiveProvider } from './config.ts';
 
 // ─── Supported CLIs ──────────────────────────────────────
 
@@ -187,10 +188,40 @@ export function buildSpawnEnv(): NodeJS.ProcessEnv {
         parts.push(process.env.PATH);
     }
 
-    return {
+    const env: NodeJS.ProcessEnv = {
         ...process.env,
         PATH: parts.join(':'),
     };
+
+    // Auto-inject active provider credentials so CLIs work seamlessly
+    try {
+        const provider = getActiveProvider();
+        if (provider) {
+            const kindStr = provider.kind as string;
+            if (kindStr === 'openai-compat' || kindStr === 'openai') {
+                if (provider.apiKey) {
+                    env.OPENAI_API_KEY = provider.apiKey;
+                    if (provider.baseUrl?.includes('openrouter') || provider.name?.toLowerCase().includes('openrouter')) {
+                        env.OPENROUTER_API_KEY = provider.apiKey;
+                    }
+                }
+                if (provider.baseUrl) {
+                    env.OPENAI_BASE_URL = provider.baseUrl;
+                }
+            } else if (kindStr === 'anthropic') {
+                if (provider.apiKey) {
+                    env.ANTHROPIC_API_KEY = provider.apiKey;
+                }
+            } else if (kindStr === 'google') {
+                if (provider.apiKey) {
+                    env.GEMINI_API_KEY = provider.apiKey;
+                    env.GOOGLE_API_KEY = provider.apiKey;
+                }
+            }
+        }
+    } catch { /* ignore */ }
+
+    return env;
 }
 
 // ─── Invocation Builder ──────────────────────────────────
@@ -232,6 +263,29 @@ export function buildCliInvocation(
     }
 
     const args: string[] = [];
+    
+    // Resolve implicit provider and model settings
+    let model = options.model;
+    let providerName = '';
+    try {
+        const p = getActiveProvider();
+        if (p) {
+            if (!model && p.defaultModel) {
+                model = p.defaultModel;
+            }
+            if (p.kind === 'openai-compat') {
+                providerName = (p.baseUrl?.includes('openrouter') || p.name?.toLowerCase().includes('openrouter')) ? 'openrouter' : 'openai';
+            } else {
+                providerName = p.kind;
+            }
+        }
+    } catch { /* ignore */ }
+
+    // pi supports --provider and --model explicitly
+    if (cliName === 'pi') {
+        if (providerName) args.push('--provider', providerName);
+        if (model) args.push('--model', model);
+    }
 
     if (profile.promptMode === 'flag') {
         // Flag-based: -p <prompt> [yoloFlags] [extraFlags]
@@ -245,9 +299,9 @@ export function buildCliInvocation(
         args.push(prompt);
     }
 
-    // Optional: model selection (only gemini and claude support --model)
-    if (options.model && (cliName === 'gemini' || cliName === 'claude')) {
-        args.push('--model', options.model);
+    // Optional: model selection (only gemini and claude support --model natively among others)
+    if (model && (cliName === 'gemini' || cliName === 'claude')) {
+        args.push('--model', model);
     }
 
     // agy: resume a conversation thread

@@ -86,7 +86,7 @@ export function NewProjectGuide({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden gap-0 w-[95vw]">
+      <DialogContent className="sm:max-w-lg p-0 overflow-hidden gap-0 w-11/12">
         {/* Header */}
         <DialogHeader className="px-5 pt-5 pb-4 border-b bg-gradient-to-br from-primary/8 via-background to-background">
           <div className="flex items-start justify-between gap-3">
@@ -98,7 +98,7 @@ export function NewProjectGuide({
                 <DialogTitle className="text-sm font-bold leading-tight">
                   Project connected!
                 </DialogTitle>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Use an AI agent to scaffold your specs
                 </p>
               </div>
@@ -129,13 +129,13 @@ export function NewProjectGuide({
           <div className="relative rounded-xl border border-border bg-muted/30 overflow-hidden">
             {/* "terminal" header bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-muted/50">
-              <span className="text-[10px] font-mono font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">
                 Prompt
               </span>
               <button
                 onClick={handleCopy}
                 className={cn(
-                  'flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-md transition-all',
+                  'flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-md transition-all',
                   copied
                     ? 'text-emerald-400 bg-emerald-500/10'
                     : 'text-muted-foreground hover:text-foreground hover:bg-background'
@@ -156,13 +156,13 @@ export function NewProjectGuide({
             </div>
 
             {/* Prompt text */}
-            <pre className="p-3.5 text-[11px] font-mono leading-relaxed text-foreground/90 whitespace-pre-wrap select-all">
+            <pre className="p-3.5 text-xs font-mono leading-relaxed text-foreground/90 whitespace-pre-wrap select-all">
               {prompt}
             </pre>
           </div>
 
           {/* Skill URL link */}
-          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span>Skill file:</span>
             <a
               href={SKILL_URL}

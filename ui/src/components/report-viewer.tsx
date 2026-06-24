@@ -118,17 +118,17 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
         <span className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-violet-500 shrink-0" />
           <span className="font-semibold text-foreground">{totalBuilds}</span> Total Builds
-          <span className="text-[10px] text-muted-foreground/60 font-mono">({uniqueStories} unique)</span>
+          <span className="text-xs text-muted-foreground/60 font-mono">({uniqueStories} unique)</span>
         </span>
         <span className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
           <span className="font-semibold text-foreground">{successRate}%</span> Success Rate
-          <span className="text-[10px] text-muted-foreground/60">({successfulBuilds} passed / {failedBuilds} failed)</span>
+          <span className="text-xs text-muted-foreground/60">({successfulBuilds} passed / {failedBuilds} failed)</span>
         </span>
         <span className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0" />
           <span className="font-semibold text-foreground">{formatTokens(totalTokens)}</span> Tokens Used
-          <span className="text-[10px] text-muted-foreground/60 font-mono">({formatTokens(totalTokensIn)} in / {formatTokens(totalTokensOut)} out)</span>
+          <span className="text-xs text-muted-foreground/60 font-mono">({formatTokens(totalTokensIn)} in / {formatTokens(totalTokensOut)} out)</span>
         </span>
         <span className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-blue-500 shrink-0" />
@@ -142,7 +142,7 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
         <div className="border border-border rounded-xl bg-card/5 p-5 md:p-6 overflow-hidden">
           <div className="flex items-center gap-2 text-muted-foreground mb-4">
             <Cpu className="h-4 w-4 shrink-0" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Model Usage</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Model Usage</span>
           </div>
           {(stats.modelUsage ?? []).length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60 space-y-2">
@@ -160,11 +160,11 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
                     <div className="flex items-center justify-between flex-wrap gap-1">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-xs font-semibold truncate">{m.model}</span>
-                        <span className="text-[9px] font-mono border border-border/80 rounded px-1 text-muted-foreground/80 shrink-0">
+                        <span className="text-xs font-mono border border-border/80 rounded px-1 text-muted-foreground/80 shrink-0">
                           {m.provider}
                         </span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
+                      <span className="text-xs text-muted-foreground shrink-0 font-medium">
                         {m.count} build{m.count !== 1 ? 's' : ''} · {formatTokens(m.tokens_in + m.tokens_out)} tokens
                       </span>
                     </div>
@@ -185,7 +185,7 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
         <div className="border border-border rounded-xl bg-card/5 p-5 md:p-6 overflow-hidden">
           <div className="flex items-center gap-2 text-muted-foreground mb-4">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Error Breakdown</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Error Breakdown</span>
           </div>
           {failedBuilds === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60 space-y-2">
@@ -201,7 +201,7 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold text-rose-500">{llmErrors}</span>
-                  <p className="text-[9px] text-muted-foreground">API failures or parse errors</p>
+                  <p className="text-xs text-muted-foreground">API failures or parse errors</p>
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-card/5">
@@ -211,7 +211,7 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold text-amber-500">{engineErrors}</span>
-                  <p className="text-[9px] text-muted-foreground">Compilation or toolchain failures</p>
+                  <p className="text-xs text-muted-foreground">Compilation or toolchain failures</p>
                 </div>
               </div>
               {failedBuilds - llmErrors - engineErrors > 0 && (
@@ -232,7 +232,7 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-muted-foreground px-1">
           <TrendingUp className="h-4 w-4 shrink-0" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Build History</span>
+          <span className="text-xs font-bold uppercase tracking-wider">Build History</span>
         </div>
         {entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/60 border border-dashed border-border rounded-xl bg-card/5">
@@ -242,7 +242,7 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
         ) : (
           <div className="divide-y divide-border border border-border rounded-xl bg-card/5 overflow-hidden">
             {/* Header row */}
-            <div className="hidden sm:grid sm:grid-cols-[1fr_90px_120px_80px_80px_70px] gap-3 px-4 py-2 bg-muted/40 text-[9px] text-muted-foreground uppercase tracking-wider font-bold">
+            <div className="hidden sm:grid sm:grid-cols-6 gap-3 px-4 py-2 bg-muted/40 text-xs text-muted-foreground uppercase tracking-wider font-bold">
               <span>Story</span>
               <span>Status</span>
               <span>Model</span>
@@ -261,63 +261,63 @@ export function ReportViewer({ entries, stats: rawStats }: ReportViewerProps) {
                     <span className="text-xs font-semibold truncate text-foreground">
                       {storyName(entry.story_file || entry.spec_file || '')}
                     </span>
-                    <span className="text-[9px] text-muted-foreground font-mono">{formatDate(entry.timestamp)}</span>
+                    <span className="text-xs text-muted-foreground font-mono">{formatDate(entry.timestamp)}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {entry.status === 'completed' ? (
-                      <span className="text-[9px] font-semibold text-emerald-500 flex items-center gap-1">
+                      <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" /> Pass
                       </span>
                     ) : (
-                      <span className="text-[9px] font-semibold text-rose-500 flex items-center gap-1">
+                      <span className="text-xs font-semibold text-rose-500 flex items-center gap-1">
                         <XCircle className="h-3 w-3" /> Fail
                       </span>
                     )}
                     {entry.model && (
-                      <span className="text-[9px] text-muted-foreground font-mono bg-muted/50 border border-border/80 rounded px-1.5 py-0.5">
+                      <span className="text-xs text-muted-foreground font-mono bg-muted/50 border border-border/80 rounded px-1.5 py-0.5">
                         {entry.model}
                       </span>
                     )}
-                    <span className="text-[9px] text-muted-foreground font-mono bg-muted/30 px-1 py-0.5 rounded uppercase">
+                    <span className="text-xs text-muted-foreground font-mono bg-muted/30 px-1 py-0.5 rounded uppercase">
                       {entry.kind === 'FeatureSpec' || entry.kind === 'FeatureStory' ? 'feat' : 'app'}
                     </span>
                   </div>
                 </div>
 
                 {/* Desktop View */}
-                <div className="hidden sm:grid sm:grid-cols-[1fr_90px_120px_80px_80px_70px] gap-3 items-center">
+                <div className="hidden sm:grid sm:grid-cols-6 gap-3 items-center">
                   <div className="truncate">
                     <span className="text-xs font-semibold text-foreground">
                       {storyName(entry.story_file || entry.spec_file || '')}
                     </span>
-                    <span className="text-[10px] text-muted-foreground/60 font-mono ml-2">
+                    <span className="text-xs text-muted-foreground/60 font-mono ml-2">
                       {formatDate(entry.timestamp)}
                     </span>
                   </div>
                   <div>
                     {entry.status === 'completed' ? (
-                      <span className="text-[9px] font-semibold text-emerald-500 flex items-center gap-1">
+                      <span className="text-xs font-semibold text-emerald-500 flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3 shrink-0" /> Pass
                       </span>
                     ) : (
-                      <span className="text-[9px] font-semibold text-rose-500 flex items-center gap-1">
+                      <span className="text-xs font-semibold text-rose-500 flex items-center gap-1">
                         <XCircle className="h-3 w-3 shrink-0" /> Fail
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] text-muted-foreground/90 font-medium truncate font-mono">
+                  <span className="text-xs text-muted-foreground/90 font-medium truncate font-mono">
                     {entry.model || '—'}
                   </span>
-                  <span className="text-[10px] text-muted-foreground font-mono">
+                  <span className="text-xs text-muted-foreground font-mono">
                     {(entry.tokens_in || 0) + (entry.tokens_out || 0) > 0
                       ? formatTokens((entry.tokens_in || 0) + (entry.tokens_out || 0))
                       : '—'}
                   </span>
-                  <span className="text-[10px] text-muted-foreground font-mono">
+                  <span className="text-xs text-muted-foreground font-mono">
                     {entry.duration_ms ? formatDuration(entry.duration_ms) : '—'}
                   </span>
                   <div>
-                    <span className="text-[9px] text-muted-foreground font-mono bg-muted/40 px-1.5 py-0.5 rounded uppercase">
+                    <span className="text-xs text-muted-foreground font-mono bg-muted/40 px-1.5 py-0.5 rounded uppercase">
                       {entry.kind === 'FeatureSpec' || entry.kind === 'FeatureStory' ? 'feat' : 'app'}
                     </span>
                   </div>

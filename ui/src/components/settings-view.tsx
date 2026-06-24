@@ -5,14 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { cn } from '@/lib/utils';
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
-  Sparkles, Bot, Server, Eye, EyeOff, CheckCircle2, XCircle, Loader2,
-  Terminal, Save, Network, RefreshCw, Plus, Trash2
+  Eye, EyeOff, Loader2,
+  Save, Network, Plus, Trash2, Zap,
+  Pencil
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -30,38 +30,20 @@ interface FactorySettings {
   updatedAt?: string;
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const CLI_OPTIONS = [
-  { id: 'pi',     label: 'pi',     description: 'Pi AI CLI' },
-  { id: 'gemini', label: 'gemini', description: 'Google Gemini CLI' },
-  { id: 'claude', label: 'claude', description: 'Anthropic Claude Code' },
-  { id: 'agy',    label: 'agy',    description: 'Antigravity CLI' },
-] as const;
-
-const PROVIDER_META: Record<string, { icon: React.ReactNode; color: string }> = {
-  gemini: { icon: <Sparkles className="h-4 w-4" />, color: 'text-blue-500' },
-  openai: { icon: <Bot className="h-4 w-4" />,      color: 'text-emerald-500' },
-  ollama: { icon: <Server className="h-4 w-4" />,    color: 'text-orange-500' },
-  'openai-compat': { icon: <Network className="h-4 w-4" />, color: 'text-purple-500' },
-  'openai-compatible': { icon: <Network className="h-4 w-4" />, color: 'text-purple-500' },
-};
-
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function SettingsView() {
   const [settings, setSettings] = useState<FactorySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testingCli, setTestingCli] = useState(false);
-  const [cliTestResult, setCliTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({});
 
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [addType, setAddType] = useState('openai');
-  const [addName, setAddName] = useState('OpenAI');
-  const [addBaseUrl, setAddBaseUrl] = useState('https://api.openai.com/v1');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+  const [modalType, setModalType] = useState('custom');
+  const [modalProvider, setModalProvider] = useState<Partial<LLMProvider>>({});
+  
+  const [showKey, setShowKey] = useState(false);
+  const [fetchingModels, setFetchingModels] = useState(false);
 
   // ── Fetch settings on mount ──
 
@@ -78,14 +60,6 @@ export function SettingsView() {
 
   // ── Helpers ──
 
-  const updateProvider = (id: string, updates: Partial<LLMProvider>) => {
-    if (!settings) return;
-    setSettings({
-      ...settings,
-      providers: settings.providers.map(p => p.id === id ? { ...p, ...updates } : p),
-    });
-  };
-
   const deleteProvider = (id: string) => {
     if (!settings) return;
     setSettings({
@@ -95,39 +69,74 @@ export function SettingsView() {
     });
   };
 
-  const handleTypeChange = (val: string) => {
-    setAddType(val);
-    if (val === 'openai') { setAddName('OpenAI'); setAddBaseUrl('https://api.openai.com/v1'); }
-    else if (val === 'gemini') { setAddName('Google Gemini'); setAddBaseUrl(''); }
-    else if (val === 'ollama') { setAddName('Ollama'); setAddBaseUrl('http://localhost:11434'); }
-    else if (val === 'lmstudio') { setAddName('LM Studio'); setAddBaseUrl('http://localhost:1234/v1'); }
-    else if (val === 'openrouter') { setAddName('OpenRouter'); setAddBaseUrl('https://openrouter.ai/api/v1'); }
-    else if (val === 'custom') { setAddName('Custom Provider'); setAddBaseUrl('https://api.example.com/v1'); }
+  const handleModalTypeChange = (val: string) => {
+    setModalType(val);
+    let kind: LLMProvider['kind'] = 'openai-compat';
+    let name = 'Custom API';
+    let baseUrl = 'https://api.example.com/v1';
+
+    if (val === 'openai') { kind = 'openai'; name = 'OpenAI'; baseUrl = 'https://api.openai.com/v1'; }
+    else if (val === 'gemini') { kind = 'gemini'; name = 'Google Gemini'; baseUrl = ''; }
+    else if (val === 'ollama') { kind = 'ollama'; name = 'Ollama'; baseUrl = 'http://localhost:11434'; }
+    else if (val === 'lmstudio') { kind = 'openai-compat'; name = 'LM Studio'; baseUrl = 'http://localhost:1234/v1'; }
+    else if (val === 'openrouter') { kind = 'openai-compat'; name = 'OpenRouter'; baseUrl = 'https://openrouter.ai/api/v1'; }
+
+    setModalProvider(prev => ({
+      ...prev,
+      kind,
+      name,
+      baseUrl: kind !== 'gemini' ? baseUrl : undefined,
+    }));
   };
 
-  const handleAddProvider = () => {
-    if (!settings) return;
-    
-    let kind: LLMProvider['kind'] = 'openai-compat';
-    if (addType === 'openai') kind = 'openai';
-    if (addType === 'gemini') kind = 'gemini';
-    if (addType === 'ollama') kind = 'ollama';
-
-    const newProvider: LLMProvider = {
-      id: `${addType}-${Date.now()}`,
-      name: addName,
-      kind,
+  const openAddModal = () => {
+    setModalMode('add');
+    setModalType('custom');
+    setModalProvider({
+      id: `custom-${Date.now()}`,
+      name: 'Custom API',
+      kind: 'openai-compat',
       enabled: true,
       models: [],
-      baseUrl: addType !== 'gemini' ? addBaseUrl : undefined,
+      baseUrl: 'https://api.example.com/v1',
       apiKey: '',
-    };
-    
-    setSettings({
-      ...settings,
-      providers: [...settings.providers, newProvider]
+      defaultModel: ''
     });
-    setIsAddOpen(false);
+    setShowKey(false);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (provider: LLMProvider) => {
+    setModalMode('edit');
+    // Try to infer the preset type
+    let type = 'custom';
+    if (provider.kind === 'openai') type = 'openai';
+    else if (provider.kind === 'gemini') type = 'gemini';
+    else if (provider.kind === 'ollama') type = 'ollama';
+    else if (provider.name === 'LM Studio') type = 'lmstudio';
+    else if (provider.name === 'OpenRouter') type = 'openrouter';
+    
+    setModalType(type);
+    setModalProvider({ ...provider });
+    setShowKey(false);
+    setModalOpen(true);
+  };
+
+  const handleSaveModal = () => {
+    if (!settings) return;
+    
+    if (modalMode === 'add') {
+      setSettings({
+        ...settings,
+        providers: [...settings.providers, modalProvider as LLMProvider]
+      });
+    } else {
+      setSettings({
+        ...settings,
+        providers: settings.providers.map(p => p.id === modalProvider.id ? (modalProvider as LLMProvider) : p)
+      });
+    }
+    setModalOpen(false);
   };
 
   // ── Save ──
@@ -148,73 +157,29 @@ export function SettingsView() {
     finally { setSaving(false); }
   };
 
-  // ── Test CLI ──
-
-  const testCli = async () => {
-    if (!settings?.defaultCli) return;
-    setTestingCli(true);
-    setCliTestResult(null);
-    try {
-      const res = await fetch('/api/settings/test-cli', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cli: settings.defaultCli }),
-      });
-      const result = await res.json();
-      setCliTestResult(result);
-      if (result.ok) toast.success(result.message);
-      else toast.error(result.message);
-    } catch {
-      setCliTestResult({ ok: false, message: 'Test request failed' });
-      toast.error('CLI test failed');
-    } finally { setTestingCli(false); }
-  };
-
   // ── Fetch Models ──
 
-  const fetchModels = async (providerId: string) => {
-    if (!settings) return;
-    const provider = settings.providers.find(p => p.id === providerId);
-    if (!provider) return;
-
-    setFetchingModels(prev => ({ ...prev, [providerId]: true }));
+  const fetchModels = async () => {
+    if (!modalProvider.id) return;
+    setFetchingModels(true);
     try {
       const res = await fetch('/api/settings/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: provider.id,
-          apiKey: provider.apiKey,
-          baseUrl: provider.baseUrl,
-          kind: provider.kind,
+          provider: modalProvider.id,
+          apiKey: modalProvider.apiKey,
+          baseUrl: modalProvider.baseUrl,
+          kind: modalProvider.kind,
         }),
       });
       const data = await res.json();
       if (data.ok && data.models) {
-        // Update models in settings
-        setSettings(prev => {
-          if (!prev) return null;
-          const updatedProviders = prev.providers.map(p => {
-            if (p.id === providerId) {
-              return {
-                ...p,
-                models: data.models,
-                defaultModel: p.defaultModel || (data.models[0]?.id || ''),
-              };
-            }
-            return p;
-          });
-          
-          const buildModel = prev.activeProvider === providerId 
-            ? (provider.defaultModel || data.models[0]?.id || '')
-            : prev.buildModel;
-
-          return {
-            ...prev,
-            providers: updatedProviders,
-            buildModel,
-          };
-        });
+        setModalProvider(prev => ({
+          ...prev,
+          models: data.models,
+          defaultModel: prev.defaultModel || (data.models[0]?.id || ''),
+        }));
         toast.success(data.message || 'Models fetched successfully');
       } else {
         toast.error(data.message || 'Failed to fetch models');
@@ -222,7 +187,7 @@ export function SettingsView() {
     } catch {
       toast.error('Failed to fetch models');
     } finally {
-      setFetchingModels(prev => ({ ...prev, [providerId]: false }));
+      setFetchingModels(false);
     }
   };
 
@@ -240,289 +205,282 @@ export function SettingsView() {
     );
   }
 
-  return (
-    <div className="space-y-6 max-w-2xl">
+  const needsApiKey = modalProvider.kind !== 'ollama';
+  const needsBaseUrl = modalProvider.kind === 'ollama' || modalProvider.kind === 'openai-compat' || modalProvider.kind === 'openai';
 
-      {/* ─── Header ─── */}
-      <div className="flex items-center justify-between pb-4 border-b border-border/40">
+  const enabledProviders = settings.providers?.filter((p: any) => p.enabled) || [];
+  const availableModels = enabledProviders.map((p: any) => {
+    const modelId = p.defaultModel || p.kind;
+    const modelObj = (p.models || []).find((m: any) => m.id === modelId);
+    let modelName = modelObj ? (modelObj.name || modelObj.id) : modelId;
+    if (modelName.includes(':')) {
+      modelName = modelName.split(':').slice(1).join(':').trim();
+    }
+    return {
+      providerId: p.id,
+      providerName: p.name,
+      modelId,
+      modelName,
+    };
+  }).filter((m: any) => m.modelId);
+
+  const currentCompoundValue = settings.activeProvider && settings.buildModel
+    ? `${settings.activeProvider}:::${settings.buildModel}`
+    : '';
+
+  const handleGlobalModelChange = (compoundValue: string) => {
+    if (compoundValue === 'none') return;
+    const [providerId, modelId] = compoundValue.split(':::');
+    setSettings({ ...settings, activeProvider: providerId, buildModel: modelId });
+  };
+
+  return (
+    <div className="space-y-8 max-w-4xl pb-16">
+      
+      {/* ─── Header Section ─── */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight text-foreground">Settings</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Configure build CLI and API provider credentials.</p>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Model Management</h2>
+          <p className="text-sm text-muted-foreground mt-1">Configure APIs and download local models to use in your chats.</p>
         </div>
-        <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5 text-xs font-semibold">
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          Save
-        </Button>
+        <div className="flex flex-wrap gap-3 w-full md:w-auto">
+          <Button onClick={openAddModal} variant="outline" className="gap-1.5 shadow-sm">
+            <Plus className="h-4 w-4" />
+            Add Provider
+          </Button>
+          <Button onClick={handleSave} disabled={saving} className="gap-2 shadow-sm">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Changes
+          </Button>
+        </div>
       </div>
 
-      {/* ─── Section 1: CLI Selection ─── */}
-      <Card className="p-5 border border-border/40 space-y-4">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-xs font-semibold text-foreground">Default CLI</h3>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Select
-            value={settings.defaultCli || ''}
-            onValueChange={(val) => {
-              setSettings({ ...settings, defaultCli: val || undefined });
-              setCliTestResult(null);
-            }}
-          >
-            <SelectTrigger className="w-[180px] h-9 text-xs font-mono">
-              <SelectValue placeholder="Select CLI…" />
-            </SelectTrigger>
-            <SelectContent>
-              {CLI_OPTIONS.map(cli => (
-                <SelectItem key={cli.id} value={cli.id} className="text-xs font-mono">
-                  <span className="font-semibold">{cli.label}</span>
-                  <span className="text-muted-foreground ml-2">— {cli.description}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={testCli}
-            disabled={!settings.defaultCli || testingCli}
-            className="text-xs gap-1.5 h-9"
-          >
-            {testingCli ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Terminal className="h-3.5 w-3.5" />}
-            Test
-          </Button>
-
-          {cliTestResult && (
-            <div className={cn(
-              "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border",
-              cliTestResult.ok
-                ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 border-emerald-500/20"
-                : "text-destructive bg-destructive/5 border-destructive/20"
-            )}>
-              {cliTestResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-              {cliTestResult.message}
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* ─── Section 3: LLM Provider Cards ─── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-xs font-semibold text-foreground">LLM Providers</h3>
-            <span className="text-[10px] text-muted-foreground">(for direct API routing)</span>
-          </div>
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5">
-                <Plus className="h-3.5 w-3.5" />
-                Add Provider
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add LLM Provider</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Provider Preset</Label>
-                  <Select value={addType} onValueChange={handleTypeChange}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="openai">OpenAI</SelectItem>
-                      <SelectItem value="gemini">Google Gemini</SelectItem>
-                      <SelectItem value="ollama">Ollama</SelectItem>
-                      <SelectItem value="lmstudio">LM Studio</SelectItem>
-                      <SelectItem value="openrouter">OpenRouter</SelectItem>
-                      <SelectItem value="custom">Custom (OpenAI Compatible)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Name</Label>
-                  <Input value={addName} onChange={e => setAddName(e.target.value)} className="h-9 text-xs" />
-                </div>
-                {addType !== 'gemini' && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Base URL</Label>
-                    <Input value={addBaseUrl} onChange={e => setAddBaseUrl(e.target.value)} className="h-9 text-xs" />
-                  </div>
+      {/* ─── Global Settings ─── */}
+      <div className="space-y-4">
+        <h3 className="text-base font-semibold text-foreground">Global Settings</h3>
+        <Card className="p-6 border border-border/40 bg-card space-y-4">
+          <div className="grid gap-2">
+            <Label>Default Chat & Build Model</Label>
+            <Select value={currentCompoundValue || undefined} onValueChange={handleGlobalModelChange}>
+              <SelectTrigger className="w-[300px] h-9">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableModels.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    No models available
+                  </SelectItem>
+                ) : (
+                  availableModels.map((m: any) => (
+                    <SelectItem key={`${m.providerId}:::${m.modelId}`} value={`${m.providerId}:::${m.modelId}`}>
+                      {m.modelName} ({m.providerName})
+                    </SelectItem>
+                  ))
                 )}
-                <Button onClick={handleAddProvider} className="w-full h-9 text-xs">Add Provider</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">This is the global default model used for chat and executing builds. You can still override it for specific projects in their Project Settings.</p>
+          </div>
+        </Card>
+      </div>
 
+      {/* ─── Added Models ─── */}
+      <div className="space-y-4">
+        <h3 className="text-base font-semibold text-foreground">Added Models</h3>
+        
         {settings.providers.length === 0 && (
-          <div className="text-center py-8 border border-dashed border-border/40 rounded-lg text-muted-foreground text-sm">
-            No providers added yet. Click &ldquo;Add Provider&rdquo; to get started.
+          <div className="text-center py-12 border border-dashed border-border/40 rounded-xl bg-black/10 text-muted-foreground text-sm">
+            No providers added yet. Click <span className="font-semibold text-foreground">&ldquo;+ Add Provider&rdquo;</span> to get started.
           </div>
         )}
 
-        {settings.providers.map(provider => {
-          const resolvedKind = (provider.kind === 'builtin' || !provider.kind) ? provider.id : provider.kind;
-          const meta = PROVIDER_META[resolvedKind] || PROVIDER_META['openai-compatible'] || { icon: <Bot className="h-4 w-4" />, color: 'text-muted-foreground' };
-          const isActive = settings.activeProvider === provider.id;
-          const showKey = showKeys[provider.id] || false;
-          const needsApiKey = resolvedKind !== 'ollama';
-          const needsBaseUrl = resolvedKind === 'ollama' || resolvedKind === 'openai-compat' || resolvedKind === 'openai';
-
-          return (
-            <Card
-              key={provider.id}
-              className={cn(
-                "p-5 border space-y-4 transition-colors",
-                isActive ? "border-primary/40 bg-primary/[0.02]" : "border-border/40"
-              )}
-            >
-              {/* Card Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className={meta.color}>{meta.icon}</span>
-                  <span className="text-sm font-semibold text-foreground">{provider.name}</span>
-                  {isActive && (
-                    <Badge className="text-[9px] font-bold py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
-                      Active
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      Enabled
-                    </span>
-                    <Switch
-                      checked={provider.enabled}
-                      onCheckedChange={(val) => {
-                        updateProvider(provider.id, { enabled: val });
-                        if (!val && isActive) {
-                          setSettings(prev => prev ? {
-                            ...prev,
-                            activeProvider: '',
-                            buildModel: '',
-                          } : null);
-                        }
-                      }}
-                      size="sm"
-                    />
+        <div className="space-y-3">
+          {settings.providers.map(provider => {
+            return (
+              <Card 
+                key={provider.id} 
+                className="overflow-hidden transition-all duration-200 border border-border/40 bg-card"
+              >
+                <div className="p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        {provider.name} {provider.defaultModel ? `/ ${provider.defaultModel}` : ''}
+                        {!provider.enabled && <Badge variant="secondary" className="text-[10px] bg-muted-foreground/20 text-muted-foreground border-0">Disabled</Badge>}
+                      </div>
+                      <div className="text-[13px] text-muted-foreground mt-0.5 font-mono">
+                        {provider.defaultModel || provider.kind} &middot; {provider.baseUrl || 'Default Endpoint'}
+                      </div>
+                    </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => deleteProvider(provider.id)}
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    title="Delete Provider"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-2">
+                       {/vision|vl|llava|omni|-o|gpt-4o|claude-3-5|pixtral/i.test(provider.defaultModel || provider.kind) && (
+                         <Badge variant="outline" className="bg-transparent border-border/40 text-muted-foreground text-[10px] uppercase font-semibold rounded-full px-2.5 py-0.5 h-6">
+                           <Eye className="h-3.5 w-3.5 mr-1" /> Vision
+                         </Badge>
+                       )}
+                       {/think|r1|reasoning|o1|o3|qwq/i.test(provider.defaultModel || provider.kind) && (
+                         <Badge variant="outline" className="bg-transparent text-blue-400 text-[10px] uppercase font-semibold rounded-full px-2.5 py-0.5 h-6 border-blue-500/20 bg-blue-500/10">
+                           <Zap className="h-3.5 w-3.5 mr-1" /> Think
+                         </Badge>
+                       )}
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => openEditModal(provider)} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => deleteProvider(provider.id)} className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
 
-              {/* API Key */}
-              {needsApiKey && (
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    API Key
-                  </Label>
-                  <div className="relative">
-                    <Input
+      {/* ─── Modal ─── */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="bg-background border-border/40 text-foreground sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Network className="h-5 w-5 text-blue-500" />
+              {modalMode === 'add' ? 'Add Provider' : 'Edit Provider'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 pt-4">
+            {modalMode === 'add' && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Provider Preset</Label>
+                <Select value={modalType} onValueChange={handleModalTypeChange}>
+                  <SelectTrigger className="h-10 bg-background border-border/40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="gemini">Google Gemini</SelectItem>
+                    <SelectItem value="ollama">Ollama</SelectItem>
+                    <SelectItem value="lmstudio">LM Studio</SelectItem>
+                    <SelectItem value="openrouter">OpenRouter</SelectItem>
+                    <SelectItem value="custom">Custom API</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Enabled</Label>
+              <Switch 
+                checked={modalProvider.enabled || false} 
+                onCheckedChange={(val) => setModalProvider(prev => ({ ...prev, enabled: val }))} 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Name</Label>
+              <Input 
+                value={modalProvider.name || ''} 
+                onChange={e => setModalProvider(prev => ({ ...prev, name: e.target.value }))} 
+                className="h-10" 
+              />
+            </div>
+            
+            {needsBaseUrl && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Base URL</Label>
+                <Input 
+                  value={modalProvider.baseUrl || ''} 
+                  onChange={e => setModalProvider(prev => ({ ...prev, baseUrl: e.target.value }))} 
+                  className="h-10 font-mono text-sm" 
+                  placeholder="https://api.example.com/v1"
+                />
+              </div>
+            )}
+            
+            {needsApiKey && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">API Key</Label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <Input 
                       type={showKey ? 'text' : 'password'}
-                      placeholder={provider.id === 'gemini' ? 'AIzaSy...' : 'sk-...'}
-                      value={provider.apiKey || ''}
-                      onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
-                      className="pr-9 font-mono text-xs h-9 border-border/60"
+                      placeholder="Enter your API key..."
+                      value={modalProvider.apiKey || ''}
+                      onChange={e => setModalProvider(prev => ({ ...prev, apiKey: e.target.value }))}
+                      className="font-mono text-sm bg-background border-border/40 pr-10 focus-visible:ring-1 focus-visible:ring-blue-500 h-10"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowKeys(prev => ({ ...prev, [provider.id]: !showKey }))}
+                      onClick={() => setShowKey(!showKey)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      aria-label={showKey ? 'Hide API key' : 'Show API key'}
                     >
-                      {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* Base URL (Ollama) */}
-              {needsBaseUrl && (
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Base URL
-                  </Label>
-                  <Input
-                    placeholder="http://localhost:11434"
-                    value={provider.baseUrl || ''}
-                    onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })}
-                    className="font-mono text-xs h-9 border-border/60"
-                  />
-                </div>
-              )}
-
-              {/* Default Model */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Default Model
-                  </Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    type="button"
-                    onClick={() => fetchModels(provider.id)}
-                    disabled={fetchingModels[provider.id]}
-                    className="h-5 px-1.5 text-[9px] font-semibold gap-1 text-muted-foreground hover:text-foreground"
+                  <Button 
+                    variant="secondary" 
+                    onClick={fetchModels}
+                    disabled={fetchingModels}
                   >
-                    {fetchingModels[provider.id] ? (
-                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-2.5 w-2.5" />
-                    )}
-                    Fetch Models
+                    {fetchingModels ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Load Models
                   </Button>
                 </div>
-                {(provider.models || []).length > 0 ? (
-                  <Select
-                    value={provider.defaultModel || ''}
-                    onValueChange={(val) => {
-                      updateProvider(provider.id, { defaultModel: val });
-                      if (isActive) setSettings(prev => prev ? { ...prev, buildModel: val } : null);
-                    }}
-                  >
-                    <SelectTrigger className="font-mono text-xs h-9 border-border/60">
-                      <SelectValue placeholder="Select model…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(provider.models || []).map(m => (
-                        <SelectItem key={m.id} value={m.id} className="font-mono text-xs">
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <p className="text-[12px] text-muted-foreground italic mt-2">Click &ldquo;Load Models&rdquo; to fetch available models from the API.</p>
+              </div>
+            )}
+
+            {/* Manual Model Entry */}
+            <div className="pt-5 border-t border-border/20 space-y-3">
+              <Label className="text-sm font-medium">Manual Model Entry</Label>
+              <p className="text-[12px] text-muted-foreground mb-3">If the API doesn&apos;t list models, enter the exact model ID here or select from loaded models.</p>
+              <div className="flex items-center gap-3">
+                {(modalProvider.models || []).length > 0 ? (
+                  <div className="flex-1 flex gap-3">
+                    <Select
+                      value={modalProvider.defaultModel || ''}
+                      onValueChange={(val) => {
+                        setModalProvider(prev => ({ ...prev, defaultModel: val }));
+                      }}
+                    >
+                      <SelectTrigger className="font-mono text-sm h-10 bg-background border-border/40 flex-1">
+                        <SelectValue placeholder="Select model…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(modalProvider.models || []).map(m => (
+                          <SelectItem key={m.id} value={m.id} className="font-mono text-sm">
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 ) : (
                   <Input
-                    placeholder="e.g. gemini-2.5-pro, gpt-4o"
-                    value={provider.defaultModel || ''}
+                    placeholder="e.g. gpt-4o, claude-3-5-sonnet"
+                    value={modalProvider.defaultModel || ''}
                     onChange={(e) => {
-                      updateProvider(provider.id, { defaultModel: e.target.value });
-                      if (isActive) setSettings(prev => prev ? { ...prev, buildModel: e.target.value } : null);
+                      setModalProvider(prev => ({ ...prev, defaultModel: e.target.value }));
                     }}
-                    className="font-mono text-xs h-9 border-border/60"
+                    className="font-mono text-sm h-10 bg-background border-border/40 flex-1"
                   />
                 )}
+                <Button variant="outline" onClick={() => toast.success("Model ID selected")}>
+                  Set Default
+                </Button>
               </div>
-            </Card>
-          );
-        })}
-      </div>
+            </div>
+
+            <Button onClick={handleSaveModal} className="w-full mt-4">
+              {modalMode === 'add' ? 'Create Provider' : 'Save Changes'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
     </div>
   );
 }

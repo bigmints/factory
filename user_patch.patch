@@ -1,0 +1,32 @@
+--- ui/src/components/story-editor.tsx
++++ ui/src/components/story-editor.tsx
+@@ -15,7 +15,9 @@
+   RotateCcw,
+   Cpu,
+   Layers,
+-  Play
++  Play,
++  Terminal,
++  StopCircle
+ } from 'lucide-react';
+ 
+ interface StoryEditorProps {
+@@ -22,6 +22,9 @@
+   storyName: string;
+   onClose: () => void;
+   onSaved: () => void;
++  onViewLogs?: (file: string, name: string) => void;
++  onStopBuild?: () => void;
++  queueRunning?: boolean;
+ }
+ 
+ // Simple robust regex-based parser/updater to preserve YAML comments/formatting
+@@ -126,7 +126,7 @@
+   return updated;
+ };
+ 
+-export function StoryEditor({ storyFile, storyName, onClose, onSaved }: StoryEditorProps) {
++export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs, onStopBuild, queueRunning }: StoryEditorProps) {
+   const [content, setContent] = useState('');
+   const [originalContent, setOriginalContent] = useState('');
+   const [loading, setLoading] = useState(true);

@@ -47,7 +47,7 @@ async function execRunFactoryCommand(args: Record<string, unknown>, ctx: Orchest
     });
 }
 
-function execManageStory(args: Record<string, unknown>, ctx: OrchestratorContext): ToolResult {
+function execManageStory(args: Record<string, unknown>, _ctx: OrchestratorContext): ToolResult {
     const storyPath = String(args.storyPath || '');
     const action = String(args.action || '');
     

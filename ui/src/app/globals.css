@@ -85,8 +85,8 @@
     --muted-foreground: oklch(0.6268 0 0);
     --accent: oklch(0.3211 0 0);
     --accent-foreground: oklch(0.8109 0 0);
-    --destructive: oklch(0.594 0.0443 196.0233);
-    --destructive-foreground: oklch(0.1797 0.0043 308.1928);
+    --destructive: oklch(0.396 0.141 25.723);
+    --destructive-foreground: oklch(0.9851 0 0);
     --border: oklch(0.252 0 0);
     --input: oklch(0.252 0 0);
     --ring: oklch(0.7214 0.1337 49.9802);
@@ -200,5 +200,7 @@
     body {
         @apply bg-background text-foreground;
         letter-spacing: var(--tracking-normal);
+        overscroll-behavior-y: none;
+        -webkit-tap-highlight-color: transparent;
     }
 }

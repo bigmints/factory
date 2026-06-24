@@ -75,6 +75,11 @@ export function loadStory(storyPath: string): Story {
         else story.kind = 'app';
     }
 
+    // Normalize target if it is an object (e.g. { app: 'bbr' })
+    if (story.target && typeof story.target === 'object') {
+        story.target = (story.target as any).app || '';
+    }
+
     // Name fallback for legacy yaml
     if (!story.name) {
         if ((story as any).appName) story.name = (story as any).appName;
@@ -92,7 +97,24 @@ export function listStories(repoPath: string): { apps: string[]; features: strin
         return { apps: [], features: [] };
     }
 
-    const allFiles = readdirSync(storiesDir).filter(f => f.endsWith('.md') || f.endsWith('.yaml') || f.endsWith('.yml'));
+    const allFiles: string[] = [];
+    function walk(dir: string, basePath = '') {
+        try {
+            const entries = readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.name.startsWith('.') || entry.name.startsWith('_')) {
+                    continue;
+                }
+                const relPath = join(basePath, entry.name);
+                if (entry.isDirectory()) {
+                    walk(join(dir, entry.name), relPath);
+                } else if (entry.isFile() && (entry.name.endsWith('.md') || entry.name.endsWith('.yaml') || entry.name.endsWith('.yml'))) {
+                    allFiles.push(relPath);
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    walk(storiesDir);
     
     const apps: string[] = [];
     const features: string[] = [];
@@ -306,11 +328,10 @@ export function restoreStory(storyPath: string): string | null {
     const parentDir = dirname(storiesDir); // .factory/stories
     
     // Read the file to determine if it is a FeatureStory or AppStory
-    let isFeature = false;
     try {
         const raw = readFileSync(absPath, 'utf-8');
-        const parsed = parseYaml(raw) as any;
-        isFeature = !!(parsed && (parsed.feature || parsed.target || 'phase' in parsed));
+        // just parse to check valid yaml
+        const _parsed = parseYaml(raw) as any;
     } catch (err) {
         log('!', `Could not parse story to determine type: ${(err as Error).message?.slice(0, 100) || err}`);
     }

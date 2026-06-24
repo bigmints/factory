@@ -26,6 +26,7 @@ export interface Story {
     pages?: PagesConfig | Array<{ slug: string; type: string; title: string }>;
     deployment?: DeploymentConfig;
     dependencies?: string[];
+    agentModel?: string;
     model?: {
         collection: string;
         fields: Array<{
@@ -194,12 +195,20 @@ export interface ProjectStack {
 
 // ─── Project Management ──────────────────────────────────
 
+export interface PiSettings {
+    model?: string;
+    thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    enableSkills: boolean;
+    enableExtensions: boolean;
+}
+
 export interface Project {
     id: string;
     name: string;
     path: string;
     addedAt: string;
     stack?: ProjectStack;
+    piConfig?: PiSettings;
 }
 
 export interface ProjectsConfig {
@@ -235,7 +244,6 @@ export interface FactorySettings {
     activeProvider: string;
     buildModel: string;
     updatedAt?: string;
-    defaultCli?: 'pi' | 'gemini' | 'claude' | 'agy';
 }
 
 // ─── Build Pipeline ──────────────────────────────────────

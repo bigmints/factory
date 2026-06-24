@@ -72,7 +72,7 @@ export function IntegrationsView() {
     <div className="space-y-6 md:space-y-8 flex flex-col">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm text-muted-foreground border-b border-border/40 pb-4">
         <span className="flex items-center gap-2">
-          <Plug className="h-4 w-4 text-indigo-500" />
+          <Plug className="h-4 w-4 text-primary" />
           <span className="font-semibold text-foreground">Model Context Protocol (MCP) Integrations</span>
         </span>
         <div className="flex items-center gap-2">
@@ -90,13 +90,13 @@ export function IntegrationsView() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="h-6 w-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
         </div>
       ) : servers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground/60 border border-dashed border-border rounded-xl bg-card/5">
           <Plug className="h-8 w-8 opacity-30 mb-2" />
           <p className="text-xs font-medium">No MCP servers integrated</p>
-          <p className="text-[10px] mt-1 text-center max-w-xs">Integrate external developer toolboxes (e.g. databases, file systems) into the TPM LLM agent context.</p>
+          <p className="text-xs mt-1 text-center max-w-xs">Integrate external developer toolboxes (e.g. databases, file systems) into the TPM LLM agent context.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -106,10 +106,10 @@ export function IntegrationsView() {
                 <div className="space-y-1.5 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-xs sm:text-sm font-semibold text-foreground truncate">{server.id}</h3>
-                    <Badge variant={server.enabled ? 'default' : 'secondary'} className="text-[9px] px-1.5 py-0 rounded font-semibold uppercase tracking-wider">
+                    <Badge variant={server.enabled ? 'default' : 'secondary'} className="text-xs px-1.5 py-0 rounded font-semibold uppercase tracking-wider">
                       {server.enabled ? 'Enabled' : 'Disabled'}
                     </Badge>
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 rounded font-semibold uppercase tracking-wider">
+                    <Badge variant="outline" className="text-xs px-1.5 py-0 rounded font-semibold uppercase tracking-wider">
                       {server.transport}
                     </Badge>
                   </div>
@@ -120,7 +120,7 @@ export function IntegrationsView() {
                         <span className="font-semibold text-foreground mr-1.5">Command:</span>{server.command}
                       </p>
                       {server.args && server.args.length > 0 && (
-                        <p className="text-[11px] font-mono text-muted-foreground/80 break-all">
+                        <p className="text-xs font-mono text-muted-foreground/80 break-all">
                           <span className="font-semibold text-foreground mr-1.5">Args:</span>{server.args.join(' ')}
                         </p>
                       )}

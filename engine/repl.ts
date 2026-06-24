@@ -75,15 +75,15 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
 
         for (const file of stories.apps) {
             storyOptions.push({
-                name: file.replace(/\.yaml$/, ''),
-                file: resolve(project.path, '.factory', 'stories', 'apps', file),
+                name: file.replace(/\.yaml$/, '').replace(/\.md$/, ''),
+                file: resolve(project.path, '.factory', 'stories', file),
                 type: 'app',
             });
         }
         for (const file of stories.features) {
             storyOptions.push({
-                name: file.replace(/\.yaml$/, ''),
-                file: resolve(project.path, '.factory', 'stories', 'features', file),
+                name: file.replace(/\.yaml$/, '').replace(/\.md$/, ''),
+                file: resolve(project.path, '.factory', 'stories', file),
                 type: 'feature',
             });
         }

@@ -141,11 +141,11 @@ export async function handleWorker(): Promise<void> {
     const subcommand = args[1];
     if (subcommand === 'cli' || subcommand === 'default-cli') {
         const cliName = args[2];
-        const { loadSettings, saveSettings } = await import('../config.ts');
+        const { loadSettings } = await import('../config.ts');
         if (!cliName) {
             try {
-                const settings = loadSettings();
-                console.log(`Current default CLI: ${settings.defaultCli || 'not set (auto-detect)'}`);
+                loadSettings();
+                console.log(`Current default CLI: not set (auto-detect)`);
             } catch {
                 console.log('Current default CLI: not set (auto-detect)');
             }
@@ -157,15 +157,16 @@ export async function handleWorker(): Promise<void> {
             process.exit(1);
         }
         try {
-            let settings: any;
             try {
-                settings = loadSettings();
+                loadSettings();
             } catch {
-                settings = { providers: [], activeProvider: '', buildModel: '' };
+                // ignore
             }
-            settings.defaultCli = cliName;
-            saveSettings(settings);
-            console.log(`✓ Default CLI set to: ${cliName}`);
+            // Default CLI is no longer supported globally. We keep this command for backwards compatibility 
+            // but just ignore the setting.
+            // settings.defaultCli = cliName;
+            // saveSettings(settings);
+            console.log(`✓ Default CLI is deprecated. Using auto-detected CLI: ${cliName}`);
             process.exit(0);
         } catch (err: any) {
             console.error(`Error saving settings: ${err.message}`);

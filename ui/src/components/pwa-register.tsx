@@ -85,7 +85,7 @@ export function PWARegister() {
         </div>
         <div className="flex-1">
           <p className="text-xs font-medium">Install Factory</p>
-          <p className="text-[10px] text-muted-foreground">Add to home screen</p>
+          <p className="text-xs text-muted-foreground">Add to home screen</p>
         </div>
         <button
           onClick={handleInstall}

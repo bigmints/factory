@@ -18,7 +18,7 @@ const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destruc
 export function StatusBadge({ status }: StatusBadgeProps) {
   const config = statusConfig[status] || { variant: 'secondary' as const, label: status };
   return (
-    <Badge variant={config.variant} className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5">
+    <Badge variant={config.variant} className="text-xs sm:text-xs px-1.5 sm:px-2 py-0.5">
       {config.label}
     </Badge>
   );

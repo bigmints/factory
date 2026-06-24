@@ -30,7 +30,8 @@ import { spawn } from 'node:child_process';
 import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import { log } from './log.ts';
 import { buildCliInvocation, buildSpawnEnv } from './cli-adapter.ts';
-import type { GeneratedFile } from './types.ts';
+import { getActiveProvider } from './config.ts';
+import type { GeneratedFile, PiSettings } from './types.ts';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -43,6 +44,8 @@ export interface CliSessionResult {
     interventionReason?: string; // STALL, LOOP, ASKING, RATE_LIMIT
     /** Last ~3 000 characters of combined stdout + stderr. */
     output: string;
+    /** Agent's pure text output for summary generation */
+    textOutput?: string;
     /** Captured conversation ID (agy-specific thread continuity). */
     threadId?: string;
     /** Files detected in the target directory after the session. */
@@ -58,10 +61,14 @@ export interface CliSessionOptions {
     cwd: string;
     /** Root of the Factory project (for log files, story files, queue). */
     repoPath: string;
-    /** Relative path of the story file (e.g. 'apps/my-app.yaml'). */
+    /** The story file being processed (e.g. apps/my-app.md). */
     storyFile: string;
+    /** The model ID to use (e.g. openai/gpt-4o), overriding settings */
+    model?: string;
     /** Optional thread ID for agy conversation continuity. */
     threadId?: string;
+    /** Project-specific Pi configuration (thinking level, skills, etc.) */
+    piConfig?: PiSettings;
 }
 
 // ─── Detection Constants ─────────────────────────────────
@@ -74,6 +81,12 @@ const LOOP_WINDOW_BYTES = 500;
 
 /** How often to run the loop detector (ms). */
 const LOOP_CHECK_MS = 15_000;
+
+/** Maximum allowed tool calls per session to prevent infinite loops. */
+const MAX_TOOL_CALLS = 150;
+
+/** Maximum allowed buffer size (in bytes) to prevent infinite loops generating massive logs (5MB). */
+const MAX_BUFFER_SIZE_BYTES = 5 * 1024 * 1024;
 
 /** Patterns that indicate the CLI is waiting for interactive user input. */
 const QUESTION_PATTERNS: RegExp[] = [
@@ -123,6 +136,10 @@ const THREAD_ID_RE = /Conversation ID:\s*([a-f0-9-]+)/i;
  *     - non-0 → 'failed'
  */
 export function runCliSession(options: CliSessionOptions): Promise<CliSessionResult> {
+    if (options.cliName === 'pi') {
+        return runPiSessionViaSdk(options);
+    }
+
     const { cliName, prompt, cwd, repoPath, storyFile, threadId } = options;
 
     // Ensure the target directory exists
@@ -153,10 +170,11 @@ export function runCliSession(options: CliSessionOptions): Promise<CliSessionRes
     return new Promise<CliSessionResult>((promiseResolve) => {
         const child = spawn(invocation.binary, invocation.args, {
             cwd: resolvedCwd,
-            stdio: ['ignore', 'pipe', 'pipe'],
+            stdio: ['pipe', 'pipe', 'pipe'],
             env: buildSpawnEnv(),
             detached: true,
         });
+        child.stdin?.end();
 
         // ── Mutable session state ────────────────────────
         let buffer = '';
@@ -217,6 +235,24 @@ export function runCliSession(options: CliSessionOptions): Promise<CliSessionRes
         let loopRepeatCount = 0;
         const loopTimer = setInterval(() => {
             if (killed || deliveryDetected) return;
+
+            // Check for runaway buffer size
+            if (buffer.length > MAX_BUFFER_SIZE_BYTES) {
+                killProcessGroup(
+                    `LOOP: Output exceeded maximum allowed size (5MB) — CLI is likely stuck in an infinite loop`,
+                );
+                return;
+            }
+
+            // Check for runaway tool calls
+            const toolCallMatches = buffer.match(/\*\*🛠️ Tool Call:\*\*/g);
+            if (toolCallMatches && toolCallMatches.length > MAX_TOOL_CALLS) {
+                killProcessGroup(
+                    `LOOP: Exceeded maximum allowed tool calls (${MAX_TOOL_CALLS}) — CLI is likely stuck in an infinite loop`,
+                );
+                return;
+            }
+
             const tail = buffer.slice(-LOOP_WINDOW_BYTES);
             if (tail.length >= LOOP_WINDOW_BYTES && tail === prevTail) {
                 loopRepeatCount++;
@@ -421,3 +457,144 @@ export function scanDirTree(dir: string): GeneratedFile[] {
     walk(dir);
     return files;
 }
+
+// ─── Native SDK Implementation ───────────────────────────
+
+async function runPiSessionViaSdk(options: CliSessionOptions): Promise<CliSessionResult> {
+    const { prompt, cwd, repoPath, storyFile } = options;
+    const resolvedCwd = resolve(cwd);
+    if (!existsSync(resolvedCwd)) mkdirSync(resolvedCwd, { recursive: true });
+
+    log('→', `Running: pi (via SDK) in ${resolvedCwd}`);
+    log('→', `Prompt (${prompt.length} chars): ${prompt.slice(0, 120)}${prompt.length > 120 ? '…' : ''}`);
+
+    const logsDir = join(repoPath, '.factory', 'logs');
+    mkdirSync(logsDir, { recursive: true });
+    const storySlug = storyFile.split('/').pop()?.replace(/\.ya?ml$/, '') || 'build';
+    const cliLogPath = join(logsDir, `cli-${storySlug}.log`);
+    const logStream = createWriteStream(cliLogPath, { flags: 'a' });
+    logStream.on('error', () => { /* ignore */ });
+    logStream.write(
+        `\n${'='.repeat(60)}\n[${new Date().toISOString()}] sdk-session → pi\nCWD: ${resolvedCwd}\n${'='.repeat(60)}\n`,
+    );
+    log('→', `SDK log: tail -f ${cliLogPath}`);
+
+    let outputBuffer = '';
+    let textBuffer = '';
+
+    try {
+        const { AuthStorage, createAgentSession, SessionManager, ModelRegistry } = await import('@earendil-works/pi-coding-agent');
+
+        // Setup Auth using our existing config logic
+        const authStorage = AuthStorage.create();
+        const registry = ModelRegistry.create(authStorage);
+        const provider = getActiveProvider();
+        if (provider?.apiKey) {
+            const kindStr = provider.kind as string;
+            if (kindStr === 'openai-compat' || kindStr === 'openai') {
+                authStorage.setRuntimeApiKey('openai', provider.apiKey);
+                process.env.OPENAI_API_KEY = provider.apiKey;
+                if (provider.baseUrl?.includes('openrouter') || provider.name?.toLowerCase().includes('openrouter')) {
+                    process.env.OPENROUTER_API_KEY = provider.apiKey;
+                }
+            } else if (kindStr === 'anthropic') {
+                authStorage.setRuntimeApiKey('anthropic', provider.apiKey);
+            } else if (kindStr === 'google') {
+                authStorage.setRuntimeApiKey('google', provider.apiKey);
+            }
+        }
+        if (provider?.baseUrl) {
+            process.env.OPENAI_BASE_URL = provider.baseUrl;
+        }
+
+        registry.refresh();
+        let agentModel;
+        
+        // 1. If options.model is explicitly passed (e.g. from the story file), use that
+        if (options.model) {
+            const [providerName, modelId] = options.model.split('/');
+            if (providerName && modelId) {
+                agentModel = registry.find(providerName, modelId);
+            }
+        } 
+        // 2. Otherwise, unify with TPM by defaulting to the global activeProvider model
+        if (!agentModel && provider?.defaultModel) {
+            agentModel = registry.find(provider.kind, provider.defaultModel);
+        }
+
+        const { session } = await createAgentSession({
+            cwd: resolvedCwd,
+            authStorage,
+            modelRegistry: registry,
+            model: agentModel,
+            sessionManager: SessionManager.inMemory(),
+            thinkingLevel: options.piConfig?.thinkingLevel || 'low',
+        });
+
+        session.subscribe((event) => {
+            if (event.type === 'message_update') {
+                const subEvent = event.assistantMessageEvent;
+                if (subEvent.type === 'text_delta') {
+                    outputBuffer += subEvent.delta;
+                    textBuffer += subEvent.delta;
+                    logStream.write(subEvent.delta);
+                } else if (subEvent.type === 'thinking_start') {
+                    const msg = `\n> _Thinking..._\n> `;
+                    outputBuffer += msg;
+                    logStream.write(msg);
+                } else if (subEvent.type === 'thinking_delta') {
+                    outputBuffer += subEvent.delta;
+                    logStream.write(subEvent.delta);
+                } else if (subEvent.type === 'thinking_end') {
+                    logStream.write(`\n\n`);
+                } else if (subEvent.type === 'toolcall_start') {
+                    const tc = subEvent.partial.content[subEvent.contentIndex] as any;
+                    const msg = `\n\n**🛠️ Tool Call:** \`${tc?.name || 'unknown'}\`\n\`\`\`json\n`;
+                    outputBuffer += msg;
+                    logStream.write(msg);
+                } else if (subEvent.type === 'toolcall_delta') {
+                    outputBuffer += subEvent.delta;
+                    logStream.write(subEvent.delta);
+                } else if (subEvent.type === 'toolcall_end') {
+                    const msg = `\n\`\`\`\n\n`;
+                    outputBuffer += msg;
+                    logStream.write(msg);
+                }
+            } else if (event.type === 'tool_execution_end') {
+                const resStr = event.result?.content?.[0]?.text || '';
+                const lines = resStr.split('\n');
+                const truncated = lines.length > 50 ? lines.slice(0, 50).join('\n') + `\n... (truncated ${lines.length - 50} lines)` : resStr;
+                const msg = `**Result:**\n\`\`\`\n${truncated}\n\`\`\`\n\n`;
+                outputBuffer += msg;
+                logStream.write(msg);
+            }
+        });
+
+        await session.prompt(prompt);
+
+        logStream.write(`\n[${new Date().toISOString()}] SDK session complete\n`);
+        logStream.end();
+        log('✓', 'SDK DELIVERY COMPLETE');
+
+        return {
+            status: 'delivered',
+            exitCode: 0,
+            output: outputBuffer.slice(-3000),
+            textOutput: textBuffer.trim(),
+            files: scanDirTree(resolvedCwd),
+        };
+    } catch (err: any) {
+        logStream.write(`\n[${new Date().toISOString()}] SDK session failed: ${err.message}\n`);
+        logStream.end();
+        log('!', `SDK session failed: ${err.message}`);
+        
+        return {
+            status: 'failed',
+            exitCode: 1,
+            output: outputBuffer.slice(-3000) + `\nError: ${err.message}`,
+            textOutput: textBuffer.trim(),
+            files: scanDirTree(resolvedCwd),
+        };
+    }
+}
+

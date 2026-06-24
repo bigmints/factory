@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 
 import { useState, useEffect, useSyncExternalStore, useRef, useMemo, useCallback } from "react";
 import { toast } from "sonner";
@@ -8,10 +9,13 @@ import { AddProject } from "./add-project";
 import { AppSidebar } from "./app-sidebar";
 import { ReportViewer } from "./report-viewer";
 import { KnowledgeViewer } from "./knowledge-viewer";
-import { HeaderSelectors } from "./header-selectors";
+import { ModelSelector } from "./model-selector";
+
 import { StoryEditor } from "./story-editor";
 import { SkillsView } from "./skills-view";
 import { ProjectsView } from "./projects-view";
+import { ProjectSettingsView } from "./project-settings-view";
+import { ProjectSwitcher } from "./project-switcher";
 import { IntegrationsView } from "./integrations-view";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
@@ -23,6 +27,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   CheckCircle2,
   MessageSquare,
@@ -35,6 +40,11 @@ import {
   List,
   PanelRight,
   PanelLeft,
+  Plus,
+  XCircle,
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -42,6 +52,34 @@ import { useTpmChat } from "@/hooks/use-tpm-chat";
 import { tpmStore, type ChatMessage } from "@/lib/tpm-chat-store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useSidebar } from "@/components/ui/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+const LeftSidebarBridgeContext = React.createContext<{ setOpenMobile: (open: boolean) => void }>({ setOpenMobile: () => {} });
+
+const LeftMobileSidebarBridge = ({ children }: { children: React.ReactNode }) => {
+  const { setOpenMobile } = useSidebar();
+  return <LeftSidebarBridgeContext.Provider value={{ setOpenMobile }}>{children}</LeftSidebarBridgeContext.Provider>;
+};
+
+const RightSidebarTrigger = () => {
+  const { setOpenMobile, isMobile, toggleSidebar, state } = useSidebar();
+  const isOpen = state === "expanded";
+  return (
+    <Button 
+      variant="ghost" 
+      size="icon" 
+      className={cn("h-8 w-8 rounded-full", isOpen ? "text-primary bg-accent" : "text-muted-foreground hover:text-foreground hover:bg-accent")}
+      onClick={() => {
+        if (isMobile) setOpenMobile(true);
+        else toggleSidebar();
+      }}
+    >
+      <PanelRight className="h-4 w-4" />
+    </Button>
+  );
+};
+
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -111,8 +149,15 @@ function extractAllStories(content: string): ParsedStory[] {
 export default function Dashboard() {
   const [input, setInput] = useState("");
 
-  const [view, setView] = useState<"board" | "settings" | "reports" | "add-project" | "knowledge" | "skills" | "projects" | "integrations">("board");
-  const [viewMode, setViewMode] = useState<"board" | "list">("board");
+  const [view, setView] = useState<"board" | "settings" | "reports" | "add-project" | "knowledge" | "skills" | "projects" | "integrations" | "project-settings">("board");
+  const [_viewMode, setViewMode] = useState<"board" | "list">("board");
+  const isMobile = useIsMobile();
+  const viewMode = isMobile ? "list" : _viewMode;
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
   const [editingStory, setEditingStory] = useState<{ file: string; name: string } | null>(null);
 
@@ -136,7 +181,12 @@ export default function Dashboard() {
       });
       if (!res.ok) throw new Error("Failed to update status");
       toast.success(`Moved story to ${newStatus}`);
-      fetchAll();
+      await fetchAll();
+      setOptimisticStatuses((prev) => {
+        const next = { ...prev };
+        delete next[draggableId];
+        return next;
+      });
     } catch (err: any) {
       toast.error(err.message || "Failed to move story");
       setOptimisticStatuses((prev) => {
@@ -146,6 +196,33 @@ export default function Dashboard() {
       });
     }
   };
+
+  const handleRetryStory = async (file: string) => {
+    setOptimisticStatuses((prev) => ({ ...prev, [file]: "ready-to-build" }));
+    try {
+      const res = await fetch("/api/stories/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file, status: "ready-to-build" }),
+      });
+      if (!res.ok) throw new Error("Failed to retry story");
+      toast.success("Story queued for retry");
+      await fetchAll();
+      setOptimisticStatuses((prev) => {
+        const next = { ...prev };
+        delete next[file];
+        return next;
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to retry story");
+      setOptimisticStatuses((prev) => {
+        const next = { ...prev };
+        delete next[file];
+        return next;
+      });
+    }
+  };
+
   const [isLeftOpen, setIsLeftOpen] = useState(true);
   const [isRightOpen, setIsRightOpen] = useState(true);
   const [reportEntries, setReportEntries] = useState<any[]>([]);
@@ -223,12 +300,16 @@ export default function Dashboard() {
         setView("knowledge");
       } else if (hash === "skills") {
         setView("skills");
-      } else if (hash === "projects") {
+      } else if (hash === "projects" || hash === "") {
         setView("projects");
       } else if (hash === "integrations") {
         setView("integrations");
-      } else {
+      } else if (hash === "project-settings") {
+        setView("project-settings");
+      } else if (hash === "board" || hash === "plan") {
         setView("board");
+      } else {
+        setView("projects");
       }
     };
 
@@ -258,9 +339,10 @@ export default function Dashboard() {
   const [logsText, setLogsText] = useState<string>('');
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = useCallback(async (file?: string) => {
     try {
-      const res = await fetch("/api/queue/logs");
+      const url = file ? `/api/queue/logs?file=${encodeURIComponent(file)}` : "/api/queue/logs";
+      const res = await fetch(url);
       const data = await res.json();
       if (data.logs) {
         setLogsText(data.logs);
@@ -278,10 +360,10 @@ export default function Dashboard() {
       return;
     }
 
-    fetchLogs();
+    fetchLogs(viewingLogsStory.file);
 
     const interval = setInterval(() => {
-      fetchLogs();
+      fetchLogs(viewingLogsStory.file);
     }, 2000);
 
     return () => clearInterval(interval);
@@ -311,8 +393,15 @@ export default function Dashboard() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ match: string; index: number } | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
+  const [toolQuery, setToolQuery] = useState<{ match: string; index: number } | null>(null);
+  const [toolIdx, setToolIdx] = useState(0);
+  const [toolsList, setToolsList] = useState<any[]>([]);
   const [savedStories, setSavedStories] = useState<Set<string>>(new Set());
   const [savingStory, setSavingStory] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/skills').then(r => r.json()).then(d => setToolsList(d.skills || [])).catch(() => {});
+  }, []);
 
   const mentionItems = useMemo(() => {
     const items: any[] = [];
@@ -350,6 +439,35 @@ export default function Dashboard() {
     }, 0);
   };
 
+  const filteredTools = useMemo(() => {
+    if (!toolQuery) return [];
+    const q = toolQuery.match.toLowerCase();
+    const staticTools = [
+      { id: 'status', name: 'Status', description: 'What is the project status?', trigger: 'status' },
+      { id: 'stories', name: 'Stories', description: 'List all stories', trigger: 'stories' },
+      { id: 'queue', name: 'Queue', description: 'Show the build queue', trigger: 'queue' },
+    ];
+    const combined = [...staticTools, ...toolsList];
+    return combined.filter(t => t.name.toLowerCase().includes(q) || t.trigger.toLowerCase().includes(q)).slice(0, 8);
+  }, [toolQuery, toolsList]);
+
+  const insertTool = (item: any) => {
+    if (!toolQuery) return;
+    const before = input.slice(0, toolQuery.index);
+    const cursor = textareaRef.current?.selectionStart || 0;
+    const aft = input.slice(cursor);
+    setInput(`${before}/${item.trigger} ${aft}`);
+    setToolQuery(null);
+    setTimeout(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        const pos = before.length + item.trigger.length + 2;
+        textarea.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
@@ -358,8 +476,18 @@ export default function Dashboard() {
     if (m) {
       setMentionQuery({ match: m[1], index: cursor - m[1].length - 1 });
       setMentionIdx(0);
+      setToolQuery(null);
+      return;
     } else {
       setMentionQuery(null);
+    }
+
+    const t = val.slice(0, cursor).match(/(?:^|\s)\/([^/\s]*)$/);
+    if (t) {
+      setToolQuery({ match: t[1], index: cursor - t[1].length - 1 });
+      setToolIdx(0);
+    } else {
+      setToolQuery(null);
     }
   };
 
@@ -497,7 +625,7 @@ export default function Dashboard() {
             <span
               className={cn(
                 "h-1.5 w-1.5 rounded-full shrink-0",
-                isApp ? "bg-sky-500" : "bg-indigo-500",
+                isApp ? "bg-secondary" : "bg-primary",
               )}
             />
             <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
@@ -512,11 +640,27 @@ export default function Dashboard() {
 
           {mode === "board" && (
             <div className="flex items-center gap-1 shrink-0 -mt-0.5">
-              {state === "done" ? (
+              {item.status === "failed" ? (
+                <div className="flex items-center gap-1">
+                  <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 rounded-md hover:bg-rose-500/10 text-rose-500 hover:text-rose-600 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRetryStory(item.file);
+                    }}
+                    title="Retry Build"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : state === "done" ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
               ) : state === "inprogress" && ["running", "building"].includes(item.status) ? (
                 <div className="flex items-center gap-1">
-                  <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin mr-1 shrink-0" />
+                  <div className="h-3 w-3 rounded-full border border-primary border-t-transparent animate-spin mr-1 shrink-0" />
                   <Button
                     size="icon"
                     variant="ghost"
@@ -565,14 +709,31 @@ export default function Dashboard() {
             {item.type || "story"}
           </span>
           <span className="flex items-center gap-1.5">
-            {state === "done" && mode === "list" && (
+            {item.status === "failed" && mode === "list" && (
+              <div className="flex items-center gap-1 mr-1">
+                <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 rounded-md hover:bg-rose-500/10 text-rose-500 hover:text-rose-600 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRetryStory(item.file);
+                  }}
+                  title="Retry Build"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+            {state === "done" && mode === "list" && item.status !== "failed" && (
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
             )}
             {state === "inprogress" &&
               mode === "list" &&
               ["running", "building"].includes(item.status) && (
                 <div className="flex items-center gap-1 mr-1">
-                  <div className="h-3 w-3 rounded-full border border-indigo-500 border-t-transparent animate-spin mr-1 shrink-0" />
+                  <div className="h-3 w-3 rounded-full border border-primary border-t-transparent animate-spin mr-1 shrink-0" />
                   <Button
                     size="icon"
                     variant="ghost"
@@ -603,7 +764,7 @@ export default function Dashboard() {
               "px-1.5 py-0.5 rounded-xs text-[9px] font-bold uppercase tracking-wider shrink-0",
               item.status === "done" && "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
               item.status === "failed" && "bg-rose-500/10 text-rose-500 border border-rose-500/20",
-              ["building", "running"].includes(item.status) && "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20",
+              ["building", "running"].includes(item.status) && "bg-primary/10 text-primary border border-primary/20",
               ["ready-to-build", "pending"].includes(item.status) && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
               (!item.status || ["draft", "todo"].includes(item.status)) && "bg-muted text-muted-foreground border border-border"
             )}>
@@ -648,10 +809,10 @@ export default function Dashboard() {
   };
 
   const PROSE =
-    "prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-1.5 prose-pre:rounded-md prose-pre:text-[10.5px] prose-code:text-[10.5px] prose-code:bg-white/10 prose-code:px-1 prose-code:py-px prose-code:rounded prose-code:font-mono prose-a:text-indigo-400";
+    "prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-1.5 prose-pre:rounded-md prose-pre:text-[10.5px] prose-code:text-[10.5px] prose-code:bg-white/10 prose-code:px-1 prose-code:py-px prose-code:rounded prose-code:font-mono prose-a:text-primary";
 
   return (
-    <SidebarProvider open={isLeftOpen} onOpenChange={setIsLeftOpen} className="h-screen overflow-hidden">
+    <SidebarProvider open={isLeftOpen} onOpenChange={setIsLeftOpen} className="h-[100dvh] overflow-hidden">
       <AppSidebar
         activeTab={view === "board" ? "plan" : view}
         onTabChange={(tab) => {
@@ -670,84 +831,88 @@ export default function Dashboard() {
         }}
         queueRunning={queueRunning}
       />
-      <SidebarProvider 
+      <LeftMobileSidebarBridge>
+        <SidebarProvider 
         open={isRightOpen} 
         onOpenChange={setIsRightOpen} 
         className="flex-1 overflow-hidden"
         style={{ "--sidebar-width": "380px" } as React.CSSProperties}
       >
-        <SidebarInset className="h-screen overflow-hidden flex flex-col bg-background text-foreground">
+        <SidebarInset className="h-[100dvh] overflow-hidden flex flex-col bg-background text-foreground">
           {/* Header */}
           <header className="flex h-14 shrink-0 items-center justify-between px-6 border-b border-border bg-card">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => setIsLeftOpen(!isLeftOpen)} className="-ml-1 h-8 w-8 text-muted-foreground hover:text-foreground">
-                <PanelLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-semibold text-foreground flex items-center gap-2">
-                Factory{" "}
-                {activeProject ? (
-                  <span className="text-muted-foreground font-normal">
-                    / {activeProject.name}
-                  </span>
-                ) : (
-                  ""
+              <LeftSidebarBridgeContext.Consumer>
+                {({ setOpenMobile }) => (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => {
+                      if (window.innerWidth < 768) setOpenMobile(true);
+                      else setIsLeftOpen(!isLeftOpen);
+                    }} 
+                    className="-ml-1 h-8 w-8 text-muted-foreground hover:text-foreground"
+                  >
+                    <PanelLeft className="h-4 w-4" />
+                  </Button>
                 )}
-              </span>
+              </LeftSidebarBridgeContext.Consumer>
+              <ProjectSwitcher 
+                onAddProject={() => {
+                  setEditingStory(null);
+                  setView("add-project");
+                }} 
+              />
             </div>
 
             <div className="flex items-center gap-2">
-              <HeaderSelectors />
+
               
-              <Button
-                size="sm"
-                onClick={async () => {
-                  try {
-                    if (queueRunning) {
-                      await fetch("/api/queue/stop", { method: "POST" });
-                      toast("Build stopped");
-                    } else {
-                      await fetch("/api/queue/start", { method: "POST" });
-                      toast("Build started");
+              {view === "board" && (inProgressItems.length > 0 || queueRunning) && (
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      if (queueRunning) {
+                        await fetch("/api/queue/stop", { method: "POST" });
+                        toast("Build stopped");
+                      } else {
+                        await fetch("/api/queue/start", { method: "POST" });
+                        toast("Build started");
+                      }
+                    } catch {
+                      toast.error("Failed to toggle build");
                     }
-                  } catch {
-                    toast.error("Failed to toggle build");
-                  }
-                }}
-                className={cn(
-                  "h-8 px-3 text-xs font-medium rounded-full gap-1.5 shadow-sm transition-all",
-                  queueRunning
-                    ? "bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
-                    : "bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/20",
-                )}
-              >
-                {queueRunning ? (
-                  <>
-                    <StopCircle className="h-3.5 w-3.5" /> Stop All
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-3.5 w-3.5" /> Build All
-                  </>
-                )}
-              </Button>
+                  }}
+                  className={cn(
+                    "h-8 px-3 text-xs font-medium rounded-full gap-1.5 shadow-sm transition-all",
+                    queueRunning
+                      ? "bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
+                      : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-primary/20",
+                  )}
+                >
+                  {queueRunning ? (
+                    <>
+                      <StopCircle className="h-3.5 w-3.5" /> Stop All
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-3.5 w-3.5" /> Build All
+                    </>
+                  )}
+                </Button>
+              )}
 
               <div className="h-4 w-px bg-border/60 mx-1" />
 
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className={cn("h-8 w-8 rounded-full", isRightOpen ? "text-indigo-500 bg-accent" : "text-muted-foreground hover:text-foreground hover:bg-accent")}
-                onClick={() => setIsRightOpen(!isRightOpen)}
-              >
-                <PanelRight className="h-4 w-4" />
-              </Button>
+              <RightSidebarTrigger />
             </div>
           </header>
 
           {/* Main Container */}
           <main className="flex-1 flex overflow-hidden">
             {/* Left: Main Content */}
-            <div className="flex-1 flex flex-col overflow-y-auto px-4 py-4 md:py-4 scrollbar-none relative">
+            <div className={cn("flex-1 flex flex-col overflow-y-auto pt-4 scrollbar-none relative", view === "board" && viewMode === "board" ? "px-0 pb-0" : "px-4 pb-24")}>
               {editingStory && (
                 <div className="fixed inset-0 z-50 bg-background">
                   <div className="w-full h-full flex flex-col">
@@ -762,64 +927,46 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
-              {viewingLogsStory && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-                  <div className="flex flex-col w-full max-w-3xl h-[80vh] rounded-xl border border-border bg-card shadow-2xl overflow-hidden">
-                    {/* Header */}
-                    <div className="flex items-center justify-between p-4 border-b border-border bg-muted/40">
-                      <div className="flex items-center gap-2">
-                        <Terminal className="h-4 w-4 text-indigo-500 animate-pulse" />
-                        <div>
-                          <h3 className="text-sm font-bold text-foreground">
-                            Execution Logs
-                          </h3>
-                          <p className="text-xs text-muted-foreground font-mono truncate max-w-[400px]">
-                            {viewingLogsStory.name} ({viewingLogsStory.file})
-                          </p>
-                        </div>
+              <Sheet open={!!viewingLogsStory} onOpenChange={(open) => !open && setViewingLogsStory(null)}>
+                <SheetContent side="bottom" className="h-[40vh] sm:h-[50vh] p-0 flex flex-col border-t border-border bg-card">
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-3 border-b border-border bg-muted/40">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="h-4 w-4 text-primary animate-pulse" />
+                      <div>
+                        <SheetTitle className="text-sm font-bold text-foreground">
+                          Execution Logs
+                        </SheetTitle>
+                        <p className="text-xs text-muted-foreground font-mono truncate max-w-[400px]">
+                          {viewingLogsStory?.name} ({viewingLogsStory?.file})
+                        </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-lg"
-                        onClick={() => setViewingLogsStory(null)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    {/* Content (Logs text area) */}
-                    <div 
-                      ref={logsContainerRef}
-                      className="flex-1 p-4 bg-zinc-950 font-mono text-xs leading-relaxed text-zinc-300 overflow-y-auto whitespace-pre-wrap select-text scrollbar-thin"
-                    >
-                      {logsText ? (
-                        logsText
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-500">
-                          <div className="h-4 w-4 rounded-full border border-zinc-700 border-t-zinc-400 animate-spin" />
-                          <span>Waiting for logs...</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between p-3 border-t border-border bg-muted/30">
-                      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                        Real-time tailing enabled
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs font-semibold h-8 rounded-lg"
-                        onClick={() => setViewingLogsStory(null)}
-                      >
-                        Close
-                      </Button>
                     </div>
                   </div>
-                </div>
-              )}
+
+                  {/* Content (Logs text area) */}
+                  <div 
+                    ref={logsContainerRef}
+                    className="flex-1 p-4 bg-zinc-950 font-mono text-xs leading-relaxed text-zinc-300 overflow-y-auto whitespace-pre-wrap select-text scrollbar-thin"
+                  >
+                    {logsText ? (
+                      logsText
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-500">
+                        <div className="h-4 w-4 rounded-full border border-zinc-700 border-t-zinc-400 animate-spin" />
+                        <span>Waiting for logs...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between p-2 border-t border-border bg-muted/30">
+                    <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider pl-2">
+                      Real-time tailing enabled
+                    </span>
+                  </div>
+                </SheetContent>
+              </Sheet>
               {view === "settings" ? (
                 <div className="w-full max-w-2xl mx-auto">
                   <SettingsView />
@@ -837,11 +984,15 @@ export default function Dashboard() {
                     }}
                   />
                 </div>
+              ) : view === "project-settings" ? (
+                <div className="w-full max-w-4xl mx-auto py-4">
+                  <ProjectSettingsView />
+                </div>
               ) : view === "reports" ? (
                 <div className="w-full max-w-4xl mx-auto">
                   {loadingReports ? (
                     <div className="flex items-center justify-center py-20">
-                      <div className="h-6 w-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                      <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                     </div>
                   ) : (
                     <ReportViewer entries={reportEntries} stats={reportStats} />
@@ -851,7 +1002,7 @@ export default function Dashboard() {
                 <div className="w-full max-w-none">
                   {loadingKnowledge ? (
                     <div className="flex items-center justify-center py-20">
-                      <div className="h-6 w-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                      <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                     </div>
                   ) : (
                     <KnowledgeViewer data={knowledgeData} />
@@ -862,24 +1013,27 @@ export default function Dashboard() {
                   <SkillsView />
                 </div>
               ) : view === "projects" ? (
-                <div className="w-full max-w-4xl mx-auto">
-                  <ProjectsView />
+                <div className="w-full h-full">
+                  <ProjectsView onAddProject={() => {
+                    setEditingStory(null);
+                    setView("add-project");
+                  }} />
                 </div>
               ) : view === "integrations" ? (
                 <div className="w-full max-w-4xl mx-auto">
                   <IntegrationsView />
                 </div>
               ) : (
-                <div className="w-full max-w-7xl mx-auto flex flex-col gap-4">
+                <div className="w-full h-full flex flex-col gap-4 min-h-0">
                   {/* Control Bar: View Switcher & Actions */}
-                  <div className="flex items-center justify-between pb-1 shrink-0">
+                  <div className="flex items-center justify-between pb-1 shrink-0 px-4">
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       Workflow Stories
                     </span>
                     <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-0.5 bg-muted border border-border p-0.5 rounded-lg">
+                      <div className="hidden md:flex items-center gap-0.5 bg-muted border border-border p-0.5 rounded-lg">
                         <Button
-                          variant={viewMode === "board" ? "secondary" : "ghost"}
+                          variant={_viewMode === "board" ? "secondary" : "ghost"}
                           size="sm"
                           onClick={() => setViewMode("board")}
                           className="h-6 px-2 text-xs gap-1 font-medium rounded-md"
@@ -887,7 +1041,7 @@ export default function Dashboard() {
                           <LayoutGrid className="h-3 w-3" /> Board
                         </Button>
                         <Button
-                          variant={viewMode === "list" ? "secondary" : "ghost"}
+                          variant={_viewMode === "list" ? "secondary" : "ghost"}
                           size="sm"
                           onClick={() => setViewMode("list")}
                           className="h-6 px-2 text-xs gap-1 font-medium rounded-md"
@@ -900,14 +1054,47 @@ export default function Dashboard() {
 
                   {/* 3-Column Kanban Board / Stacked List */}
                   <DragDropContext onDragEnd={onDragEnd}>
-                    <div
-                      className={cn(
-                        "w-full pb-8",
-                        viewMode === "board"
-                          ? "grid grid-cols-1 lg:grid-cols-3 gap-4"
-                          : "flex flex-col gap-4",
+                    <div className={cn("w-full flex-1 min-h-0 flex flex-col mt-0", viewMode === "board" && "border-y border-border/80")}>
+                      {viewMode === "board" && (
+                        <div className="grid grid-cols-3 divide-x divide-border border-b border-border/80 bg-muted/10 shrink-0">
+                          <div className="px-4 py-3 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                              <div className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50 bg-muted/40" />
+                              Todo
+                            </h3>
+                            <span className="text-xs font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                              {todoItems.length}
+                            </span>
+                          </div>
+                          <div className="px-4 py-3 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                              <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              Ready to Build
+                            </h3>
+                            <span className="text-xs font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                              {inProgressItems.length}
+                            </span>
+                          </div>
+                          <div className="px-4 py-3 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              Done
+                            </h3>
+                            <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              {doneItems.length}
+                            </span>
+                          </div>
+                        </div>
                       )}
-                    >
+
+                      <div
+                        className={cn(
+                          "w-full flex-1 min-h-0",
+                          viewMode === "board"
+                            ? "grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border bg-background"
+                            : "flex flex-col mt-0",
+                        )}
+                      >
                       {/* Column: Todo */}
                       <Droppable droppableId="todo" isDropDisabled={viewMode !== "board"}>
                         {(provided) => (
@@ -917,32 +1104,28 @@ export default function Dashboard() {
                             className={cn(
                               "flex flex-col",
                               viewMode === "board"
-                                ? "min-h-96 bg-transparent"
+                                ? "h-full bg-transparent overflow-y-auto scrollbar-none px-4 pt-4"
                                 : "min-h-0 bg-transparent",
                             )}
                           >
-                            <div
-                              className={cn(
-                                "flex items-center justify-between shrink-0 mb-3",
-                                viewMode === "board" ? "px-1" : "px-2 pb-2",
-                              )}
-                            >
-                              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                                <div className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50 bg-muted/40" />
-                                Todo
-                              </h3>
-                              <span className="text-xs font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                                {todoItems.length}
-                              </span>
-                            </div>
-                            <div
-                              className={cn(
-                                "flex flex-col flex-1",
-                                viewMode === "board"
-                                  ? "overflow-y-auto max-h-full scrollbar-none px-1"
-                                  : "px-0 overflow-visible",
-                              )}
-                            >
+                            {viewMode === "list" && (
+                              <div 
+                                className="flex items-center justify-between shrink-0 px-4 py-3 -mx-4 border-y border-border/40 cursor-pointer hover:bg-muted/10 transition-colors"
+                                onClick={() => toggleGroup("todo")}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {collapsedGroups["todo"] ? <ChevronRight className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                                  <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full border border-muted-foreground/50 bg-muted/40" />
+                                    Todo
+                                  </h3>
+                                </div>
+                                <span className="text-sm font-bold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
+                                  {todoItems.length}
+                                </span>
+                              </div>
+                            )}
+                            <div className={cn("flex flex-col flex-1", viewMode === "list" && "px-0 overflow-visible pt-3 pb-3", viewMode === "list" && collapsedGroups["todo"] && "hidden")}>
                               {todoItems.length === 0 ? (
                                 <div className="py-8 text-center text-xs text-muted-foreground/60">
                                   No pending stories
@@ -965,32 +1148,28 @@ export default function Dashboard() {
                             className={cn(
                               "flex flex-col",
                               viewMode === "board"
-                                ? "min-h-96 bg-transparent"
-                                : "min-h-0 bg-transparent mt-4",
+                                ? "h-full bg-transparent overflow-y-auto scrollbar-none px-4 pt-4"
+                                : "min-h-0 bg-transparent",
                             )}
                           >
-                            <div
-                              className={cn(
-                                "flex items-center justify-between shrink-0 mb-3",
-                                viewMode === "board" ? "px-1" : "px-2 pb-2",
-                              )}
-                            >
-                              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                                <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                Ready to Build
-                              </h3>
-                              <span className="text-xs font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                                {inProgressItems.length}
-                              </span>
-                            </div>
-                            <div
-                              className={cn(
-                                "flex flex-col flex-1",
-                                viewMode === "board"
-                                  ? "overflow-y-auto max-h-full scrollbar-none px-1"
-                                  : "px-0 overflow-visible",
-                              )}
-                            >
+                            {viewMode === "list" && (
+                              <div 
+                                className="flex items-center justify-between shrink-0 px-4 py-3 -mx-4 border-b border-border/40 cursor-pointer hover:bg-muted/10 transition-colors"
+                                onClick={() => toggleGroup("inprogress")}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {collapsedGroups["inprogress"] ? <ChevronRight className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                                  <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-amber-500" />
+                                    Ready to Build
+                                  </h3>
+                                </div>
+                                <span className="text-sm font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">
+                                  {inProgressItems.length}
+                                </span>
+                              </div>
+                            )}
+                            <div className={cn("flex flex-col flex-1", viewMode === "list" && "px-0 overflow-visible pt-3 pb-3", viewMode === "list" && collapsedGroups["inprogress"] && "hidden")}>
                               {inProgressItems.length === 0 ? (
                                 <div className="py-8 text-center text-xs text-muted-foreground/60">
                                   No active tasks
@@ -1013,32 +1192,28 @@ export default function Dashboard() {
                             className={cn(
                               "flex flex-col",
                               viewMode === "board"
-                                ? "min-h-96 bg-transparent"
-                                : "min-h-0 bg-transparent mt-4",
+                                ? "h-full bg-transparent overflow-y-auto scrollbar-none px-4 pt-4"
+                                : "min-h-0 bg-transparent",
                             )}
                           >
-                            <div
-                              className={cn(
-                                "flex items-center justify-between shrink-0 mb-3",
-                                viewMode === "board" ? "px-1" : "px-2 pb-2",
-                              )}
-                            >
-                              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                Done
-                              </h3>
-                              <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                                {doneItems.length}
-                              </span>
-                            </div>
-                            <div
-                              className={cn(
-                                "flex flex-col flex-1",
-                                viewMode === "board"
-                                  ? "overflow-y-auto max-h-full scrollbar-none px-1"
-                                  : "px-0 overflow-visible",
-                              )}
-                            >
+                            {viewMode === "list" && (
+                              <div 
+                                className="flex items-center justify-between shrink-0 px-4 py-3 -mx-4 border-b border-border/40 cursor-pointer hover:bg-muted/10 transition-colors"
+                                onClick={() => toggleGroup("done")}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {collapsedGroups["done"] ? <ChevronRight className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                                  <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                                    Done
+                                  </h3>
+                                </div>
+                                <span className="text-sm font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">
+                                  {doneItems.length}
+                                </span>
+                              </div>
+                            )}
+                            <div className={cn("flex flex-col flex-1", viewMode === "list" && "px-0 overflow-visible pt-3 pb-3", viewMode === "list" && collapsedGroups["done"] && "hidden")}>
                               {doneItems.length === 0 ? (
                                 <div className="py-8 text-center text-xs text-muted-foreground/60">
                                   No completed items
@@ -1052,7 +1227,8 @@ export default function Dashboard() {
                         )}
                       </Droppable>
                     </div>
-                  </DragDropContext>
+                  </div>
+                </DragDropContext>
                 </div>
               )}
             </div>
@@ -1188,8 +1364,8 @@ export default function Dashboard() {
                 !messages[messages.length - 1]?.content && (
                   <div className="self-start flex items-center gap-1.5 py-2">
                     <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/70 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                     </span>
                     <span className="text-xs text-muted-foreground font-medium">
                       Thinking...
@@ -1201,6 +1377,7 @@ export default function Dashboard() {
 
             {/* Input Area */}
             <SidebarFooter className="p-4 border-t border-border shrink-0 bg-card relative">
+
               {/* Quick Actions */}
               {messages.length === 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-2 px-1">
@@ -1245,13 +1422,35 @@ export default function Dashboard() {
                 </div>
               )}
 
+              {/* Tools Dropdown */}
+              {toolQuery && filteredTools.length > 0 && (
+                <div className="absolute bottom-full left-4 right-4 mb-2 z-50 rounded-lg border border-border bg-popover p-1 shadow-lg max-h-48 overflow-y-auto">
+                  {filteredTools.map((item, idx) => (
+                    <button
+                      key={item.id}
+                      onClick={() => insertTool(item)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition-colors",
+                        idx === toolIdx ? "bg-accent text-accent-foreground font-medium" : "hover:bg-accent hover:text-accent-foreground"
+                      )}
+                    >
+                      <div className="flex flex-col gap-0.5 truncate">
+                        <span className="truncate">{item.name}</span>
+                        <span className="text-[10px] text-muted-foreground/80 truncate">{item.description}</span>
+                      </div>
+                      <span className="text-xs font-mono text-muted-foreground/60 shrink-0 ml-4">/{item.trigger}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="relative bg-muted/50 rounded-xl overflow-hidden focus-within:bg-muted transition-colors border border-border">
                 <Textarea
                   ref={textareaRef}
                   value={input}
                   onChange={handleInputChange}
-                  placeholder="Message TPM..."
-                  className="min-h-[80px] w-full resize-none bg-transparent border-0 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
+                  placeholder="Ask anything, @ to mention, / for actions"
+                  className="min-h-[100px] w-full resize-none bg-transparent border-0 px-4 py-3 pb-12 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
                   onKeyDown={(e) => {
                     if (mentionQuery && filteredMentions.length > 0) {
                       if (e.key === "ArrowDown") {
@@ -1275,12 +1474,42 @@ export default function Dashboard() {
                         return;
                       }
                     }
+                    if (toolQuery && filteredTools.length > 0) {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setToolIdx((prev) => (prev + 1) % filteredTools.length);
+                        return;
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setToolIdx((prev) => (prev - 1 + filteredTools.length) % filteredTools.length);
+                        return;
+                      }
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        insertTool(filteredTools[toolIdx]);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setToolQuery(null);
+                        return;
+                      }
+                    }
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       onSend();
                     }
                   }}
                 />
+                
+                <div className="absolute left-2 bottom-2 flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                  <ModelSelector />
+                </div>
+
                 <div className="absolute right-2 bottom-2">
                   {streaming ? (
                     <Button
@@ -1300,7 +1529,7 @@ export default function Dashboard() {
                       className={cn(
                         "h-7 w-7 rounded-lg transition-all",
                         input.trim()
-                          ? "bg-indigo-500 text-white hover:bg-indigo-600"
+                          ? "bg-primary text-primary-foreground hover:bg-primary/90"
                           : "bg-muted text-muted-foreground/30 hover:bg-muted/80",
                       )}
                       onClick={onSend}
@@ -1314,6 +1543,7 @@ export default function Dashboard() {
             </SidebarFooter>
           </Sidebar>
         </SidebarProvider>
+      </LeftMobileSidebarBridge>
     </SidebarProvider>
   );
 }

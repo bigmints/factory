@@ -135,34 +135,54 @@ export function KnowledgeViewer({ data }: KnowledgeViewerProps) {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1 pr-2 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
             {filteredDocs.length === 0 ? (
               <div className="text-center py-12 text-xs text-muted-foreground opacity-60">
                 No documents found.
               </div>
             ) : (
-              filteredDocs.map((doc) => {
-                const isSelected = doc.id === activeDocId;
-                return (
-                  <button
-                    key={doc.id}
-                    onClick={() => setSelectedDocId(doc.id)}
-                    className={cn(
-                      "w-full text-left p-3 rounded-lg border transition-all flex items-start gap-2.5 cursor-pointer",
-                      isSelected 
-                        ? "bg-primary/10 border-primary/30 text-primary shadow-sm"
-                        : "border-transparent hover:bg-muted/40 text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <FileText className={cn("h-4 w-4 shrink-0 mt-0.5", isSelected ? "text-primary" : "text-muted-foreground")} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold truncate">{doc.title}</p>
-                      <p className="text-xs text-muted-foreground/60 truncate mt-0.5 font-mono">{doc.file}</p>
+              [
+                { title: 'Blueprint (Tech Stack)', docs: filteredDocs.filter(d => d.id === 'blueprint' || d.file.endsWith('blueprint.md')) },
+                { title: 'Project Knowledge', docs: filteredDocs.filter(d => d.id === 'knowledge' || d.file.endsWith('knowledge.md')) },
+                { title: 'Project Chronicles', docs: filteredDocs.filter(d => d.id === 'chronicles' || d.file.endsWith('chronicles.md')) },
+                { title: 'Architectural Decisions (ADRs)', docs: filteredDocs.filter(d => 
+                    d.id !== 'blueprint' && !d.file.endsWith('blueprint.md') &&
+                    d.id !== 'knowledge' && !d.file.endsWith('knowledge.md') &&
+                    d.id !== 'chronicles' && !d.file.endsWith('chronicles.md')
+                )}
+              ].map((group, groupIdx) => (
+                group.docs.length > 0 && (
+                  <div key={group.title} className={cn("mb-6", groupIdx > 0 && "mt-6")}>
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 px-2">
+                      {group.title}
+                    </h3>
+                    <div className="space-y-1">
+                      {group.docs.map((doc) => {
+                        const isSelected = doc.id === activeDocId;
+                        return (
+                          <button
+                            key={doc.id}
+                            onClick={() => setSelectedDocId(doc.id)}
+                            className={cn(
+                              "w-full text-left p-3 rounded-lg border transition-all flex items-start gap-2.5 cursor-pointer",
+                              isSelected 
+                                ? "bg-primary/10 border-primary/30 text-primary shadow-sm"
+                                : "border-transparent hover:bg-muted/40 text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <FileText className={cn("h-4 w-4 shrink-0 mt-0.5", isSelected ? "text-primary" : "text-muted-foreground")} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold truncate">{doc.title}</p>
+                              <p className="text-xs text-muted-foreground/60 truncate mt-0.5 font-mono">{doc.file}</p>
+                            </div>
+                            {isSelected && <ChevronRight className="h-3 w-3 shrink-0 text-primary mt-1" />}
+                          </button>
+                        );
+                      })}
                     </div>
-                    {isSelected && <ChevronRight className="h-3 w-3 shrink-0 text-primary mt-1" />}
-                  </button>
-                );
-              })
+                  </div>
+                )
+              ))
             )}
           </div>
         </div>

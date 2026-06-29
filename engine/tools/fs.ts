@@ -57,7 +57,7 @@ export interface ToolResult {
 
 const TOOL_DEFINITIONS = [
     {
-        name: 'read_file',
+        name: 'fs_read_file',
         description: 'Read the contents of a file. Returns file content as text (capped at 100KB).',
         parameters: {
             type: 'object',
@@ -68,7 +68,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'write_file',
+        name: 'fs_write_file',
         description: 'Write content to a file. Creates parent directories if needed.',
         parameters: {
             type: 'object',
@@ -80,7 +80,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'patch_file',
+        name: 'fs_patch_file',
         description: 'Replace a specific section of a file. Finds old_content exactly and replaces it with new_content. Returns an error if old_content is not found — use read_file first to confirm current content.',
         parameters: {
             type: 'object',
@@ -93,7 +93,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'delete_file',
+        name: 'fs_delete_file',
         description: 'Delete a file from the filesystem.',
         parameters: {
             type: 'object',
@@ -104,7 +104,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'list_dir',
+        name: 'fs_list_dir',
         description: 'List files and directories. Returns a newline-separated list of entries.',
         parameters: {
             type: 'object',
@@ -116,7 +116,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'search_files',
+        name: 'fs_search_files',
         description: 'Search for a text pattern across files in a directory. Returns matching file:line snippets (max 50 results).',
         parameters: {
             type: 'object',
@@ -130,7 +130,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'run_command',
+        name: 'sys_run_command',
         description: 'Execute a shell command in the target directory. Returns stdout/stderr (capped at 50KB). Timeout: 120s.',
         parameters: {
             type: 'object',
@@ -143,7 +143,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'read_story',
+        name: 'factory_read_story',
         description: 'Read the current build story YAML file. Returns its content.',
         parameters: {
             type: 'object',
@@ -151,7 +151,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'read_blueprint',
+        name: 'factory_read_blueprint',
         description: 'Read project blueprint/context. Type must be one of: conventions, knowledge, file_tree, package_json, tsconfig.',
         parameters: {
             type: 'object',
@@ -166,7 +166,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'log_step',
+        name: 'factory_log_step',
         description: 'Log a step or message during the build. Useful for tracking progress.',
         parameters: {
             type: 'object',
@@ -178,7 +178,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'mark_complete',
+        name: 'factory_mark_complete',
         description: 'Signal that the build is complete and successful. This terminates the tool session.',
         parameters: {
             type: 'object',
@@ -189,7 +189,7 @@ const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'mark_failed',
+        name: 'factory_mark_failed',
         description: 'Signal that the build has failed and cannot proceed. This terminates the tool session.',
         parameters: {
             type: 'object',
@@ -841,18 +841,18 @@ async function execMcpTool(
 // ─── Register Tools ──────────────────────────────────────────
 
 const TOOL_HANDLERS: Record<string, (args: any, ctx: any) => any> = {
-    'read_file': execReadFile,
-    'write_file': execWriteFile,
-    'patch_file': execPatchFile,
-    'delete_file': execDeleteFile,
-    'list_dir': execListDir,
-    'search_files': execSearchFiles,
-    'run_command': execRunCommand,
-    'read_story': execReadStory,
-    'read_blueprint': execReadBlueprint,
-    'log_step': execLogStep,
-    'mark_complete': execMarkComplete,
-    'mark_failed': execMarkFailed
+    'fs_read_file': execReadFile,
+    'fs_write_file': execWriteFile,
+    'fs_patch_file': execPatchFile,
+    'fs_delete_file': execDeleteFile,
+    'fs_list_dir': execListDir,
+    'fs_search_files': execSearchFiles,
+    'sys_run_command': execRunCommand,
+    'factory_read_story': execReadStory,
+    'factory_read_blueprint': execReadBlueprint,
+    'factory_log_step': execLogStep,
+    'factory_mark_complete': execMarkComplete,
+    'factory_mark_failed': execMarkFailed
 };
 
 for (const def of TOOL_DEFINITIONS) {

@@ -89,14 +89,14 @@ function execUpdateStoryYaml(args: Record<string, unknown>, ctx: OrchestratorCon
 
 // Register Tools
 tpmToolRegistry.register({
-    name: 'read_queue',
+    name: 'tpm_read_queue',
     description: 'Read the contents of the task queue to see upcoming stories and dependencies.',
     parameters: { type: 'object', properties: {}, required: [] },
     execute: execReadQueue
 });
 
 tpmToolRegistry.register({
-    name: 'split_story',
+    name: 'tpm_split_story',
     description: 'Decompose a failing or complex story into smaller, phased feature stories.',
     parameters: {
         type: 'object',
@@ -123,7 +123,7 @@ tpmToolRegistry.register({
 });
 
 tpmToolRegistry.register({
-    name: 'update_story_yaml',
+    name: 'tpm_update_story_yaml',
     description: 'Update the YAML content of a story file (e.g. to amend requirements or stack choices).',
     parameters: {
         type: 'object',

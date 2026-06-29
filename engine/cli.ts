@@ -132,7 +132,7 @@ async function main(): Promise<void> {
     const lazyProject = () => import('./cli/project-handlers.ts');
     const lazyFeature = () => import('./cli/feature-handlers.ts');
 
-    switch (command) {
+    switch (command || 'repl') {
         case 'build':
             return handleBuild(target);
         case 'validate':

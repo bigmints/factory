@@ -112,8 +112,8 @@ export function buildToolSystemPrompt(
 
     return `You are an autonomous build engine for Factory.
 Your task: build "${storyName}" in ${targetDir}.
-Use the available tools (read_file, write_file, run_command, etc.) to complete the build.
-Call mark_complete when done or mark_failed if you cannot proceed.
+Use the available tools (fs_read_file, fs_write_file, sys_run_command, etc.) to complete the build.
+Call factory_mark_complete when done or factory_mark_failed if you cannot proceed.
 ${conventions}${knowledge}`;
 }
 

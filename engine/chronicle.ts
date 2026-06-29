@@ -6,6 +6,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 
 import { join } from 'node:path';
 import { parse as yamlParse } from 'yaml';
 import { requireActiveProvider, callProviderTextOnly } from './generate.ts';
+import { buildFileTree } from './init.ts';
 import { log, logError } from './log.ts';
 
 interface FailureRecord {
@@ -155,18 +156,22 @@ export function parseCliLogs(repoPath: string): CliConversation[] {
 
 /**
  * Distills the raw repository logs, failures, and architectural decision records (ADRs)
- * into a single high-density chronicle file at `.factory/knowledge/chronicle.md`.
+ * into two distinct files:
+ * 1. knowledge.md (Bird's eye view of approach, tech stack, architecture)
+ * 2. chronicles.md (Append-only notes of story completions: Action, What, Because, So that)
  */
-export async function distillChronicle(repoPath: string): Promise<void> {
+export async function distillKnowledgeAndChronicles(repoPath: string): Promise<void> {
     const factoryDir = join(repoPath, '.factory');
     if (!existsSync(factoryDir)) {
-        log('!', `No .factory bridge directory found in ${repoPath} — skipping chronicle distillation`);
+        log('!', `No .factory bridge directory found in ${repoPath} — skipping knowledge distillation`);
         return;
     }
 
     const knowledgeDir = join(factoryDir, 'knowledge');
     const logsDir = join(factoryDir, 'logs');
-    const chroniclePath = join(knowledgeDir, 'chronicle.md');
+    const blueprintPath = join(knowledgeDir, 'blueprint.md');
+    const knowledgePath = join(knowledgeDir, 'knowledge.md');
+    const chroniclesPath = join(knowledgeDir, 'chronicles.md');
 
     if (!existsSync(knowledgeDir)) {
         try {
@@ -177,17 +182,29 @@ export async function distillChronicle(repoPath: string): Promise<void> {
         }
     }
 
-    log('→', 'GATHERING RAW CONTEXT FOR DISTILLATION...');
+    log('→', 'GATHERING RAW CONTEXT FOR KNOWLEDGE & CHRONICLES...');
 
-    // 1. Read existing chronicle (if any)
-    let existingChronicle = '';
-    if (existsSync(chroniclePath)) {
-        try {
-            existingChronicle = readFileSync(chroniclePath, 'utf-8');
-        } catch { /* ignore */ }
+    // 1. Existing contents
+    let existingKnowledge = '';
+    if (existsSync(knowledgePath)) existingKnowledge = readFileSync(knowledgePath, 'utf-8');
+    let existingChronicles = '';
+    if (existsSync(chroniclesPath)) existingChronicles = readFileSync(chroniclesPath, 'utf-8');
+
+    // 2. Project Tree, README, and Package.json (for Knowledge)
+    const fileTree = buildFileTree(repoPath, 4);
+    let readme = '';
+    for (const f of ['README.md', 'readme.md', 'README.txt']) {
+        const p = join(repoPath, f);
+        if (existsSync(p)) {
+            readme = readFileSync(p, 'utf-8').slice(0, 5000);
+            break;
+        }
     }
+    let pkg = '';
+    const pkgPath = join(repoPath, 'package.json');
+    if (existsSync(pkgPath)) pkg = readFileSync(pkgPath, 'utf-8').slice(0, 3000);
 
-    // 2. Read failures
+    // 3. Failures
     const failures: FailureRecord[] = [];
     const failDirs = [join(logsDir, 'failures'), join(knowledgeDir, 'failures')];
     for (const failDir of failDirs) {
@@ -204,7 +221,7 @@ export async function distillChronicle(repoPath: string): Promise<void> {
         }
     }
 
-    // 3. Read worklogs
+    // 4. Worklogs
     let worklogContent = 'No worklog entries found.';
     const worklogCandidates = [
         join(logsDir, 'worklog.yaml'),
@@ -229,7 +246,7 @@ export async function distillChronicle(repoPath: string): Promise<void> {
         }
     }
 
-    // 4. Read ADRs
+    // 5. ADRs
     const adrs: AdrRecord[] = [];
     const adrDirs = [
         join(repoPath, 'docs', 'adr'), 
@@ -239,7 +256,7 @@ export async function distillChronicle(repoPath: string): Promise<void> {
     for (const dir of adrDirs) {
         if (existsSync(dir)) {
             try {
-                const files = readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'chronicle.md');
+                const files = readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'blueprint.md' && f !== 'knowledge.md' && f !== 'chronicles.md');
                 for (const file of files) {
                     const content = readFileSync(join(dir, file), 'utf-8');
                     const titleMatch = content.match(/^# (.+)$/m);
@@ -250,73 +267,132 @@ export async function distillChronicle(repoPath: string): Promise<void> {
         }
     }
 
-    // 4.5. Read CLI conversation logs (TPM Briefs & CLI Outcomes)
+    // 6. CLI Conversations
     const conversations = parseCliLogs(repoPath);
     let conversationsBlock = 'No recent CLI conversation history found.';
     if (conversations.length > 0) {
         conversationsBlock = conversations.map(c => {
             const turnBlocks = c.turns.map(t => {
-                return `#### Attempt ${t.attempt}
-* **TPM Brief / Context**:
-${t.tpmBrief}
-* **CLI Execution & Outcome**:
-${t.cliOutcome}`;
+                return `#### Attempt ${t.attempt}\n* **TPM Brief**: ${t.tpmBrief}\n* **CLI Outcome**: ${t.cliOutcome}`;
             }).join('\n\n');
-
-            return `### Story Slug: ${c.storySlug}
-${turnBlocks}`;
+            return `### Story Slug: ${c.storySlug}\n${turnBlocks}`;
         }).join('\n\n---\n\n');
     }
 
-    // 5. Construct input prompt for the LLM
-    const systemInstruction = `You are the Factory Knowledge Distiller. Your job is to compile, synthesize, and compress raw logs, ADRs, and build failures into a single high-density markdown document: the REPOSITORY ARCHITECTURAL CHRONICLE (.factory/knowledge/chronicle.md).
-
-This chronicle acts as a structured memory bridge for subsequent AI coding agents so they understand the context, stack decisions, key successes, and previous compile/runtime failures to avoid repeating mistakes.
+    try {
+        const { provider, model } = requireActiveProvider();
+        
+        // --- LLM CALL 1: BLUEPRINT (Tech Stack & Structure) ---
+        log('→', "DISTILLING BLUEPRINT (TECH STACK & STRUCTURE)...");
+        
+        const blueprintSysInstr = `You are the Factory Blueprint Architect. Your job is to synthesize the repository architecture, tech stack, and directory structure into a single document: blueprint.md.
 
 Strict Rules:
-- Keep the document highly dense, professional, and token-efficient.
-- Eliminate raw logs, verbose descriptions, or excessive boilerplate.
-- Synthesize all compilation or runtime failures into an "Anti-Patterns & Post-Mortems" section showing: what failed, the error/symptom, and the specific fix that resolved it.
-- Maintain a running history: do not delete previous milestones or key architectural learnings; merge new updates with the existing chronicle.
-- Use the TPM briefs and CLI outcomes/conversations to reconstruct a high-density, accurate historical overview of what was requested, what decisions/milestones were achieved, what actually worked, and any specific technical paths chosen.
-- Output ONLY the markdown document. Do not include introductory or concluding conversational text.`;
+- Output the Tech Stack, Framework Configurations, Directory Structure Map, and Active Integrations.
+- Do NOT include history, approach changes, or post-mortems (that goes in knowledge.md).
+- Output ONLY the markdown document. Do not wrap in markdown code blocks (\`\`\`markdown).`;
 
-    let prompt = `## INPUT DATA FOR SYNTHESIS
+        const blueprintPrompt = `## INPUT DATA FOR BLUEPRINT
+### 1. Project File Tree
+${fileTree.join('\n')}
 
-### 1. Existing Chronicle (To be updated/merged)
-${existingChronicle || 'No existing chronicle.'}
+### 2. Package.json
+${pkg}
 
-### 2. Recent Worklog Entries (Last 20)
-${worklogContent}
+### 3. README
+${readme}
+
+---
+Synthesize the above into the high-density BLUEPRINT document detailing the immutable tech stack and structure.`;
+
+        let blueprintText = await callProviderTextOnly(provider, model, blueprintSysInstr, blueprintPrompt);
+        blueprintText = blueprintText.replace(/^\s*```(?:markdown)?\s*([\s\S]*?)```\s*$/, '$1').trim();
+        if (blueprintText && blueprintText.length > 10) {
+            writeFileSync(blueprintPath, blueprintText + '\n');
+            log('✓', `Blueprint updated successfully at ${blueprintPath}`);
+        } else {
+            log('!', 'LLM returned an empty blueprint response.');
+        }
+
+        // --- LLM CALL 2: KNOWLEDGE (Strategy & Learnings) ---
+        log('→', "DISTILLING KNOWLEDGE (STRATEGY & LEARNINGS)...");
+        
+        const knowledgeSysInstr = `You are the Factory Knowledge Distiller. Your job is to synthesize the strategic approach, architectural paradigms, new features, and post-mortems into a single high-level document: knowledge.md.
+
+Strict Rules:
+- This is a "Bird's eye view". Focus on what changed in the overall approach, architectural paradigms, new features added, and anti-patterns.
+- Do NOT list the basic tech stack or directory structure (that is in the Blueprint).
+- Maintain a running history: do not delete previous key learnings; merge new updates with the existing knowledge.
+- Include an "Anti-Patterns & Post-Mortems" section summarizing what didn't work and the established fixes.
+- Output ONLY the markdown document. Do not wrap in markdown code blocks (\`\`\`markdown).`;
+
+        const knowledgePrompt = `## INPUT DATA FOR KNOWLEDGE SYNTHESIS
+
+### 1. Existing Knowledge
+${existingKnowledge || 'No existing knowledge.'}
+
+### 2. Architectural Decision Records (ADRs)
+${adrs.length === 0 ? 'No ADRs found.' : adrs.map(a => `* ${a.title} (${a.filename}):\n${a.content.slice(0, 1000)}...`).join('\n\n')}
 
 ### 3. Recent Failures & Post-Mortems
 ${failures.length === 0 ? 'No failures recorded.' : failures.map(f => `--- FAILURE FILE: ${f.filename} ---\n${f.content}`).join('\n\n')}
 
-### 4. Active Architectural Decision Records (ADRs)
-${adrs.length === 0 ? 'No ADRs found.' : adrs.map(a => `* ${a.title} (${a.filename}):\n${a.content.slice(0, 1000)}...`).join('\n\n')}
+---
+Synthesize the above into the high-density KNOWLEDGE document. Maintain sections like Architectural Paradigm, New Features / Approach Changes, and Anti-Patterns.`;
 
-### 5. CLI Agent Conversation History (TPM Briefs & CLI outcomes)
+        let knowledgeText = await callProviderTextOnly(provider, model, knowledgeSysInstr, knowledgePrompt);
+        knowledgeText = knowledgeText.replace(/^\s*```(?:markdown)?\s*([\s\S]*?)```\s*$/, '$1').trim();
+
+        if (knowledgeText && knowledgeText.length > 10) {
+            writeFileSync(knowledgePath, knowledgeText + '\n');
+            log('✓', `Knowledge updated successfully at ${knowledgePath}`);
+        } else {
+            log('!', 'LLM returned an empty knowledge response.');
+        }
+
+        // --- LLM CALL 2: CHRONICLES (Story Completions) ---
+        log('→', 'EXTRACTING CHRONICLES (STORY NOTES)...');
+        
+        const chronicleSysInstr = `You are the Factory Chronicle Extractor. Your job is to extract story completion notes from CLI logs and worklogs, and APPEND them to the existing chronicles list.
+
+Strict Rules:
+- The chronicles MUST strictly be an append-only list of notes captured at the end of story completions.
+- The output format for EACH item MUST be strictly:
+  * **[Datestamp] [Commit Number if available]**
+    * **Action**: <Created | changed | removed | fixed>
+    * **What**: <file, feature, bug, module, db table, etc>
+    * **Because**: <the reason>
+    * **So that**: <the benefit>
+- ONLY return the newly extracted items formatted exactly as above. Do not rewrite the existing chronicle.
+- If there is no new information to extract, return an empty string.
+- Output ONLY the markdown text. Do not wrap in markdown code blocks.`;
+
+        const chroniclePrompt = `## INPUT DATA FOR EXTRACTION
+
+### 1. Existing Chronicles (For Context - DO NOT REPEAT THESE)
+${existingChronicles || 'No existing chronicles.'}
+
+### 2. Recent Worklog Entries
+${worklogContent}
+
+### 3. CLI Agent Conversation History (Story Outcomes)
 ${conversationsBlock}
 
 ---
-Please synthesize the above input into a high-density, updated REPOSITORY ARCHITECTURAL CHRONICLE (.factory/knowledge/chronicle.md). Maintain the following markdown sections:
-# REPOSITORY ARCHITECTURAL CHRONICLE
-## 1. Architectural Context & Key ADR Highlights
-## 2. Chronology of Major Milestones & What Worked
-## 3. Failure Post-Mortems & Anti-Patterns ("What Didn't Work" and how it was resolved)`;
+Extract the NEW story completion notes from the Worklog Entries and CLI Conversation History. Return ONLY the new appendable list items matching the exact format. If nothing new, return "NO_UPDATE".`;
 
-    try {
-        log('→', 'INVOKING ORCHESTRATOR LLM FOR CHRONICLE DISTILLATION...');
-        const { provider, model } = requireActiveProvider();
-        const distilledText = await callProviderTextOnly(provider, model, systemInstruction, prompt);
+        let chronicleText = await callProviderTextOnly(provider, model, chronicleSysInstr, chroniclePrompt);
+        chronicleText = chronicleText.replace(/^\s*```(?:markdown)?\s*([\s\S]*?)```\s*$/, '$1').trim();
 
-        if (distilledText && distilledText.trim().length > 10) {
-            writeFileSync(chroniclePath, distilledText.trim() + '\n');
-            log('✓', `Repository Architectural Chronicle updated successfully at ${chroniclePath}`);
+        if (chronicleText && chronicleText.length > 10 && chronicleText !== 'NO_UPDATE') {
+            const finalChronicles = (existingChronicles + '\n\n' + chronicleText).trim();
+            writeFileSync(chroniclesPath, finalChronicles + '\n');
+            log('✓', `Chronicles appended successfully at ${chroniclesPath}`);
         } else {
-            log('!', 'LLM returned an empty or invalid chronicle response.');
+            log('!', 'No new chronicles to append.');
         }
+
     } catch (e: any) {
-        logError(`Chronicle distillation failed: ${e.message}`);
+        logError(`Knowledge/Chronicle distillation failed: ${e.message}`);
     }
 }

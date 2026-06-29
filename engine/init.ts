@@ -18,7 +18,7 @@
 
 import {
     existsSync, readFileSync, writeFileSync,
-    mkdirSync, readdirSync, chmodSync, copyFileSync, symlinkSync,
+    mkdirSync, readdirSync, chmodSync, copyFileSync, symlinkSync, cpSync,
 } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve, join, basename, dirname } from 'node:path';
@@ -85,6 +85,26 @@ export function detectStack(repoPath: string): ProjectStack | undefined {
             else if (deps.playwright || deps['@playwright/test']) testing = 'playwright';
 
         } catch { /* ignore */ }
+    }
+
+    if (existsSync(join(repoPath, 'pubspec.yaml'))) {
+        let isFlutter = false;
+        try {
+            const pub = readFileSync(join(repoPath, 'pubspec.yaml'), 'utf-8');
+            if (pub.includes('sdk: flutter')) isFlutter = true;
+        } catch {}
+        return {
+            framework: isFlutter ? 'flutter' : 'dart',
+            packageManager: 'pub',
+        };
+    }
+
+    if (existsSync(join(repoPath, 'go.mod'))) {
+        return { framework: 'go', packageManager: 'go modules' };
+    }
+
+    if (existsSync(join(repoPath, 'Cargo.toml'))) {
+        return { framework: 'rust', packageManager: 'cargo' };
     }
 
     if (!framework && !existsSync(tsPath)) return undefined;
@@ -168,12 +188,20 @@ export function analyzeExistingProject(repoPath: string): Record<string, unknown
 
 /** Build a simplified 2-level file tree, skipping noise dirs. */
 export function buildFileTree(dir: string, depth: number, _current = 0): string[] {
-    const SKIP = new Set(['.git', 'node_modules', '.next', 'dist', 'build', '.cache', 'coverage', '.turbo']);
+    const SKIP = new Set(['.git', 'node_modules', '.next', 'dist', 'build', '.cache', 'coverage', '.turbo', '.dart_tool', 'android', 'ios', 'macos', 'linux', 'windows']);
     if (_current >= depth) return [];
     try {
-        return readdirSync(dir, { withFileTypes: true })
-            .filter(e => !SKIP.has(e.name) && !e.name.startsWith('.'))
-            .map(e => {
+        const entries = readdirSync(dir, { withFileTypes: true })
+            .filter(e => !SKIP.has(e.name) && !e.name.startsWith('.'));
+            
+        // Sort files first, then directories, so that we don't truncate before seeing files
+        entries.sort((a, b) => {
+            if (a.isDirectory() && !b.isDirectory()) return 1;
+            if (!a.isDirectory() && b.isDirectory()) return -1;
+            return a.name.localeCompare(b.name);
+        });
+
+        return entries.map(e => {
                 const prefix = '  '.repeat(_current) + (e.isDirectory() ? '📁 ' : '📄 ');
                 const entry = prefix + e.name;
                 if (e.isDirectory() && _current < depth - 1) {
@@ -183,7 +211,7 @@ export function buildFileTree(dir: string, depth: number, _current = 0): string[
                 return [entry];
             })
             .flat()
-            .slice(0, 60); // cap at 60 lines
+            .slice(0, 80); // cap at 80 lines
     } catch { return []; }
 }
 
@@ -722,7 +750,7 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
 
     const localSkillIndex = join(factoryDir, 'skill-index.yaml');
     if (!existsSync(localSkillIndex)) {
-        try { symlinkSync(globalSkillIndex, localSkillIndex); } catch { /* fallback or ignore */ }
+        try { copyFileSync(globalSkillIndex, localSkillIndex); } catch { /* fallback or ignore */ }
         files.push({ path: '.factory/skill-index.yaml', action: 'created' });
     } else {
         files.push({ path: '.factory/skill-index.yaml', action: 'skipped' });
@@ -730,10 +758,29 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
 
     const localSkillsDir = join(factoryDir, 'skills');
     if (!existsSync(localSkillsDir)) {
-        try { symlinkSync(globalSkillsDir, localSkillsDir); } catch { /* fallback or ignore */ }
+        try { 
+            mkdirSync(localSkillsDir, { recursive: true }); 
+            const readme = `# Project-Specific Skills\n\nAny \`SKILL.md\` placed in this directory will be available to Factory agents in this project.\n\nTo override a global skill, create a file with the exact same name as the global skill (e.g. \`story-generator.md\`) in this folder. Factory merges these at runtime, with local skills taking precedence.\n`;
+            writeFileSync(join(localSkillsDir, 'README.md'), readme);
+        } catch { /* fallback or ignore */ }
         files.push({ path: '.factory/skills', action: 'created' });
     } else {
         files.push({ path: '.factory/skills', action: 'skipped' });
+    }
+
+    // 6. Seed knowledge files
+    const knowledgeFiles = [
+        { name: 'blueprint.md', title: 'Tech Stack & Architecture Blueprint', type: 'blueprint' },
+        { name: 'knowledge.md', title: 'Project Knowledge & Strategy', type: 'knowledge' },
+        { name: 'chronicles.md', title: 'Project Chronicles', type: 'chronicles' }
+    ];
+    for (const kFile of knowledgeFiles) {
+        const kPath = join(factoryDir, 'knowledge', kFile.name);
+        if (!existsSync(kPath)) {
+            const frontmatter = `---\ntitle: "${kFile.title}"\ntype: "${kFile.type}"\ndate: "${new Date().toISOString()}"\n---\n\n`;
+            writeFileSync(kPath, frontmatter);
+            files.push({ path: `.factory/knowledge/${kFile.name}`, action: 'created' });
+        }
     }
 
     // 6. todo.yaml

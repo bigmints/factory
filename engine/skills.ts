@@ -121,16 +121,32 @@ function slugify(name: string): string {
 
 // ─── Skills Registry (File-Based) ────────────────────────
 
-/** Load all skills from the skills directory. */
-export function loadAllSkills(): Skill[] {
-    const dir = ensureSkillsDir();
-    const files = readdirSync(dir).filter(f => f.endsWith('.md'));
-    const skills: Skill[] = [];
+/** Load all skills, merging global skills with local project overrides. */
+export function loadAllSkills(repoPath?: string): Skill[] {
+    const globalDir = ensureSkillsDir();
+    const globalFiles = readdirSync(globalDir).filter(f => f.endsWith('.md'));
+    const skillsMap: Map<string, Skill> = new Map();
 
-    for (const file of files) {
-        const skill = parseSkillFile(join(dir, file));
-        if (skill) skills.push(skill);
+    // 1. Load Global Skills
+    for (const file of globalFiles) {
+        const skill = parseSkillFile(join(globalDir, file));
+        if (skill) skillsMap.set(skill.id, skill);
     }
+
+    // 2. Load Local Overrides (if in a project)
+    const activeRepo = repoPath || process.cwd();
+    const localDir = join(activeRepo, '.factory', 'skills');
+    if (existsSync(localDir)) {
+        try {
+            const localFiles = readdirSync(localDir).filter(f => f.endsWith('.md') && f !== 'README.md');
+            for (const file of localFiles) {
+                const skill = parseSkillFile(join(localDir, file));
+                if (skill) skillsMap.set(skill.id, skill); // Local overrides global
+            }
+        } catch { /* ignore read errors for local */ }
+    }
+
+    const skills: Skill[] = Array.from(skillsMap.values());
 
     // Merge active dynamic MCP skills
     try {

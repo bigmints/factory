@@ -316,8 +316,8 @@ export async function handleChronicle(subcommand?: string, arg?: string): Promis
     switch (subcommand) {
         case 'update':
             logHeader('Distilling Repository Chronicle');
-            const { distillChronicle } = await import('../chronicle.ts');
-            await distillChronicle(repoPath);
+            const { distillKnowledgeAndChronicles } = await import('../chronicle.ts');
+            await distillKnowledgeAndChronicles(repoPath);
             break;
         case 'view':
             const chroniclePath = join(repoPath, '.factory', 'knowledge', 'chronicle.md');
@@ -336,6 +336,8 @@ export async function handleChronicle(subcommand?: string, arg?: string): Promis
 /** factory build-knowledge <repoPath> — build TPM context */
 export async function handleBuildKnowledge(): Promise<void> {
     const repoPath = args[1] || process.cwd();
-    const { buildTpmKnowledge } = await import('../analyze.ts');
-    await buildTpmKnowledge(repoPath);
+    
+    // Distill Knowledge and Chronicles (Handles both Bird's eye view and story notes)
+    const { distillKnowledgeAndChronicles } = await import('../chronicle.ts');
+    await distillKnowledgeAndChronicles(repoPath);
 }

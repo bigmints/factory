@@ -60,7 +60,7 @@ function execUpdateProjectState(args: Record<string, unknown>, ctx: Orchestrator
 }
 
 tpmToolRegistry.register({
-    name: 'write_adr',
+    name: 'tpm_write_adr',
     description: 'Create an Architecture Decision Record (ADR) in the knowledge base to document significant technical decisions made during the build.',
     parameters: {
         type: 'object',
@@ -75,7 +75,7 @@ tpmToolRegistry.register({
 });
 
 tpmToolRegistry.register({
-    name: 'update_project_state',
+    name: 'tpm_update_project_state',
     description: 'Update the living project state file with new key-value pairs (e.g. recording a completed milestone or installed library).',
     parameters: {
         type: 'object',

@@ -74,7 +74,7 @@ function execManageStory(args: Record<string, unknown>, _ctx: OrchestratorContex
 }
 
 tpmToolRegistry.register({
-    name: 'run_factory_command',
+    name: 'tpm_run_factory_command',
     description: 'Execute a Factory CLI command natively (e.g., build, validate, status, queue start, app sync, chronicle). Use this to orchestrate the engine, sync roadmaps, manage queues, or build knowledge. Pass the arguments as an array (e.g., ["app", "sync"]).',
     parameters: {
         type: 'object',
@@ -91,7 +91,7 @@ tpmToolRegistry.register({
 });
 
 tpmToolRegistry.register({
-    name: 'manage_story',
+    name: 'tpm_manage_story',
     description: 'Safely read, scaffold, or update .md / .yaml story status without breaking file structures.',
     parameters: {
         type: 'object',

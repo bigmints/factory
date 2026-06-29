@@ -175,7 +175,7 @@ export async function runRepl(storyPath?: string, options: { auto?: boolean } = 
     // Prepopulate tool message history
     const systemPrompt = activeStory
         ? buildToolSystemPrompt(activeStory, blueprint, targetDir, appBlueprint)
-        : `You are an autonomous code generation engine with access to tools in the directory: ${targetDir}. Always complete with mark_complete.`;
+        : `You are an autonomous code generation engine with access to tools in the directory: ${targetDir}. Always complete with factory_mark_complete.`;
 
     const messages: ToolMessages = [
         { role: 'system', content: systemPrompt },
@@ -234,7 +234,7 @@ ${C.bold}🏭 REPL Slash Commands:${C.reset}
 ${C.bold}🛠️ Direct Tool Execution:${C.reset}
   You can call any tool manually by typing ${C.brightCyan}/<tool_name> [args]${C.reset}.
   If you omit required arguments, the shell will prompt you interactively!
-  Example: ${C.brightCyan}/read_file package.json${C.reset} or ${C.brightCyan}/run_command npm test${C.reset}
+  Example: ${C.brightCyan}/fs_read_file package.json${C.reset} or ${C.brightCyan}/sys_run_command npm test${C.reset}
 `);
 }
 
@@ -243,26 +243,27 @@ function printGroupedTools(): void {
 ${C.bold}🛠️ FACTORY BUILD ENGINE TOOLS (GROUPED):${C.reset}
 
   📁 ${C.brightBlue}${C.bold}FILE MANIPULATION${C.reset}
-    ${C.brightCyan}/read_file${C.reset} <path>               Read a file's content (capped at 100KB)
-    ${C.brightCyan}/write_file${C.reset} <path>              Create or overwrite a file (prompts for multi-line content)
-    ${C.brightCyan}/patch_file${C.reset} <path>              Surgically replace content block (prompts for old/new blocks)
-    ${C.brightCyan}/delete_file${C.reset} <path>             Delete a file from the filesystem safely
+    ${C.brightCyan}/fs_read_file${C.reset} <path>               Read a file's content (capped at 100KB)
+    ${C.brightCyan}/fs_write_file${C.reset} <path>              Create or overwrite a file (prompts for multi-line content)
+    ${C.brightCyan}/fs_patch_file${C.reset} <path>              Surgically replace content block (prompts for old/new blocks)
+    ${C.brightCyan}/fs_delete_file${C.reset} <path>             Delete a file from the filesystem safely
 
   🔍 ${C.brightMagenta}${C.bold}SEARCH & EXPLORATION${C.reset}
-    ${C.brightCyan}/list_dir${C.reset} [path] [--recursive]    List directory contents (shallow by default)
-    ${C.brightCyan}/search_files${C.reset} <pattern>          Recursive text grep across target directory with globs
+    ${C.brightCyan}/fs_list_dir${C.reset} [path] [--recursive]    List directory contents (shallow by default)
+    ${C.brightCyan}/fs_search_files${C.reset} <pattern>          Recursive text grep across target directory with globs
 
   💻 ${C.brightGreen}${C.bold}SHELL & EXECUTION${C.reset}
-    ${C.brightCyan}/run_command${C.reset} <command>           Run shell command in target directory
+    ${C.brightCyan}/sys_run_command${C.reset} <command>           Run shell command in target directory
 
   ℹ️ ${C.brightYellow}${C.bold}CONTEXT & METADATA${C.reset}
-    ${C.brightCyan}/read_story${C.reset}                   Display the currently active story YAML
+    ${C.brightCyan}/factory_read_story${C.reset}                   Display the currently active story YAML
     ${C.brightCyan}/read_context${C.reset} <type>            Read project package.json, tsconfig, file_tree, conventions, knowledge
-    ${C.brightCyan}/log_step${C.reset} <message>               Record progress to the build logs
+    ${C.brightCyan}/factory_build_knowledge${C.reset}              Distill and update knowledge and chronicles
+    ${C.brightCyan}/factory_log_step${C.reset} <message>               Record progress to the build logs
 
   🛑 ${C.brightRed}${C.bold}SESSION CONTROL${C.reset}
-    ${C.brightCyan}/mark_complete${C.reset} [summary]       Complete build session and stage for commit
-    ${C.brightCyan}/mark_failed${C.reset} <reason>           Abort build session and mark failure
+    ${C.brightCyan}/factory_mark_complete${C.reset} [summary]       Complete build session and stage for commit
+    ${C.brightCyan}/factory_mark_failed${C.reset} <reason>           Abort build session and mark failure
 `);
 }
 
@@ -311,31 +312,31 @@ async function handleManualToolCall(
 
     try {
         switch (name) {
-            case 'read_file': {
+            case 'fs_read_file': {
                 resolvedArgs.path = argsList[0] || (await rl.question(`${C.bold}Path to read: ${C.reset}`));
                 break;
             }
-            case 'write_file': {
+            case 'fs_write_file': {
                 resolvedArgs.path = argsList[0] || (await rl.question(`${C.bold}File path to write: ${C.reset}`));
                 resolvedArgs.content = await readMultiLineInput(rl, 'File content');
                 break;
             }
-            case 'patch_file': {
+            case 'fs_patch_file': {
                 resolvedArgs.path = argsList[0] || (await rl.question(`${C.bold}File path to patch: ${C.reset}`));
                 resolvedArgs.old_content = await readMultiLineInput(rl, 'Exact old content block to find');
                 resolvedArgs.new_content = await readMultiLineInput(rl, 'New replacement content block');
                 break;
             }
-            case 'delete_file': {
+            case 'fs_delete_file': {
                 resolvedArgs.path = argsList[0] || (await rl.question(`${C.bold}File path to delete: ${C.reset}`));
                 break;
             }
-            case 'list_dir': {
+            case 'fs_list_dir': {
                 resolvedArgs.path = argsList[0] || '.';
                 resolvedArgs.recursive = argStr.includes('--recursive') || argStr.includes('-r');
                 break;
             }
-            case 'search_files': {
+            case 'fs_search_files': {
                 resolvedArgs.pattern = argsList[0] || (await rl.question(`${C.bold}Search pattern: ${C.reset}`));
                 resolvedArgs.path = '.';
                 // Simple parser for --glob
@@ -346,11 +347,11 @@ async function handleManualToolCall(
                 resolvedArgs.case_insensitive = argStr.includes('--case-insensitive') || argStr.includes('-i');
                 break;
             }
-            case 'run_command': {
+            case 'sys_run_command': {
                 resolvedArgs.command = argStr || (await rl.question(`${C.bold}Command to run: ${C.reset}`));
                 break;
             }
-            case 'read_story': {
+            case 'factory_read_story': {
                 break;
             }
             case 'read_context': {
@@ -363,16 +364,16 @@ async function handleManualToolCall(
                 }
                 break;
             }
-            case 'log_step': {
+            case 'factory_log_step': {
                 resolvedArgs.message = argStr || (await rl.question(`${C.bold}Log Message: ${C.reset}`));
                 resolvedArgs.level = 'info';
                 break;
             }
-            case 'mark_complete': {
+            case 'factory_mark_complete': {
                 resolvedArgs.summary = argStr || (await rl.question(`${C.bold}Build Summary: ${C.reset}`));
                 break;
             }
-            case 'mark_failed': {
+            case 'factory_mark_failed': {
                 resolvedArgs.reason = argStr || (await rl.question(`${C.bold}Reason for failure: ${C.reset}`));
                 break;
             }

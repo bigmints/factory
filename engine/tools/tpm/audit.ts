@@ -68,7 +68,7 @@ function execSpotCheckCode(args: Record<string, unknown>, ctx: OrchestratorConte
 }
 
 tpmToolRegistry.register({
-    name: 'run_verification',
+    name: 'tpm_run_verification',
     description: 'Run tests or build scripts (e.g. "npm run build", "tsc --noEmit") to independently verify the CLI engineer\'s work before marking a story done.',
     parameters: {
         type: 'object',
@@ -81,7 +81,7 @@ tpmToolRegistry.register({
 });
 
 tpmToolRegistry.register({
-    name: 'spot_check_code',
+    name: 'tpm_spot_check_code',
     description: 'Read the contents of a specific file in the target directory to verify the CLI met acceptance criteria.',
     parameters: {
         type: 'object',

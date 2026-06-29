@@ -21,6 +21,7 @@ import { log, logError } from './log.ts';
 import { writeHeartbeat } from './toon.ts';
 import { updateStoryStatus, loadStory } from './story.ts';
 import { loadSettings, getActiveProject } from './config.ts';
+import { distillKnowledgeAndChronicles } from './chronicle.ts';
 import { detectAvailableCli } from './cli-adapter.ts';
 import { runCliSession } from './cli-session.ts';
 import { resolveSkillsForBuild, formatSkillsForPrompt } from './skills.ts';
@@ -167,6 +168,14 @@ async function runDeterministicPipeline(
             }
 
             writeBuildReceipt(ctx, 'CLI delivered successfully', true);
+
+            try {
+                log('●', `Autonomously building knowledge for chronicle...`);
+                await distillKnowledgeAndChronicles(blueprint.repoPath);
+                log('✓', `Chronicle updated successfully`);
+            } catch (e) {
+                log('!', `Could not distill chronicle: ${e}`);
+            }
             break;
 
         case 'failed':

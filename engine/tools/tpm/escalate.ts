@@ -23,7 +23,7 @@ function execAskDeveloper(args: Record<string, unknown>, ctx: OrchestratorContex
 }
 
 tpmToolRegistry.register({
-    name: 'ask_developer',
+    name: 'tpm_ask_developer',
     description: 'Suspend the build process and ask the human developer for clarification on an ambiguous business requirement.',
     parameters: {
         type: 'object',

@@ -55,7 +55,7 @@ export interface ToolResult {
 
 export const TOOL_DEFINITIONS = [
     {
-        name: 'read_file',
+        name: 'fs_read_file',
         description: 'Read the contents of a file. Returns file content as text (capped at 100KB).',
         parameters: {
             type: 'object',
@@ -66,7 +66,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'write_file',
+        name: 'fs_write_file',
         description: 'Write content to a file. Creates parent directories if needed.',
         parameters: {
             type: 'object',
@@ -78,7 +78,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'patch_file',
+        name: 'fs_patch_file',
         description: 'Replace a specific section of a file. Finds old_content exactly and replaces it with new_content. Returns an error if old_content is not found — use read_file first to confirm current content.',
         parameters: {
             type: 'object',
@@ -91,7 +91,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'delete_file',
+        name: 'fs_delete_file',
         description: 'Delete a file from the filesystem.',
         parameters: {
             type: 'object',
@@ -102,7 +102,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'list_dir',
+        name: 'fs_list_dir',
         description: 'List files and directories. Returns a newline-separated list of entries.',
         parameters: {
             type: 'object',
@@ -114,7 +114,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'search_files',
+        name: 'fs_search_files',
         description: 'Search for a text pattern across files in a directory. Returns matching file:line snippets (max 50 results).',
         parameters: {
             type: 'object',
@@ -128,7 +128,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'run_command',
+        name: 'sys_run_command',
         description: 'Execute a shell command in the target directory. Returns stdout/stderr (capped at 50KB). Timeout: 120s.',
         parameters: {
             type: 'object',
@@ -141,7 +141,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'read_story',
+        name: 'factory_read_story',
         description: 'Read the current build story YAML file. Returns its content.',
         parameters: {
             type: 'object',
@@ -149,7 +149,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'read_blueprint',
+        name: 'factory_read_blueprint',
         description: 'Read project blueprint/context. Type must be one of: conventions, knowledge, file_tree, package_json, tsconfig.',
         parameters: {
             type: 'object',
@@ -164,7 +164,16 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'log_step',
+        name: 'factory_build_knowledge',
+        description: 'Distill and update the project architectural knowledge and chronicles context files based on recent changes.',
+        parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+        },
+    },
+    {
+        name: 'factory_log_step',
         description: 'Log a step or message during the build. Useful for tracking progress.',
         parameters: {
             type: 'object',
@@ -176,7 +185,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'mark_complete',
+        name: 'factory_mark_complete',
         description: 'Signal that the build is complete and successful. This terminates the tool session.',
         parameters: {
             type: 'object',
@@ -187,7 +196,7 @@ export const TOOL_DEFINITIONS = [
         },
     },
     {
-        name: 'mark_failed',
+        name: 'factory_mark_failed',
         description: 'Signal that the build has failed and cannot proceed. This terminates the tool session.',
         parameters: {
             type: 'object',
@@ -215,19 +224,20 @@ export async function executeTool(
             return await execMcpTool(name, args, ctx);
         }
         switch (name) {
-            case 'read_file':     return execReadFile(args, ctx);
-            case 'write_file':    return execWriteFile(args, ctx);
-            case 'patch_file':    return execPatchFile(args, ctx);
-            case 'delete_file':   return execDeleteFile(args, ctx);
-            case 'list_dir':      return execListDir(args, ctx);
-            case 'search_files':  return execSearchFiles(args, ctx);
-            case 'run_command':   return execRunCommand(args, ctx);
-            case 'read_story':    return execReadStory(args, ctx);
-            case 'read_blueprint':
+            case 'fs_read_file':     return execReadFile(args, ctx);
+            case 'fs_write_file':    return execWriteFile(args, ctx);
+            case 'fs_patch_file':    return execPatchFile(args, ctx);
+            case 'fs_delete_file':   return execDeleteFile(args, ctx);
+            case 'fs_list_dir':      return execListDir(args, ctx);
+            case 'fs_search_files':  return execSearchFiles(args, ctx);
+            case 'sys_run_command':   return execRunCommand(args, ctx);
+            case 'factory_read_story':    return execReadStory(args, ctx);
+            case 'factory_read_blueprint':
             case 'read_context':  return execReadBlueprint(args, ctx);
-            case 'log_step':      return execLogStep(args, ctx);
-            case 'mark_complete': return execMarkComplete(args, ctx);
-            case 'mark_failed':   return execMarkFailed(args, ctx);
+            case 'factory_build_knowledge': return await execBuildKnowledge(args, ctx);
+            case 'factory_log_step':      return execLogStep(args, ctx);
+            case 'factory_mark_complete': return execMarkComplete(args, ctx);
+            case 'factory_mark_failed':   return execMarkFailed(args, ctx);
             default:
                 return { content: `Unknown tool: "${name}". Valid tools: ${TOOL_DEFINITIONS.map(t => t.name).join(', ')}`, isError: true };
         }
@@ -518,6 +528,16 @@ function execReadBlueprint(args: Record<string, unknown>, ctx: BuildToolBlueprin
                 content: `Unknown blueprint type: "${type}". Valid types: conventions, knowledge, file_tree, package_json, tsconfig`,
                 isError: true,
             };
+    }
+}
+
+async function execBuildKnowledge(args: Record<string, unknown>, ctx: BuildToolBlueprint): Promise<ToolResult> {
+    try {
+        const { distillKnowledgeAndChronicles } = await import('./chronicle.ts');
+        await distillKnowledgeAndChronicles(ctx.targetDir);
+        return { content: `Successfully built knowledge and chronicles context.` };
+    } catch (e: any) {
+        return { content: `Failed to build knowledge: ${e.message}`, isError: true };
     }
 }
 

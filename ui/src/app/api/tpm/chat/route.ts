@@ -13,8 +13,10 @@ import { parse as parseYaml, stringify as toYaml } from 'yaml';
 import matter from 'gray-matter';
 
 import { getActiveProject } from '@engine/config';
+import { loadAllSkills } from '@engine/skills';
 
 import { getBuildLogs } from '@engine/db';
+import { distillKnowledgeAndChronicles } from '@engine/chronicle';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
@@ -72,66 +74,31 @@ function readBlueprintWorklog(projectPath: string, limit = 8): string {
 
 /** Load skill-index.yaml from the active project or ~/.factory/ */
 function loadSkillIndex(projectPath: string): string {
-  const projectIdx = join(projectPath, '.factory', 'skill-index.yaml');
-  const globalIdx  = join(homedir(), '.factory', 'skill-index.yaml');
-  const filePath = existsSync(projectIdx) ? projectIdx
-                 : existsSync(globalIdx)  ? globalIdx : null;
-  if (!filePath) return '';
-  try {
-    const parsed = parseYaml(readFileSync(filePath, 'utf-8')) as any;
-    const skills: any[] = parsed?.skills || [];
-    if (!skills.length) return '';
-    return skills
-      .map((s: any) => `- **${s.name}**: ${s.description || ''}${s.trigger ? ` (trigger: ${(s.trigger as string[]).join(', ')})` : ''}`)
-      .join('\n');
-  } catch { return ''; }
+  const skills = loadAllSkills(projectPath);
+  if (!skills.length) return '';
+  return skills
+    .map(s => `- **${s.name}**: ${s.description || ''}${s.trigger ? ` (trigger: ${s.trigger})` : ''}`)
+    .join('\n');
 }
 
 /**
- * Load a skill's full content by name from the global skill-index.yaml.
- * Handles both SKILL.md paths and ~/ expansions.
- * This is the core runtime for the "LLM is the runtime" philosophy:
- * the TypeScript only reads the file — the LLM decides how to apply it.
+ * Load a skill's full content by name.
  */
-function loadSkillRaw(name: string): { skill: any; content: string } | null {
-  const indexPath = join(homedir(), '.factory', 'skill-index.yaml');
-  let skills: any[] = [];
-  if (existsSync(indexPath)) {
-    try {
-      const parsed = parseYaml(readFileSync(indexPath, 'utf-8')) as any;
-      skills = parsed?.skills || [];
-    } catch { /* fall through */ }
-  }
+function loadSkillRaw(name: string, projectPath?: string): { skill: any; content: string } | null {
+  const skills = loadAllSkills(projectPath);
 
   const q = name.toLowerCase().trim();
   const skill =
-    skills.find((s: any) => s.name?.toLowerCase() === q) ||
-    skills.find((s: any) => s.name?.toLowerCase().startsWith(q)) ||
-    skills.find((s: any) => s.name?.toLowerCase().includes(q)) ||
-    skills.find((s: any) => (s.description || '').toLowerCase().includes(q));
+    skills.find(s => s.name?.toLowerCase() === q) ||
+    skills.find(s => s.name?.toLowerCase().startsWith(q)) ||
+    skills.find(s => s.name?.toLowerCase().includes(q)) ||
+    skills.find(s => (s.description || '').toLowerCase().includes(q));
 
   if (!skill) return null;
-
-  const rawPath: string = skill.path || '';
-  // Resolve ~/... paths
-  const filePath = rawPath.startsWith('~/') ? join(homedir(), rawPath.slice(2)) : rawPath;
-
-  // If path is a factory CLI command (not a file), return the command description
-  if (rawPath.startsWith('factory ')) {
-    return {
-      skill,
-      content: `## Skill: ${skill.name}\n\n**Description:** ${skill.description || 'No description'}\n\n**CLI command:** \`${rawPath}\`\n\nThis skill is executed via the Factory CLI. Run this command in the project directory when needed.`,
-    };
-  }
-
-  if (!filePath || !existsSync(filePath)) return null;
-
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    return { skill, content };
-  } catch {
-    return null;
-  }
+  return { 
+      skill, 
+      content: `## Skill: ${skill.name}\n\n**Description:** ${skill.description || 'No description'}\n\n**Instructions:**\n${skill.instructions}${skill.template ? `\n\n**Template:**\n\`\`\`tsx\n${skill.template}\n\`\`\`` : ''}` 
+  };
 }
 
 // ─── TPM Tool Definitions ───────────────────────────────────────────────────
@@ -241,6 +208,17 @@ export const TPM_TOOLS = [
     description:
       'Read the latest heartbeat signal and recent worklog session entries. Use when user asks what the agent was last doing or wants a liveness check.',
     parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'build_knowledge',
+    description:
+      'Distill the raw repository logs, failures, and architectural decision records (ADRs) into the separated knowledge files (.factory/knowledge/blueprint.md, knowledge.md and chronicles.md). Use this tool autonomously when you determine significant progress or a completed story warrants an update, or when the user explicitly asks to "Build knowledge".',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'Optional reason for building knowledge' },
+      },
+    },
   },
   {
     name: 'decompose_requirements',
@@ -710,6 +688,15 @@ async function handleReadHeartbeat(projectPath: string) {
   return results.join('\n') || 'No heartbeat or worklog data available.';
 }
 
+async function handleBuildKnowledge(projectPath: string) {
+  try {
+    await distillKnowledgeAndChronicles(projectPath);
+    return `✅ Successfully distilled knowledge and updated the architectural chronicles at .factory/knowledge/blueprint.md, knowledge.md and chronicles.md.`;
+  } catch (err: any) {
+    return `Failed to build knowledge: ${err.message}`;
+  }
+}
+
 async function handleDecomposeRequirements(
   prompt: string,
   projectPath: string,
@@ -928,29 +915,24 @@ function parseXmlToolCall(text: string): any[] {
 // content and decides how to apply it — no business logic lives here.
 
 /** List all skills in the global library */
-function handleListSkills(): string {
-  const indexPath = join(homedir(), '.factory', 'skill-index.yaml');
-  if (!existsSync(indexPath)) {
-    return `No skill library found at ${indexPath}. Run factory init to set up skills.`;
-  }
+function handleListSkills(projectPath: string): string {
   try {
-    const parsed = parseYaml(readFileSync(indexPath, 'utf-8')) as any;
-    const skills: any[] = parsed?.skills || [];
+    const skills = loadAllSkills(projectPath);
     if (!skills.length) return 'Skill library is empty.';
-    const lines = skills.map((s: any) => {
-      const triggers = Array.isArray(s.trigger) ? ` | triggers: ${s.trigger.slice(0, 3).join(', ')}` : '';
+    const lines = skills.map(s => {
+      const triggers = s.trigger ? ` | triggers: ${s.trigger}` : '';
       return `- **${s.name}**: ${s.description || 'No description'}${triggers}`;
     });
     return `## Factory Skill Library (${skills.length} skills)\n\n${lines.join('\n')}\n\nUse \`read_skill(name)\` to get the full instructions for any skill.`;
   } catch (err: any) {
-    return `Failed to read skill index: ${err.message}`;
+    return `Failed to read skills: ${err.message}`;
   }
 }
 
 /** Read a skill's full instructions by name (exact or fuzzy match) */
-function handleReadSkill(name: string): string {
+function handleReadSkill(name: string, projectPath: string): string {
   if (!name) return 'name is required — pass the skill name to look up.';
-  const result = loadSkillRaw(name);
+  const result = loadSkillRaw(name, projectPath);
   if (!result) {
     // Build a helpful error showing what's available
     const indexPath = join(homedir(), '.factory', 'skill-index.yaml');
@@ -965,10 +947,10 @@ function handleReadSkill(name: string): string {
 }
 
 /** Invoke a skill: reads its instructions and frames them against user context */
-function handleInvokeSkill(name: string, context?: string): string {
+function handleInvokeSkill(name: string, projectPath: string, context?: string): string {
   if (!name) return 'name is required.';
-  const result = loadSkillRaw(name);
-  if (!result) return handleReadSkill(name); // will return the not-found error
+  const result = loadSkillRaw(name, projectPath);
+  if (!result) return handleReadSkill(name, projectPath); // will return the not-found error
   const header = context
     ? `## Invoking Skill: ${result.skill.name}\n\n**Context:** ${context}\n\n> ${result.skill.description || ''}\n\nApply the following instructions to the context above:\n\n---\n\n`
     : `## Skill: ${result.skill.name}\n\n> ${result.skill.description || ''}\n\n---\n\n`;
@@ -1056,6 +1038,7 @@ You have access to the following tools. Use them proactively to fulfill user req
 - apply_story(name, content, kind, phase?, dependsOn?) — save a new Markdown story with YAML frontmatter
 - add_adr_decision(slug, content) — record an architectural decision
 - decompose_requirements(prompt) — decompose requirements into feature story Markdown contents with YAML frontmatter
+- build_knowledge() — distill logs and ADRs into blueprint.md, knowledge.md and chronicles.md
 
 **Orchestration rules:**
 - Always call tools when user asks about status, stories, or logs — never guess from memory.
@@ -1281,6 +1264,9 @@ You have access to the following tools. Use them proactively to fulfill user req
                     case 'read_heartbeat':
                       result = await handleReadHeartbeat(activeProject.path);
                       break;
+                    case 'build_knowledge':
+                      result = await handleBuildKnowledge(activeProject.path);
+                      break;
                     case 'decompose_requirements':
                       result = await handleDecomposeRequirements(
                         tc.arguments.prompt,
@@ -1308,13 +1294,13 @@ You have access to the following tools. Use them proactively to fulfill user req
                       );
                       break;
                     case 'list_skills':
-                      result = handleListSkills();
+                      result = handleListSkills(activeProject.path);
                       break;
                     case 'read_skill':
-                      result = handleReadSkill(tc.arguments.name);
+                      result = handleReadSkill(tc.arguments.name, activeProject.path);
                       break;
                     case 'invoke_skill':
-                      result = handleInvokeSkill(tc.arguments.name, tc.arguments.context);
+                      result = handleInvokeSkill(tc.arguments.name, activeProject.path, tc.arguments.context);
                       break;
                     default:
                       result = `Tool "${tc.name}" is not implemented.`;

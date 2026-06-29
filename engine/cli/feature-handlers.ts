@@ -63,8 +63,8 @@ export async function handleFeature(subcommand?: string, storyPath?: string): Pr
                 // Distill chronicle automatically (dynamic context accumulation)
                 try {
                     log('→', 'Auto-distilling chronicle context...');
-                    const { distillChronicle } = await import('../chronicle.ts');
-                    await distillChronicle(project.path);
+                    const { distillKnowledgeAndChronicles } = await import('../chronicle.ts');
+                    await distillKnowledgeAndChronicles(project.path);
                 } catch { /* ignore */ }
 
                 const commitTarget = story.target || story.name || 'fix';

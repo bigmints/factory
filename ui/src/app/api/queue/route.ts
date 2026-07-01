@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { resolve } from 'path';
-import { listStories, loadStory, updateStoryStatus } from '@engine/story';
+import { listStories, loadStory, updateStoryStatus, sortStoriesTopologically } from '@engine/story';
 import { getActiveProject } from '@engine/config';
 
 export const dynamic = 'force-dynamic';
@@ -17,24 +17,34 @@ export async function GET() {
         const items: any[] = [];
         let isRunning = false;
         
+        const pendingForSort: Array<{ path: string, story: any }> = [];
         for (const file of all) {
             try {
-                const story = loadStory(resolve(project.path, '.factory', 'stories', file));
+                const pathStr = resolve(project.path, '.factory', 'stories', file);
+                const story = loadStory(pathStr);
                 const status = story.status || 'draft';
                 if (['pending', 'ready-to-build', 'building', 'failed', 'done'].includes(status)) {
-                    // Match UI expectations
-                    const uiStatus = status === 'building' ? 'running' : (status === 'ready-to-build' ? 'pending' : status);
-                    items.push({
-                        id: file,
-                        status: uiStatus,
-                        storyFile: file,
-                        title: story.name || file
-                    });
-                    if (status === 'building') {
-                        isRunning = true;
-                    }
+                    pendingForSort.push({ path: file, story });
                 }
             } catch { /* ignore */ }
+        }
+
+        const sorted = sortStoriesTopologically(pendingForSort);
+
+        for (const item of sorted) {
+            const status = item.story.status || 'draft';
+            const uiStatus = status === 'building' ? 'running' : (status === 'ready-to-build' ? 'pending' : status);
+            items.push({
+                id: item.path,
+                status: uiStatus,
+                storyFile: item.path,
+                title: item.story.name || item.path,
+                dependsOn: item.story.dependsOn || [],
+                phase: item.story.phase || 1
+            });
+            if (status === 'building') {
+                isRunning = true;
+            }
         }
         
         return NextResponse.json({ items, isRunning });

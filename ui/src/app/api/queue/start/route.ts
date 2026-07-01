@@ -21,8 +21,19 @@ export async function POST() {
         const out = fs.openSync(logFile, 'a');
         const err = fs.openSync(logFile, 'a');
 
-        const parts = ['..', 'bin', 'factory'];
-        const factoryBin = [process.cwd(), ...parts].join('/');
+        const devBin = path.join(process.cwd(), '..', 'bin', 'factory');
+        const factoryBin = fs.existsSync(devBin) ? devBin : 'factory';
+        
+        const pidFile = path.join(project.path, '.factory', 'queue.pid');
+        if (fs.existsSync(pidFile)) {
+            try {
+                const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
+                process.kill(pid, 0);
+                return NextResponse.json({ error: 'Queue is already running' }, { status: 400 });
+            } catch {
+                // Not running, safe to start
+            }
+        }
         
         // Spawn factory queue start detached and pipe output to log file
         const child = spawn(factoryBin, ['queue', 'start'], {
@@ -30,9 +41,7 @@ export async function POST() {
             stdio: ['ignore', out, err],
         });
         
-        // Save the PID so we can stop the queue later
-        const pidFile = path.join(project.path, '.factory', 'queue.pid');
-        fs.writeFileSync(pidFile, String(child.pid));
+        // The detached process will write its own PID in handleQueueStart()
         
         child.unref(); // Let it run in background
 

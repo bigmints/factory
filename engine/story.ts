@@ -496,3 +496,40 @@ export function validateAppSpec(app: AppSpec): ValidationResult {
     return { passed: errors.length === 0, errors };
 }
 
+/**
+ * Topologically sort a list of pending story items based on phase and dependsOn.
+ */
+export function sortStoriesTopologically(pending: Array<{ path: string, story: any }>): Array<{ path: string, story: any }> {
+    // Sort by phase first
+    pending.sort((a, b) => {
+        const phaseA = typeof a.story.phase === 'number' ? a.story.phase : 99;
+        const phaseB = typeof b.story.phase === 'number' ? b.story.phase : 99;
+        return phaseA - phaseB;
+    });
+
+    // Topological sort respecting dependencies
+    const orderedPending: typeof pending = [];
+    const visited = new Set<string>();
+    const pendingMap = new Map(pending.map(item => [item.story.feature?.slug || item.story.name, item]));
+
+    function visit(item: typeof pending[0]) {
+        const key = item.story.feature?.slug || item.story.name;
+        if (!key || visited.has(key)) return;
+        visited.add(key);
+        
+        const deps = item.story.dependsOn || [];
+        for (const dep of deps) {
+            const depItem = pendingMap.get(dep);
+            if (depItem) visit(depItem);
+        }
+        orderedPending.push(item);
+    }
+
+    for (const item of pending) {
+        visit(item);
+    }
+
+    return orderedPending;
+}
+
+

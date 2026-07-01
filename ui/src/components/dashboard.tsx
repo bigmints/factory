@@ -390,6 +390,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleStopIndividualStory = async (e: React.MouseEvent | undefined, file: string) => {
+    if (e) e.stopPropagation();
+    try {
+      const res = await fetch("/api/stories/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file, status: "draft" })
+      });
+      if (res.ok) {
+        toast.success("Stopped individual build");
+        fetchAll();
+      } else {
+        toast.error("Failed to stop individual build");
+      }
+    } catch {
+      toast.error("Failed to stop individual build");
+    }
+  };
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ match: string; index: number } | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
@@ -679,7 +698,7 @@ export default function Dashboard() {
                     className="h-6 w-6 rounded-md hover:bg-red-500/10 text-red-500 hover:text-red-600 shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleStopBuild(e);
+                      handleStopIndividualStory(e, item.file);
                     }}
                     title="Stop Build"
                   >
@@ -752,7 +771,7 @@ export default function Dashboard() {
                     className="h-6 w-6 rounded-md hover:bg-red-500/10 text-red-500 hover:text-red-600 shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleStopBuild(e);
+                      handleStopIndividualStory(e, item.file);
                     }}
                     title="Stop Build"
                   >
@@ -922,7 +941,7 @@ export default function Dashboard() {
                       onClose={() => setEditingStory(null)}
                       onSaved={() => fetchAll()}
                       onViewLogs={(file, name) => setViewingLogsStory({ file, name })}
-                      onStopBuild={handleStopBuild}
+                      onStopBuild={() => handleStopIndividualStory(undefined, editingStory.file)}
                     />
                   </div>
                 </div>

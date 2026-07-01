@@ -37,12 +37,26 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     const bridge = loadBridgeConfig(project.path);
     const blueprint = gatherBlueprint(project.path, bridge);
 
-    const slug = storySlug(story);
-    const targetDir = bridge.apps_dir
-        ? resolve(project.path, bridge.apps_dir, slug)
-        : slug !== project.name && slug !== basename(project.path)
-        ? resolve(project.path, slug)
-        : project.path;
+    // Determine the target directory for execution.
+    // Features should run inside the target app's directory, not a new folder named after the feature.
+    let targetDir = project.path;
+    const targetApp = (story.target as any)?.app;
+    
+    if (bridge.apps_dir && targetApp) {
+        targetDir = resolve(project.path, bridge.apps_dir, targetApp);
+    } else if (targetApp && targetApp !== project.name && targetApp !== basename(project.path)) {
+        // Monorepo without explicit apps_dir, or the folder exists
+        const potentialAppDir = resolve(project.path, targetApp);
+        if (existsSync(potentialAppDir)) {
+            targetDir = potentialAppDir;
+        }
+    } else if (!(story as any).feature) {
+        // For app generation stories without a specific target, legacy fallback to story slug
+        const slug = storySlug(story);
+        if (slug !== project.name && slug !== basename(project.path)) {
+            targetDir = resolve(project.path, slug);
+        }
+    }
 
     // Step 3: Run orchestrator — LLM delegates to the configured CLI
     // The CLI agent writes files directly; no post-pipeline writeFiles() needed.
@@ -115,7 +129,7 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     console.log('');
     console.log('═'.repeat(50));
     log('✓', `Build ${result.success ? 'COMPLETE' : 'DONE (with warnings)'}`);
-    log('→', `App: ${story.name} (${slug})`);
+    log('→', `App: ${story.name} (${storySlug(story)})`);
     log('→', `Files: ${result.files.length}`);
     log('→', `Output: ${targetDir}`);
     if (result.errors && result.errors.length > 0) {

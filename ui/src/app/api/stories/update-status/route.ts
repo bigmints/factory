@@ -43,7 +43,15 @@ export async function POST(request: Request) {
     // 2. Update physical story YAML file status
     updateStoryStatus(currentFile, status);
 
-    // 3. Update status inside scaffold.yaml & calculate rollups (Removed: rollup.ts is gone)
+    // 3. If cancelling/failing a currently running build, kill its specific process
+    if (['draft', 'paused', 'failed'].includes(status)) {
+      const { exec } = require('node:child_process');
+      const escapedFile = currentFile.split('/').pop()?.replace(/["'$]/g, '') || '';
+      if (escapedFile) {
+        // Find and kill the specific `tsx engine/cli.ts build` process for this file
+        exec(`pkill -f "cli.ts build .*${escapedFile}"`, () => {});
+      }
+    }
 
     return NextResponse.json({
       success: true,

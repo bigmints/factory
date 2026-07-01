@@ -8,11 +8,10 @@ export async function POST() {
         if (!project || !project.path) {
             return NextResponse.json({ error: 'No active project' }, { status: 400 });
         }
-        const parts = ['..', 'bin', 'factory'];
-        const factoryBin = [process.cwd(), ...parts].join('/');
-        
         const fs = require('fs');
         const path = require('path');
+        const devBin = path.join(process.cwd(), '..', 'bin', 'factory');
+        const factoryBin = fs.existsSync(devBin) ? devBin : 'factory';
         const logsDir = path.join(project.path, '.factory', 'logs');
         if (!fs.existsSync(logsDir)) {
             fs.mkdirSync(logsDir, { recursive: true });

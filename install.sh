@@ -69,6 +69,7 @@ if [ ! -d "$FACTORY_DIR/skills" ] || [ -z "$(ls -A "$FACTORY_DIR/skills" 2>/dev/
   echo "🧠 Seeding default skills..."
   mkdir -p "$FACTORY_DIR/skills"
   cp skills/defaults/*.md "$FACTORY_DIR/skills/" 2>/dev/null || true
+  cp skills/story-generator/SKILL.md "$FACTORY_DIR/skills/story-generator.md" 2>/dev/null || true
 fi
 
 # Link CLI

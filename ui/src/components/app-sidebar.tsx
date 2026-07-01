@@ -9,6 +9,7 @@ import {
   Plug,
   Settings,
   Settings2,
+  ListOrdered
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -37,6 +38,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 const navMain = [
   { title: "Stories", id: "plan",   icon: LayoutDashboard },
+  { title: "Build Queue", id: "queue", icon: ListOrdered },
   { title: "Knowledge",  id: "knowledge", icon: Brain },
   { title: "Project Settings",  id: "project-settings", icon: Settings2 },
 ]

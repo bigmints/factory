@@ -14,7 +14,6 @@ authority: CANONICAL — overrides all other files
 
 | Rule | Command |
 |------|---------|
-| **Heartbeat** — before every task and after every commit | `factory pulse "<task>"` |
 | **Token budget** — keep every prompt under 64k tokens | Stay under 50k working input; split large tasks |
 | **Validate before commit** — zero broken code committed | `npx tsc --noEmit && npx eslint .` |
 | **Context reflects reality** — update after structural changes | Update context + write ADR if architectural |
@@ -61,11 +60,9 @@ START → bootstrap.md → [WORK LOOP] → SESSION END (§6) → END
 | Context size > 50k tokens | compress worklog → trim → retry |
 | Context parse error | `git checkout .factory/logs/state.yaml` |
 | Task not in `todo.yaml` | `manage.sh list` → find or add it |
-| Heartbeat stale (> 30 min) | `factory pulse "resuming"` → continue |
 
 **Stuck checklist:**
 ```
-[ ] Heartbeat fresh (< 30 min)?    NO → factory pulse "resuming"
 [ ] Task claimed in todo.yaml?     NO → factory task start <id>
 [ ] Context < 50k tokens?          NO → compress worklog
 [ ] ADR covers this decision?      NO → write ADR first
@@ -107,7 +104,6 @@ Bug fixes and styling → **not structural**, skip this.
 
 ```bash
 # 1. Heartbeat
-factory pulse "Session end: <task_id>"
 
 # 2. Complete task
 factory task complete --id <id> --summary "<what was done>"
@@ -142,7 +138,6 @@ Valid ADR: Context · Decision · Consequences · Status (all four required)
 | `.factory/workflows/bootstrap.md` | Session start checklist |
 | `.factory/workflows/commit.md` | Pre-commit validation gate |
 | `.factory/logs/state.yaml` | Live project state — single source of truth |
-| `.factory/logs/heartbeat.yaml` | Liveness timestamp (overwrite, never append) |
 | `.factory/task-manager/todo.yaml` | Task queue — only via manage.sh |
 | `.factory/skill-index.yaml` | Available skills with script paths |
 | `.factory/knowledge/builds/` | Build history from Factory engine |
@@ -153,7 +148,6 @@ Valid ADR: Context · Decision · Consequences · Status (all four required)
 
 ```bash
 # Heartbeat
-factory pulse "<msg>"
 
 # Task management
 factory task list
@@ -169,4 +163,4 @@ factory blueprint update "<msg>"
 git log --oneline -20
 ```
 
-> **Note:** Once us_004_cli_facade is complete, all commands above become `factory pulse`, `factory task`, `factory context update`.
+> **Note:** Once us_004_cli_facade is complete, all commands above become `factory task` and `factory context update`.

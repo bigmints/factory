@@ -91,26 +91,6 @@ export function parseToonSkillIndex(path: string): Array<{ name: string; path: s
 // ─── Heartbeat ───────────────────────────────────────────
 
 /**
- * Write a heartbeat to .factory/logs/heartbeat.yaml.
- * @param projectRoot - Path to the project root
- * @param task - Current task description
- */
-export function writeHeartbeat(projectRoot: string, task: string): void {
-    // Write to .yaml — YAML is the canonical storage format
-    const heartbeatFile = join(projectRoot, '.factory/logs/heartbeat.yaml');
-    mkdirSync(dirname(heartbeatFile), { recursive: true });
-
-    const data = {
-        heartbeat: {
-            last_seen: new Date().toISOString(),
-            host: osHostname(),
-            task,
-            status: 'alive',
-        },
-    };
-    writeFileSync(heartbeatFile, toYaml(data));
-}
-
 // ─── Tasks Snapshot ─────────────────────────────────────
 
 /**

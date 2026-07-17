@@ -7,7 +7,6 @@
  * Creates:
  *   .factory/factory.yaml           — bridge config (absolute factory_home)
  *   .factory/logs/state.yaml          — project state (analyzed from codebase)
- *   .factory/logs/heartbeat.yaml      — liveness signal
  *   .factory/logs/worklog.yaml        — append-only session log
  *   .factory/skill-index.yaml       — skills directory
  *   .factory/task-manager/todo.yaml — task queue
@@ -227,7 +226,6 @@ This project is connected to [Factory](https://github.com/Bigmints-com/factory) 
 ### Quick Commands
 
 \`\`\`bash
-factory pulse "<msg>"            # Write liveness heartbeat
 factory task list                # Show task queue
 factory task start <id>          # Claim a task
 factory blueprint update "<msg>" # Append to worklog
@@ -242,7 +240,6 @@ factory hooks install            # Install git hooks
 |------|---------|
 | \`.factory/factory.yaml\` | Bridge config (links to Factory install) |
 | \`.factory/logs/state.yaml\` | Project state snapshot (read by agent on start) |
-| \`.factory/logs/heartbeat.yaml\` | Liveness signal (written every build step) |
 | \`.factory/logs/worklog.yaml\` | Append-only session log |
 | \`.factory/skill-index.yaml\` | Available agentic skills |
 | \`.factory/task-manager/todo.yaml\` | Task queue (human + agent readable) |
@@ -257,8 +254,8 @@ You MUST adhere to the following file paths:
 
 ### Workflow
 
-1. Start: \`factory task start <id>\` → \`factory pulse "starting <id>"\`
-2. Work: agent reads logs/state.yaml, builds, writes heartbeat on each step
+1. Start: \`factory task start <id>\`
+2. Work: agent reads logs/state.yaml and builds
 3. Done: \`factory task complete --id <id> --summary "what was done"\`
 4. Commit: \`factory blueprint update "summary"\` → git commit
 `.trim();
@@ -308,16 +305,12 @@ Always adhere strictly to the following phased lifecycle when executing tasks:
      \`\`\`bash
      .factory/task-manager/manage.sh start <task-id>
      \`\`\`
-   - Write a heartbeat pulse indicating you have claimed and started the task:
      \`\`\`bash
-     factory pulse "Starting work on <task-id>: <brief summary>"
      \`\`\`
 
 3. **BUILD & ITERATE:**
    - Write modular, readable, fully typed code. Avoid placeholders, "TODO" comments in critical paths, or stubbed endpoints.
-   - Constantly write heartbeat signals to \`.factory/logs/heartbeat.yaml\` at significant coding milestones via:
      \`\`\`bash
-     factory pulse "<milestone summary>"
      \`\`\`
    - Perform incremental validation checks. If compilation or lint errors are returned, perform targeted debugging rather than full regeneration.
 
@@ -333,7 +326,6 @@ Always adhere strictly to the following phased lifecycle when executing tasks:
      \`\`\`
    - Write a session update pulse:
      \`\`\`bash
-     factory pulse "Successfully completed and validated <task-id>."
      \`\`\`
 
 ## Coding Conventions
@@ -372,7 +364,6 @@ export function patchAgentsMd(repoPath: string): { path: string; action: 'create
 ## Role
 You are a senior developer working on **${name}**.
 Always read .factory/logs/state.yaml before starting work.
-Write heartbeat on every significant step.
 
 ${stackLine}
 
@@ -677,6 +668,21 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
             rules: '.factory/knowledge',
             agents: '.factory/AGENTS.md',
         },
+        delivery: {
+            mode: 'pull-request',
+            executor: 'pi-sdk',
+            localModelsOnly: true,
+            requireHumanMerge: true,
+            maxWorkers: 1,
+            leaseMinutes: 10,
+            unattended: {
+                enabled: false,
+                maxRuntimeMinutes: 30,
+                maxToolCalls: 150,
+                maxChangedFiles: 25,
+                maxChangedLines: 2000,
+            },
+        },
         agentic: {
             logs_dir: '.factory/logs',
             task_queue: '.factory/task-manager/todo.yaml',
@@ -701,22 +707,6 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
         files.push({ path: '.factory/logs/state.yaml', action: 'skipped' });
     }
 
-    // 3. heartbeat.yaml
-    const heartbeatPath = join(factoryDir, 'logs', 'heartbeat.yaml');
-    if (!existsSync(heartbeatPath)) {
-        writeFileSync(heartbeatPath, toYaml({
-            heartbeat: {
-                last_seen: new Date().toISOString(),
-                host: 'uninitialized',
-                task: 'scaffold created',
-                status: 'idle',
-            },
-        }));
-        files.push({ path: '.factory/logs/heartbeat.yaml', action: 'created' });
-    } else {
-        files.push({ path: '.factory/logs/heartbeat.yaml', action: 'skipped' });
-    }
-
     // 4. worklog.yaml
     const worklogPath = join(factoryDir, 'logs', 'worklog.yaml');
     if (!existsSync(worklogPath)) {
@@ -739,11 +729,11 @@ export async function initBridge(repoPath: string): Promise<InitResult> {
     if (!existsSync(globalSkillIndex)) {
         writeFileSync(globalSkillIndex, toYaml({
             skills: [
-                { name: 'heartbeat', path: `factory pulse "liveness check"`, description: 'Write a liveness timestamp' },
                 { name: 'auto-blueprint', path: `factory blueprint update "checkpoint"`, description: 'Append to worklog' },
                 { name: 'validate-code', path: `factory validate`, description: 'Run lint and type checks' },
                 { name: 'worker', path: 'factory worker', description: 'Run YAML prompt queue' },
                 { name: 'task-manager', path: 'factory task', description: 'Manage task lifecycle' },
+                { name: 'delivery-kernel', path: 'skills/delivery-kernel.md', description: 'Pi SDK worktree and PR delivery contract' },
             ],
         }));
     }

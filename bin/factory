@@ -10,4 +10,11 @@ while [ -h "$SOURCE" ]; do
 done
 DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 
+if ! command -v node >/dev/null 2>&1; then
+  NVM_NODE_BIN=$(find "$HOME/.nvm/versions/node" -maxdepth 3 -type f -name node 2>/dev/null | sort -V | tail -n 1 | xargs dirname 2>/dev/null || true)
+  if [ -n "$NVM_NODE_BIN" ]; then
+    export PATH="$NVM_NODE_BIN:$PATH"
+  fi
+fi
+
 exec "$DIR/node_modules/.bin/tsx" "$DIR/engine/cli.ts" "$@"

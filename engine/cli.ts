@@ -17,7 +17,7 @@ import { logError } from './log.ts';
 import { handleBuild, handleValidate, handleStatus } from './cli/build-handlers.ts';
 import { handleStart, handleStop } from './cli/service-handlers.ts';
 import {
-    handlePulse, handleBtw, handleTask, handleBlueprint, handleCompress,
+    handleBtw, handleTask, handleBlueprint, handleCompress,
     handleWorker, handleHooks, handleRepl, handleChronicle, installGitHooks,
 } from './cli/facade-handlers.ts';
 
@@ -89,7 +89,7 @@ function printUsage(): void {
 Usage: factory <command> [options]
 
 Commands:
-  build <story.yaml> [--engine worker]   Full pipeline (or worker engine)
+  build <story.yaml>            Full Pi SDK build pipeline
   validate <story.yaml>       Validate a story
   repl [<story.yaml>] [--auto] Start the beautiful interactive CLI terminal UI (REPL)
   status                     Show story statuses
@@ -106,22 +106,19 @@ Commands:
   project remove <id>        Disconnect a repo
   project reset [repo-path]  Reset project stories to draft & clear queue
 
-  feature build <story.yaml> [--engine worker]  Build a feature
+  feature build <story.yaml>  Build a feature
   feature validate <story.yaml>  Validate a feature story
 
-   app sync [<yaml-path>]        Sync app roadmap and statuses with scaffold.yaml roadmap spec
+   app sync [<yaml-path>]        Sync app roadmap metadata
   app list                      List all synced apps
-  app status [<app-id>]         Show full hierarchical status tree and progress
 
   queue list                    List all queue items
-  queue add <story.yaml> [--engine worker]  Add to queue
+  queue add <story.yaml>        Add to queue
   queue start                   Process all pending items autonomously
-  queue stats                   Show queue statistics
-  queue clear                   Clear completed items
-  queue retry <id>              Retry a failed item
-  queue remove <id>             Remove an item from queue
+  queue clear                   Reset stale running items back to queued
+  delivery reconcile [story]    Reconcile leases and pull-request state
 
-  worker [options...]           Run task queue natively (formerly minions CLI)
+  worker [options...]           Legacy worker path
 `);
 }
 
@@ -177,9 +174,11 @@ async function main(): Promise<void> {
             console.error('Unknown queue command. Available: list, add, start, clear');
             process.exit(1);
         }
+        case 'delivery': {
+            const { handleDelivery } = await import('./cli/delivery-handlers.ts');
+            return handleDelivery(args[1], args[2]);
+        }
         // ─── CLI Facade ─────────────────────────────
-        case 'pulse':
-            return handlePulse();
         case 'task':
             return handleTask();
         case 'blueprint':

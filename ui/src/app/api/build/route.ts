@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { buildSpawnEnv } from '@engine/cli-adapter';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     const execOptions = {
       encoding: 'utf-8' as BufferEncoding,
       timeout: 1_200_000,
-      env: { ...process.env, npm_config_cache: '/tmp/factory-npm-cache', TMPDIR: '/tmp/factory-npm-cache' }
+      env: { ...buildSpawnEnv(), npm_config_cache: '/tmp/factory-npm-cache', TMPDIR: '/tmp/factory-npm-cache' }
     };
 
     const result = stripAnsi(execFileSync(

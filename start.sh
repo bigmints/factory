@@ -9,5 +9,15 @@ if [ -n "$PID" ]; then
   sleep 1
 fi
 
-echo "🚀 Starting Factory on http://localhost:$PORT"
-cd "$(dirname "$0")/ui" && npm run dev -- -p $PORT 2>&1
+FACTORY_DIR="${FACTORY_DIR:-$HOME/.factory}"
+SERVER="$FACTORY_DIR/ui/server.js"
+
+if [ ! -f "$SERVER" ]; then
+  echo "❌ Production UI not installed at $SERVER"
+  echo "Run: make install"
+  exit 1
+fi
+
+echo "🚀 Starting Factory production server on http://localhost:$PORT"
+cd "$FACTORY_DIR/ui"
+PORT="$PORT" HOSTNAME="0.0.0.0" node server.js 2>&1

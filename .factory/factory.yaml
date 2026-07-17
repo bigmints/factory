@@ -9,6 +9,19 @@ stack:
 conventions:
   rules: .factory/knowledge
   agents: .factory/AGENTS.md
+delivery:
+  mode: pull-request
+  executor: pi-sdk
+  localModelsOnly: true
+  requireHumanMerge: true
+  maxWorkers: 1
+  leaseMinutes: 10
+  unattended:
+    enabled: false
+    maxRuntimeMinutes: 30
+    maxToolCalls: 150
+    maxChangedFiles: 25
+    maxChangedLines: 2000
 agentic:
   logs_dir: .factory/logs
   task_queue: .factory/task-manager/todo.yaml

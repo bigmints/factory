@@ -41,9 +41,7 @@ git rev-parse --show-toplevel
 .factory/task-manager/manage.sh list --status in_progress
 ```
 
-**4 — Check heartbeat**
 ```bash
-cat .factory/logs/heartbeat.yaml
 ```
 | Age | Action |
 |-----|--------|
@@ -52,7 +50,6 @@ cat .factory/logs/heartbeat.yaml
 | > 30 min | Run pulse first |
 
 ```bash
-factory pulse "Session start"
 ```
 
 **5 — Claim a task**
@@ -63,9 +60,7 @@ factory task start <task_id>
 ```
 Rules: lowest priority first · never claim `in_progress` · never re-claim `completed`
 
-**6 — Start heartbeat**
 ```bash
-factory pulse "<task_id>: starting"
 ```
 
 ---

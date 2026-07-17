@@ -1,6 +1,6 @@
 /**
  * CLI facade handlers — thin wrappers that delegate to shell scripts or engine modules.
- * Covers: pulse, btw, task, blueprint, compress, worker, hooks, repl, chronicle.
+ * Covers: btw, task, blueprint, compress, worker, hooks, repl, chronicle.
  */
 
 import { resolve, dirname, join } from 'node:path';
@@ -12,13 +12,6 @@ import { getActiveProject } from '../config.ts';
 import { syncBlueprint } from '../blueprint.ts';
 import { log, logHeader, logError } from '../log.ts';
 import { args, resolveScript, spawnScript } from '../cli.ts';
-
-/** factory pulse "<msg>" — write heartbeat */
-export function handlePulse(): void {
-    const script = resolveScript('heartbeat/pulse.sh');
-    const msg = args.slice(1).join(' ') || 'pulse';
-    spawnScript(script, [msg]);
-}
 
 /** factory btw <target> "<message>" — prioritize btw additional details without interrupting running tasks */
 export async function handleBtw(target: string, message: string): Promise<void> {
@@ -273,10 +266,9 @@ export function installGitHooks(projectRoot: string): void {
     const hooksDir = join(gitDir, 'hooks');
     mkdirSync(hooksDir, { recursive: true });
 
-    // post-commit hook — writes heartbeat + appends worklog entry
+    // post-commit hook — appends blueprint worklog entry
     const postCommit = join(hooksDir, 'post-commit');
     const factoryRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-    const pulseScript = join(factoryRoot, 'factory', 'scripts', 'heartbeat', 'pulse.sh');
     const blueprintScript = join(factoryRoot, 'factory', 'scripts', 'auto-blueprint', 'update-blueprint.sh');
 
     const hookContent = [
@@ -285,7 +277,6 @@ export function installGitHooks(projectRoot: string): void {
         `export FACTORY_PROJECT_ROOT="${projectRoot}"`,
         `COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo 'commit')`,
         `CHANGED=$(git diff-tree --no-commit-id -r --name-only HEAD 2>/dev/null | tr '\\n' ', ' | sed 's/,$//')`,
-        existsSync(pulseScript)  ? `bash "${pulseScript}" "post-commit: $COMMIT_MSG"` : '',
         existsSync(blueprintScript) ? `bash "${blueprintScript}" "committed: $COMMIT_MSG FILES:$CHANGED"` : '',
         '',
     ].filter(l => l !== null).join('\n');
@@ -294,7 +285,7 @@ export function installGitHooks(projectRoot: string): void {
     try { execSync(`chmod +x "${postCommit}"`); } catch { /* ignore on non-unix */ }
 
     log('✓', `Git hooks installed in ${projectRoot}`);
-    log('→', 'post-commit: heartbeat + worklog auto-updated on every commit');
+    log('→', 'post-commit: blueprint worklog auto-updated on every commit');
 }
 
 export async function handleRepl(storyPath?: string): Promise<void> {

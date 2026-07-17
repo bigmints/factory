@@ -16,7 +16,7 @@ Factory is an LLM-orchestrated build system. The TPM (Technical Program Manager)
 | Pattern knowledge, how-to instructions | Skill (`SKILL.md`) |
 | Schema definitions, acceptance criteria format | Skill (`SKILL.md`) |
 | File reading, file writing, process spawning | Tool (TypeScript function) |
-| Queue management, heartbeat, state persistence | Tool (TypeScript function) |
+| Queue management, state persistence | Tool (TypeScript function) |
 
 ### Rules for all agents working on Factory
 
@@ -59,7 +59,6 @@ npx tsx engine/cli.ts queue list
 npx tsx engine/cli.ts queue start
 
 # CLI facade
-factory pulse "<msg>"
 factory task list
 factory blueprint update "<msg>"
 factory validate
@@ -70,8 +69,6 @@ factory repl <provider>
 factory chronicle distill
 
 # Agentic scripts
-FACTORY_PROJECT_ROOT=$(pwd) factory/scripts/heartbeat/pulse.sh "<msg>"
-FACTORY_PROJECT_ROOT=$(pwd) factory/scripts/heartbeat/check.sh
 FACTORY_PROJECT_ROOT=$(pwd) factory/scripts/auto-blueprint/update-blueprint.sh "<msg>"
 .factory/task-manager/manage.sh list
 .factory/task-manager/manage.sh start <id>
@@ -101,12 +98,12 @@ factory/
 │   ├── writer.ts          ← File writer, npm install, git ops, knowledge feedback
 │   ├── db.ts              ← Build logs (YAML-based, replaces SQLite)
 │   ├── queue.ts           ← Dependency-aware queue (YAML-based)
-│   ├── health.ts          ← State audit, heartbeat, error categorisation
+│   ├── health.ts          ← State audit and error categorisation
 │   ├── chronicle.ts       ← Auto-distill build history into knowledge context
 │   ├── rollup.ts          ← Scaffold.yaml sync & progress rollup
 │   ├── skills.ts          ← Skill registry and execution
 │   ├── init.ts            ← Project initialisation & bridge setup
-│   ├── toon.ts            ← TOON/YAML read/write helpers, heartbeat writer
+│   ├── toon.ts            ← TOON/YAML read/write helpers and task snapshots
 │   ├── build-tools.ts     ← Build tool definitions for LLM tool-calling
 │   ├── worker-engine.ts   ← Worker engine for YAML prompt queue processing
 │   ├── daemon.ts          ← Daemon lifecycle (start/stop)
@@ -137,12 +134,12 @@ factory/
 | `writer.ts`          | Writes files, runs `npm install`, git commit/push, knowledge entries, AGENTS.md generation   |
 | `db.ts`              | Build log storage via YAML (`~/.factory/builds.yaml`)                                        |
 | `queue.ts`           | YAML-based queue: enqueue, dequeue (phase + dependsOn gating), daemon loop, stats            |
-| `health.ts`          | State audit (zombie detection), heartbeat management, error categorisation                   |
+| `health.ts`          | State audit (zombie detection) and error categorisation                                      |
 | `chronicle.ts`       | Auto-distills build history + knowledge into compressed context for future builds             |
 | `rollup.ts`          | Syncs scaffold.yaml progress from story file statuses, calculates percentages                |
 | `skills.ts`          | Skill registry: load, list, execute agentic skills                                           |
 | `init.ts`            | Project initialisation: scaffold.yaml generation, story decomposition from requirements      |
-| `toon.ts`            | TOON encoding/decoding helpers, heartbeat writer, task snapshot writer                       |
+| `toon.ts`            | TOON encoding/decoding helpers and task snapshot writer                                      |
 | `build-tools.ts`     | Tool definitions exposed to the LLM during orchestration                                     |
 | `worker-engine.ts`   | Processes YAML prompt queues via configured CLI                                              |
 | `daemon.ts`          | Daemon lifecycle management (start/stop/install/uninstall as LaunchAgent)                    |
@@ -223,7 +220,6 @@ The `.factory/` folder inside a connected project repo. Single source of truth f
 │   └── done/              ← Archived completed stories
 ├── knowledge/             ← Agent-authored ADRs, decisions, conventions for future runs
 ├── logs/                  ← Machine-written runtime output (never hand-edit)
-│   ├── heartbeat.yaml     ← Liveness signal (written by engine + pulse.sh)
 │   ├── worklog.yaml       ← Append-only session log
 │   ├── builds/            ← Build receipts written after each successful build
 │   └── failures/          ← Failure records for debugging
@@ -316,7 +312,6 @@ factory queue watch start               Start file-watching queue
 factory worker --queue <file>           Run YAML prompt queue natively
 factory worker default-cli [cli]        Get/set default CLI (pi, gemini, claude, agy)
 
-factory pulse "<msg>"                   Write liveness heartbeat
 factory task list                       Show task queue
 factory blueprint update "<msg>"        Append to worklog
 factory repl <provider>                 Interactive LLM REPL
@@ -369,7 +364,6 @@ This project is connected to [Factory](https://github.com/Bigmints-com/factory) 
 ### Quick Commands
 
 ```bash
-factory pulse "<msg>"            # Write liveness heartbeat
 factory task list                # Show task queue
 factory task start <id>          # Claim a task
 factory blueprint update "<msg>" # Append to worklog
@@ -389,7 +383,6 @@ factory hooks install            # Install git hooks
 | `.factory/stories/done/*.yaml` | Archived completed stories |
 | `.factory/knowledge/` | Agent-authored ADRs and decisions (future context) |
 | `.factory/blueprint/chronicle.md` | Auto-distilled project context |
-| `.factory/logs/heartbeat.yaml` | Liveness signal (written every build step) |
 | `.factory/logs/worklog.yaml` | Append-only session log |
 | `.factory/logs/builds/` | Build receipts |
 | `.factory/logs/failures/` | Failure records |
@@ -398,7 +391,7 @@ factory hooks install            # Install git hooks
 
 ### Workflow
 
-1. Start: `factory task start <id>` → `factory pulse "starting <id>"`
-2. Work: agent reads context, builds, writes heartbeat on each step
+1. Start: `factory task start <id>`
+2. Work: agent reads context and builds
 3. Done: `factory task complete --id <id> --summary "what was done"`
 4. Commit: `git add -A && git commit -m "feat(scope): what and why"`

@@ -118,7 +118,6 @@ async function summarizeLog(logTail: string, llm: { baseUrl: string; apiKey: str
  * Server-Sent Events stream that:
  *   - Tails `.factory/logs/cli-<slug>.log` every 750ms  → `log` events
  *   - Summarizes the log via LLM every 8s               → `summary` events
- *   - Emits heartbeat changes                           → `heartbeat` events
  *
  * Works with any CLI: gemini, agy, pi, claude, codex.
  * The log file is written by orchestrate.ts at the spawn() level.
@@ -133,7 +132,6 @@ export async function GET(request: Request) {
   const projectRoot   = getProjectPath(project);
   const logsDir       = join(projectRoot, '.factory', 'logs');
   const cliLogPath    = join(logsDir, `cli-${slug}.log`);
-  const heartbeatPath = join(logsDir, 'heartbeat.yaml');
 
   const llmConfig = loadLLMConfig();
 
@@ -142,7 +140,6 @@ export async function GET(request: Request) {
   const stream = new ReadableStream({
     start(controller) {
       let fileOffset        = 0;
-      let lastHeartbeatSent = '';
       let fullLogBuffer     = '';   // accumulates the whole log for summarization
       let lastSummarizeAt   = 0;
       let summarizing       = false;
@@ -169,14 +166,6 @@ export async function GET(request: Request) {
         send('log', { text: `Waiting for CLI to start...\n(log: ${cliLogPath})\n`, offset: 0 });
       }
 
-      if (existsSync(heartbeatPath)) {
-        try {
-          const hb = readFileSync(heartbeatPath, 'utf-8');
-          send('heartbeat', { raw: hb });
-          lastHeartbeatSent = hb;
-        } catch {}
-      }
-
       // ── Poll 750ms ────────────────────────────────────────────────────────
       const interval = setInterval(async () => {
         // Tail new bytes
@@ -199,17 +188,6 @@ export async function GET(request: Request) {
               fullLogBuffer = readFileSync(cliLogPath, 'utf-8');
               fileOffset    = Buffer.byteLength(fullLogBuffer, 'utf-8');
               send('log', { text: fullLogBuffer, offset: fileOffset, reset: true });
-            }
-          } catch {}
-        }
-
-        // Heartbeat
-        if (existsSync(heartbeatPath)) {
-          try {
-            const hb = readFileSync(heartbeatPath, 'utf-8');
-            if (hb !== lastHeartbeatSent) {
-              send('heartbeat', { raw: hb });
-              lastHeartbeatSent = hb;
             }
           } catch {}
         }

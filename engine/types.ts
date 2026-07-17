@@ -39,10 +39,15 @@ export interface Story {
 
     // Metadata
     status?: StoryStatus;
+    failureReason?: string;
     engine?: 'factory' | 'worker';
     build?: BuildMeta;
     threadId?: string;
     btw?: string[];
+    execution?: StoryExecution;
+    validation?: {
+        command: string;
+    };
 
     // Original raw markdown body content
     content?: string;
@@ -126,9 +131,35 @@ export interface DeploymentConfig {
     region?: string;
 }
 
-export type LifecycleStatus = 'draft' | 'ready-to-build' | 'building' | 'failed' | 'done';
+export type LifecycleStatus = 'draft' | 'queued' | 'running' | 'review' | 'failed' | 'done';
 
 export type StoryStatus = LifecycleStatus;
+
+export interface StoryExecution {
+    executor: 'pi-sdk';
+    model: string;
+    provider: string;
+    endpointHost: string;
+    branch: string;
+    worktree: string;
+    baseBranch: string;
+    claimedAt: string;
+    heartbeatAt: string;
+    leaseUntil: string;
+    prNumber?: number;
+    prUrl?: string;
+    state?: 'claimed' | 'building' | 'review' | 'stale' | 'merged';
+    lastEvent?: string;
+    lastReconciledAt?: string;
+    changedFiles?: string[];
+    verification?: {
+        status: DeliveryVerificationStatus;
+        summary: string;
+        evidence: string[];
+        productFilesChanged: boolean;
+        userReachable: boolean;
+    };
+}
 
 /** Blueprint about an existing app that feature builds need for integration */
 export interface AppIntegrationBlueprint {
@@ -167,6 +198,21 @@ export interface BridgeConfig {
     project?: {
         bootstrapped?: boolean;
     };
+    delivery?: {
+        mode?: 'pull-request';
+        executor?: 'pi-sdk';
+        localModelsOnly?: boolean;
+        requireHumanMerge?: boolean;
+        maxWorkers?: number;
+        leaseMinutes?: number;
+        unattended?: {
+            enabled: boolean;
+            maxRuntimeMinutes: number;
+            maxToolCalls: number;
+            maxChangedFiles: number;
+            maxChangedLines: number;
+        };
+    };
     /** Agentic configuration — paths to logs, tasks, skills, workflows, knowledge */
     agentic?: {
         logs_dir?: string;
@@ -196,6 +242,7 @@ export interface ProjectStack {
 // ─── Project Management ──────────────────────────────────
 
 export interface PiSettings {
+    providerId?: string;
     model?: string;
     thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     enableSkills: boolean;
@@ -259,19 +306,32 @@ export interface BuildPlan {
     decisions: string[];
 }
 
+export type DeliveryVerificationStatus = 'verified' | 'review' | 'failed';
+
+export interface DeliveryVerification {
+    status: DeliveryVerificationStatus;
+    summary: string;
+    evidence: string[];
+    missing: string[];
+    productFilesChanged: boolean;
+    userReachable: boolean;
+}
+
 export interface BuildResult {
     success: boolean;
+    status?: 'done' | 'review' | 'failed';
     files: GeneratedFile[];
     plan: BuildPlan;
     iterations: number;
     errors?: string[];
+    verification?: DeliveryVerification;
     /** Token usage accumulated across all LLM calls in this build */
     tokenUsage?: { promptTokens: number; completionTokens: number };
     /** Model used for generation */
     model?: string;
     /** Provider used (gemini/openai/ollama) */
     provider?: string;
-    /** which engine produced this result */
+    /** which execution path produced this result */
     engine?: string;
 }
 
@@ -407,4 +467,3 @@ export interface TaskItemSpec {
     title: string;
     status: TaskStatus;
 }
-

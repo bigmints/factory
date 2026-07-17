@@ -97,7 +97,7 @@ function toolIcon(name: string) {
   if (name.includes('scaffold')) return <Layers className="h-2.5 w-2.5" />;
   if (name.includes('queue')) return <ListTodo className="h-2.5 w-2.5" />;
   if (name.includes('knowledge') || name.includes('adr')) return <BookOpen className="h-2.5 w-2.5" />;
-  if (name.includes('heartbeat') || name.includes('logs')) return <Cpu className="h-2.5 w-2.5" />;
+  if (name.includes('logs')) return <Cpu className="h-2.5 w-2.5" />;
   if (name.includes('decompose')) return <Zap className="h-2.5 w-2.5" />;
   if (name.includes('apply')) return <GitBranch className="h-2.5 w-2.5" />;
   return <Terminal className="h-2.5 w-2.5" />;
@@ -113,8 +113,8 @@ function toolChipClass(status: ToolCall['status']) {
 
 const QUICK = [
   { label: 'Status', msg: "What's the project status?" },
-  { label: 'Stories', msg: 'List all stories.' },
-  { label: 'Queue', msg: 'Show the build queue.' },
+  { label: 'Stories', msg: 'List all stories and their execution status.' },
+  { label: 'Execution', msg: 'Show which stories are queued, running, failed, or done.' },
 ];
 
 // ─── Thinking dots ─────────────────────────────────────────────────────────────
@@ -603,7 +603,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             <div className="flex h-5 w-5 items-center justify-center rounded bg-primary/10 text-primary border border-primary/20 shrink-0">
               <Brain className="h-3 w-3" />
             </div>
-            <span className="text-xs font-bold tracking-widest uppercase text-foreground">TPM</span>
+            <span className="text-xs font-bold tracking-widest uppercase text-foreground">TPM Story Writer</span>
             {activeProject && <><span className="w-px h-3 bg-border/40" /><span className="text-xs text-muted-foreground/60 truncate max-w-24">{activeProject.name}</span></>}
             {streaming && <span className="relative flex h-1.5 w-1.5 ml-1"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500" /></span>}
           </div>
@@ -648,10 +648,10 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             <div className="flex flex-col items-center justify-center h-full gap-5 text-center select-none">
               <div>
                 <h2 className="text-lg font-semibold tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-foreground via-foreground/90 to-foreground/60 mb-1.5">
-                  Ask the TPM
+                  Plan stories with TPM
                 </h2>
                 <p className="text-xs text-muted-foreground/60 leading-relaxed max-w-56">
-                  Status, stories, queue, decisions. Type <kbd className="px-1 py-px bg-muted rounded border border-border font-mono text-xs">@</kbd> to reference a story.
+                  Write stories, refine requirements, inspect execution, and review knowledge. Type <kbd className="px-1 py-px bg-muted rounded border border-border font-mono text-xs">@</kbd> to reference a story.
                 </p>
               </div>
               {activeProject && (
@@ -669,7 +669,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                 ))}
                 <button onClick={() => { setInput('Plan new feature: '); inputRef.current?.focus(); }}
                   className="text-xs font-medium px-2.5 py-1 rounded-full border border-border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground transition-all">
-                  Plan feature…
+                  Draft story…
                 </button>
               </div>
             </div>
@@ -756,7 +756,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                       {m.status && (
                         <span className={cn('text-xs px-1 py-px rounded-full font-semibold shrink-0',
                           m.status === 'done' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
-                          m.status === 'in-progress' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
+                          m.status === 'running' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
                           'bg-muted text-muted-foreground')}>
                           {m.status}
                         </span>
@@ -772,7 +772,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder={streaming ? 'Generating…' : 'Message TPM… or @ to reference a story'}
+              placeholder={streaming ? 'Generating…' : 'Ask TPM to write or refine stories… use @ to reference one'}
               className="w-full border-0 px-4 py-3 pr-10 min-h-11 max-h-48 bg-transparent text-foreground placeholder:text-muted-foreground/40 text-sm leading-snug resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none"
               rows={1}
             />
@@ -799,7 +799,7 @@ export function TpmChat({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               </div>
             </div>
           </div>
-          <p className="text-center text-xs text-muted-foreground/30 mt-1.5">TPM can make mistakes. Verify decisions.</p>
+          <p className="text-center text-xs text-muted-foreground/30 mt-1.5">TPM proposes and refines stories. Review important decisions.</p>
         </div>
         </div>
       </div>

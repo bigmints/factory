@@ -17,8 +17,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getActiveProvider } from './config.ts';
@@ -84,15 +83,15 @@ const CLI_PROFILES: Record<CliName, CliProfile> = {
     /**
      * pi (Pi Coding Agent by earendil-works)
      * Non-interactive: pi -p "<prompt>"
-     * --no-session     : skip loading/saving session (avoids corrupted settings stall)
-     * --no-extensions  : skip MCP adapter init which blocks stdout for 30-60s
-     * --no-skills      : skip toon-context skill which reads ALL project files before responding
-     *                    (183 files = 300s stall on local models)
+     * Keep Pi's own sessions, skills, extensions, and tool policy enabled.
+     * --offline disables startup network checks; the configured local provider
+     * still handles model calls through its local OpenAI-compatible endpoint.
+     * Factory's job is queue/status/validation, not constraining Pi's runtime.
      */
     pi: {
         promptMode: 'flag',
         yoloFlags: [],
-        extraFlags: ['--no-session', '--no-extensions', '--no-skills', '--verbose'],
+        extraFlags: ['--offline', '--verbose'],
     },
 
     /**
@@ -192,6 +191,7 @@ export function buildSpawnEnv(): NodeJS.ProcessEnv {
         ...process.env,
         PATH: parts.join(':'),
     };
+    sanitizeNextRuntimeEnv(env);
 
     // Auto-inject active provider credentials so CLIs work seamlessly
     try {
@@ -199,8 +199,8 @@ export function buildSpawnEnv(): NodeJS.ProcessEnv {
         if (provider) {
             const kindStr = provider.kind as string;
             if (kindStr === 'openai-compat' || kindStr === 'openai') {
-                if (provider.apiKey) {
-                    env.OPENAI_API_KEY = provider.apiKey;
+                if (provider.apiKey || kindStr === 'openai-compat') {
+                    env.OPENAI_API_KEY = provider.apiKey || 'factory-local';
                     if (provider.baseUrl?.includes('openrouter') || provider.name?.toLowerCase().includes('openrouter')) {
                         env.OPENROUTER_API_KEY = provider.apiKey;
                     }
@@ -222,6 +222,18 @@ export function buildSpawnEnv(): NodeJS.ProcessEnv {
     } catch { /* ignore */ }
 
     return env;
+}
+
+function sanitizeNextRuntimeEnv(env: NodeJS.ProcessEnv): void {
+    // Next standalone servers inject private runtime flags into process.env.
+    // Factory child processes build arbitrary target projects, so those flags
+    // must not leak into `next build` or other framework commands.
+    delete env.TURBOPACK;
+    for (const key of Object.keys(env)) {
+        if (key.startsWith('__NEXT_PRIVATE_')) {
+            delete env[key];
+        }
+    }
 }
 
 // ─── Invocation Builder ──────────────────────────────────
@@ -246,7 +258,7 @@ export interface CliInvocationOptions {
  * Examples:
  *   agy:    ['<path>/agy',    ['-p', '<prompt>', '--dangerously-skip-permissions']]
  *   gemini: ['<path>/gemini', ['-p', '<prompt>', '--yolo']]
- *   pi:     ['<path>/pi',     ['<prompt>', '--no-session', '--no-extensions', '--no-skills']]
+ *   pi:     ['<path>/pi',     ['-p', '<prompt>', '--offline', '--verbose']]
  *   claude: ['<path>/claude', ['-p', '<prompt>', '--dangerously-skip-permissions']]
  */
 export function buildCliInvocation(
@@ -274,7 +286,9 @@ export function buildCliInvocation(
                 model = p.defaultModel;
             }
             if (p.kind === 'openai-compat') {
-                providerName = (p.baseUrl?.includes('openrouter') || p.name?.toLowerCase().includes('openrouter')) ? 'openrouter' : 'openai';
+                providerName = (p.baseUrl?.includes('openrouter') || p.name?.toLowerCase().includes('openrouter'))
+                    ? 'openrouter'
+                    : ensurePiCustomProvider(p, model);
             } else {
                 providerName = p.kind;
             }
@@ -310,6 +324,60 @@ export function buildCliInvocation(
     }
 
     return { binary, args };
+}
+
+function ensurePiCustomProvider(provider: any, requestedModel?: string | null): string {
+    const providerId = sanitizePiProviderId(provider.name || provider.id || 'factory-local');
+    const agentDir = join(homedir(), '.pi', 'agent');
+    const modelsPath = join(agentDir, 'models.json');
+    mkdirSync(agentDir, { recursive: true });
+
+    let config: any = {};
+    if (existsSync(modelsPath)) {
+        try {
+            config = JSON.parse(readFileSync(modelsPath, 'utf-8'));
+        } catch {
+            config = {};
+        }
+    }
+
+    const configuredModels = Array.isArray(provider.models)
+        ? provider.models.map((model: any) => ({
+            id: String(model.id || model.name || requestedModel || provider.defaultModel),
+            name: String(model.name || model.id || requestedModel || provider.defaultModel),
+        })).filter((model: any) => model.id && model.id !== 'undefined')
+        : [];
+    const fallbackModel = requestedModel || provider.defaultModel;
+    if (fallbackModel && !configuredModels.some((model: any) => model.id === fallbackModel)) {
+        configuredModels.unshift({ id: fallbackModel, name: fallbackModel });
+    }
+
+    config.providers = {
+        ...(config.providers || {}),
+        [providerId]: {
+            ...(config.providers?.[providerId] || {}),
+            baseUrl: provider.baseUrl,
+            api: 'openai-completions',
+            apiKey: provider.apiKey || 'factory-local',
+            compat: {
+                supportsDeveloperRole: false,
+                supportsReasoningEffort: false,
+                ...(config.providers?.[providerId]?.compat || {}),
+            },
+            models: configuredModels,
+        },
+    };
+
+    writeFileSync(modelsPath, JSON.stringify(config, null, 2), 'utf-8');
+    return providerId;
+}
+
+function sanitizePiProviderId(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        || 'factory-local';
 }
 
 // ─── Detection ───────────────────────────────────────────

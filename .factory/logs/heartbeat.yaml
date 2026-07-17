@@ -1,5 +1,5 @@
 heartbeat:
-  last_seen: "2026-06-29T20:02:01Z"
-  host: "BigMac-2"
-  task: "post-commit: Refactor skill resolution to support global/local inheritance"
+  last_seen: "2026-07-01T06:12:42Z"
+  host: "Mac"
+  task: "post-commit: feat: Add build queue prioritization and UI, fix queue orchestration"
   status: alive

@@ -106,13 +106,13 @@ export const TPM_TOOLS = [
   {
     name: 'get_project_status',
     description:
-      'Fetch the active project progress: scaffold.yaml epics, build queue status, recent heartbeats, and session worklogs. Call whenever the user asks about project health, progress, or status.',
+      'Fetch the active project progress: scaffold.yaml epics, build queue status, and session worklogs. Call whenever the user asks about project health, progress, or status.',
     parameters: { type: 'object', properties: {} },
   },
   {
     name: 'list_stories',
     description:
-      'List all feature and app stories in the active project with their names, slugs, statuses, and phases. Use when user wants to see what stories exist.',
+      'List all feature and app stories in the active project with their names, slugs, execution statuses, and phases. Use when the user wants to see what work exists in Factory.',
     parameters: {
       type: 'object',
       properties: {
@@ -123,7 +123,7 @@ export const TPM_TOOLS = [
         },
         status: {
           type: 'string',
-          description: 'Optional status filter (draft, in-progress, done).',
+          description: 'Optional status filter (draft, queued, running, review, failed, done).',
         },
       },
     },
@@ -146,14 +146,14 @@ export const TPM_TOOLS = [
   {
     name: 'update_story_status',
     description:
-      'Update the status field of a story. Valid statuses: draft, in-progress, done, review. Use when the user wants to mark progress on a story.',
+      'Update the status field of a story. Valid statuses: draft, queued, running, review, failed, done. Use when the user wants to control Factory execution state for a story.',
     parameters: {
       type: 'object',
       properties: {
         slug: { type: 'string', description: 'The story slug or filename.' },
         status: {
           type: 'string',
-          enum: ['draft', 'in-progress', 'done', 'review'],
+          enum: ['draft', 'queued', 'running', 'review', 'failed', 'done'],
           description: 'The new status to set.',
         },
       },
@@ -204,12 +204,6 @@ export const TPM_TOOLS = [
     },
   },
   {
-    name: 'read_heartbeat',
-    description:
-      'Read the latest heartbeat signal and recent worklog session entries. Use when user asks what the agent was last doing or wants a liveness check.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
     name: 'build_knowledge',
     description:
       'Distill the raw repository logs, failures, and architectural decision records (ADRs) into the separated knowledge files (.factory/knowledge/blueprint.md, knowledge.md and chronicles.md). Use this tool autonomously when you determine significant progress or a completed story warrants an update, or when the user explicitly asks to "Build knowledge".',
@@ -223,7 +217,7 @@ export const TPM_TOOLS = [
   {
     name: 'decompose_requirements',
     description:
-      'Decompose user requirements into modular feature stories in Factory YAML format. Use when user wants to plan new features.',
+      'Decompose user requirements into modular Factory stories in YAML format. Use when the user wants TPM to write or refine stories.',
     parameters: {
       type: 'object',
       properties: {
@@ -411,21 +405,11 @@ Progress: ${parsed.progressPercent || 0}%`;
     }
   }
 
-  let heartbeatMsg = 'No heartbeat registered yet.';
-  const heartbeatPath = join(projectPath, '.factory', 'logs', 'heartbeat.yaml');
-  if (existsSync(heartbeatPath)) {
-    try {
-      const raw = readFileSync(heartbeatPath, 'utf-8');
-      const parsed = parseYaml(raw) as any;
-      heartbeatMsg = `Last Heartbeat: [${parsed.timestamp || 'N/A'}] ${parsed.message || 'No message'}`;
-    } catch {}
-  }
-
   // Read from blueprint/worklog.yaml (TOON format) — the actual agent session log
   const worklogSnippet = 'Recent Session Logs:\n' + readBlueprintWorklog(projectPath, 5);
 
   return JSON.stringify(
-    { scaffold: scaffoldInfo, heartbeat: heartbeatMsg, worklog: worklogSnippet },
+    { scaffold: scaffoldInfo, worklog: worklogSnippet },
     null,
     2
   );
@@ -664,28 +648,8 @@ async function handleSearchKnowledge(projectPath: string, query: string) {
 }
 
 async function handleReadHeartbeat(projectPath: string) {
-  const results: string[] = [];
-
-  const heartbeatPath = join(projectPath, '.factory', 'logs', 'heartbeat.yaml');
-  if (existsSync(heartbeatPath)) {
-    try {
-      const raw = readFileSync(heartbeatPath, 'utf-8');
-      const parsed = parseYaml(raw) as any;
-      results.push(
-        `## Latest Heartbeat\n- Timestamp: ${parsed.timestamp || 'N/A'}\n- Message: ${parsed.message || 'No message'}\n- Status: ${parsed.status || 'unknown'}`
-      );
-    } catch {
-      results.push('Could not read heartbeat file.');
-    }
-  } else {
-    results.push('No heartbeat file found. Agent has not been run recently.');
-  }
-
-  // Read from blueprint/worklog.yaml (TOON format) — the actual agent session log
   const wl = readBlueprintWorklog(projectPath, 8);
-  results.push(`\n## Recent Worklog (blueprint)\n${wl}`);
-
-  return results.join('\n') || 'No heartbeat or worklog data available.';
+  return `## Recent Worklog (blueprint)\n${wl}`;
 }
 
 async function handleBuildKnowledge(projectPath: string) {
@@ -780,61 +744,61 @@ RULES:
 }
 
 async function handleApplyStory(
-  name: string,
-  content: string,
-  kind: string,
-  phase: number,
-  dependsOn: string[],
-  projectPath: string,
-  threadId?: string
+    name: string,
+    content: string,
+    kind: string,
+    phase: number,
+    dependsOn: string[],
+    projectPath: string,
+    threadId?: string
 ) {
-  try {
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    const folder = kind === 'app' ? 'apps' : 'features';
-    const relativePath = `stories/${folder}/${slug}.md`;
-    const fullPath = join(projectPath, '.factory', relativePath);
-
-    let finalContent = content;
-    let parsedYaml: any = null;
     try {
-      let yamlStr = content.trim();
-      if (yamlStr.startsWith('---')) {
-        const match = yamlStr.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
-        if (match) {
-          yamlStr = match[1];
+        let finalContent = content;
+        let parsedYaml: any = null;
+
+        try {
+            let yamlStr = content.trim();
+            if (yamlStr.startsWith('---')) {
+                const match = yamlStr.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+                yamlStr = match ? match[1] : yamlStr;
+            }
+            parsedYaml = parseYaml(yamlStr);
+        } catch {
+            parsedYaml = null;
         }
-      }
-      parsedYaml = parseYaml(yamlStr);
-    } catch {}
 
-    if (parsedYaml) {
-      if (threadId) {
-        parsedYaml.threadId = threadId;
-      }
-      parsedYaml.phase = phase;
-      parsedYaml.kind = kind;
-      parsedYaml.name = name;
-      if (dependsOn && dependsOn.length > 0) {
-        parsedYaml.dependsOn = dependsOn;
-      }
-      
-      const yamlStr = toYaml(parsedYaml);
-      finalContent = `---\n${yamlStr.trim()}\n---\n\n# ${name}\n`;
-    } else {
-      const yamlStr = content.trim();
-      finalContent = `---\n${yamlStr}\n---\n\n# ${name}\n`;
+        const storySlug = String(
+            parsedYaml?.feature?.slug ||
+            parsedYaml?.slug ||
+            parsedYaml?.appName ||
+            name
+        )
+            .toLowerCase()
+            .replace(/\.(md|ya?ml)$/i, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+
+        const folder = kind === 'app' ? 'apps' : 'features';
+        const relativePath = `stories/${folder}/${storySlug}.md`;
+        const fullPath = join(projectPath, '.factory', relativePath);
+
+        if (parsedYaml && typeof parsedYaml === 'object') {
+            if (threadId) parsedYaml.threadId = threadId;
+            parsedYaml.phase = phase;
+            parsedYaml.kind = kind;
+            if (!parsedYaml.name) parsedYaml.name = name;
+            if (dependsOn && dependsOn.length > 0) parsedYaml.dependsOn = dependsOn;
+
+            const yamlStr = toYaml(parsedYaml);
+            finalContent = `---\n${yamlStr.trim()}\n---\n\n# ${parsedYaml.name || name}\n`;
+        }
+
+        mkdirSync(join(projectPath, '.factory', 'stories', folder), { recursive: true });
+        writeFileSync(fullPath, finalContent, 'utf-8');
+        return `✅ Successfully saved story to .factory/${relativePath}.`;
+    } catch (err: any) {
+        return `Error saving story: ${err.message}`;
     }
-
-    mkdirSync(join(projectPath, '.factory', 'stories', folder), { recursive: true });
-    writeFileSync(fullPath, finalContent, 'utf-8');
-
-    return `✅ Successfully saved story to .factory/${relativePath}.`;
-  } catch (err: any) {
-    return `Error saving story: ${err.message}`;
-  }
 }
 
 async function handleAddAdrDecision(slug: string, content: string, projectPath: string) {
@@ -1024,13 +988,12 @@ export async function POST(request: Request) {
 You have access to the following tools. Use them proactively to fulfill user requests:
 
 **Query tools:**
-- get_project_status() — project progress, heartbeat, worklog
+- get_project_status() — project progress and worklog
 - list_stories(kind?, status?) — all stories with statuses
 - get_story(slug) — full content (Markdown + frontmatter) of a specific story
 - get_scaffold() — full planning scaffold
 - get_build_logs(limit?) — build history and receipts
 - search_knowledge(query) — search ADRs and engineering decisions
-- read_heartbeat() — latest agent liveness signal and worklog
 
 **Write tools:**
 - update_story_status(slug, status) — update story status (draft/in-progress/done/review)
@@ -1260,9 +1223,6 @@ You have access to the following tools. Use them proactively to fulfill user req
                         activeProject.path,
                         tc.arguments.query
                       );
-                      break;
-                    case 'read_heartbeat':
-                      result = await handleReadHeartbeat(activeProject.path);
                       break;
                     case 'build_knowledge':
                       result = await handleBuildKnowledge(activeProject.path);

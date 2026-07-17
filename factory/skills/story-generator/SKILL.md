@@ -31,6 +31,74 @@ Write complete, production-ready **Feature Stories** and **App Stories** in Fact
 - Base modules, paths, and dependencies on the actual codebase (read `state.yaml` first)
 - Do not invent files that don't exist
 
+### 4. Atomic Build Units (QUEUE-SAFE)
+Factory executes stories through the Pi patch executor using local models. A buildable story must be small enough for one focused file-write transaction.
+
+Hard limits for each feature story:
+- Own **one route handler**, **one service module**, **one schema/type module**, or **one tiny workflow step**
+- Name no more than **1 HTTP endpoint**
+- Touch no more than **1-3 product files**
+- Target roughly **80-200 lines of product-code change**
+- Include exact target files when known
+- Include one deterministic validation command
+- Depend on earlier stories for shared types, provider routing, guardrails, persistence, or helpers
+
+Do not create "vertical slices" that quietly bundle multiple architectural layers. If a route needs types, provider routing, guardrails, usage logging, and a handler, split those into separate queued stories:
+- `ai-chat-types`
+- `ai-provider-routing-registry`
+- `ai-learner-guardrails`
+- `ai-usage-metadata-store`
+- `ai-chat-completions-route`
+
+Never create a buildable story for a broad/reference epic such as "Admin CMS and Content Operations API", "Authentication", "Analytics Platform", or "OpenAI-compatible Chat Completions API". Split it into child stories first, for example:
+- `admin-content-list-route`
+- `admin-content-create-route`
+- `admin-content-update-delete-route`
+- `admin-content-publish-workflow`
+- `admin-content-import-job`
+- `admin-content-stats-route`
+
+If a requirement is broad, write the broad item as an epic/scaffold grouping only and create atomic child stories for the queue.
+
+### 5. Epic → Story → Subtask Structure
+Use this hierarchy for every non-trivial requirement:
+
+- **Epic**: planning container only. It can describe a broad capability such as "AI APIs" or "Admin CMS", but it must not be queued directly.
+- **Story**: the only queue/build unit. It must be atomic and independently buildable by Pi.
+- **Subtasks**: checklist items inside one atomic story. They must not hide separate files, layers, routes, or workflows.
+
+Good pattern:
+```yaml
+Epic: AI APIs
+Stories:
+  - ai-chat-types
+  - ai-provider-routing-registry
+  - ai-learner-guardrails
+  - ai-usage-metadata
+  - ai-chat-completions-route
+```
+
+Bad pattern:
+```yaml
+Story: OpenAI Compatible Chat Completions API
+Subtasks:
+  - Add request/response types
+  - Add provider routing
+  - Add guardrails
+  - Add usage metadata
+  - Add POST /v1/chat/completions
+```
+
+If a subtask needs a different file/layer/route/service than the parent story, promote it to its own story and connect it with `dependsOn`.
+
+#### Atomicity Rejection Test
+Before saving a story, ask:
+- Would this require creating both a route and a reusable service? If yes, split.
+- Would this require creating both types and business logic? If yes, split.
+- Would this require adding validation, persistence, and endpoint wiring together? If yes, split.
+- Could a local model implement it by writing one complete file and maybe one small test/type file? If no, split.
+- Does the title contain "API" while the body mentions routing, guardrails, usage, and provider integration? If yes, split.
+
 ---
 
 ## Step-by-Step Process
@@ -91,6 +159,9 @@ dependencies:
   - "zod"               # for validation schemas
   - "react-hook-form"   # for form state management
 
+validation:
+  command: "npx tsc --noEmit"
+
 modules:
   - name: "GoalSchema"
     path: "src/lib/schemas/goal.ts"
@@ -130,6 +201,8 @@ behavior:
 config: {}
 status: draft
 ```
+
+For local-model execution, prefer even smaller split stories than the example above. If the example would require route, repository, page, card, and form changes together, split it into separate queued stories with `dependsOn`.
 
 ---
 
@@ -185,9 +258,14 @@ status: draft
 
 Before saving the file, verify:
 - [ ] `feature.slug` matches the filename (e.g., `slug: goals-management` → `goals-management.yaml`)
+- [ ] Story is atomic: one route handler, one service module, one schema/type module, or one tiny workflow step
+- [ ] Story names no more than 1 HTTP endpoint
+- [ ] Story touches no more than 1-3 product files
+- [ ] Story does not bundle route + service + guardrails + usage + types together
 - [ ] `userStory` block is present with `asA`, `iWantTo`, `soThat`
 - [ ] At least **5 acceptance criteria** using Given/When/Then format
-- [ ] At least **3 modules** with real paths from the codebase
+- [ ] Modules list contains only the 1-3 files this story should change
+- [ ] `validation.command` is present and deterministic
 - [ ] `status: draft`
 - [ ] File saved to `.factory/stories/features/<slug>.yaml` (no subdirectories)
 - [ ] No placeholder text like "TODO" or "implement later"

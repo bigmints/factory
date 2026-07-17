@@ -8,15 +8,13 @@
  * and how to apply them — the TypeScript only handles file I/O.
  */
 
-import { join } from 'node:path';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { parse as parseYaml } from 'yaml';
 import { tpmToolRegistry } from '../registry.ts';
-import type { ToolResult, ToolContext } from '../types.ts';
+import type { ToolResult } from '../types.ts';
 import { loadAllSkills } from '../../skills.ts';
 
-const FACTORY_HOME = join(homedir(), '.factory');
+interface ToolContext {
+  repoPath?: string;
+}
 
 
 /**

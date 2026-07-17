@@ -94,39 +94,47 @@ const BuildMetaSchema = z.object({
     taskType: z.string(),
 });
 
-const mapLegacyStatus = (val: unknown): string => {
-    if (typeof val !== 'string') return String(val);
-    switch (val) {
-        case 'pending':
-        case 'ready':
-            return 'ready-to-build';
-        case 'running':
-        case 'in-progress':
-            return 'building';
-        case 'blocked':
-        case 'cancelled':
-        case 'needs-attention':
-        case 'review':
-        case 'validation':
-        case 'testing':
-        case 'paused':
-            return 'ready-to-build';
-        case 'completed':
-        case 'done':
-            return 'done';
-        case 'failed':
-            return 'failed';
-        case 'draft':
-            return 'draft';
-        default:
-            return val;
-    }
-};
+const StoryExecutionSchema = z.object({
+    executor: z.literal('pi-sdk'),
+    model: z.string().min(1),
+    provider: z.string().min(1),
+    endpointHost: z.string().min(1),
+    branch: z.string().min(1),
+    worktree: z.string().min(1),
+    baseBranch: z.string().min(1),
+    claimedAt: z.string().min(1),
+    heartbeatAt: z.string().min(1),
+    leaseUntil: z.string().min(1),
+    prNumber: z.number().int().positive().optional(),
+    prUrl: z.string().url().optional(),
+    state: z.enum(['claimed', 'building', 'review', 'stale', 'merged']).optional(),
+    lastEvent: z.string().optional(),
+    lastReconciledAt: z.string().optional(),
+    changedFiles: z.array(z.string()).optional(),
+    verification: z.object({
+        status: z.enum(['verified', 'review', 'failed']),
+        summary: z.string(),
+        evidence: z.array(z.string()),
+        productFilesChanged: z.boolean(),
+        userReachable: z.boolean(),
+    }).optional(),
+});
 
-export const LifecycleStatusSchema = z.preprocess(
-    mapLegacyStatus,
-    z.enum(['draft', 'ready-to-build', 'building', 'failed', 'done'])
-);
+export const LIFECYCLE_STATUSES = ['draft', 'queued', 'running', 'review', 'failed', 'done'] as const;
+export type CanonicalLifecycleStatus = typeof LIFECYCLE_STATUSES[number];
+
+export function isLifecycleStatus(value: unknown): value is CanonicalLifecycleStatus {
+    return typeof value === 'string' && LIFECYCLE_STATUSES.includes(value as CanonicalLifecycleStatus);
+}
+
+export function readLifecycleStatus(
+    value: unknown,
+    fallback: CanonicalLifecycleStatus = 'draft',
+): CanonicalLifecycleStatus {
+    return isLifecycleStatus(value) ? value : fallback;
+}
+
+export const LifecycleStatusSchema = z.enum(LIFECYCLE_STATUSES);
 
 // ─── Story ────────────────────────────────────────────
 
@@ -173,6 +181,8 @@ export const StorySchema = z.object({
     build: BuildMetaSchema.optional(),
     threadId: z.string().optional(),
     btw: z.array(z.string()).optional(),
+    execution: StoryExecutionSchema.optional(),
+    validation: z.object({ command: z.string().min(1) }).optional(),
 });
 
 export type StoryZ = z.infer<typeof StorySchema>;
@@ -208,6 +218,21 @@ export const BridgeConfigSchema = z.object({
     apps_dir: z.string().optional(),
     project: z.object({
         bootstrapped: z.boolean().optional(),
+    }).optional(),
+    delivery: z.object({
+        mode: z.literal('pull-request').optional(),
+        executor: z.literal('pi-sdk').optional(),
+        localModelsOnly: z.boolean().optional(),
+        requireHumanMerge: z.literal(true).optional(),
+        maxWorkers: z.number().int().min(1).max(1).optional(),
+        leaseMinutes: z.number().int().min(1).optional(),
+        unattended: z.object({
+            enabled: z.boolean(),
+            maxRuntimeMinutes: z.number().int().min(1),
+            maxToolCalls: z.number().int().min(1),
+            maxChangedFiles: z.number().int().min(1),
+            maxChangedLines: z.number().int().min(1),
+        }).optional(),
     }).optional(),
     agentic: z.object({
         logs_dir: z.string().optional(),

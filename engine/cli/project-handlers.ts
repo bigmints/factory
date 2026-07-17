@@ -195,7 +195,7 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
                 app.progressPercent = 0;
                 if (app.features) {
                     for (const feature of app.features) {
-                        feature.status = 'ready-to-build';
+                        feature.status = 'queued';
                         feature.progressPercent = 0;
                         if (feature.stories) {
                             for (const story of feature.stories) {
@@ -203,7 +203,7 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
                                 story.progressPercent = 0;
                                 if (story.tasks) {
                                     for (const task of story.tasks) {
-                                        task.status = 'ready-to-build';
+                                        task.status = 'queued';
                                     }
                                 }
                             }
@@ -212,7 +212,7 @@ async function handleProjectReset(repoPathInput?: string): Promise<void> {
                 }
                 
                 wr(scaffoldYamlPath, stringifyYaml(app, { lineWidth: 120 }), 'utf-8');
-                log('✓', `Reset scaffold.yaml roadmap progress and tasks to draft/pending.`);
+                log('✓', `Reset scaffold.yaml roadmap progress and tasks to draft/queued.`);
             }
         } catch (err: any) {
             logError(`Failed to reset scaffold.yaml roadmap: ${err?.message || err}`);

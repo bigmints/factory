@@ -18,16 +18,12 @@ Always adhere strictly to the following phased lifecycle when executing tasks:
      ```bash
      .factory/task-manager/manage.sh start <task-id>
      ```
-   - Write a heartbeat pulse indicating you have claimed and started the task:
      ```bash
-     factory pulse "Starting work on <task-id>: <brief summary>"
      ```
 
 3. **BUILD & ITERATE:**
    - Write modular, readable, fully typed code. Avoid placeholders, "TODO" comments in critical paths, or stubbed endpoints.
-   - Constantly write heartbeat signals to `.factory/logs/heartbeat.yaml` at significant coding milestones via:
      ```bash
-     factory pulse "<milestone summary>"
      ```
    - Perform incremental validation checks. If compilation or lint errors are returned, perform targeted debugging rather than full regeneration.
 
@@ -43,7 +39,6 @@ Always adhere strictly to the following phased lifecycle when executing tasks:
      ```
    - Write a session update pulse:
      ```bash
-     factory pulse "Successfully completed and validated <task-id>."
      ```
 
 ## Coding Conventions
@@ -60,7 +55,6 @@ This project is connected to [Factory](https://github.com/Bigmints-com/factory) 
 ### Quick Commands
 
 ```bash
-factory pulse "<msg>"            # Write liveness heartbeat
 factory task list                # Show task queue
 factory task start <id>          # Claim a task
 factory blueprint update "<msg>" # Append to worklog
@@ -75,7 +69,6 @@ factory hooks install            # Install git hooks
 |------|---------|
 | `.factory/factory.yaml` | Bridge config (links to Factory install) |
 | `.factory/logs/state.yaml` | Project state snapshot (read by agent on start) |
-| `.factory/logs/heartbeat.yaml` | Liveness signal (written every build step) |
 | `.factory/logs/worklog.yaml` | Append-only session log |
 | `.factory/skill-index.yaml` | Available agentic skills |
 | `.factory/task-manager/todo.yaml` | Task queue (human + agent readable) |
@@ -83,7 +76,5 @@ factory hooks install            # Install git hooks
 
 ### Workflow
 
-1. Start: `factory task start <id>` → `factory pulse "starting <id>"`
-2. Work: agent reads logs/state.yaml, builds, writes heartbeat on each step
 3. Done: `factory task complete --id <id> --summary "what was done"`
 4. Commit: `factory blueprint update "summary"` → git commit

@@ -2,16 +2,18 @@
  * Build, validate, and status handlers for the Factory CLI.
  */
 
-import { resolve, basename, join } from 'node:path';
-import { readdirSync, existsSync } from 'node:fs';
-import { loadStory, listStories, validateStory, updateStoryBuildMeta, archiveStory, resolveStoryPath, updateStoryStatus } from '../story.ts';
-import { getActiveProject, loadBridgeConfig } from '../config.ts';
+import { resolve, basename, relative } from 'node:path';
+import { existsSync } from 'node:fs';
+import { loadStory, listStories, validateStory, updateStoryBuildMeta, resolveStoryPath, updateStoryStatus, updateStoryExecution } from '../story.ts';
+import { getActiveProject, loadBridgeConfig, loadSettings } from '../config.ts';
 import { gatherBlueprint } from '../blueprint.ts';
 import { runPipeline } from '../generate.ts';
-import { gitCommit, gitPush } from '../writer.ts';
 import { log, logStep, logHeader, logError } from '../log.ts';
 import { storySlug, storyPort } from '../types.ts';
+import type { StoryExecution } from '../types.ts';
 import { requireTarget } from '../cli.ts';
+import { preflightDgx, isDgxInfrastructureFailure, resolvePiDgxProvider } from '../dgx.ts';
+import { claimStoryWorktree, DeliveryError, startStoryHeartbeat, submitStoryPullRequest } from '../delivery.ts';
 
 export async function handleBuild(storyPath?: string): Promise<void> {
     requireTarget('build');
@@ -32,6 +34,20 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     }
     log('✓', 'Story is valid');
 
+    const settings = loadSettings();
+    const piExecution = resolvePiDgxProvider(settings, project.piConfig, story.agentModel);
+    let dgx;
+    try {
+        log('→', 'Checking local DGX model endpoint...');
+        dgx = await preflightDgx(piExecution.provider, piExecution.model);
+        log('✓', `DGX ready: ${dgx.model} on ${dgx.endpointHost} (${dgx.latencyMs}ms)`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        updateStoryStatus(storyPath!, 'queued');
+        logError(message);
+        process.exit(1);
+    }
+
     // Step 2: Gather blueprint (TOON state, knowledgebase, conventions)
     logStep(2, 4, 'Gathering blueprint...');
     const bridge = loadBridgeConfig(project.path);
@@ -40,8 +56,8 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     // Determine the target directory for execution.
     // Features should run inside the target app's directory, not a new folder named after the feature.
     let targetDir = project.path;
-    const targetApp = (story.target as any)?.app;
-    
+    const targetApp = typeof story.target === 'string' ? story.target : (story.target as any)?.app;
+
     if (bridge.apps_dir && targetApp) {
         targetDir = resolve(project.path, bridge.apps_dir, targetApp);
     } else if (targetApp && targetApp !== project.name && targetApp !== basename(project.path)) {
@@ -50,7 +66,7 @@ export async function handleBuild(storyPath?: string): Promise<void> {
         if (existsSync(potentialAppDir)) {
             targetDir = potentialAppDir;
         }
-    } else if (!(story as any).feature) {
+    } else if (story.kind === 'app') {
         // For app generation stories without a specific target, legacy fallback to story slug
         const slug = storySlug(story);
         if (slug !== project.name && slug !== basename(project.path)) {
@@ -58,72 +74,133 @@ export async function handleBuild(storyPath?: string): Promise<void> {
         }
     }
 
-    // Step 3: Run orchestrator — LLM delegates to the configured CLI
-    // The CLI agent writes files directly; no post-pipeline writeFiles() needed.
-    logStep(3, 4, 'Orchestrating build...');
-    const result = await runPipeline(story, blueprint, targetDir, storyPath!);
+    const targetRelative = relative(project.path, targetDir);
+    if (targetRelative.startsWith('..')) {
+        logError(`Target directory escapes the project repository: ${targetDir}`);
+        process.exit(1);
+    }
 
-    // Distill chronicle automatically (dynamic context accumulation)
+    let claim;
     try {
-        log('→', 'Auto-distilling chronicle context...');
-        const { distillKnowledgeAndChronicles } = await import('../chronicle.ts');
-        await distillKnowledgeAndChronicles(project.path);
-    } catch { /* ignore */ }
+        claim = claimStoryWorktree({
+            repoPath: project.path,
+            storyId: storySlug(story),
+            storyPath: resolveStoryPath(storyPath!),
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        updateStoryStatus(storyPath!, error instanceof DeliveryError && error.code === 'dirty_product' ? 'review' : 'queued', message);
+        logError(`Delivery claim failed: ${message}`);
+        process.exit(1);
+    }
 
-    // Step 4: Git commit + push
-    logStep(4, 4, 'Committing and pushing...');
-    gitCommit(project.path, `factory: ${story.name}`);
-    gitPush(project.path);
+    const execution: StoryExecution = {
+        executor: 'pi-sdk',
+        model: dgx.model,
+        provider: dgx.provider,
+        endpointHost: dgx.endpointHost,
+        branch: claim.branch,
+        worktree: claim.worktree,
+        baseBranch: claim.baseBranch,
+        claimedAt: new Date().toISOString(),
+        heartbeatAt: new Date().toISOString(),
+        leaseUntil: new Date(Date.now() + (bridge.delivery?.leaseMinutes || 10) * 60_000).toISOString(),
+        state: 'building',
+        lastEvent: claim.resumed ? 'Resumed owned worktree.' : 'Claimed story worktree.',
+    };
+    updateStoryStatus(storyPath!, 'running');
+    const stopHeartbeat = startStoryHeartbeat(storyPath!, execution, bridge.delivery?.leaseMinutes || 10);
+    const deliveryTargetDir = resolve(claim.worktree, targetRelative);
 
-    // Write build metadata back into story + archive
+    // Step 3: Pi SDK runs only in the claimed worktree.
+    logStep(3, 4, 'Orchestrating build...');
+    let result;
+    try {
+        result = await runPipeline(story, blueprint, deliveryTargetDir, storyPath!);
+    } finally {
+        stopHeartbeat();
+    }
+
+    if (!result.success) {
+        if (result.status === 'review') {
+            const reviewSummary = [
+                `Factory verification requires review for ${story.name}.`,
+                '',
+                result.verification?.summary || 'Delivery was not verified.',
+                '',
+                ...(result.verification?.missing || []).slice(0, 8).map(item => `- ${item}`),
+            ].join('\n');
+
+            updateStoryStatus(storyPath!, 'review', reviewSummary);
+            logError(`Build needs review: ${story.name}`);
+            for (const item of (result.verification?.missing || []).slice(0, 5)) {
+                log('  ', `  • ${item.slice(0, 200)}`);
+            }
+            console.log('');
+            process.exit(1);
+        }
+
+        const failureSummary = [
+            `Factory build failed for ${story.name}.`,
+            '',
+            ...(result.errors || ['Pipeline returned success=false without a detailed error.']).slice(0, 8),
+        ].join('\n');
+
+        const infrastructureFailure = isDgxInfrastructureFailure(failureSummary);
+        updateStoryStatus(storyPath!, infrastructureFailure ? 'queued' : 'failed', failureSummary);
+        logError(`Build failed: ${story.name}`);
+        for (const e of (result.errors || []).slice(0, 5)) {
+            log('  ', `  • ${e.slice(0, 200)}`);
+        }
+        console.log('');
+        process.exit(1);
+    }
+
+    let submission;
+    try {
+        submission = submitStoryPullRequest({
+            claim,
+            storyName: story.name,
+            verification: result.verification,
+            limits: {
+                maxChangedFiles: bridge.delivery?.unattended?.maxChangedFiles || 25,
+                maxChangedLines: bridge.delivery?.unattended?.maxChangedLines || 2000,
+            },
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        updateStoryStatus(storyPath!, 'review', `Delivery is preserved in ${claim.worktree}, but PR submission needs attention: ${message}`);
+        logError(`PR submission needs review: ${message}`);
+        process.exit(1);
+    }
+
+    execution.prNumber = submission.prNumber;
+    execution.prUrl = submission.prUrl;
+    execution.heartbeatAt = new Date().toISOString();
+    execution.leaseUntil = execution.heartbeatAt;
+    execution.state = 'review';
+    execution.lastEvent = 'Pull request submitted; awaiting human review.';
+    execution.changedFiles = submission.changedFiles;
+    execution.verification = result.verification ? {
+        status: result.verification.status,
+        summary: result.verification.summary,
+        evidence: result.verification.evidence,
+        productFilesChanged: result.verification.productFilesChanged,
+        userReachable: result.verification.userReachable,
+    } : undefined;
+    updateStoryExecution(storyPath!, execution);
+    updateStoryStatus(storyPath!, 'review', `Awaiting human review: ${submission.prUrl}`);
+
+    // Write build metadata back into the source story. Archival happens only after merge.
     updateStoryBuildMeta(storyPath!, {
-        outputDir: targetDir,
+        outputDir: deliveryTargetDir,
+        commitHash: submission.commit.slice(0, 12),
         filesGenerated: result.files.length,
         iterations: result.iterations,
-        taskType: result.plan.decisions.find(d => d.startsWith('cli:')) || 'orchestrator',
-    }, project.path);
-    if (result.success) {
-        archiveStory(storyPath!);
+        taskType: result.plan.decisions.find(d => d.startsWith('executor:')) || 'orchestrator',
+    }, claim.worktree);
 
-        // Resolve associated stories symmetrically:
-        try {
-            const absStoryPath = resolveStoryPath(storyPath!);
-
-            // Case A: The story built was a fix story. Resolve and archive the original story.
-            if ((story as any).original_story) {
-                const absOriginalPath = resolveStoryPath((story as any).original_story);
-                if (existsSync(absOriginalPath)) {
-                    log('→', `Auto-resolving original story: ${basename(absOriginalPath)}`);
-                    updateStoryStatus(absOriginalPath, 'done', `Resolved because fix story ${basename(absStoryPath)} was successfully built.`);
-                    archiveStory(absOriginalPath);
-                }
-            }
-
-            // Case B: The story built was an original story. Resolve and archive any active fix stories pointing to it.
-            const storiesDir = join(project.path, '.factory', 'stories');
-            if (existsSync(storiesDir)) {
-                const files = readdirSync(storiesDir).filter(f => f.endsWith('.md') || f.endsWith('.yaml') || f.endsWith('.yml'));
-                for (const file of files) {
-                    const filePath = join(storiesDir, file);
-                    try {
-                        const activeStory = loadStory(filePath);
-                        if ((activeStory as any).original_story) {
-                            const absOriginalPath = resolveStoryPath((activeStory as any).original_story);
-                            if (absOriginalPath === absStoryPath) {
-                                log('→', `Auto-resolving associated fix story: ${file}`);
-                                updateStoryStatus(filePath, 'done', `Resolved because original story ${basename(absStoryPath)} was successfully built.`);
-                                archiveStory(filePath);
-                            }
-                        }
-                    } catch {
-                        // ignore malformed stories
-                    }
-                }
-            }
-        } catch (err) {
-            log('!', `Failed to clean up associated stories: ${err instanceof Error ? err.message : String(err)}`);
-        }
-    }
+    logStep(4, 4, 'Pull request submitted for human review');
 
     // Summary
     console.log('');
@@ -131,7 +208,8 @@ export async function handleBuild(storyPath?: string): Promise<void> {
     log('✓', `Build ${result.success ? 'COMPLETE' : 'DONE (with warnings)'}`);
     log('→', `App: ${story.name} (${storySlug(story)})`);
     log('→', `Files: ${result.files.length}`);
-    log('→', `Output: ${targetDir}`);
+    log('→', `Worktree: ${claim.worktree}`);
+    log('→', `Pull request: ${submission.prUrl}`);
     if (result.errors && result.errors.length > 0) {
         log('!', `${result.errors.length} warning(s) remaining`);
         for (const e of result.errors.slice(0, 3)) log('  ', `  • ${e.slice(0, 120)}`);
@@ -183,7 +261,7 @@ export function handleStatus(): void {
                     const slug = storySlug(story);
                     const port = storyPort(story as any); // cast for now if storyPort relies on AppStory fields
                     const status = story.status || 'draft';
-                    const icon = status === 'done' ? '✅' : status === 'building' ? '🔄' : '📝';
+                    const icon = status === 'done' ? '✅' : status === 'review' ? '⚠️' : status === 'running' ? '🔄' : status === 'queued' ? '⏳' : '📝';
                     log('  ', `  ${icon} ${slug} — ${story.name} (port ${port}) [${status}]`);
                 } catch {
                     log('  ', `  ❌ ${file} — failed to parse`);

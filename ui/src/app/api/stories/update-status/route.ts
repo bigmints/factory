@@ -14,11 +14,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Allow user-settable statuses. Engine manages in-progress/validation automatically.
-    const userAllowedStatuses = ['draft', 'ready-to-build', 'building', 'paused', 'failed', 'done'];
+    const userAllowedStatuses = ['draft', 'queued', 'running', 'review', 'failed', 'done'];
     if (!userAllowedStatuses.includes(status)) {
       return NextResponse.json(
-        { error: `Invalid status "${status}". Use: draft, ready-to-build, building, paused, failed, or done.` },
+        { error: `Invalid status "${status}". Use: draft, queued, running, review, failed, or done.` },
         { status: 400 }
       );
     }
@@ -44,7 +43,7 @@ export async function POST(request: Request) {
     updateStoryStatus(currentFile, status);
 
     // 3. If cancelling/failing a currently running build, kill its specific process
-    if (['draft', 'paused', 'failed'].includes(status)) {
+    if (['draft', 'review', 'failed'].includes(status)) {
       const { exec } = require('node:child_process');
       const escapedFile = currentFile.split('/').pop()?.replace(/["'$]/g, '') || '';
       if (escapedFile) {

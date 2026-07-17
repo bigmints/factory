@@ -56,7 +56,7 @@ const parseYamlFields = (yaml: string) => {
     featureName: featNameMatch ? featNameMatch[1] : '',
     description: descMatch ? descMatch[1] : '',
     targetApp: targetAppMatch ? targetAppMatch[1] : '',
-    status: statusMatch ? statusMatch[1] : 'todo',
+    status: statusMatch ? statusMatch[1] : 'draft',
     phase: phaseMatch ? parseInt(phaseMatch[1]) : 1,
     dependsOn: dependsOnMatch ? dependsOnMatch[1].trim() : '',
     framework: frameworkMatch ? frameworkMatch[1] : 'Next.js',
@@ -178,7 +178,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
   const isDirty = content !== originalContent;
 
   useEffect(() => {
-    if (parsedFields.status !== 'building' && parsedFields.status !== 'running') return;
+    if (parsedFields.status !== 'running') return;
     if (isDirty) return;
 
     const interval = setInterval(async () => {
@@ -187,7 +187,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
         if (res.ok) {
           const data = await res.json();
           const parsed = parseYamlFields(data.content);
-          if (parsed.status !== 'building' && parsed.status !== 'running') {
+          if (parsed.status !== 'running') {
             setContent(data.content);
             setOriginalContent(data.content);
             onSaved();
@@ -344,21 +344,22 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <div className="flex items-center gap-1.5 rounded-md border border-border p-1 bg-muted shrink-0">
-              {['todo', 'in-progress', 'done'].map((s) => {
+              {['draft', 'queued', 'review', 'done'].map((s) => {
                 const isActive = 
-                  (s === 'todo' && (parsedFields.status === 'todo' || parsedFields.status === 'draft')) ||
-                  (s === 'in-progress' && (parsedFields.status === 'in-progress' || parsedFields.status === 'ready-to-build' || parsedFields.status === 'building' || parsedFields.status === 'running')) ||
-                  (s === 'done' && (parsedFields.status === 'done' || parsedFields.status === 'completed' || parsedFields.status === 'failed'));
+                  (s === 'draft' && parsedFields.status === 'draft') ||
+                  (s === 'queued' && (parsedFields.status === 'queued' || parsedFields.status === 'running')) ||
+                  (s === 'review' && parsedFields.status === 'review') ||
+                  (s === 'done' && parsedFields.status === 'done');
                 
                 return (
                   <button
                     key={s}
-                    onClick={() => updateField('status', s === 'in-progress' ? 'ready-to-build' : s === 'todo' ? 'draft' : s)}
+                    onClick={() => updateField('status', s)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-sm uppercase tracking-wider transition-colors ${
                       isActive ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    {s}
+                    {s === 'queued' ? 'execution' : s}
                   </button>
                 );
               })}
@@ -381,7 +382,7 @@ export function StoryEditor({ storyFile, storyName, onClose, onSaved, onViewLogs
             </div>
 
             <div className="flex items-center gap-1.5">
-              {['building', 'running'].includes(parsedFields.status) ? (
+              {parsedFields.status === 'running' ? (
                 <>
                   <div className="flex items-center gap-1.5 px-3 h-9 rounded-lg border border-primary/20 bg-primary/5 text-primary text-xs font-semibold shrink-0">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

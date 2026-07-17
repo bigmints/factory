@@ -16,6 +16,45 @@ function defaultSettings() {
     };
 }
 
+function normalizeProvider(provider: any) {
+    const normalized = { ...provider };
+    if (!normalized.kind || normalized.kind === 'builtin') {
+        if (normalized.id === 'gemini') normalized.kind = 'gemini';
+        else if (normalized.id === 'openai') normalized.kind = 'openai';
+        else if (normalized.id === 'ollama') normalized.kind = 'ollama';
+        else normalized.kind = 'openai-compat';
+    }
+    normalized.models = normalized.models || [];
+    if (normalized.enabled === undefined) normalized.enabled = true;
+    return normalized;
+}
+
+function normalizeSettings(settings: any) {
+    const providers = (settings.providers || []).map(normalizeProvider);
+    const activeProvider = providers.find((p: any) => p.id === settings.activeProvider && p.enabled);
+    const activeHasModel = activeProvider && (
+        activeProvider.defaultModel === settings.buildModel ||
+        activeProvider.models?.some((m: any) => m.id === settings.buildModel)
+    );
+
+    if (activeHasModel) {
+        return {
+            ...settings,
+            providers,
+            activeProvider: settings.activeProvider || '',
+            buildModel: settings.buildModel || '',
+        };
+    }
+
+    const fallback = providers.find((p: any) => p.enabled && (p.defaultModel || p.models?.[0]?.id));
+    return {
+        ...settings,
+        providers,
+        activeProvider: fallback?.id || '',
+        buildModel: fallback ? (fallback.defaultModel || fallback.models?.[0]?.id || '') : '',
+    };
+}
+
 export async function GET() {
     try {
         if (!existsSync(SETTINGS_FILE)) {
@@ -24,25 +63,14 @@ export async function GET() {
         const raw = readFileSync(SETTINGS_FILE, 'utf-8');
         const saved = JSON.parse(raw);
         
-        // Ensure legacy providers have a valid kind and default values
-        const mappedProviders = (saved.providers || []).map((p: any) => {
-            if (!p.kind || p.kind === 'builtin') {
-                if (p.id === 'gemini') p.kind = 'gemini';
-                else if (p.id === 'openai') p.kind = 'openai';
-                else if (p.id === 'ollama') p.kind = 'ollama';
-                else p.kind = 'openai-compat';
-            }
-            p.models = p.models || [];
-            if (p.enabled === undefined) p.enabled = true;
-            return p;
-        });
+        const normalized = normalizeSettings(saved);
 
         return NextResponse.json({
-            providers: mappedProviders,
-            activeProvider: saved.activeProvider || '',
-            buildModel: saved.buildModel || '',
-            defaultCli: saved.defaultCli || '',
-            updatedAt: saved.updatedAt,
+            providers: normalized.providers,
+            activeProvider: normalized.activeProvider || '',
+            buildModel: normalized.buildModel || '',
+            defaultCli: normalized.defaultCli || '',
+            updatedAt: normalized.updatedAt,
         });
     } catch {
         return NextResponse.json(defaultSettings());
@@ -52,11 +80,16 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        body.updatedAt = new Date().toISOString();
+        const normalized = normalizeSettings(body);
+        normalized.updatedAt = new Date().toISOString();
         const dir = dirname(SETTINGS_FILE);
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-        writeFileSync(SETTINGS_FILE, JSON.stringify(body, null, 2) + '\n');
-        return NextResponse.json({ ok: true });
+        writeFileSync(SETTINGS_FILE, JSON.stringify(normalized, null, 2) + '\n');
+        return NextResponse.json({
+            ok: true,
+            activeProvider: normalized.activeProvider,
+            buildModel: normalized.buildModel,
+        });
     } catch (err: any) {
         return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
     }

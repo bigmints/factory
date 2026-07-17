@@ -23,6 +23,7 @@ export interface StoryItem {
   database?: Record<string, any>;
   api?: Record<string, any>;
   features?: Record<string, any>;
+  execution?: DeliveryExecution | null;
 }
 
 export interface FeatureStoryItem {
@@ -36,6 +37,32 @@ export interface FeatureStoryItem {
   model: Record<string, any>;
   phase?: number;
   dependsOn?: string[];
+  execution?: DeliveryExecution | null;
+}
+
+export interface DeliveryExecution {
+  executor: 'pi-sdk';
+  model: string;
+  provider: string;
+  endpointHost: string;
+  branch: string;
+  worktree: string;
+  baseBranch: string;
+  claimedAt: string;
+  heartbeatAt: string;
+  leaseUntil: string;
+  state?: 'claimed' | 'building' | 'review' | 'stale' | 'merged';
+  lastEvent?: string;
+  changedFiles?: string[];
+  prNumber?: number;
+  prUrl?: string;
+  verification?: {
+    status: string;
+    summary: string;
+    evidence: string[];
+    productFilesChanged: boolean;
+    userReachable: boolean;
+  };
 }
 
 export interface QueueItem {
@@ -55,6 +82,8 @@ export interface QueueItem {
   error: string | null;
   durationMs: number | null;
   targetApp?: string;
+  title?: string;
+  execution?: DeliveryExecution | null;
 }
 
 export interface ProjectItem {
@@ -86,6 +115,8 @@ interface FactoryStore {
   featureStories: FeatureStoryItem[];
   queueItems: QueueItem[];
   queueRunning: boolean;
+  dgxStatus: { state: 'ready' | 'unavailable'; provider?: string; model?: string; endpointHost?: string; latencyMs?: number; error?: string } | null;
+  queueCapacity: { maxWorkers: number; activeWorkers: number; unattendedEnabled: boolean; humanMergeRequired: boolean } | null;
   projects: ProjectItem[];
   activeProject: ProjectItem | null;
   activeProjectId: string | null;
@@ -125,6 +156,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   featureStories: [],
   queueItems: [],
   queueRunning: false,
+  dgxStatus: null,
+  queueCapacity: null,
   projects: [],
   activeProject: null,
   activeProjectId: null,
@@ -184,6 +217,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         queueItems: items,
         queueRunning: running,
         queueStatusMap: map,
+        dgxStatus: data.dgx || null,
+        queueCapacity: data.capacity || null,
       });
     } catch {
       /* network error — keep stale data */

@@ -17,6 +17,7 @@ import { ProjectsView } from "./projects-view";
 import { ProjectSettingsView } from "./project-settings-view";
 import { ProjectSwitcher } from "./project-switcher";
 import { IntegrationsView } from "./integrations-view";
+import { QueueView } from "./queue-view";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import {
   SidebarProvider,
@@ -45,6 +46,8 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
+  GitBranch,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -76,6 +79,24 @@ const RightSidebarTrigger = () => {
       }}
     >
       <PanelRight className="h-4 w-4" />
+    </Button>
+  );
+};
+
+const RightSidebarCloseButton = () => {
+  const { isMobile, setOpenMobile, setOpen } = useSidebar();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-9 w-9 text-muted-foreground hover:text-foreground"
+      onClick={() => {
+        if (isMobile) setOpenMobile(false);
+        else setOpen(false);
+      }}
+      aria-label="Close TPM Chat"
+    >
+      <X className="h-4 w-4" />
     </Button>
   );
 };
@@ -149,7 +170,7 @@ function extractAllStories(content: string): ParsedStory[] {
 export default function Dashboard() {
   const [input, setInput] = useState("");
 
-  const [view, setView] = useState<"board" | "settings" | "reports" | "add-project" | "knowledge" | "skills" | "projects" | "integrations" | "project-settings">("board");
+  const [view, setView] = useState<"board" | "queue" | "settings" | "reports" | "add-project" | "knowledge" | "skills" | "projects" | "integrations" | "project-settings">("board");
   const [_viewMode, setViewMode] = useState<"board" | "list">("board");
   const isMobile = useIsMobile();
   const viewMode = isMobile ? "list" : _viewMode;
@@ -167,8 +188,9 @@ export default function Dashboard() {
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     let newStatus = "draft";
-    if (destination.droppableId === "todo") newStatus = "draft";
-    if (destination.droppableId === "inprogress") newStatus = "ready-to-build";
+    if (destination.droppableId === "draft") newStatus = "draft";
+    if (destination.droppableId === "execution") newStatus = "queued";
+    if (destination.droppableId === "review") newStatus = "review";
     if (destination.droppableId === "done") newStatus = "done";
 
     setOptimisticStatuses((prev) => ({ ...prev, [draggableId]: newStatus }));
@@ -198,12 +220,12 @@ export default function Dashboard() {
   };
 
   const handleRetryStory = async (file: string) => {
-    setOptimisticStatuses((prev) => ({ ...prev, [file]: "ready-to-build" }));
+    setOptimisticStatuses((prev) => ({ ...prev, [file]: "queued" }));
     try {
       const res = await fetch("/api/stories/update-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file, status: "ready-to-build" }),
+        body: JSON.stringify({ file, status: "queued" }),
       });
       if (!res.ok) throw new Error("Failed to retry story");
       toast.success("Story queued for retry");
@@ -308,6 +330,8 @@ export default function Dashboard() {
         setView("project-settings");
       } else if (hash === "board" || hash === "plan") {
         setView("board");
+      } else if (hash === "queue") {
+        setView("queue");
       } else {
         setView("projects");
       }
@@ -542,7 +566,7 @@ export default function Dashboard() {
       const res = await fetch('/api/stories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: story.name, content: story.yaml, kind: story.kind })
+        body: JSON.stringify({ name: story.name, content: story.yaml, kind: story.kind, filename: story.filename })
       });
       const d = await res.json();
       if (res.ok) {
@@ -559,65 +583,68 @@ export default function Dashboard() {
     }
   };
 
-  // Group stories into 3 states: Todo, In Progress, Done
-  const todoItems: any[] = [];
-  const inProgressItems: any[] = [];
+  // Group stories into 4 states: Draft, Execution, Review, Done
+  const draftItems: any[] = [];
+  const executionItems: any[] = [];
+  const reviewItems: any[] = [];
   const doneItems: any[] = [];
 
-  const allItems: any[] = [];
+  const allItemsMap = new Map<string, any>();
 
-  const queueFiles = new Set<string>();
   queueItems.forEach((q) => {
     const file = q.storyFile || q.specFile;
-    if (file) {
-      queueFiles.add(file);
-      const displayName = file.split("/").pop() || file;
-      allItems.push({
-        type: q.kind === "FeatureStory" ? "feature" : "app",
-        displayName: displayName,
-        status: optimisticStatuses[file] || q.status,
-        file: file,
-        addedAt: q.addedAt,
-        completedAt: q.completedAt,
-      });
-    }
+    if (!file) return;
+    const displayName = q.title || file.split("/").pop() || file;
+    allItemsMap.set(file, {
+      type: q.kind === "FeatureStory" ? "feature" : "app",
+      displayName,
+      status: optimisticStatuses[file] || q.status,
+      file,
+      addedAt: q.addedAt,
+      completedAt: q.completedAt,
+      execution: q.execution,
+      failureReason: q.error,
+    });
   });
 
   stories.forEach((s) => {
-    if (!queueFiles.has(s.file)) {
-      allItems.push({
-        ...s,
-        type: "app",
-        status: optimisticStatuses[s.file] || s.status || "draft",
-        displayName: s.metadata?.name || s.file,
-      });
-    }
-  });
-  featureStories.forEach((s) => {
-    if (!queueFiles.has(s.file)) {
-      allItems.push({
-        ...s,
-        type: "feature",
-        status: optimisticStatuses[s.file] || s.status || "draft",
-        displayName: (s as any).name || s.feature?.name || s.file,
-      });
-    }
+    if (allItemsMap.has(s.file)) return;
+    allItemsMap.set(s.file, {
+      ...s,
+      type: "app",
+      status: optimisticStatuses[s.file] || s.status || "draft",
+      displayName: s.metadata?.name || s.file,
+    });
   });
 
+  featureStories.forEach((s) => {
+    if (allItemsMap.has(s.file)) return;
+    allItemsMap.set(s.file, {
+      ...s,
+      type: "feature",
+      status: optimisticStatuses[s.file] || s.status || "draft",
+      displayName: (s as any).name || s.feature?.name || s.file,
+    });
+  });
+
+  const allItems = Array.from(allItemsMap.values());
+
   allItems.forEach((item) => {
-    if (["done", "failed", "completed"].includes(item.status)) {
+    if (item.status === "done") {
       doneItems.push(item);
-    } else if (["draft", "todo"].includes(item.status)) {
-      todoItems.push(item);
+    } else if (item.status === "review") {
+      reviewItems.push(item);
+    } else if (item.status === "draft") {
+      draftItems.push(item);
     } else {
-      inProgressItems.push(item);
+      executionItems.push(item);
     }
   });
 
   const renderItem = (
     item: any,
     idx: number,
-    state: "todo" | "inprogress" | "done",
+    state: "draft" | "execution" | "review" | "done",
     mode: "board" | "list" = "board",
   ) => {
     const isApp = item.type === "app";
@@ -627,57 +654,75 @@ export default function Dashboard() {
       <div
         onClick={() => setEditingStory({ file: item.file, name: item.displayName })}
         className={cn(
-          "group relative transition-all duration-150 cursor-pointer",
+          "group relative min-w-0 overflow-hidden transition-all duration-150 cursor-pointer",
           mode === "board"
             ? "p-3 rounded-xl border border-border/50 bg-card shadow-sm flex flex-col gap-2 mb-3 hover:border-border/80 hover:shadow-md"
-            : "p-2 rounded-md flex items-center justify-between gap-4 border border-border/40 mb-2 shadow-xs bg-transparent hover:bg-muted/40",
+            : "z-0 rounded-2xl border border-border/60 bg-card/70 p-3.5 shadow-xs hover:bg-muted/30",
         )}
       >
         <div
           className={cn(
-            "flex items-start justify-between gap-2 min-w-0",
-            mode === "list" && "items-center flex-1",
+            "flex items-start justify-between min-w-0",
+            mode === "board" ? "gap-2" : "gap-3",
           )}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex min-w-0 flex-1 items-start gap-2">
             {/* Minimal Color Dot Indicator */}
             <span
               className={cn(
                 "h-1.5 w-1.5 rounded-full shrink-0",
+                mode === "list" && "mt-1.5",
                 isApp ? "bg-secondary" : "bg-primary",
               )}
             />
-            <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+            <span className={cn(
+              "min-w-0 font-medium text-foreground group-hover:text-primary transition-colors",
+              mode === "board" ? "truncate text-sm" : "break-words text-[15px] leading-snug",
+            )}>
               {item.displayName}
             </span>
-            {mode === "list" && item.file && item.file !== item.displayName && (
-              <span className="text-xs font-mono text-muted-foreground/50 truncate ml-2">
-                {item.file.split("/").pop()}
-              </span>
-            )}
           </div>
+
+          {mode === "list" && (
+            <span className={cn(
+              "mt-0.5 shrink-0 rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-wider",
+              item.status === "done" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+              item.status === "review" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+              item.status === "failed" && "bg-rose-500/10 text-rose-500 border-rose-500/20",
+              item.status === "running" && "bg-primary/10 text-primary border-primary/20",
+              item.status === "queued" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+              (!item.status || item.status === "draft") && "bg-muted text-muted-foreground border-border"
+            )}>
+              {item.status || "Draft"}
+            </span>
+          )}
 
           {mode === "board" && (
             <div className="flex items-center gap-1 shrink-0 -mt-0.5">
-              {item.status === "failed" ? (
+              {item.status === "failed" || item.status === "review" ? (
                 <div className="flex items-center gap-1">
-                  <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                  <XCircle className={cn("h-3.5 w-3.5", item.status === "review" ? "text-amber-500" : "text-rose-500")} />
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-6 w-6 rounded-md hover:bg-rose-500/10 text-rose-500 hover:text-rose-600 shrink-0"
+                    className={cn(
+                      "h-6 w-6 rounded-md shrink-0",
+                      item.status === "review"
+                        ? "hover:bg-amber-500/10 text-amber-500 hover:text-amber-600"
+                        : "hover:bg-rose-500/10 text-rose-500 hover:text-rose-600",
+                    )}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleRetryStory(item.file);
                     }}
-                    title="Retry Build"
+                    title="Requeue Build"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               ) : state === "done" ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              ) : state === "inprogress" && ["running", "building"].includes(item.status) ? (
+              ) : state === "execution" && item.status === "running" ? (
                 <div className="flex items-center gap-1">
                   <div className="h-3 w-3 rounded-full border border-primary border-t-transparent animate-spin mr-1 shrink-0" />
                   <Button
@@ -716,30 +761,71 @@ export default function Dashboard() {
           </p>
         )}
 
+        {mode === "list" && item.file && item.file !== item.displayName && (
+          <p className="mt-1 truncate pl-3.5 text-[11px] font-mono text-muted-foreground/55">
+            {item.file.split("/").pop()}
+          </p>
+        )}
+
+        {item.execution && (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-3.5 text-[10px] text-muted-foreground">
+            <span className="truncate">{item.execution.model}</span>
+            <span className="inline-flex min-w-0 items-center gap-1 truncate"><GitBranch className="h-3 w-3 shrink-0" />{item.execution.branch}</span>
+            {item.execution.prUrl && (
+              <a
+                href={item.execution.prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                PR #{item.execution.prNumber}<ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        )}
+
+        {(item.status === "failed" || item.status === "review") && item.failureReason && (
+          <p className={cn("text-xs line-clamp-2 pl-3.5", item.status === "review" ? "text-amber-500/85" : "text-rose-500/85")}>
+            {item.failureReason}
+          </p>
+        )}
+
         <div
           className={cn(
             "flex items-center text-xs text-muted-foreground",
             mode === "board"
               ? "justify-between mt-0.5 pt-1 border-t border-border/10 pl-3.5"
-              : "gap-4 shrink-0",
+              : "mt-3 min-w-0 justify-between gap-3 border-t border-border/25 pt-2.5 pl-3.5",
           )}
         >
-          <span className="font-mono uppercase tracking-wider text-[8.5px]">
+          <span className={cn(
+            "font-mono uppercase tracking-wider text-[8.5px]",
+            mode === "list" && "shrink-0 text-muted-foreground/70",
+          )}>
             {item.type || "story"}
           </span>
-          <span className="flex items-center gap-1.5">
-            {item.status === "failed" && mode === "list" && (
-              <div className="flex items-center gap-1 mr-1">
-                <XCircle className="h-3.5 w-3.5 text-rose-500" />
+          <span className={cn(
+            "flex min-w-0 items-center justify-end gap-1.5",
+            mode === "board" && "flex-wrap",
+          )}>
+            {(item.status === "failed" || item.status === "review") && mode === "list" && (
+              <div className="flex items-center gap-1">
+                <XCircle className={cn("h-3.5 w-3.5", item.status === "review" ? "text-amber-500" : "text-rose-500")} />
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-6 w-6 rounded-md hover:bg-rose-500/10 text-rose-500 hover:text-rose-600 shrink-0"
+                  className={cn(
+                    "h-6 w-6 rounded-md shrink-0",
+                    item.status === "review"
+                      ? "hover:bg-amber-500/10 text-amber-500 hover:text-amber-600"
+                      : "hover:bg-rose-500/10 text-rose-500 hover:text-rose-600",
+                  )}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleRetryStory(item.file);
                   }}
-                  title="Retry Build"
+                  title="Requeue Build"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </Button>
@@ -748,11 +834,11 @@ export default function Dashboard() {
             {state === "done" && mode === "list" && item.status !== "failed" && (
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
             )}
-            {state === "inprogress" &&
+            {state === "execution" &&
               mode === "list" &&
-              ["running", "building"].includes(item.status) && (
-                <div className="flex items-center gap-1 mr-1">
-                  <div className="h-3 w-3 rounded-full border border-primary border-t-transparent animate-spin mr-1 shrink-0" />
+              item.status === "running" && (
+                <div className="flex items-center gap-1">
+                  <div className="h-3 w-3 rounded-full border border-primary border-t-transparent animate-spin shrink-0" />
                   <Button
                     size="icon"
                     variant="ghost"
@@ -779,23 +865,26 @@ export default function Dashboard() {
                   </Button>
                 </div>
               )}
-            <span className={cn(
-              "px-1.5 py-0.5 rounded-xs text-[9px] font-bold uppercase tracking-wider shrink-0",
-              item.status === "done" && "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
-              item.status === "failed" && "bg-rose-500/10 text-rose-500 border border-rose-500/20",
-              ["building", "running"].includes(item.status) && "bg-primary/10 text-primary border border-primary/20",
-              ["ready-to-build", "pending"].includes(item.status) && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
-              (!item.status || ["draft", "todo"].includes(item.status)) && "bg-muted text-muted-foreground border border-border"
-            )}>
-              {item.status || "Draft"}
-            </span>
+            {mode === "board" && (
+              <span className={cn(
+                "px-1.5 py-0.5 rounded-xs text-[9px] font-bold uppercase tracking-wider shrink-0",
+                item.status === "done" && "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
+                item.status === "review" && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
+                item.status === "failed" && "bg-rose-500/10 text-rose-500 border border-rose-500/20",
+                item.status === "running" && "bg-primary/10 text-primary border border-primary/20",
+                item.status === "queued" && "bg-amber-500/10 text-amber-500 border border-amber-500/20",
+                (!item.status || item.status === "draft") && "bg-muted text-muted-foreground border border-border"
+              )}>
+                {item.status || "Draft"}
+              </span>
+            )}
             {item.completedAt && (
-              <span className="text-[10px] text-muted-foreground/60 font-medium">
+              <span className="hidden sm:inline text-[10px] text-muted-foreground/60 font-medium">
                 Done {new Date(item.completedAt).toLocaleDateString()}
               </span>
             )}
             {!item.completedAt && item.addedAt && (
-              <span className="text-[10px] text-muted-foreground/60 font-medium">
+              <span className="hidden sm:inline text-[10px] text-muted-foreground/60 font-medium">
                 Added {new Date(item.addedAt).toLocaleDateString()}
               </span>
             )}
@@ -827,6 +916,47 @@ export default function Dashboard() {
     );
   };
 
+  const renderListSection = (
+    id: "draft" | "execution" | "review" | "done",
+    label: string,
+    items: any[],
+    dotClass: string,
+    countClass: string,
+    emptyText: string,
+  ) => (
+    <section key={id} className="relative isolate z-0 min-w-0 overflow-visible rounded-2xl border border-border/50 bg-card/25">
+      <button
+        type="button"
+        className="relative z-0 flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left"
+        onClick={() => toggleGroup(id)}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {collapsedGroups[id] ? (
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className={cn("h-2 w-2 shrink-0 rounded-full", dotClass)} />
+          <span className="truncate text-sm font-semibold text-foreground">{label}</span>
+        </span>
+        <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-sm font-bold", countClass)}>
+          {items.length}
+        </span>
+      </button>
+      {!collapsedGroups[id] && (
+        <div className="relative z-0 flex min-w-0 flex-col gap-2 px-2.5 pb-2.5">
+          {items.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/50 px-3 py-5 text-center text-xs text-muted-foreground/70">
+              {emptyText}
+            </div>
+          ) : (
+            items.map((item, idx) => renderItem(item, idx, id, "list"))
+          )}
+        </div>
+      )}
+    </section>
+  );
+
   const PROSE =
     "prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-1.5 prose-pre:rounded-md prose-pre:text-[10.5px] prose-code:text-[10.5px] prose-code:bg-white/10 prose-code:px-1 prose-code:py-px prose-code:rounded prose-code:font-mono prose-a:text-primary";
 
@@ -839,6 +969,9 @@ export default function Dashboard() {
           if (tab === "plan") {
             setView("board");
             window.location.hash = "plan";
+          } else if (tab === "queue") {
+            setView("queue");
+            window.location.hash = "queue";
           } else {
             setView(tab as any);
             window.location.hash = tab;
@@ -859,8 +992,8 @@ export default function Dashboard() {
       >
         <SidebarInset className="h-[100dvh] overflow-hidden flex flex-col bg-background text-foreground">
           {/* Header */}
-          <header className="flex h-14 shrink-0 items-center justify-between px-6 border-b border-border bg-card">
-            <div className="flex items-center gap-3">
+          <header className="flex min-h-14 shrink-0 items-center justify-between gap-2 px-3 py-2 sm:px-6 border-b border-border bg-card">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <LeftSidebarBridgeContext.Consumer>
                 {({ setOpenMobile }) => (
                   <Button 
@@ -870,41 +1003,51 @@ export default function Dashboard() {
                       if (window.innerWidth < 768) setOpenMobile(true);
                       else setIsLeftOpen(!isLeftOpen);
                     }} 
-                    className="-ml-1 h-8 w-8 text-muted-foreground hover:text-foreground"
+                    className="-ml-1 h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
                   >
                     <PanelLeft className="h-4 w-4" />
                   </Button>
                 )}
               </LeftSidebarBridgeContext.Consumer>
+              <div className="min-w-0">
               <ProjectSwitcher 
                 onAddProject={() => {
                   setEditingStory(null);
                   setView("add-project");
                 }} 
               />
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
 
               
-              {view === "board" && (inProgressItems.length > 0 || queueRunning) && (
+              {view === "board" && (executionItems.length > 0 || queueRunning) && (
                 <Button
                   size="sm"
                   onClick={async () => {
                     try {
                       if (queueRunning) {
-                        await fetch("/api/queue/stop", { method: "POST" });
+                        const res = await fetch("/api/queue/stop", { method: "POST" });
+                        if (!res.ok) {
+                          const data = await res.json().catch(() => ({}));
+                          throw new Error(data.error || "Failed to stop build");
+                        }
                         toast("Build stopped");
                       } else {
-                        await fetch("/api/queue/start", { method: "POST" });
+                        const res = await fetch("/api/queue/start", { method: "POST" });
+                        if (!res.ok) {
+                          const data = await res.json().catch(() => ({}));
+                          throw new Error(data.error || "Failed to start build");
+                        }
                         toast("Build started");
                       }
-                    } catch {
-                      toast.error("Failed to toggle build");
+                    } catch (error: any) {
+                      toast.error("Failed to toggle build", { description: error.message });
                     }
                   }}
                   className={cn(
-                    "h-8 px-3 text-xs font-medium rounded-full gap-1.5 shadow-sm transition-all",
+                    "h-9 px-2.5 sm:px-3 text-xs font-medium rounded-full gap-1.5 shadow-sm transition-all",
                     queueRunning
                       ? "bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
                       : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-primary/20",
@@ -912,17 +1055,17 @@ export default function Dashboard() {
                 >
                   {queueRunning ? (
                     <>
-                      <StopCircle className="h-3.5 w-3.5" /> Stop All
+                      <StopCircle className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Stop </span>All
                     </>
                   ) : (
                     <>
-                      <Zap className="h-3.5 w-3.5" /> Build All
+                      <Zap className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Build </span>All
                     </>
                   )}
                 </Button>
               )}
 
-              <div className="h-4 w-px bg-border/60 mx-1" />
+              <div className="hidden sm:block h-4 w-px bg-border/60 mx-1" />
 
               <RightSidebarTrigger />
             </div>
@@ -931,7 +1074,7 @@ export default function Dashboard() {
           {/* Main Container */}
           <main className="flex-1 flex overflow-hidden">
             {/* Left: Main Content */}
-            <div className={cn("flex-1 flex flex-col overflow-y-auto pt-4 scrollbar-none relative", view === "board" && viewMode === "board" ? "px-0 pb-0" : "px-4 pb-24")}>
+            <div className={cn("flex-1 flex flex-col overflow-y-auto scrollbar-none relative", view === "board" && viewMode === "board" ? "px-0 pb-0 pt-4" : "px-3 sm:px-4 pb-24 pt-3 sm:pt-4")}>
               {editingStory && (
                 <div className="fixed inset-0 z-50 bg-background">
                   <div className="w-full h-full flex flex-col">
@@ -1003,6 +1146,10 @@ export default function Dashboard() {
                     }}
                   />
                 </div>
+              ) : view === "queue" ? (
+                <div className="w-full max-w-5xl mx-auto">
+                  <QueueView />
+                </div>
               ) : view === "project-settings" ? (
                 <div className="w-full max-w-4xl mx-auto py-4">
                   <ProjectSettingsView />
@@ -1043,9 +1190,12 @@ export default function Dashboard() {
                   <IntegrationsView />
                 </div>
               ) : (
-                <div className="w-full h-full flex flex-col gap-4 min-h-0">
+                <div className={cn(
+                  "w-full flex flex-col gap-3 sm:gap-4",
+                  viewMode === "board" ? "min-h-full" : "min-h-0",
+                )}>
                   {/* Control Bar: View Switcher & Actions */}
-                  <div className="flex items-center justify-between pb-1 shrink-0 px-4">
+                  <div className="flex items-center justify-between pb-1 shrink-0 px-1 sm:px-4">
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                       Workflow Stories
                     </span>
@@ -1071,27 +1221,43 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* 3-Column Kanban Board / Stacked List */}
+                  {/* Mobile-first stacked list; desktop board keeps drag/drop. */}
+                  {viewMode === "list" ? (
+                    <div className="flex w-full min-w-0 flex-col gap-3 pb-8">
+                      {renderListSection("draft", "Draft", draftItems, "border border-muted-foreground/50 bg-muted/40", "bg-muted/60 text-muted-foreground", "No draft stories")}
+                      {renderListSection("execution", "Execution", executionItems, "bg-amber-500", "bg-amber-500/10 text-amber-500", "No stories in execution")}
+                      {renderListSection("review", "Review", reviewItems, "bg-orange-500", "bg-orange-500/10 text-orange-500", "No stories need review")}
+                      {renderListSection("done", "Done", doneItems, "bg-emerald-500", "bg-emerald-500/10 text-emerald-500", "No completed stories")}
+                    </div>
+                  ) : (
                   <DragDropContext onDragEnd={onDragEnd}>
-                    <div className={cn("w-full flex-1 min-h-0 flex flex-col mt-0", viewMode === "board" && "border-y border-border/80")}>
-                      {viewMode === "board" && (
-                        <div className="grid grid-cols-3 divide-x divide-border border-b border-border/80 bg-muted/10 shrink-0">
+                    <div className="w-full flex-1 min-h-0 flex flex-col mt-0 border-y border-border/80">
+                        <div className="grid grid-cols-4 divide-x divide-border border-b border-border/80 bg-muted/10 shrink-0">
                           <div className="px-4 py-3 flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                               <div className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50 bg-muted/40" />
-                              Todo
+                              Draft
                             </h3>
                             <span className="text-xs font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                              {todoItems.length}
+                              {draftItems.length}
                             </span>
                           </div>
                           <div className="px-4 py-3 flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                               <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                              Ready to Build
+                              Execution
                             </h3>
                             <span className="text-xs font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                              {inProgressItems.length}
+                              {executionItems.length}
+                            </span>
+                          </div>
+                          <div className="px-4 py-3 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                              <div className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                              Review
+                            </h3>
+                            <span className="text-xs font-bold text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                              {reviewItems.length}
                             </span>
                           </div>
                           <div className="px-4 py-3 flex items-center justify-between">
@@ -1104,53 +1270,25 @@ export default function Dashboard() {
                             </span>
                           </div>
                         </div>
-                      )}
 
                       <div
-                        className={cn(
-                          "w-full flex-1 min-h-0",
-                          viewMode === "board"
-                            ? "grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border bg-background"
-                            : "flex flex-col mt-0",
-                        )}
+                        className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-border bg-background"
                       >
-                      {/* Column: Todo */}
-                      <Droppable droppableId="todo" isDropDisabled={viewMode !== "board"}>
+                      {/* Column: Draft */}
+                      <Droppable droppableId="draft">
                         {(provided) => (
                           <div
                             ref={provided.innerRef}
                             {...provided.droppableProps}
-                            className={cn(
-                              "flex flex-col",
-                              viewMode === "board"
-                                ? "h-full bg-transparent overflow-y-auto scrollbar-none px-4 pt-4"
-                                : "min-h-0 bg-transparent",
-                            )}
+                            className="flex flex-col h-full bg-transparent overflow-visible px-4 pt-4"
                           >
-                            {viewMode === "list" && (
-                              <div 
-                                className="flex items-center justify-between shrink-0 px-4 py-3 -mx-4 border-y border-border/40 cursor-pointer hover:bg-muted/10 transition-colors"
-                                onClick={() => toggleGroup("todo")}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {collapsedGroups["todo"] ? <ChevronRight className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
-                                  <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                                    <div className="h-2 w-2 rounded-full border border-muted-foreground/50 bg-muted/40" />
-                                    Todo
-                                  </h3>
-                                </div>
-                                <span className="text-sm font-bold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
-                                  {todoItems.length}
-                                </span>
-                              </div>
-                            )}
-                            <div className={cn("flex flex-col flex-1", viewMode === "list" && "px-0 overflow-visible pt-3 pb-3", viewMode === "list" && collapsedGroups["todo"] && "hidden")}>
-                              {todoItems.length === 0 ? (
+                            <div className="flex flex-col flex-1">
+                              {draftItems.length === 0 ? (
                                 <div className="py-8 text-center text-xs text-muted-foreground/60">
-                                  No pending stories
+                                  No draft stories
                                 </div>
                               ) : (
-                                todoItems.map((item, idx) => renderItem(item, idx, "todo", viewMode))
+                                draftItems.map((item, idx) => renderItem(item, idx, "draft", viewMode))
                               )}
                               {provided.placeholder}
                             </div>
@@ -1158,43 +1296,43 @@ export default function Dashboard() {
                         )}
                       </Droppable>
 
-                      {/* Column: Ready to Build */}
-                      <Droppable droppableId="inprogress" isDropDisabled={viewMode !== "board"}>
+                      {/* Column: Execution */}
+                      <Droppable droppableId="execution">
                         {(provided) => (
                           <div
                             ref={provided.innerRef}
                             {...provided.droppableProps}
-                            className={cn(
-                              "flex flex-col",
-                              viewMode === "board"
-                                ? "h-full bg-transparent overflow-y-auto scrollbar-none px-4 pt-4"
-                                : "min-h-0 bg-transparent",
-                            )}
+                            className="flex flex-col h-full bg-transparent overflow-visible px-4 pt-4"
                           >
-                            {viewMode === "list" && (
-                              <div 
-                                className="flex items-center justify-between shrink-0 px-4 py-3 -mx-4 border-b border-border/40 cursor-pointer hover:bg-muted/10 transition-colors"
-                                onClick={() => toggleGroup("inprogress")}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {collapsedGroups["inprogress"] ? <ChevronRight className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
-                                  <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                                    <div className="h-2 w-2 rounded-full bg-amber-500" />
-                                    Ready to Build
-                                  </h3>
-                                </div>
-                                <span className="text-sm font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">
-                                  {inProgressItems.length}
-                                </span>
-                              </div>
-                            )}
-                            <div className={cn("flex flex-col flex-1", viewMode === "list" && "px-0 overflow-visible pt-3 pb-3", viewMode === "list" && collapsedGroups["inprogress"] && "hidden")}>
-                              {inProgressItems.length === 0 ? (
+                            <div className="flex flex-col flex-1">
+                              {executionItems.length === 0 ? (
                                 <div className="py-8 text-center text-xs text-muted-foreground/60">
-                                  No active tasks
+                                  No stories in execution
                                 </div>
                               ) : (
-                                inProgressItems.map((item, idx) => renderItem(item, idx, "inprogress", viewMode))
+                                executionItems.map((item, idx) => renderItem(item, idx, "execution", viewMode))
+                              )}
+                              {provided.placeholder}
+                            </div>
+                          </div>
+                        )}
+                      </Droppable>
+
+                      {/* Column: Review */}
+                      <Droppable droppableId="review">
+                        {(provided) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            className="flex flex-col h-full bg-transparent overflow-visible px-4 pt-4"
+                          >
+                            <div className="flex flex-col flex-1">
+                              {reviewItems.length === 0 ? (
+                                <div className="py-8 text-center text-xs text-muted-foreground/60">
+                                  No stories need review
+                                </div>
+                              ) : (
+                                reviewItems.map((item, idx) => renderItem(item, idx, "review", viewMode))
                               )}
                               {provided.placeholder}
                             </div>
@@ -1203,39 +1341,17 @@ export default function Dashboard() {
                       </Droppable>
 
                       {/* Column: Done */}
-                      <Droppable droppableId="done" isDropDisabled={viewMode !== "board"}>
+                      <Droppable droppableId="done">
                         {(provided) => (
                           <div
                             ref={provided.innerRef}
                             {...provided.droppableProps}
-                            className={cn(
-                              "flex flex-col",
-                              viewMode === "board"
-                                ? "h-full bg-transparent overflow-y-auto scrollbar-none px-4 pt-4"
-                                : "min-h-0 bg-transparent",
-                            )}
+                            className="flex flex-col h-full bg-transparent overflow-visible px-4 pt-4"
                           >
-                            {viewMode === "list" && (
-                              <div 
-                                className="flex items-center justify-between shrink-0 px-4 py-3 -mx-4 border-b border-border/40 cursor-pointer hover:bg-muted/10 transition-colors"
-                                onClick={() => toggleGroup("done")}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {collapsedGroups["done"] ? <ChevronRight className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
-                                  <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                                    Done
-                                  </h3>
-                                </div>
-                                <span className="text-sm font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">
-                                  {doneItems.length}
-                                </span>
-                              </div>
-                            )}
-                            <div className={cn("flex flex-col flex-1", viewMode === "list" && "px-0 overflow-visible pt-3 pb-3", viewMode === "list" && collapsedGroups["done"] && "hidden")}>
+                            <div className="flex flex-col flex-1">
                               {doneItems.length === 0 ? (
                                 <div className="py-8 text-center text-xs text-muted-foreground/60">
-                                  No completed items
+                                  No completed stories
                                 </div>
                               ) : (
                                 doneItems.map((item, idx) => renderItem(item, idx, "done", viewMode))
@@ -1248,6 +1364,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </DragDropContext>
+                  )}
                 </div>
               )}
             </div>
@@ -1260,14 +1377,7 @@ export default function Dashboard() {
                 <h3 className="text-sm font-semibold text-foreground">
                   TPM Chat
                 </h3>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => setIsRightOpen(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                <RightSidebarCloseButton />
               </SidebarHeader>
 
               <SidebarContent className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">

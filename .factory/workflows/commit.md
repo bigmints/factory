@@ -38,9 +38,7 @@ git commit -m "<type>(<scope>): <what and why>"
 # Types: feat · fix · chore · refactor · adr
 ```
 
-**5 — Post-commit heartbeat**
 ```bash
-factory pulse "Committed: $(git log -1 --format='%s')"
 ```
 
 **6 — Post-commit worklog**

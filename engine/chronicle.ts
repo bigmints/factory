@@ -9,6 +9,8 @@ import { requireActiveProvider, callProviderTextOnly } from './generate.ts';
 import { buildFileTree } from './init.ts';
 import { log, logError } from './log.ts';
 
+const CHRONICLE_TEXT_TIMEOUT_MS = 90_000;
+
 interface FailureRecord {
     filename: string;
     content: string;
@@ -305,7 +307,7 @@ ${readme}
 ---
 Synthesize the above into the high-density BLUEPRINT document detailing the immutable tech stack and structure.`;
 
-        let blueprintText = await callProviderTextOnly(provider, model, blueprintSysInstr, blueprintPrompt);
+        let blueprintText = await callProviderTextOnly(provider, model, blueprintSysInstr, blueprintPrompt, CHRONICLE_TEXT_TIMEOUT_MS);
         blueprintText = blueprintText.replace(/^\s*```(?:markdown)?\s*([\s\S]*?)```\s*$/, '$1').trim();
         if (blueprintText && blueprintText.length > 10) {
             writeFileSync(blueprintPath, blueprintText + '\n');
@@ -340,7 +342,7 @@ ${failures.length === 0 ? 'No failures recorded.' : failures.map(f => `--- FAILU
 ---
 Synthesize the above into the high-density KNOWLEDGE document. Maintain sections like Architectural Paradigm, New Features / Approach Changes, and Anti-Patterns.`;
 
-        let knowledgeText = await callProviderTextOnly(provider, model, knowledgeSysInstr, knowledgePrompt);
+        let knowledgeText = await callProviderTextOnly(provider, model, knowledgeSysInstr, knowledgePrompt, CHRONICLE_TEXT_TIMEOUT_MS);
         knowledgeText = knowledgeText.replace(/^\s*```(?:markdown)?\s*([\s\S]*?)```\s*$/, '$1').trim();
 
         if (knowledgeText && knowledgeText.length > 10) {
@@ -381,7 +383,7 @@ ${conversationsBlock}
 ---
 Extract the NEW story completion notes from the Worklog Entries and CLI Conversation History. Return ONLY the new appendable list items matching the exact format. If nothing new, return "NO_UPDATE".`;
 
-        let chronicleText = await callProviderTextOnly(provider, model, chronicleSysInstr, chroniclePrompt);
+        let chronicleText = await callProviderTextOnly(provider, model, chronicleSysInstr, chroniclePrompt, CHRONICLE_TEXT_TIMEOUT_MS);
         chronicleText = chronicleText.replace(/^\s*```(?:markdown)?\s*([\s\S]*?)```\s*$/, '$1').trim();
 
         if (chronicleText && chronicleText.length > 10 && chronicleText !== 'NO_UPDATE') {

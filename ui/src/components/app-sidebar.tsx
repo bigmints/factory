@@ -38,7 +38,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 const navMain = [
   { title: "Stories", id: "plan",   icon: LayoutDashboard },
-  { title: "Build Queue", id: "queue", icon: ListOrdered },
+  { title: "Execution", id: "queue", icon: ListOrdered },
   { title: "Knowledge",  id: "knowledge", icon: Brain },
   { title: "Project Settings",  id: "project-settings", icon: Settings2 },
 ]
@@ -78,7 +78,7 @@ export function AppSidebar({
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">Factory</span>
-                  <span className="truncate text-xs">Build Engine</span>
+                  <span className="truncate text-xs">Stories to software</span>
                 </div>
               </a>
             </SidebarMenuButton>

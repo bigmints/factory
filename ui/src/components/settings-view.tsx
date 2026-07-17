@@ -124,16 +124,28 @@ export function SettingsView() {
 
   const handleSaveModal = () => {
     if (!settings) return;
+    const provider = modalProvider as LLMProvider;
+    const modelId = provider.defaultModel || provider.models?.[0]?.id || '';
+    const shouldMakeActive =
+      provider.enabled &&
+      modelId &&
+      (modalMode === 'add' ||
+        !settings.activeProvider ||
+        settings.activeProvider === provider.id);
     
     if (modalMode === 'add') {
       setSettings({
         ...settings,
-        providers: [...settings.providers, modalProvider as LLMProvider]
+        providers: [...settings.providers, provider],
+        activeProvider: shouldMakeActive ? provider.id : settings.activeProvider,
+        buildModel: shouldMakeActive ? modelId : settings.buildModel,
       });
     } else {
       setSettings({
         ...settings,
-        providers: settings.providers.map(p => p.id === modalProvider.id ? (modalProvider as LLMProvider) : p)
+        providers: settings.providers.map(p => p.id === provider.id ? provider : p),
+        activeProvider: shouldMakeActive ? provider.id : settings.activeProvider,
+        buildModel: shouldMakeActive ? modelId : settings.buildModel,
       });
     }
     setModalOpen(false);
@@ -240,8 +252,8 @@ export function SettingsView() {
       {/* ─── Header Section ─── */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Model Management</h2>
-          <p className="text-sm text-muted-foreground mt-1">Configure APIs and download local models to use in your chats.</p>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Pi SDK Execution</h2>
+          <p className="text-sm text-muted-foreground mt-1">Configure the provider credentials and default model Factory uses when the Pi SDK executes stories.</p>
         </div>
         <div className="flex flex-wrap gap-3 w-full md:w-auto">
           <Button onClick={openAddModal} variant="outline" className="gap-1.5 shadow-sm">
@@ -260,7 +272,7 @@ export function SettingsView() {
         <h3 className="text-base font-semibold text-foreground">Global Settings</h3>
         <Card className="p-6 border border-border/40 bg-card space-y-4">
           <div className="grid gap-2">
-            <Label>Default Chat & Build Model</Label>
+            <Label>Default Pi Execution Model</Label>
             <Select value={currentCompoundValue || undefined} onValueChange={handleGlobalModelChange}>
               <SelectTrigger className="w-[300px] h-9">
                 <SelectValue placeholder="Select model" />
@@ -279,18 +291,18 @@ export function SettingsView() {
                 )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">This is the global default model used for chat and executing builds. You can still override it for specific projects in their Project Settings.</p>
+            <p className="text-xs text-muted-foreground">This is the default model the Pi SDK uses when executing stories. You can still override it per project in Project Settings.</p>
           </div>
         </Card>
       </div>
 
       {/* ─── Added Models ─── */}
       <div className="space-y-4">
-        <h3 className="text-base font-semibold text-foreground">Added Models</h3>
+        <h3 className="text-base font-semibold text-foreground">Configured Providers</h3>
         
         {settings.providers.length === 0 && (
           <div className="text-center py-12 border border-dashed border-border/40 rounded-xl bg-black/10 text-muted-foreground text-sm">
-            No providers added yet. Click <span className="font-semibold text-foreground">&ldquo;+ Add Provider&rdquo;</span> to get started.
+            No providers added yet. Click <span className="font-semibold text-foreground">&ldquo;+ Add Provider&rdquo;</span> to give the Pi SDK a backing model provider.
           </div>
         )}
 

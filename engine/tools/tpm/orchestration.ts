@@ -98,7 +98,7 @@ tpmToolRegistry.register({
         properties: {
             storyPath: { type: 'string', description: 'The path or slug of the story.' },
             action: { type: 'string', description: 'The action to perform. Currently supported: "update_status"' },
-            status: { type: 'string', description: 'The new status if action is update_status (e.g., "pending", "done", "failed").' },
+            status: { type: 'string', description: 'The new status if action is update_status (draft, queued, running, review, failed, done).' },
             summary: { type: 'string', description: 'Optional summary to append to the story when marking it as done.' }
         },
         required: ['storyPath', 'action']

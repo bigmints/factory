@@ -90,6 +90,7 @@ export function gitCommit(repoPath: string, message: string): boolean {
         }
 
         execFileSync('git', ['add', '-A'], { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
+        unstageFactoryRuntimeFiles(repoPath);
         execFileSync('git', ['commit', '-m', message], { cwd: repoPath, stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 });
         log('✓', `Committed: ${message}`);
         return true;
@@ -102,6 +103,18 @@ export function gitCommit(repoPath: string, message: string): boolean {
         }
         logError(`Git commit failed: ${msg}`);
         return false;
+    }
+}
+
+function unstageFactoryRuntimeFiles(repoPath: string): void {
+    try {
+        execFileSync(
+            'git',
+            ['reset', '--quiet', 'HEAD', '--', '.factory/queue.pid', '.factory/daemon.pid', '.factory/ui.pid'],
+            { cwd: repoPath, stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 },
+        );
+    } catch {
+        // Runtime pid files are best-effort exclusions; git may not have HEAD yet.
     }
 }
 

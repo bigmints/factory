@@ -17,3 +17,6 @@ skills:
   - name: task-manager
     path: .factory/task-manager/manage.sh
     description: "Manage task lifecycle: list / add / start / complete tasks in todo.yaml"
+  - name: delivery-kernel
+    path: skills/delivery-kernel.md
+    description: "Pi SDK worktree and pull-request delivery contract"

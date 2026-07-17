@@ -11,6 +11,9 @@ import { NextResponse } from 'next/server';
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, join, basename } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { getActiveProject } from '@engine/config';
+import { listStories as listEngineStories, loadStory as loadEngineStory } from '@engine/story';
+import { readLifecycleStatus } from '@engine/schemas';
 
 const FACTORY_ROOT = resolve(homedir(), '.factory');
 
@@ -156,148 +159,69 @@ function getStoriesDirs(): { stories: string; done: string; source: string } {
 
 export async function GET() {
   try {
-    const { stories: STORIES_DIR, done: DONE_DIR, source } = getStoriesDirs();
-    const projectPath = getActiveProjectPath();
-    const scaffoldMeta = projectPath ? loadScaffoldStoryMeta(projectPath) : new Map<string, ScaffoldStoryMeta>();
-
+    const project = getActiveProject();
+    const scaffoldMeta = loadScaffoldStoryMeta(project.path);
+    const listed = listEngineStories(project.path);
     const stories: any[] = [];
     const featureStories: any[] = [];
 
-    // Active stories
-    if (STORIES_DIR && existsSync(STORIES_DIR)) {
-      const allFiles = walkDirSync(STORIES_DIR).filter(
-        (f) => f.endsWith('.md') && !basename(f).startsWith('.') && !basename(f).startsWith('_') && !f.startsWith('done/')
-      );
-
-      for (const file of allFiles) {
-        try {
-          const raw = readFileSync(join(STORIES_DIR, file), 'utf-8');
-          const { parsed, body } = parseFrontmatter(raw);
-
-          // Default metadata values if they don't exist
-          if (!parsed.name) {
-            const match = body.match(/^#\s+(.+)$/m);
-            parsed.name = match ? match[1] : basename(file, '.md');
-          }
-          if (!parsed.kind) {
-            parsed.kind = (parsed.feature || parsed.target || 'phase' in parsed) ? 'feature' : 'app';
-          }
-          if (!parsed.status) {
-            parsed.status = 'draft';
-          }
-
-          const isFeature = parsed.kind === 'feature';
-          
-          if (isFeature) {
-             const meta = scaffoldMeta.get(`features/${file}`) || scaffoldMeta.get(file);
-             featureStories.push({
-               file,
-               kind: 'FeatureStory' as const,
-               valid: true,
-               name: parsed.name || '',
-               feature: parsed.feature || { description: body },
-               target: parsed.target || {},
-               status: parsed.status || 'unknown',
-               pages: parsed.pages || [],
-               model: parsed.model || {},
-               navigation: parsed.navigation || {},
-               phase: meta ? meta.phase : (parsed.phase ?? 1),
-               dependsOn: meta ? meta.dependsOn : (parsed.dependsOn ?? []),
-               priority: meta ? meta.priority : 0
-             });
-          } else {
-             const meta = scaffoldMeta.get(`apps/${file}`) || scaffoldMeta.get(file);
-             stories.push({
-               file,
-               kind: 'AppStory' as const,
-               valid: true,
-               metadata: parsed.metadata || { name: parsed.name, description: body },
-               status: parsed.status || 'unknown',
-               deployment: parsed.deployment || {},
-               database: parsed.database || {},
-               api: parsed.api || {},
-               features: parsed.features || {},
-               phase: meta ? meta.phase : 0,
-               dependsOn: meta ? meta.dependsOn : [],
-               priority: meta ? meta.priority : 100
-             });
-          }
-        } catch {
-          stories.push({ file, kind: 'AppStory' as const, valid: false, error: 'Failed to parse' });
+    const pushStory = (file: string, isDone = false) => {
+      const relFile = isDone ? `done/${file}` : file;
+      const meta = scaffoldMeta.get(relFile) || scaffoldMeta.get(file);
+      try {
+        const story = loadEngineStory(join(project.path, '.factory', 'stories', relFile));
+        if (story.kind === 'feature') {
+          const status = readLifecycleStatus(story.status, isDone ? 'done' : 'draft');
+          featureStories.push({
+            file: relFile,
+            kind: 'FeatureStory' as const,
+            valid: true,
+            name: story.name || '',
+            feature: { name: story.name, description: story.description || story.content || '' },
+            target: story.target || '',
+            status,
+            failureReason: story.failureReason || null,
+            execution: story.execution || null,
+            pages: story.pages || [],
+            model: story.model || {},
+            phase: meta ? meta.phase : (story.phase ?? 1),
+            dependsOn: meta ? meta.dependsOn : (story.dependsOn ?? []),
+            priority: meta ? meta.priority : 0,
+          });
+        } else {
+          const status = readLifecycleStatus(story.status, isDone ? 'done' : 'draft');
+          stories.push({
+            file: relFile,
+            kind: 'AppStory' as const,
+            valid: true,
+            metadata: { name: story.name, description: story.description || story.content || '' },
+            status,
+            failureReason: story.failureReason || null,
+            execution: story.execution || null,
+            deployment: story.deployment || {},
+            database: story.data || {},
+            api: {},
+            features: {},
+            phase: meta ? meta.phase : 0,
+            dependsOn: meta ? meta.dependsOn : [],
+            priority: meta ? meta.priority : 100,
+          });
         }
+      } catch {
+        const target = isDone ? featureStories : stories;
+        target.push({ file: relFile, valid: false, error: 'Failed to parse' });
       }
-    }
+    };
 
-    // Completed/Done stories in 'done' directory
-    if (DONE_DIR && existsSync(DONE_DIR)) {
-      const doneFiles = walkDirSync(DONE_DIR).filter(
-        (f) => f.endsWith('.md') && !basename(f).startsWith('.') && !basename(f).startsWith('_')
-      );
-
-      for (const file of doneFiles) {
-        try {
-          const raw = readFileSync(join(DONE_DIR, file), 'utf-8');
-          const { parsed, body } = parseFrontmatter(raw);
-
-          // Default metadata values if they don't exist
-          if (!parsed.name) {
-            const match = body.match(/^#\s+(.+)$/m);
-            parsed.name = match ? match[1] : basename(file, '.md');
-          }
-          if (!parsed.kind) {
-            parsed.kind = (parsed.feature || parsed.target || 'phase' in parsed) ? 'feature' : 'app';
-          }
-          if (!parsed.status) {
-            parsed.status = 'done';
-          }
-
-          const isFeature = parsed.kind === 'feature';
-          if (isFeature) {
-            const meta = scaffoldMeta.get(`done/${file}`) || scaffoldMeta.get(`features/${file}`) || scaffoldMeta.get(file);
-            featureStories.push({
-              file: `done/${file}`,
-              kind: 'FeatureStory' as const,
-              valid: true,
-              name: parsed.name || '',
-              feature: parsed.feature || { description: body },
-              target: parsed.target || {},
-              status: parsed.status || 'unknown',
-              pages: parsed.pages || [],
-              model: parsed.model || {},
-              navigation: parsed.navigation || {},
-              phase: meta ? meta.phase : (parsed.phase ?? 1),
-              dependsOn: meta ? meta.dependsOn : (parsed.dependsOn ?? []),
-              priority: meta ? meta.priority : 0
-            });
-          } else {
-            const meta = scaffoldMeta.get(`done/${file}`) || scaffoldMeta.get(`apps/${file}`) || scaffoldMeta.get(file);
-            stories.push({
-              file: `done/${file}`,
-              kind: 'AppStory' as const,
-              valid: true,
-              metadata: parsed.metadata || { name: parsed.name, description: body },
-              status: parsed.status || 'unknown',
-              deployment: parsed.deployment || {},
-              database: parsed.database || {},
-              api: parsed.api || {},
-              features: parsed.features || {},
-              phase: meta ? meta.phase : 0,
-              dependsOn: meta ? meta.dependsOn : [],
-              priority: meta ? meta.priority : 100
-            });
-          }
-        } catch {
-          featureStories.push({ file: `done/${file}`, kind: 'FeatureStory' as const, valid: false, error: 'Failed to parse' });
-        }
-      }
-    }
+    listed.apps.forEach((file) => pushStory(file));
+    listed.features.forEach((file) => pushStory(file));
 
     featureStories.sort((a, b) => {
-      if (a.phase !== b.phase) return a.phase - b.phase;
-      return b.priority - a.priority;
+      if ((a.phase ?? 0) !== (b.phase ?? 0)) return (a.phase ?? 0) - (b.phase ?? 0);
+      return (b.priority ?? 0) - (a.priority ?? 0);
     });
 
-    return NextResponse.json({ stories, featureStories, source });
+    return NextResponse.json({ stories, featureStories, source: project.name });
   } catch {
     return NextResponse.json({ stories: [], featureStories: [], source: 'error', error: 'stories directory not found' });
   }
@@ -306,22 +230,25 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, content, kind } = body;
+    const { name, content, kind, filename: requestedFilename } = body;
 
     if (!name || typeof name !== 'string') {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
-    const slug = name
+    const slug = String(requestedFilename || name)
       .toLowerCase()
+      .replace(/\.(md|ya?ml)$/i, '')
+      .split('/')
+      .pop()!
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_|_$/g, '');
 
     const filename = `${slug.replace(/_/g, '-')}.md`;
 
-    const { stories: targetDir } = getStoriesDirs();
+    const { stories } = getStoriesDirs();
 
-    if (!targetDir) {
+    if (!stories) {
       return NextResponse.json(
         { error: 'No active project. Connect a project first from the Projects page.' },
         { status: 400 }
@@ -329,6 +256,8 @@ export async function POST(request: Request) {
     }
 
     const { mkdirSync } = await import('node:fs');
+    const folder = kind === 'app' ? 'apps' : 'features';
+    const targetDir = join(stories, folder);
     mkdirSync(targetDir, { recursive: true });
 
     const filePath = join(targetDir, filename);
@@ -355,7 +284,7 @@ export async function POST(request: Request) {
 name: "${name}"
 kind: feature
 target: root
-status: ready-to-build
+status: draft
 description: "Implement ${name}"
 ---
 
@@ -367,7 +296,7 @@ Write detailed requirements here.
         storyContent = `---
 name: "${name}"
 kind: app
-status: ready-to-build
+status: draft
 description: "A ${name.toLowerCase()} application"
 stack:
   framework: nextjs
@@ -381,13 +310,13 @@ Write detailed requirements here.
       }
     }
 
-    // Ensure status is standard ready-to-build in frontmatter
+    // Ensure new stories start as draft until explicitly queued
     if (storyContent.includes('status:')) {
-      storyContent = storyContent.replace(/status:\s*["']?(pending|ready-to-build)["']?/g, 'status: ready-to-build');
+      storyContent = storyContent.replace(/status:\s*["']?(draft|queued|running|review|failed|done)["']?/g, 'status: draft');
     } else {
       const parts = storyContent.split('---');
       if (parts.length >= 3) {
-        parts[1] = parts[1].trimEnd() + '\nstatus: ready-to-build\n';
+        parts[1] = parts[1].trimEnd() + '\nstatus: draft\n';
         storyContent = parts.join('---');
       }
     }

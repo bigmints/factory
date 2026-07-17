@@ -175,24 +175,6 @@ function readWorklog(projectRoot: string): WorklogEntry[] {
   return [];
 }
 
-function readHeartbeat(projectRoot: string): Record<string, unknown> {
-  const heartbeatCandidates = [
-    path.join(projectRoot, '.factory', 'logs', 'heartbeat.yaml'),
-    path.join(projectRoot, '.factory', 'context', 'heartbeat.yaml'),
-    path.join(projectRoot, '.factory', 'logs', 'heartbeat.toon'),
-    path.join(projectRoot, '.factory', 'context', 'heartbeat.toon'),
-  ];
-
-  for (const file of heartbeatCandidates) {
-    if (fs.existsSync(file)) {
-      try {
-        return yamlParse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
-      } catch { /* ignore */ }
-    }
-  }
-  return {};
-}
-
 
 
 export async function GET(request: Request) {
@@ -205,7 +187,6 @@ export async function GET(request: Request) {
     const adrs = readAdrs(projectRoot);
     const context = readContext(projectRoot);
     const worklog = readWorklog(projectRoot);
-    const heartbeat = readHeartbeat(projectRoot);
 
     // Apply search filter
     const qLower = query.toLowerCase();
@@ -219,7 +200,6 @@ export async function GET(request: Request) {
     return NextResponse.json({
       adrs: filtered.adrs,
       context,
-      heartbeat,
       worklog: filtered.worklog,
       projectRoot,
       stats: {

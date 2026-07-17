@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve, join, basename, dirname, relative } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { Story, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec } from './types.ts';
+import type { Story, StoryStatus, BuildMeta, ValidationResult, AppSpec, TaskItemSpec, StoryExecution } from './types.ts';
 import { storySlug } from './types.ts';
 import { log } from './log.ts';
-import { StorySchema } from './schemas.ts';
+import { StorySchema, readLifecycleStatus } from './schemas.ts';
 import matter from 'gray-matter';
 import { execSync } from 'node:child_process';
 
@@ -66,7 +66,7 @@ export function loadStory(storyPath: string): Story {
     const parsed = matter(raw);
     const story = {
         ...parsed.data,
-        content: parsed.content.trim()
+        content: stripGeneratedBuildSummary(parsed.content.trim())
     } as Story;
 
     // Fallback if parsing didn't find kind (e.g., pure yaml files temporarily during migration)
@@ -86,50 +86,61 @@ export function loadStory(storyPath: string): Story {
         else if ((story as any).feature?.name) story.name = (story as any).feature.name;
     }
 
+    story.status = readLifecycleStatus(story.status);
+    if (Array.isArray(story.dependsOn)) {
+        story.dependsOn = story.dependsOn.map(normalizeDependencySlug).filter(Boolean);
+    }
+
     return story;
 }
 
-/** List all markdown story files in a repo's .factory/stories/ directory */
+function normalizeDependencySlug(value: string): string {
+    return String(value)
+        .split('/')
+        .pop()!
+        .replace(/\.(md|ya?ml)$/i, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+/** List active story files in a repo's .factory/stories directory. */
 export function listStories(repoPath: string): { apps: string[]; features: string[] } {
     const storiesDir = join(repoPath, '.factory', 'stories');
-    
+
     if (!existsSync(storiesDir)) {
         return { apps: [], features: [] };
     }
 
     const allFiles: string[] = [];
     function walk(dir: string, basePath = '') {
-        try {
-            const entries = readdirSync(dir, { withFileTypes: true });
-            for (const entry of entries) {
-                if (entry.name.startsWith('.') || entry.name.startsWith('_')) {
-                    continue;
-                }
-                const relPath = join(basePath, entry.name);
-                if (entry.isDirectory()) {
-                    walk(join(dir, entry.name), relPath);
-                } else if (entry.isFile() && (entry.name.endsWith('.md') || entry.name.endsWith('.yaml') || entry.name.endsWith('.yml'))) {
-                    allFiles.push(relPath);
-                }
+        if (!existsSync(dir)) return;
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue;
+
+            const relPath = join(basePath, entry.name);
+            if (entry.isDirectory()) {
+                walk(join(dir, entry.name), relPath);
+            } else if (entry.isFile() && /\.(md|ya?ml)$/i.test(entry.name)) {
+                allFiles.push(relPath);
             }
-        } catch { /* ignore */ }
+        }
     }
-    walk(storiesDir);
-    
+
+    walk(join(storiesDir, 'apps'), 'apps');
+    walk(join(storiesDir, 'features'), 'features');
+
     const apps: string[] = [];
     const features: string[] = [];
 
     for (const file of allFiles) {
-        // Skip scaffold.md if we want to treat it specially, but usually it's an app story.
         try {
             const story = loadStory(join(storiesDir, file));
-            if (story.kind === 'app') {
-                apps.push(file);
-            } else if (story.kind === 'feature') {
-                features.push(file);
-            }
+            if (story.kind === 'app') apps.push(file);
+            else if (story.kind === 'feature') features.push(file);
         } catch {
-            // If it fails to parse, just ignore or put it in apps by default to show an error later
             apps.push(file);
         }
     }
@@ -193,15 +204,37 @@ export function updateStoryStatus(storyPath: string, status: StoryStatus, summar
     const raw = readFileSync(absPath, 'utf-8');
     const parsed = matter(raw);
     const story = parsed.data;
-    story.status = status;
+    story.status = readLifecycleStatus(status);
+    if ((status === 'failed' || status === 'review') && summary) {
+        story.failureReason = summary.split('\n').find(line => line.trim().length > 0)?.slice(0, 300)
+            || (status === 'review' ? 'Needs integration review' : 'Build failed');
+    } else if (status !== 'failed' && status !== 'review') {
+        delete story.failureReason;
+    }
     
-    let updatedContent = parsed.content.trim();
-    if (summary) {
+    let updatedContent = stripGeneratedBuildSummary(parsed.content.trim());
+    if (summary && story.status === 'done') {
         updatedContent += `\n\n## Build Summary\n\n${summary}`;
     }
 
     const updated = `---\n${stringifyYaml(story, { lineWidth: 120 }).trim()}\n---\n\n${updatedContent}\n`;
     writeFileSync(absPath, updated);
+}
+
+/** Persist deterministic delivery metadata without changing story content. */
+export function updateStoryExecution(storyPath: string, execution: StoryExecution): void {
+    const absPath = resolveStoryPath(storyPath);
+    if (!existsSync(absPath)) return;
+    const parsed = matter(readFileSync(absPath, 'utf-8'));
+    parsed.data.execution = execution;
+    const updated = `---\n${stringifyYaml(parsed.data, { lineWidth: 120 }).trim()}\n---\n\n${parsed.content.trim()}\n`;
+    writeFileSync(absPath, updated);
+}
+
+function stripGeneratedBuildSummary(content: string): string {
+    return content
+        .replace(/\n{2,}## Build Summary[\s\S]*$/i, '')
+        .trim();
 }
 
 // ─── Build Metadata Writeback ────────────────────────────
@@ -260,17 +293,14 @@ export function updateStoryBuildMeta(
  * Creates the done/ directory if it doesn't exist.
  * Returns the new path, or null if the story couldn't be moved.
  */
-export function archiveStory(storyPath: string): string | null {
+export function archiveStory(storyPath: string, repoPathOverride?: string): string | null {
     const absPath = resolveStoryPath(storyPath);
     if (!existsSync(absPath)) return null;
 
-    const project = getActiveProject();
-    if (!project || !project.path) {
-        log('!', `No active project found — skipping archive`);
-        return null;
-    }
+    const projectPath = repoPathOverride || getActiveProject()?.path;
+    if (!projectPath) return null;
 
-    const storiesRoot = join(project.path, '.factory', 'stories');
+    const storiesRoot = join(projectPath, '.factory', 'stories');
     const rel = relative(storiesRoot, absPath);
     const firstPart = rel.split(/[\\/]/)[0];
 
@@ -381,16 +411,16 @@ ${dbSection ? dbSection + '\n' : ''}${authSection ? authSection + '\n' : ''}${pa
 
     // Map features/stories/tasks
     const coreTasks: TaskItemSpec[] = [
-        { id: 'task-skeleton', title: 'Scaffold project skeleton and configurations', status: 'ready-to-build' },
-        { id: 'task-pages', title: 'Implement main pages, layout, and styling views', status: 'ready-to-build' },
+        { id: 'task-skeleton', title: 'Scaffold project skeleton and configurations', status: 'queued' },
+        { id: 'task-pages', title: 'Implement main pages, layout, and styling views', status: 'queued' },
     ];
 
     if (story.auth?.provider && story.auth.provider !== 'none') {
-        coreTasks.push({ id: 'task-auth', title: `Integrate and configure ${story.auth.provider} authentication`, status: 'ready-to-build' });
+        coreTasks.push({ id: 'task-auth', title: `Integrate and configure ${story.auth.provider} authentication`, status: 'queued' });
     }
 
     if (stack.database) {
-        coreTasks.push({ id: 'task-database', title: `Setup ${stack.database} schema, connection, and seed data`, status: 'ready-to-build' });
+        coreTasks.push({ id: 'task-database', title: `Setup ${stack.database} schema, connection, and seed data`, status: 'queued' });
     }
 
     const appSpec: AppSpec = {
@@ -404,7 +434,7 @@ ${dbSection ? dbSection + '\n' : ''}${authSection ? authSection + '\n' : ''}${pa
             {
                 name: 'Core Foundation',
                 description: `Foundational scaffolding and layout styling for ${story.name}.`,
-                status: 'ready-to-build',
+                status: 'queued',
                 stories: [
                     {
                         name: story.name,
@@ -480,7 +510,7 @@ export function validateAppSpec(app: AppSpec): ValidationResult {
                                         if (!task.title || task.title.trim().length === 0) {
                                             errors.push(`Task at index ${tIdx} under Story "${story.name}" must have a title`);
                                         }
-                                        if (task.status && !['pending', 'running', 'completed', 'failed', 'done', 'building', 'ready-to-build', 'paused', 'draft'].includes(task.status)) {
+                                        if (task.status && !['draft', 'queued', 'running', 'review', 'failed', 'done'].includes(task.status)) {
                                             errors.push(`Task "${task.title}" has invalid status "${task.status}"`);
                                         }
                                     }
@@ -497,39 +527,21 @@ export function validateAppSpec(app: AppSpec): ValidationResult {
 }
 
 /**
- * Topologically sort a list of pending story items based on phase and dependsOn.
+ * Sort stories into the deterministic execution order used by the queue.
+ * Dependencies are shown in the UI, but execution is intentionally linear:
+ * phase first, then filename. This avoids deadlocks when story dependencies
+ * contain cycles or incomplete planning metadata.
  */
-export function sortStoriesTopologically(pending: Array<{ path: string, story: any }>): Array<{ path: string, story: any }> {
-    // Sort by phase first
-    pending.sort((a, b) => {
-        const phaseA = typeof a.story.phase === 'number' ? a.story.phase : 99;
-        const phaseB = typeof b.story.phase === 'number' ? b.story.phase : 99;
-        return phaseA - phaseB;
+export function sortStoriesForExecution(queuedStories: Array<{ path: string, story: any }>): Array<{ path: string, story: any }> {
+    return [...queuedStories].sort((a, b) => {
+        const phaseA = storyPhase(a.story);
+        const phaseB = storyPhase(b.story);
+        if (phaseA !== phaseB) return phaseA - phaseB;
+        return a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' });
     });
-
-    // Topological sort respecting dependencies
-    const orderedPending: typeof pending = [];
-    const visited = new Set<string>();
-    const pendingMap = new Map(pending.map(item => [item.story.feature?.slug || item.story.name, item]));
-
-    function visit(item: typeof pending[0]) {
-        const key = item.story.feature?.slug || item.story.name;
-        if (!key || visited.has(key)) return;
-        visited.add(key);
-        
-        const deps = item.story.dependsOn || [];
-        for (const dep of deps) {
-            const depItem = pendingMap.get(dep);
-            if (depItem) visit(depItem);
-        }
-        orderedPending.push(item);
-    }
-
-    for (const item of pending) {
-        visit(item);
-    }
-
-    return orderedPending;
 }
 
-
+function storyPhase(story: any): number {
+    if (typeof story.phase === 'number') return story.phase;
+    return story.kind === 'app' ? 0 : 1;
+}
